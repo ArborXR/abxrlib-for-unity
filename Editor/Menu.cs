@@ -14,6 +14,6 @@ public class Menu
     [MenuItem("ArborXR Insights/Documentation", priority = 2)]
     private static void Documentation()
     {
-        Application.OpenURL("https://github.com/informXR/abxrlib-for-unity?tab=readme-ov-file#table-of-contents");
+        Application.OpenURL("https://github.com/ArborXR/abxrlib-for-unity?tab=readme-ov-file#table-of-contents");
     }
 }

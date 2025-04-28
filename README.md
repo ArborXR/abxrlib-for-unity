@@ -41,7 +41,7 @@ ArborXR Insights enhances product value by offering:
 2. Select the '+' dropdown and choose **'Add package from git URL'**.
 3. Use the GitHub repo URL:
    ```
-   https://github.com/informXR/abxrlib-for-unity.git
+   https://github.com/ArborXR/abxrlib-for-unity.git
    ```
 4. Once imported, you will see `ArborXR Insights` in your Unity toolbar.
 
