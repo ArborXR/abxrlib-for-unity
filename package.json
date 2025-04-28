@@ -1,0 +1,16 @@
+{
+    "name": "com.arborxr.unity",
+    "version": "1.0.0",
+    "displayName": "AbxrLib for Unity",
+    "description": "AbxrLib analytics for Unity",
+    "unity": "2022.3",
+    "author": {
+      "name": "ArborXR",
+      "url": "https://arborxr.com"
+    },
+    "dependencies": {
+      "com.unity.textmeshpro": "3.0.6",
+      "com.unity.inputsystem": "1.8.1",
+      "com.unity.nuget.newtonsoft-json": "3.2.1"
+    }
+}
