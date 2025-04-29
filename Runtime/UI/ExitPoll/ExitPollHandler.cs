@@ -4,6 +4,10 @@ using UnityEngine;
 
 public class ExitPollHandler : MonoBehaviour
 {
+    private const string PollEventString = "poll";
+    private const string PollResponseString = "answer";
+    private const string PollQuestionString = "prompt";
+    
     public enum PollType
     {
         Thumbs,
@@ -57,7 +61,11 @@ public class ExitPollHandler : MonoBehaviour
     private static void HandleThumbsUp(object sender, EventArgs e)
     {
         var poll = (ExitPoll)sender;
-        Abxr.Event(poll.prompt.text, new Dictionary<string, string> { ["answer"] = "up" });
+        Abxr.Event(PollEventString, new Dictionary<string, string>
+        {
+            [PollQuestionString] = poll.prompt.text,
+            [PollResponseString] = "up"
+        });
         if (Polls.Count > 0) ProcessPoll();
         _isProcessing = false;
     }
@@ -65,7 +73,11 @@ public class ExitPollHandler : MonoBehaviour
     private static void HandleThumbsDown(object sender, EventArgs e)
     {
         var poll = (ExitPoll)sender;
-        Abxr.Event(poll.prompt.text, new Dictionary<string, string> { ["answer"] = "down" });
+        Abxr.Event(PollEventString, new Dictionary<string, string>
+        {
+            [PollQuestionString] = poll.prompt.text,
+            [PollResponseString] = "down"
+        });
         if (Polls.Count > 0) ProcessPoll();
         _isProcessing = false;
     }
@@ -73,7 +85,11 @@ public class ExitPollHandler : MonoBehaviour
     private static void HandleRating(object sender, ExitPoll.RatingEventArgs e)
     {
         var poll = (ExitPoll)sender;
-        Abxr.Event(poll.prompt.text, new Dictionary<string, string> { ["answer"] = e.rating.ToString() });
+        Abxr.Event(PollEventString, new Dictionary<string, string>
+        {
+            [PollQuestionString] = poll.prompt.text,
+            [PollResponseString] = e.rating.ToString()
+        });
         if (Polls.Count > 0) ProcessPoll();
         _isProcessing = false;
     }
