@@ -69,7 +69,7 @@ public class Authentication : SdkBehaviour
         StartCoroutine(CheckForReAuth());
     }
 
-    private static IEnumerator Authenticate()
+    public static IEnumerator Authenticate()
     {
         yield return AuthRequest();
         yield return GetConfiguration();

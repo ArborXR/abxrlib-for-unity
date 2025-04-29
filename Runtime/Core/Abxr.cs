@@ -365,6 +365,11 @@ public static class Abxr
 	{
 		ExitPollHandler.AddPoll(prompt, pollType);
 	}
+
+	public static void ReAuthenticate()
+	{
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
+	}
 	
 	private static void AddDuration(Dictionary<string, DateTime> startTimes, string name, Dictionary<string, string> meta)
 	{

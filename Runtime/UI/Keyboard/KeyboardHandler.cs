@@ -2,18 +2,43 @@
 using System.Collections;
 using Microsoft.MixedReality.Toolkit.Experimental.UI;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class KeyboardHandler : MonoBehaviour
 {
+    private GameObject _keyboardPrefab;
+    private GameObject _keyboardInstance;
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (_keyboardInstance != null)
+        {
+            Destroy(_keyboardInstance);
+        }
+
+        _keyboardInstance = Instantiate(_keyboardPrefab, Camera.main.transform);
+        NonNativeKeyboard.Instance.OnTextSubmitted += HandleTextSubmitted;
+    }
+    
     public static bool ProcessingSubmit;
     private const string ProcessingText = "Processing";
     
     private void Start()
     {
-        GameObject keyboard = Resources.Load<GameObject>("Prefabs/AbxrKeyboard");
-        if (keyboard != null)
+        _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard");
+        if (_keyboardPrefab != null)
         {
-            Instantiate(keyboard, Camera.main.transform);
+            Instantiate(_keyboardPrefab, Camera.main.transform);
         }
         else
         {
