@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Microsoft.MixedReality.Toolkit.Experimental.UI;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -176,7 +175,7 @@ public class Authentication : SdkBehaviour
             yield return AuthRequest();
 			if (_keyboardAuthSuccess)
             {
-                NonNativeKeyboard.Instance.Close();
+                KeyboardHandler.Destroy();
                 _failedAuthAttempts = 0;
                 yield break;
             }

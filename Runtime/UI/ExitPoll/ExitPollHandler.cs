@@ -36,7 +36,7 @@ public class ExitPollHandler : MonoBehaviour
         }
         else
         {
-            Debug.LogError("Failed to load exit poll prefab");
+            Debug.LogError("AbxrLib - Failed to load exit poll prefab");
         }
     }
 

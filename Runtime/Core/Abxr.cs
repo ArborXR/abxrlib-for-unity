@@ -2,7 +2,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Microsoft.MixedReality.Toolkit.Experimental.UI;
 using UnityEngine;
 
 public static class Abxr
@@ -342,22 +341,22 @@ public static class Abxr
 	// ---
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
-		KeyboardHandler.ProcessingSubmit = false;
 		if (keyboardType is "text" or null)
 		{
-			NonNativeKeyboard.Instance.Prompt.text = promptText ?? "Please Enter Your Login";
-			NonNativeKeyboard.Instance.PresentKeyboard();
+			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+			KeyboardHandler.SetPrompt(promptText ?? "Please Enter Your Login");
 		}
 		else if (keyboardType == "assessmentPin")
 		{
-			NonNativeKeyboard.Instance.Prompt.text = promptText ?? "Enter your 6-digit PIN";
-			NonNativeKeyboard.Instance.PresentKeyboard(NonNativeKeyboard.LayoutType.Symbol);
+			KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+			KeyboardHandler.SetPrompt(promptText ?? "Enter your 6-digit PIN");
 		}
 		else if (keyboardType == "email")
 		{
-			NonNativeKeyboard.Instance.Prompt.text = promptText ?? "Enter your email";
-			NonNativeKeyboard.Instance.EmailDomain.text = $"@{emailDomain}";
-			NonNativeKeyboard.Instance.PresentKeyboard(NonNativeKeyboard.LayoutType.Email);
+			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+			KeyboardHandler.SetPrompt(promptText != null ?
+				$"{promptText} (<u>username</u>@{emailDomain})" : 
+				$"Enter your email username (<u>username</u>@{emailDomain})");
 		}
 	}
 

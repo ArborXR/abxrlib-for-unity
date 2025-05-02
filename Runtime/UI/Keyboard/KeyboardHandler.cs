@@ -1,73 +1,77 @@
-﻿using System;
-using System.Collections;
-using Microsoft.MixedReality.Toolkit.Experimental.UI;
+﻿using System.Collections;
+using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 public class KeyboardHandler : MonoBehaviour
 {
-    private GameObject _keyboardPrefab;
-    private GameObject _keyboardInstance;
-
-    private void OnEnable()
+    public enum KeyboardType
     {
-        SceneManager.sceneLoaded += OnSceneLoaded;
+        PinPad,
+        FullKeyboard
     }
+    
+    private static GameObject _keyboardPrefab;
+    private static GameObject _pinPadPrefab;
+    private static GameObject _panelPrefab;
+    private static GameObject _keyboardInstance;
+    private static GameObject _pinPadInstance;
+    private static GameObject _panelInstance;
+    
+    private const string ProcessingText = "Processing";
+    private static bool _processingSubmit;
 
-    private void OnDisable()
-    {
-        SceneManager.sceneLoaded -= OnSceneLoaded;
-    }
-
-    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    private static TextMeshProUGUI _prompt;
+    
+    
+    public static void Destroy()
     {
         if (_keyboardInstance != null)
         {
             Destroy(_keyboardInstance);
         }
 
-        _keyboardInstance = Instantiate(_keyboardPrefab, Camera.main.transform);
-        NonNativeKeyboard.Instance.OnTextSubmitted += HandleTextSubmitted;
+        if (_panelInstance != null)
+        {
+            Destroy(_panelInstance);
+        }
     }
-    
-    public static bool ProcessingSubmit;
-    private const string ProcessingText = "Processing";
+
+    public static void SetPrompt(string prompt)
+    {
+        _prompt.text = prompt;
+    }
+
+    public static void Create(KeyboardType keyboardType)
+    {
+        _processingSubmit = false;
+        if (_panelInstance != null) return;
+        
+        if (keyboardType == KeyboardType.PinPad) _keyboardInstance = Instantiate(_pinPadPrefab);
+        else if (keyboardType == KeyboardType.FullKeyboard) _keyboardInstance = Instantiate(_keyboardPrefab);
+        
+        _panelInstance = Instantiate(_panelPrefab);
+        _prompt = _panelInstance.GetComponentInChildren<TextMeshProUGUI>();
+    }
     
     private void Start()
     {
         _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard");
-        if (_keyboardPrefab != null)
+        _pinPadPrefab = Resources.Load<GameObject>("Prefabs/AbxrPinPad");
+        _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
+        if (_keyboardPrefab == null)
         {
-            Instantiate(_keyboardPrefab, Camera.main.transform);
+            Debug.LogError("AbxrLib - Failed to load keyboard prefab");
         }
-        else
-        {
-            Debug.LogError("Failed to load keyboard prefab");
-        }
-        
-        NonNativeKeyboard.Instance.OnTextSubmitted += HandleTextSubmitted;
     }
     
-    private void HandleTextSubmitted(object sender, EventArgs e)
+    public static IEnumerator ProcessingVisual()
     {
-        if (ProcessingSubmit) return;
-        
-        StartCoroutine(ProcessingVisual());
-        var keyboard = (NonNativeKeyboard)sender;
-        StartCoroutine(Authentication.KeyboardAuthenticate(keyboard.InputField.text));
-    }
-    
-    private static IEnumerator ProcessingVisual()
-    {
-        ProcessingSubmit = true;
-        NonNativeKeyboard.Instance.Prompt.text = ProcessingText;
-        while (ProcessingSubmit)
+        _processingSubmit = true;
+        SetPrompt(ProcessingText);
+        while (_processingSubmit)
         {
-            string currentText = NonNativeKeyboard.Instance.Prompt.text;
-            NonNativeKeyboard.Instance.Prompt.text = currentText.Length > ProcessingText.Length + 10 ?
-                ProcessingText :
-                $":{NonNativeKeyboard.Instance.Prompt.text}:";
-            
+            string currentText = _prompt.text;
+            _prompt.text = currentText.Length > ProcessingText.Length + 10 ? ProcessingText : $":{_prompt.text}:";
             yield return new WaitForSeconds(0.5f); // Wait before running again
         }
     }
