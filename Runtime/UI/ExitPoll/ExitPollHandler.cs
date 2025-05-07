@@ -4,9 +4,9 @@ using UnityEngine;
 
 public class ExitPollHandler : MonoBehaviour
 {
-    private const string PollEventString = "poll";
-    private const string PollResponseString = "answer";
-    private const string PollQuestionString = "prompt";
+    private static GameObject _panelPrefab;
+    private static GameObject _ratingPrefab;
+    private static GameObject _thumbsPrefab;
     
     public enum PollType
     {
@@ -16,6 +16,17 @@ public class ExitPollHandler : MonoBehaviour
     
     private static readonly List<Tuple<string, PollType>> Polls = new();
     private static bool _isProcessing;
+
+    private void Start()
+    {
+        _ratingPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollRating");
+        _thumbsPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollThumbs");
+        _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
+        if (_ratingPrefab == null)
+        {
+            Debug.LogError("AbxrLib - Failed to load exit poll prefab");
+        }
+    }
     
     public static void AddPoll(string prompt, PollType pollType)
     {
@@ -24,20 +35,24 @@ public class ExitPollHandler : MonoBehaviour
         if (!_isProcessing) ProcessPoll();
     }
 
-    private static void CreatePoll(PollType pollType)
+    public static void ProcessNextPoll()
     {
-        string pollPath = "";
-        if (pollType == PollType.Rating) pollPath = "Prefabs/AbxrExitPollRating";
-        else if (pollType == PollType.Thumbs) pollPath = "Prefabs/AbxrExitPollThumbs";
-        GameObject exitPoll = Resources.Load<GameObject>(pollPath);
-        if (exitPoll != null)
+        if (Polls.Count > 0) ProcessPoll();
+        _isProcessing = false;
+    }
+
+    private static void CreatePoll(PollType pollType, string prompt)
+    {
+        if (pollType == PollType.Rating)
         {
-            Instantiate(exitPoll, Camera.main.transform);
+            Instantiate(_ratingPrefab);
         }
-        else
+        else if (pollType == PollType.Thumbs)
         {
-            Debug.LogError("AbxrLib - Failed to load exit poll prefab");
+            Instantiate(_thumbsPrefab);
         }
+        
+        ExitPoll.CreatePanel(_panelPrefab, prompt);
     }
 
     private static void ProcessPoll()
@@ -45,52 +60,7 @@ public class ExitPollHandler : MonoBehaviour
         _isProcessing = true;
 
         Tuple<string, PollType> poll = Polls[0];
-        CreatePoll(poll.Item2);
-        ExitPoll.Instance.prompt.text = poll.Item1;
-        WireButtonHandlers();
+        CreatePoll(poll.Item2, poll.Item1);
         Polls.RemoveAt(0);
-    }
-
-    private static void WireButtonHandlers()
-    {
-        ExitPoll.Instance.OnThumbsUp += HandleThumbsUp;
-        ExitPoll.Instance.OnThumbsDown += HandleThumbsDown;
-        ExitPoll.Instance.OnRating += HandleRating;
-    }
-    
-    private static void HandleThumbsUp(object sender, EventArgs e)
-    {
-        var poll = (ExitPoll)sender;
-        Abxr.Event(PollEventString, new Dictionary<string, string>
-        {
-            [PollQuestionString] = poll.prompt.text,
-            [PollResponseString] = "up"
-        });
-        if (Polls.Count > 0) ProcessPoll();
-        _isProcessing = false;
-    }
-    
-    private static void HandleThumbsDown(object sender, EventArgs e)
-    {
-        var poll = (ExitPoll)sender;
-        Abxr.Event(PollEventString, new Dictionary<string, string>
-        {
-            [PollQuestionString] = poll.prompt.text,
-            [PollResponseString] = "down"
-        });
-        if (Polls.Count > 0) ProcessPoll();
-        _isProcessing = false;
-    }
-    
-    private static void HandleRating(object sender, ExitPoll.RatingEventArgs e)
-    {
-        var poll = (ExitPoll)sender;
-        Abxr.Event(PollEventString, new Dictionary<string, string>
-        {
-            [PollQuestionString] = poll.prompt.text,
-            [PollResponseString] = e.rating.ToString()
-        });
-        if (Polls.Count > 0) ProcessPoll();
-        _isProcessing = false;
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+﻿using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,7 +7,10 @@ public class ExitPoll : MonoBehaviour
 {
     public static ExitPoll Instance { get; private set; }
     
-    public Button submitButton;
+    private const string PollEventString = "poll";
+    private const string PollResponseString = "answer";
+    private const string PollQuestionString = "prompt";
+    
     public Button thumbsUpButton;
     public Button thumbsDownButton;
     public Button oneRatingButton;
@@ -15,12 +18,9 @@ public class ExitPoll : MonoBehaviour
     public Button threeRatingButton;
     public Button fourRatingButton;
     public Button fiveRatingButton;
-    public TMP_Text prompt;
-    
-    public event EventHandler OnTextSubmitted = delegate { };
-    public event EventHandler OnThumbsDown = delegate { };
-    public event EventHandler OnThumbsUp = delegate { };
-    public event EventHandler<RatingEventArgs> OnRating = delegate { };
+
+    private static GameObject _panelInstance;
+    private static TextMeshProUGUI _prompt;
 
     private void Awake()
     {
@@ -29,7 +29,6 @@ public class ExitPoll : MonoBehaviour
     
     private void Start()
     {
-        submitButton?.onClick.AddListener(OnSubmitClick);
         thumbsUpButton?.onClick.AddListener(OnThumbsUpClick);
         thumbsDownButton?.onClick.AddListener(OnThumbsDownClick);
         oneRatingButton?.onClick.AddListener(OnOneRatingClick);
@@ -38,62 +37,69 @@ public class ExitPoll : MonoBehaviour
         fourRatingButton?.onClick.AddListener(OnFourRatingClick);
         fiveRatingButton?.onClick.AddListener(OnFiveRatingClick);
     }
-    
-    private void OnSubmitClick()
+
+    public static void CreatePanel(GameObject prefab, string prompt)
     {
-        OnTextSubmitted?.Invoke(this, EventArgs.Empty);
-        gameObject.SetActive(false);
+        _panelInstance = Instantiate(prefab);
+        _prompt = _panelInstance.GetComponentInChildren<TextMeshProUGUI>();
+        _prompt.text = prompt;
+    }
+
+    private void Destroy()
+    {
+        Destroy(gameObject);
+        Destroy(_panelInstance);
     }
     
     private void OnThumbsUpClick()
     {
-        OnThumbsUp?.Invoke(this, EventArgs.Empty);
-        gameObject.SetActive(false);
+        PollEvent(_prompt.text, "up");
+        Destroy();
     }
     
     private void OnThumbsDownClick()
     {
-        OnThumbsDown?.Invoke(this, EventArgs.Empty);
-        gameObject.SetActive(false);
+        PollEvent(_prompt.text, "down");
+        Destroy();
     }
 
     private void OnOneRatingClick()
     {
-        OnRating?.Invoke(this, new RatingEventArgs(1));
-        gameObject.SetActive(false);
+        PollEvent(_prompt.text, "1");
+        Destroy();
     }
     
     private void OnTwoRatingClick()
     {
-        OnRating?.Invoke(this, new RatingEventArgs(2));
-        gameObject.SetActive(false);
+        PollEvent(_prompt.text, "2");
+        Destroy();
     }
     
     private void OnThreeRatingClick()
     {
-        OnRating?.Invoke(this, new RatingEventArgs(3));
-        gameObject.SetActive(false);
+        PollEvent(_prompt.text, "3");
+        Destroy();
     }
     
     private void OnFourRatingClick()
     {
-        OnRating?.Invoke(this, new RatingEventArgs(4));
-        gameObject.SetActive(false);
+        PollEvent(_prompt.text, "4");
+        Destroy();
     }
     
     private void OnFiveRatingClick()
     {
-        OnRating?.Invoke(this, new RatingEventArgs(5));
-        gameObject.SetActive(false);
+        PollEvent(_prompt.text, "5");
+        Destroy();
     }
     
-    public class RatingEventArgs : EventArgs
+    private static void PollEvent(string prompt, string response)
     {
-        public int rating { get; }
-
-        public RatingEventArgs(int rating)
+        Abxr.Event(PollEventString, new Dictionary<string, string>
         {
-            this.rating = rating;
-        }
+            [PollQuestionString] = prompt,
+            [PollResponseString] = response
+        });
+        ExitPollHandler.ProcessNextPoll();
     }
 }
