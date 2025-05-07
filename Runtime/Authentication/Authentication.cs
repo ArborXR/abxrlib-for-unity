@@ -13,7 +13,7 @@ using XRDM.SDK.External.Unity;
 public class Authentication : SdkBehaviour
 {
     private static string _orgId;
-    private static string _deviceId = SystemInfo.deviceUniqueIdentifier;
+    private static string _deviceId;
     private static string _authSecret;
     private static string _userId;
     private static string _appId;
@@ -58,6 +58,7 @@ public class Authentication : SdkBehaviour
     {
         GetConfigData();
 #if UNITY_ANDROID
+        _deviceId = SystemInfo.deviceUniqueIdentifier;
         GetArborData();
 #elif UNITY_WEBGL && !UNITY_EDITOR
         GetQueryData();
