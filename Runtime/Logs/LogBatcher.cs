@@ -7,7 +7,7 @@ using UnityEngine.Networking;
 
 public class LogBatcher : MonoBehaviour
 {
-	private static float _sendInterval;
+	private static float _sendIntervalSeconds;
 	private const string UrlPath = "/v1/collect/log";
 	private static Uri _uri;
 	private static readonly List<Payload> Payloads = new();
@@ -16,7 +16,7 @@ public class LogBatcher : MonoBehaviour
 	private void Start()
 	{
 		_uri = new Uri(new Uri(Configuration.Instance.restUrl), UrlPath);
-		_sendInterval = Configuration.Instance.sendNextBatchWaitSeconds;
+		_sendIntervalSeconds = Configuration.Instance.sendNextBatchWaitSeconds;
 		StartCoroutine(SendLoop());
 	}
 
@@ -29,7 +29,7 @@ public class LogBatcher : MonoBehaviour
 	{
 		while (true)
 		{
-			yield return new WaitForSeconds(_sendInterval);
+			yield return new WaitForSeconds(_sendIntervalSeconds);
 			yield return Send();
 		}
 	}
@@ -37,7 +37,7 @@ public class LogBatcher : MonoBehaviour
 	private static IEnumerator Send()
 	{
 		if (!Authentication.Authenticated()) yield break;
-		_sendInterval = Configuration.Instance.sendNextBatchWaitSeconds;
+		_sendIntervalSeconds = Configuration.Instance.sendNextBatchWaitSeconds;
 		lock (Lock)
 		{
 			if (Payloads.Count > 0) yield return SendLogs();
@@ -55,8 +55,15 @@ public class LogBatcher : MonoBehaviour
 			meta = meta
 		};
 		
-		lock (Lock) Payloads.Add(payload);
-	}
+		lock (Lock)
+		{
+			Payloads.Add(payload);
+			if (Payloads.Count >= Configuration.Instance.logsPerSendAttempt)
+			{
+				_sendIntervalSeconds = 1; // Send what we have soon
+			}
+		}
+    }
 
 	private static IEnumerator SendLogs()
 	{
@@ -83,7 +90,7 @@ public class LogBatcher : MonoBehaviour
 		else
 		{
 			Debug.LogError($"AbxrLib - Log POST Request failed : {request.error} - {request.downloadHandler.text}");
-			_sendInterval = Configuration.Instance.sendRetryIntervalSeconds;
+			_sendIntervalSeconds = Configuration.Instance.sendRetryIntervalSeconds;
 			lock (Lock)
 			{
 				Payloads.InsertRange(0, logsToSend);

@@ -7,7 +7,7 @@ using UnityEngine.Networking;
 
 public class StorageBatcher : MonoBehaviour
 {
-	private static float _sendInterval;
+	private static float _sendIntervalSeconds;
 	private const string UrlPath = "/v1/storage";
 	private static Uri _uri;
 	private static readonly List<Payload> Payloads = new();
@@ -16,7 +16,7 @@ public class StorageBatcher : MonoBehaviour
 	private void Start()
 	{
 		_uri = new Uri(new Uri(Configuration.Instance.restUrl), UrlPath);
-		_sendInterval = Configuration.Instance.sendNextBatchWaitSeconds;
+		_sendIntervalSeconds = Configuration.Instance.sendNextBatchWaitSeconds;
 		StartCoroutine(SendLoop());
 	}
 
@@ -29,7 +29,7 @@ public class StorageBatcher : MonoBehaviour
 	{
 		while (true)
 		{
-			yield return new WaitForSeconds(_sendInterval);
+			yield return new WaitForSeconds(_sendIntervalSeconds);
 			yield return Send();
 		}
 	}
@@ -37,7 +37,7 @@ public class StorageBatcher : MonoBehaviour
 	private static IEnumerator Send()
 	{
 		if (!Authentication.Authenticated()) yield break;
-		_sendInterval = Configuration.Instance.sendNextBatchWaitSeconds;
+		_sendIntervalSeconds = Configuration.Instance.sendNextBatchWaitSeconds;
 		lock (Lock)
 		{
 			if (Payloads.Count > 0) yield return SendStorages();
@@ -60,7 +60,14 @@ public class StorageBatcher : MonoBehaviour
 			scope = scope.ToString()
 		};
 		
-		lock (Lock) Payloads.Add(payload);
+		lock (Lock)
+		{
+			Payloads.Add(payload);
+			if (Payloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt)
+			{
+				_sendIntervalSeconds = 1; // Send what we have soon
+			}
+		}
 	}
 
 	private static IEnumerator SendStorages()
@@ -88,7 +95,7 @@ public class StorageBatcher : MonoBehaviour
 		else
 		{
 			Debug.LogError($"AbxrLib - Storage POST Request failed : {request.error} - {request.downloadHandler.text}");
-			_sendInterval = Configuration.Instance.sendRetryIntervalSeconds;
+			_sendIntervalSeconds = Configuration.Instance.sendRetryIntervalSeconds;
 			lock (Lock)
 			{
 				Payloads.InsertRange(0, storagesToSend);
