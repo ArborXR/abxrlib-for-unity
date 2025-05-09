@@ -8,7 +8,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 [DefaultExecutionOrder(1)]
-public class Authentication : SdkBehaviour
+public class Authentication : MonoBehaviour
 {
     private static string _orgId;
     private static string _deviceId;
@@ -33,24 +33,6 @@ public class Authentication : SdkBehaviour
     private static bool _keyboardAuthSuccess;
 
     public static bool Authenticated() => DateTime.UtcNow <= _tokenExpiry;
-
-    protected override void OnEnable()
-    {
-#if UNITY_ANDROID
-        base.OnEnable();
-        var callBack = new Callback();
-        Connect(callBack);
-#endif
-    }
-    
-    private sealed class Callback : IConnectionCallback
-    {
-        public static ISdkService Service;
-        
-        public void OnConnected(ISdkService service) => Service = service;
-
-        public void OnDisconnected(bool isRetrying) => Service = null;
-    }
     
     private void Start()
     {
@@ -110,13 +92,13 @@ public class Authentication : SdkBehaviour
     
     private static void GetArborData()
     {
-        if (Callback.Service == null) return;
-
+        if (!ArborServiceClient.IsConnected()) return;
+        
         _partner = Partner.ArborXR;
-        _orgId = Callback.Service.GetOrgId();
-        _deviceId = Callback.Service.GetDeviceId();
-        _authSecret = Callback.Service.GetFingerprint();
-        _userId = Callback.Service.GetAccessToken();
+        _orgId = Abxr.GetOrgId();
+        _deviceId = Abxr.GetDeviceId();
+        _authSecret = Abxr.GetFingerprint();
+        _userId = Abxr.GetAccessToken();
     }
 
     private static void GetQueryData()

@@ -17,14 +17,14 @@ public static class AndroidJavaObjectExt
 ///   Only a single instance of this class should be used per app. The SDK is automatically initialized and shut
 ///   down whenever the instance of this class is enabled/disabled (respectively).
 /// </remarks>
-public class SdkBehaviour : MonoBehaviour
+public class ArborServiceClient : MonoBehaviour
 {
     private const string PackageName = "app.xrdm.sdk.external";
     private AndroidJavaObject? _sdk;
     private NativeConnectionCallback? _nativeCallback;
-    private IConnectionCallback? _connectionCallback;
+    public static SdkServiceWrapper? ServiceWrapper;
 
-    // Whenever we delay via Task.Delay, there is no garuntee that our current thread would be already attached to Android JNI,
+    // Whenever we delay via Task.Delay, there is no guarantee that our current thread would be already attached to Android JNI,
     // so we must reattached the current thread to AndroidJNI right after Task.Delay to ensure we don't run into threading issues.
     private static Task DelayAndReattachThreadToJNI(int delay) => Task.Delay(delay).ContinueWith(_ => AndroidJNI.AttachCurrentThread());
 
@@ -41,35 +41,34 @@ public class SdkBehaviour : MonoBehaviour
         }
     }
 
-    public void Connect(IConnectionCallback callback)
+    public static bool IsConnected() => ServiceWrapper != null;
+
+    private void Connect()
     {
-        _connectionCallback = callback;
         using var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
         using var currentActivity = unityPlayerClass.GetStatic<AndroidJavaObject>("currentActivity");
-        _nativeCallback = new NativeConnectionCallback(callback, this);
+        _nativeCallback = new NativeConnectionCallback(this);
         Sdk.Call("connect", currentActivity, _nativeCallback);
     }
-
-    public void Disconnect() =>
-        Sdk.Call("disconnect");
-
-    protected virtual void OnDisable()
+    
+    protected void OnDisable()
     {
         _sdk?.Dispose();
         _sdk = null;
     }
 
-    protected virtual void OnEnable() =>
+    protected void OnEnable()
+    {
         // Instantiates our `Sdk.java`.
         _sdk = new AndroidJavaObject($"{PackageName}.Sdk");
+        Connect();
+    }
 
-    private sealed class SdkServiceWrapper : ISdkService
+    public sealed class SdkServiceWrapper
     {
         private readonly AndroidJavaObject _native;
 
         public SdkServiceWrapper(AndroidJavaObject native) => _native = native;
-
-        public void Dispose() => _native.Dispose();
 
         public string GetDeviceId() => _native.CallResult<string>("getDeviceId");
 
@@ -118,7 +117,7 @@ public class SdkBehaviour : MonoBehaviour
         public string GetFingerprint() => _native.CallResult<string>("getFingerprint");
     }
 
-    internal async Task NotifyWhenInitializedAsync(AndroidJavaObject? nativeObj)
+    private async Task NotifyWhenInitializedAsync(AndroidJavaObject? nativeObj)
     {
         // If the application gets loaded before the XRDM client, the XRDM client may not have time to be initialized.
         // To avoid this timing issue, we should wait until XRDM client is initialized to fire the event of OnConnected.
@@ -138,7 +137,7 @@ public class SdkBehaviour : MonoBehaviour
             {
                 if (serviceWrapper.GetIsInitialized())
                 {
-                    _connectionCallback?.OnConnected(serviceWrapper);
+                    ServiceWrapper = serviceWrapper;
                     return;
                 }
                 await DelayAndReattachThreadToJNI(delay);
@@ -152,34 +151,18 @@ public class SdkBehaviour : MonoBehaviour
         {
             await DelayAndReattachThreadToJNI(delay);
             _ = AndroidJNI.AttachCurrentThread();
-            _connectionCallback?.OnConnected(serviceWrapper);
+            ServiceWrapper = serviceWrapper;
         }
 #pragma warning restore CA1031
     }
 
     private sealed class NativeConnectionCallback : AndroidJavaProxy
     {
-        private readonly IConnectionCallback _wrapped;
-        private readonly SdkBehaviour _sdkBehavior;
+        private readonly ArborServiceClient _sdkBehavior;
 
-        public NativeConnectionCallback(IConnectionCallback wrapped, SdkBehaviour sdkBehavior) : base(PackageName + ".IConnectionCallback")
+        public NativeConnectionCallback(ArborServiceClient sdkBehavior) : base(PackageName + ".IConnectionCallback")
         {
-            _wrapped = wrapped;
             _sdkBehavior = sdkBehavior;
-        }
-
-        // Invoke the method ourselves, as the base does an expensive lookup via reflection:
-        // https://github.com/Unity-Technologies/UnityCsReference/blob/61f92bd79ae862c4465d35270f9d1d57befd1761/Modules/AndroidJNI/AndroidJava.cs#L88-L122
-        public override AndroidJavaObject? Invoke(string methodName, object[] args)
-        {
-            if (methodName == "onDisconnected")
-            {
-                _wrapped.OnDisconnected((bool)args[0]);
-                // `onDisconnected` is a `void` method.
-                return null;
-            }
-
-            return base.Invoke(methodName, args);
         }
 
         // Invoke the method ourselves, as the base does an expensive lookup via reflection:
@@ -200,9 +183,6 @@ public class SdkBehaviour : MonoBehaviour
 
 public class SdkException : Exception
 {
-    public SdkException()
-    { }
-
     public SdkException(string message) : base(message)
     {
     }

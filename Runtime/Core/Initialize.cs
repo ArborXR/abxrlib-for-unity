@@ -13,6 +13,7 @@ public static class Initialize
         ObjectAttacher.Attach<DeviceModel>("DeviceModel");
 #endif
         ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
+        ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
         ObjectAttacher.Attach<Authentication>("Authentication");
         ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
         ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
