@@ -21,13 +21,31 @@ public class TrackInputDevices : MonoBehaviour
 
     private void Start()
     {
-        InvokeRepeating(nameof(InitializeInputDevices), 0, 1); // Check for input devices every second
+        _leftController  = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+        _rightController = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+        _hmd = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+        
         InvokeRepeating(nameof(UpdateLocationData), 0, positionUpdateIntervalSeconds);
+        
+        InputDevices.deviceConnected += RegisterDevice;
     }
     
     private void Update()
     {
         CheckTriggers(); // Always check for triggers
+    }
+
+    private void OnDestroy()
+    {
+        InputDevices.deviceConnected -= RegisterDevice;
+    }
+
+    // Listen for hot-swaps and handle reconnects
+    private void RegisterDevice(InputDevice device)
+    {
+        if (device.characteristics.HasFlag(InputDeviceCharacteristics.Left)) _leftController = device;
+        if (device.characteristics.HasFlag(InputDeviceCharacteristics.Right)) _rightController = device;
+        if (device.characteristics.HasFlag(InputDeviceCharacteristics.HeadMounted)) _hmd = device;
     }
 
     private void UpdateLocationData()
@@ -107,36 +125,6 @@ public class TrackInputDevices : MonoBehaviour
                 Abxr.TelemetryEntry($"Left Controller {trigger.name}", telemetryData);
                 _leftTriggerValues[trigger] = pressed;
             }
-        }
-    }
-    
-    private void InitializeInputDevices()
-    {
-        if (!_rightController.isValid)
-        {
-            InitializeInputDevice(InputDeviceCharacteristics.Controller | InputDeviceCharacteristics.Right,
-                ref _rightController);
-        }
-
-        if (!_leftController.isValid)
-        {
-            InitializeInputDevice(InputDeviceCharacteristics.Controller | InputDeviceCharacteristics.Left,
-                ref _leftController);
-        }
-
-        if (!_hmd.isValid)
-        {
-            InitializeInputDevice(InputDeviceCharacteristics.HeadMounted, ref _hmd);
-        }
-    }
-
-    private static void InitializeInputDevice(InputDeviceCharacteristics inputCharacteristics, ref InputDevice inputDevice)
-    {
-        var devices = new List<InputDevice>();
-        InputDevices.GetDevicesWithCharacteristics(inputCharacteristics, devices);
-        if (devices.Count > 0)
-        {
-            inputDevice = devices[0];
         }
     }
 }
