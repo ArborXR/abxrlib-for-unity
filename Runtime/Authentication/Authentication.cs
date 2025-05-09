@@ -6,7 +6,6 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
-using XRDM.SDK.External.Unity;
 
 [DefaultExecutionOrder(1)]
 public class Authentication : SdkBehaviour
