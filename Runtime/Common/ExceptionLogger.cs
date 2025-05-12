@@ -6,6 +6,7 @@ public class ExceptionLogger : MonoBehaviour
 {
     private void Awake()
     {
+#if UNITY_ANDROID && !UNITY_EDITOR
         // Set up global exception handling
         Application.logMessageReceived += HandleUnityLog;
         AppDomain.CurrentDomain.UnhandledException += HandleUnhandledException;
@@ -15,6 +16,7 @@ public class ExceptionLogger : MonoBehaviour
         using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
         using var crashHandler = new AndroidJavaClass("com.example.crashhandlerlib.CrashHandlerInitializer");
         crashHandler.CallStatic("initializeCrashHandler", activity);
+#endif
     }
 
     private static void HandleUnityLog(string logString, string stackTrace, LogType type)
