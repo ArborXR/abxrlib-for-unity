@@ -63,7 +63,8 @@ Update Your Unity Project
 2. Paste in the Beta App ID, Org ID, and Auth Secret. All 3 are required if you are testing from Unity itself.
 
 Alternative for Managed Headsets
-If you’re using an ArborXR-managed device, only the App ID is required. The Org ID and Auth Secret auto-fill.
+
+If you’re using an ArborXR-managed device, only the App ID is required. The Org ID and Auth Secret auto-fill. 
 On any non-managed headset, you must manually enter all three values for testing purposes only.
 
 ---
