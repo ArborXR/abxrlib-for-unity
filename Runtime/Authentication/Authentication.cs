@@ -37,7 +37,7 @@ public class Authentication : MonoBehaviour
     private void Start()
     {
         GetConfigData();
-#if UNITY_ANDROID
+#if UNITY_ANDROID && !UNITY_EDITOR
         _deviceId = SystemInfo.deviceUniqueIdentifier;
         GetArborData();
 #elif UNITY_WEBGL && !UNITY_EDITOR
@@ -172,7 +172,7 @@ public class Authentication : MonoBehaviour
 
     private static void SetSessionData()
     {
-#if UNITY_ANDROID
+#if UNITY_ANDROID && !UNITY_EDITOR
         _ipAddress = Utils.GetIPAddress();
         if (!string.IsNullOrEmpty(DeviceModel.deviceModel)) _deviceModel = DeviceModel.deviceModel;
         

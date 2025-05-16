@@ -8,12 +8,14 @@ public static class Initialize
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void OnBeforeSceneLoad()
     {
-#if UNITY_ANDROID
+#if UNITY_ANDROID && !UNITY_EDITOR
         ObjectAttacher.Attach<ExceptionLogger>("ExceptionLogger");
         ObjectAttacher.Attach<DeviceModel>("DeviceModel");
 #endif
         ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
+#if UNITY_ANDROID && !UNITY_EDITOR
         ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
+#endif
         ObjectAttacher.Attach<Authentication>("Authentication");
         ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
         ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
@@ -22,7 +24,7 @@ public static class Initialize
         ObjectAttacher.Attach<TelemetryBatcher>("TelemetryBatcher");
         ObjectAttacher.Attach<LogBatcher>("LogBatcher");
         ObjectAttacher.Attach<StorageBatcher>("StorageBatcher");
-#if UNITY_ANDROID
+#if UNITY_ANDROID && !UNITY_EDITOR
         if (Configuration.Instance.headsetTracking)
         {
             ObjectAttacher.Attach<TrackInputDevices>("TrackInputDevices");
