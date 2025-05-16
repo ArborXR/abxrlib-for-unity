@@ -11,7 +11,7 @@ using UnityEngine.Networking;
 public class Authentication : MonoBehaviour
 {
     private static string _orgId;
-    private static string _deviceId;
+    private static string _deviceId = "";
     private static string _authSecret;
     private static string _userId;
     private static string _appId;
