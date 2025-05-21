@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.Scripting;
 
 [DefaultExecutionOrder(1)]
 public class Authentication : MonoBehaviour
@@ -307,13 +308,18 @@ public class Authentication : MonoBehaviour
         if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) Configuration.Instance.retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
     }
     
+    [Preserve]
     private class AuthMechanism
     {
         public string type;
         public string prompt;
         public string domain;
+        
+        [Preserve]
+        public AuthMechanism() {}
     }
 
+    [Preserve]
     private class ConfigPayload
     {
         public AuthMechanism authMechanism;
@@ -332,6 +338,9 @@ public class Authentication : MonoBehaviour
         public string maximumCachedItems;
         public string retainLocalAfterSent;
         public string positionCapturePeriod;
+        
+        [Preserve]
+        public ConfigPayload() {}
     }
 
     private class AuthPayload
@@ -354,10 +363,14 @@ public class Authentication : MonoBehaviour
         public Dictionary<string, string> authMechanism;
     }
 
+    [Preserve]
     private class AuthResponse
     {
         public string Token;
         public string Secret;
+
+        [Preserve]
+        public AuthResponse() {}
     }
 
     private enum Partner
