@@ -75,7 +75,7 @@ public class EventBatcher : MonoBehaviour
         }
 				
 		var wrapper = new PayloadWrapper { data = eventsToSend };
-		string json = JsonConvert.SerializeObject(wrapper, Formatting.Indented);
+		string json = JsonConvert.SerializeObject(wrapper);
 		
 		using var request = new UnityWebRequest(_uri, "POST");
 		Utils.BuildRequest(request, json);

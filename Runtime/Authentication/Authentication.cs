@@ -219,7 +219,7 @@ public class Authentication : MonoBehaviour
             authMechanism = CreateAuthMechanismDict()
         };
         
-        string json = JsonConvert.SerializeObject(data, Formatting.Indented);
+        string json = JsonConvert.SerializeObject(data);
 
         var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
         using var request = new UnityWebRequest(fullUri.ToString(), "POST");

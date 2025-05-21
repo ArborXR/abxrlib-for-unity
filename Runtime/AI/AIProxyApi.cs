@@ -30,7 +30,7 @@ public class AIProxyApi : MonoBehaviour
             pastMessages = pastMessages
         };
         
-        string json = JsonConvert.SerializeObject(payload, Formatting.Indented);
+        string json = JsonConvert.SerializeObject(payload);
         
         using var request = new UnityWebRequest(_uri, "POST");
         Utils.BuildRequest(request, json);
