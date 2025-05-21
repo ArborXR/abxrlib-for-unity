@@ -12,7 +12,7 @@ using UnityEngine.Scripting;
 public class Authentication : MonoBehaviour
 {
     private static string _orgId;
-    private static string _deviceId = "";
+    private static string _deviceId;
     private static string _authSecret;
     private static string _userId;
     private static string _appId;
@@ -38,8 +38,8 @@ public class Authentication : MonoBehaviour
     private void Start()
     {
         GetConfigData();
-#if UNITY_ANDROID && !UNITY_EDITOR
         _deviceId = SystemInfo.deviceUniqueIdentifier;
+#if UNITY_ANDROID && !UNITY_EDITOR
         GetArborData();
 #elif UNITY_WEBGL && !UNITY_EDITOR
         GetQueryData();
