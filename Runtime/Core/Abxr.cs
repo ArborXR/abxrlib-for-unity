@@ -360,9 +360,30 @@ public static class Abxr
 		}
 	}
 
-	public static void PollUser(string prompt, ExitPollHandler.PollType pollType)
+	/// <summary>
+	/// Get feedback from the user with a Poll
+	/// </summary>
+	/// <param name="prompt">The question being asked</param>
+	/// <param name="pollType">What kind of poll would you like</param>
+	/// <param name="responses">If a multiple choice poll, you need to provide between 2 and 8 possible responses</param>
+	public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null)
 	{
-		ExitPollHandler.AddPoll(prompt, pollType);
+		if (pollType == ExitPollHandler.PollType.MultipleChoice)
+		{
+			if (responses == null)
+			{
+				Debug.LogError("AbxrLib - List of responses required for multiple choice poll");
+				return;
+			}
+
+			if (responses.Count is < 2 or > 8)
+			{
+				Debug.LogError("AbxrLib - Multiple choice poll must have at least two and no more than 8 responses");
+				return;
+			}
+		}
+		
+		ExitPollHandler.AddPoll(prompt, pollType, responses);
 	}
 
 	public static void ReAuthenticate()

@@ -356,8 +356,9 @@ GameObject:
   - component: {fileID: 3779015006969483574}
   - component: {fileID: 6982807208053727076}
   - component: {fileID: 2260489868239985790}
-  - component: {fileID: -1254853392002778101}
   - component: {fileID: 6122527513708747896}
+  - component: {fileID: -3736542662893015287}
+  - component: {fileID: 4268683610115642966}
   m_Layer: 5
   m_Name: AbxrExitPollThumbs
   m_TagString: Untagged
@@ -450,25 +451,6 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   m_RaycastTriggerInteraction: 1
---- !u!114 &-1254853392002778101
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6166950621211028194}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9a2a647c952d43e0a7ce0b88a9e13cac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  thumbsUpButton: {fileID: 1056190299836468558}
-  thumbsDownButton: {fileID: 8297451711649344405}
-  oneRatingButton: {fileID: 0}
-  twoRatingButton: {fileID: 0}
-  threeRatingButton: {fileID: 0}
-  fourRatingButton: {fileID: 0}
-  fiveRatingButton: {fileID: 0}
 --- !u!114 &6122527513708747896
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -483,3 +465,34 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   distanceFromCamera: 1.2
   verticalOffset: -0.2
+--- !u!114 &-3736542662893015287
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6166950621211028194}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_IgnoreReversedGraphics: 1
+  m_BlockingObjects: 0
+  m_BlockingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!114 &4268683610115642966
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6166950621211028194}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6374b67eed5042529b79f7b85e7ea484, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  thumbsUpButton: {fileID: 1056190299836468558}
+  thumbsDownButton: {fileID: 8297451711649344405}

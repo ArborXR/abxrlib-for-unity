@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class FaceCamera : MonoBehaviour
 {
-    [Tooltip("How far in front of the camera the keyboard should float")]
+    [Tooltip("How far in front of the camera the panel should float")]
     public float distanceFromCamera = 1.5f;
 
     [Tooltip("Vertical offset from the camera's eye height (in meters)")]
