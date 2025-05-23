@@ -390,6 +390,18 @@ public static class Abxr
 	{
 		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 	}
+
+	public static void StartNewSession()
+	{
+		Authentication.SetSessionId(Guid.NewGuid().ToString());
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
+	}
+
+	public static void ContinueSession(string sessionId)
+	{
+		Authentication.SetSessionId(sessionId);
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
+	}
 	
 	private static void AddDuration(Dictionary<string, DateTime> startTimes, string name, Dictionary<string, string> meta)
 	{

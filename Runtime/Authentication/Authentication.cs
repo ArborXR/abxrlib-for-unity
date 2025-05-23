@@ -51,6 +51,8 @@ public class Authentication : MonoBehaviour
         StartCoroutine(CheckForReAuth());
     }
 
+    public static void SetSessionId(string sessionId) => _sessionId = sessionId;
+
     public static IEnumerator Authenticate()
     {
         yield return AuthRequest();
