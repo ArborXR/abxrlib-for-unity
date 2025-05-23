@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public class SceneChangeDetector : MonoBehaviour
@@ -21,7 +20,5 @@ public class SceneChangeDetector : MonoBehaviour
     private static void OnActiveSceneChanged(Scene oldScene, Scene newScene)
     {
         CurrentSceneName = newScene.name;
-        Debug.Log("AbxrLib - Active scene changed to " + newScene.name);
-        Abxr.Event("Scene Changed", new Dictionary<string, string> { ["Scene Name"] = newScene.name });
     }
 }
