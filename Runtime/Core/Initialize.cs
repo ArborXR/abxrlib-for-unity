@@ -1,4 +1,5 @@
 ﻿using System;
+using Newtonsoft.Json;
 using UnityEngine;
 
 public static class Initialize
@@ -8,6 +9,14 @@ public static class Initialize
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void OnBeforeSceneLoad()
     {
+        var version = typeof(JsonConvert).Assembly.GetName().Version;
+        Debug.Log($"Using Newtonsoft.Json version: {version}");
+
+        if (version < new Version(13, 0, 0))
+        {
+            Debug.LogError("Incompatible Newtonsoft.Json version loaded.");
+        }
+        
 #if UNITY_ANDROID && !UNITY_EDITOR
         ObjectAttacher.Attach<ExceptionLogger>("ExceptionLogger");
         ObjectAttacher.Attach<DeviceModel>("DeviceModel");

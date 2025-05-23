@@ -4,7 +4,8 @@
     "references": [
         "Unity.TextMeshPro",
         "Unity.InputSystem",
-        "Unity.XR.Interaction.Toolkit"
+        "Unity.XR.Interaction.Toolkit",
+        "Unity.Newtonsoft.Json"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
