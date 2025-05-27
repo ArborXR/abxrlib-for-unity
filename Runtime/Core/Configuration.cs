@@ -7,10 +7,10 @@ public class Configuration : ScriptableObject
     {
         get
         {
-            if (_instance != null) return _instance;
+            if (_instance) return _instance;
             
             _instance = Resources.Load<Configuration>("ArborXR");
-            if (_instance == null)
+            if (!_instance)
             {
                 _instance = CreateInstance<Configuration>();
             }
@@ -39,4 +39,5 @@ public class Configuration : ScriptableObject
     public int pruneSentItemsOlderThanHours = 12;
     public int maximumCachedItems = 1024;
     public bool retainLocalAfterSent;
+    public bool disableTelemetry;
 }

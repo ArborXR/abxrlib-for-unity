@@ -16,10 +16,14 @@ public class ConfigInspector : Editor
         
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Player Tracking", EditorStyles.boldLabel);
+        
+        // Disable headset tracking UI if telemetry is disabled
+        EditorGUI.BeginDisabledGroup(config.disableTelemetry);
         config.headsetTracking = EditorGUILayout.Toggle(new GUIContent(
             "Headset/Controller Tracking", "Track the Headset and Controllers"), config.headsetTracking);
         config.trackingUpdatesPerMinute = EditorGUILayout.IntField(
             "Tracking Updates Per Minute", config.trackingUpdatesPerMinute);
+        EditorGUI.EndDisabledGroup();
         
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Network", EditorStyles.boldLabel);
@@ -36,12 +40,18 @@ public class ConfigInspector : Editor
         config.eventsPerSendAttempt = EditorGUILayout.IntField(new GUIContent(
             "Events Per Send Attempt", "0 = Send all not already sent"), config.eventsPerSendAttempt);
         config.logsPerSendAttempt = EditorGUILayout.IntField("Logs Per Send Attempt", config.logsPerSendAttempt);
+        
+        // Disable telemetry entries field if telemetry is disabled
+        EditorGUI.BeginDisabledGroup(config.disableTelemetry);
         config.telemetryEntriesPerSendAttempt = EditorGUILayout.IntField("Telemetry Entries Per Send Attempt", config.telemetryEntriesPerSendAttempt);
+        EditorGUI.EndDisabledGroup();
+        
         config.storageEntriesPerSendAttempt = EditorGUILayout.IntField("Storage Entries Per Send Attempt", config.storageEntriesPerSendAttempt);
         config.pruneSentItemsOlderThanHours = EditorGUILayout.IntField(new GUIContent(
             "Prune Sent Items Older Than Hours", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours);
         config.maximumCachedItems = EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems);
         config.retainLocalAfterSent = EditorGUILayout.Toggle("Retain Local After Sent", config.retainLocalAfterSent);
+        config.disableTelemetry = EditorGUILayout.Toggle("Disable Telemetry", config.disableTelemetry);
 
         if (GUILayout.Button("Reset To Sending Rule Defaults"))
         {
@@ -56,6 +66,7 @@ public class ConfigInspector : Editor
             config.pruneSentItemsOlderThanHours = 12;
             config.maximumCachedItems = 1024;
             config.retainLocalAfterSent = false;
+            config.disableTelemetry = false;
         }
 
         if (GUI.changed) EditorUtility.SetDirty(config);

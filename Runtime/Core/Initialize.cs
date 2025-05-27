@@ -26,19 +26,22 @@ public static class Initialize
         ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
 #endif
         ObjectAttacher.Attach<Authentication>("Authentication");
-        ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
         ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
         ObjectAttacher.Attach<SceneChangeDetector>("SceneChangeDetector");
         ObjectAttacher.Attach<EventBatcher>("EventBatcher");
-        ObjectAttacher.Attach<TelemetryBatcher>("TelemetryBatcher");
         ObjectAttacher.Attach<LogBatcher>("LogBatcher");
         ObjectAttacher.Attach<StorageBatcher>("StorageBatcher");
-#if UNITY_ANDROID && !UNITY_EDITOR
-        if (Configuration.Instance.headsetTracking)
+        if (!Configuration.Instance.disableTelemetry)
         {
-            ObjectAttacher.Attach<TrackInputDevices>("TrackInputDevices");
-        }
+            ObjectAttacher.Attach<TelemetryBatcher>("TelemetryBatcher");
+            ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (Configuration.Instance.headsetTracking)
+            {
+                ObjectAttacher.Attach<TrackInputDevices>("TrackInputDevices");
+            }
 #endif
+        }
     }
 }
 
