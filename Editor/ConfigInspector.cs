@@ -52,6 +52,7 @@ public class ConfigInspector : Editor
         config.maximumCachedItems = EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems);
         config.retainLocalAfterSent = EditorGUILayout.Toggle("Retain Local After Sent", config.retainLocalAfterSent);
         config.disableTelemetry = EditorGUILayout.Toggle("Disable Telemetry", config.disableTelemetry);
+        config.disableSceneEvents = EditorGUILayout.Toggle("Disable Scene Events", config.disableSceneEvents);
 
         if (GUILayout.Button("Reset To Sending Rule Defaults"))
         {
@@ -67,6 +68,7 @@ public class ConfigInspector : Editor
             config.maximumCachedItems = 1024;
             config.retainLocalAfterSent = false;
             config.disableTelemetry = false;
+            config.disableSceneEvents = false;
         }
 
         if (GUI.changed) EditorUtility.SetDirty(config);

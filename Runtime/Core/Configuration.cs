@@ -40,4 +40,5 @@ public class Configuration : ScriptableObject
     public int maximumCachedItems = 1024;
     public bool retainLocalAfterSent;
     public bool disableTelemetry;
+    public bool disableSceneEvents;
 }
