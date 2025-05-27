@@ -33,15 +33,23 @@ public class ExitPollHandler : MonoBehaviour
 
     private void Start()
     {
+        KeyboardHandler.OnKeyboardCreated += PauseExitPolling;
+        KeyboardHandler.OnKeyboardDestroyed += ResumeExitPolling;
         _ratingPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollRating");
         _thumbsPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollThumbs");
         _multiPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollMulti");
         _multiButtonPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollMultiButton");
         _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
-        if (_ratingPrefab == null)
+        if (!_ratingPrefab)
         {
             Debug.LogError("AbxrLib - Failed to load exit poll prefab");
         }
+    }
+
+    private void OnDisable()
+    {
+        KeyboardHandler.OnKeyboardCreated -= PauseExitPolling;
+        KeyboardHandler.OnKeyboardDestroyed -= ResumeExitPolling;
     }
     
     public static void AddPoll(string prompt, PollType pollType, List<string> responses)
@@ -58,7 +66,7 @@ public class ExitPollHandler : MonoBehaviour
         _isProcessing = false;
     }
 
-    private static void CreatePoll(PollType pollType, string prompt)
+    private static void CreatePoll(PollType pollType)
     {
         if (pollType == PollType.Rating)
         {
@@ -73,21 +81,20 @@ public class ExitPollHandler : MonoBehaviour
             _pollInstance = Instantiate(_multiPrefab);
             Transform panel = _pollInstance.transform.Find("Panel");
             RectTransform panelTransform = panel.GetComponentInChildren<RectTransform>();
-            float panelShift = 0.06f - (Responses[prompt].Count - 2) * 0.03f;
+            float panelShift = 0.06f - (Responses[_prompt].Count - 2) * 0.03f;
             panelTransform.transform.position += new Vector3(0, panelShift, 0);
-            foreach (var response in Responses[prompt])
+            foreach (var response in Responses[_prompt])
             {
                 AddButton(response, panelTransform);
             }
         }
     }
     
-    private static void CreatePanel(GameObject prefab, string prompt)
+    private static void CreatePanel(GameObject prefab)
     {
         _panelInstance = Instantiate(prefab);
         TextMeshProUGUI panelText = _panelInstance.GetComponentInChildren<TextMeshProUGUI>();
-        panelText.text = prompt;
-        _prompt = prompt;
+        panelText.text = _prompt;
     }
 
     private static void ProcessPoll()
@@ -95,11 +102,11 @@ public class ExitPollHandler : MonoBehaviour
         _isProcessing = true;
 
         Tuple<string, PollType> poll = Polls[0];
-        string prompt = poll.Item1;
-        CreatePanel(_panelPrefab, prompt);
-        CreatePoll(poll.Item2, prompt);
+        _prompt = poll.Item1;
+        CreatePanel(_panelPrefab);
+        CreatePoll(poll.Item2);
         Polls.RemoveAt(0);
-        Responses.Remove(prompt);
+        Responses.Remove(_prompt);
     }
     
     private static void AddButton(string response, RectTransform panel)
@@ -121,5 +128,19 @@ public class ExitPollHandler : MonoBehaviour
             [PollResponseString] = response
         });
         ProcessNextPoll();
+    }
+    
+    private static void PauseExitPolling()
+    {
+        _isProcessing = true;
+        if (_pollInstance) _pollInstance.SetActive(false);
+        if (_panelInstance) _panelInstance.SetActive(false);
+    }
+
+    private static void ResumeExitPolling()
+    {
+        if (_pollInstance) _pollInstance.SetActive(true);
+        if (_panelInstance) _panelInstance.SetActive(true);
+        if (!_pollInstance) ProcessNextPoll();
     }
 }

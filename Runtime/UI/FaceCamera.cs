@@ -8,21 +8,15 @@ public class FaceCamera : MonoBehaviour
     [Tooltip("Vertical offset from the camera's eye height (in meters)")]
     public float verticalOffset = 0;
 
-    void LateUpdate()
+    private void LateUpdate()
     {
         var cam = Camera.main.transform;
-        if (cam == null) return;
-
-        // compute target position: in front of camera + optional vertical offset
-        Vector3 targetPos = cam.position 
-                            + cam.forward * distanceFromCamera 
-                            + Vector3.up * verticalOffset;
-
-        // set position
+        if (!cam) return;
+        
+        Vector3 targetPos = cam.position + cam.forward * distanceFromCamera + Vector3.up * verticalOffset;
         transform.position = targetPos;
 
-        // face the camera (so forward of keyboard points at camera)
-        // you might want keys to face the camera, so keyboard's forward should be opposite
+        // face the camera
         transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
     }
 }

@@ -48,7 +48,7 @@ public class TelemetryBatcher : MonoBehaviour
 	{
 		if (Configuration.Instance.disableTelemetry)
 		{
-			Debug.LogWarning("Trying to add telemetry but telemetry is disabled.");
+			Debug.LogWarning("AbxrLib - Trying to add telemetry but telemetry is disabled.");
 			return;
 		}
 		

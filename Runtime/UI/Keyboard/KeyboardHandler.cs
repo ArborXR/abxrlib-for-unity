@@ -1,9 +1,13 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using TMPro;
 using UnityEngine;
 
 public class KeyboardHandler : MonoBehaviour
 {
+    public static event Action OnKeyboardCreated;
+    public static event Action OnKeyboardDestroyed;
+    
     public enum KeyboardType
     {
         PinPad,
@@ -25,15 +29,17 @@ public class KeyboardHandler : MonoBehaviour
     
     public static void Destroy()
     {
-        if (_keyboardInstance != null)
+        if (_keyboardInstance)
         {
             Destroy(_keyboardInstance);
         }
 
-        if (_panelInstance != null)
+        if (_panelInstance)
         {
             Destroy(_panelInstance);
         }
+        
+        OnKeyboardDestroyed?.Invoke();
     }
 
     public static void SetPrompt(string prompt)
@@ -44,13 +50,14 @@ public class KeyboardHandler : MonoBehaviour
     public static void Create(KeyboardType keyboardType)
     {
         _processingSubmit = false;
-        if (_panelInstance != null) return;
+        if (_panelInstance) return;
         
         if (keyboardType == KeyboardType.PinPad) _keyboardInstance = Instantiate(_pinPadPrefab);
         else if (keyboardType == KeyboardType.FullKeyboard) _keyboardInstance = Instantiate(_keyboardPrefab);
         
         _panelInstance = Instantiate(_panelPrefab);
         _prompt = _panelInstance.GetComponentInChildren<TextMeshProUGUI>();
+        OnKeyboardCreated?.Invoke();
     }
     
     private void Start()
@@ -58,7 +65,7 @@ public class KeyboardHandler : MonoBehaviour
         _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard");
         _pinPadPrefab = Resources.Load<GameObject>("Prefabs/AbxrPinPad");
         _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
-        if (_keyboardPrefab == null)
+        if (!_keyboardPrefab)
         {
             Debug.LogError("AbxrLib - Failed to load keyboard prefab");
         }
