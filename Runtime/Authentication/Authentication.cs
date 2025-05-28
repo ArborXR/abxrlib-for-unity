@@ -30,6 +30,8 @@ public class Authentication : MonoBehaviour
     private static string _apiSecret;
     private static AuthMechanism _authMechanism;
     private static DateTime _tokenExpiry = DateTime.MinValue;
+    
+    private const string DeviceIdKey = "abxrlib_device_id";
 
     private static bool _keyboardAuthSuccess;
 
@@ -43,6 +45,7 @@ public class Authentication : MonoBehaviour
         GetArborData();
 #elif UNITY_WEBGL && !UNITY_EDITOR
         GetQueryData();
+        _deviceId = GetOrCreateDeviceId();
 #endif
         if (!ValidateConfigValues()) return;
 
@@ -103,7 +106,7 @@ public class Authentication : MonoBehaviour
         _authSecret = Abxr.GetFingerprint();
         _userId = Abxr.GetAccessToken();
     }
-
+#if UNITY_WEBGL && !UNITY_EDITOR
     private static void GetQueryData()
     {
         string orgIdQuery = Utils.GetQueryParam("abxr_orgid", Application.absoluteURL);
@@ -118,7 +121,20 @@ public class Authentication : MonoBehaviour
             _authSecret = authSecretQuery;
         }
     }
+    
+    private static string GetOrCreateDeviceId()
+    {
+        if (PlayerPrefs.HasKey(DeviceIdKey))
+        {
+            return PlayerPrefs.GetString(DeviceIdKey);
+        }
 
+        string newGuid = Guid.NewGuid().ToString();
+        PlayerPrefs.SetString(DeviceIdKey, newGuid);
+        PlayerPrefs.Save();
+        return newGuid;
+    }
+#endif
     private static bool ValidateConfigValues()
     {
         const string appIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
