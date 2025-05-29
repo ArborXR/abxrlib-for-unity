@@ -60,7 +60,7 @@ public class Authentication : MonoBehaviour
     {
         yield return AuthRequest();
         yield return GetConfiguration();
-        if (!string.IsNullOrEmpty(_authMechanism.prompt))
+        if (!string.IsNullOrEmpty(_authMechanism?.prompt))
         {
             yield return KeyboardAuthenticate();
         }
