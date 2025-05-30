@@ -13,7 +13,6 @@ GameObject:
   - component: {fileID: 4134876018333934114}
   - component: {fileID: 4134876018333934113}
   - component: {fileID: 4134876018333934112}
-  - component: {fileID: 1349378825199591356}
   m_Layer: 5
   m_Name: AbxrKeyboardKey
   m_TagString: Untagged
@@ -138,20 +137,6 @@ MonoBehaviour:
   character: 
   shiftCharacter: 
   keyLabel: {fileID: 4134876018436328723}
---- !u!114 &1349378825199591356
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4134876018333934118}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1 &4134876018436328721
 GameObject:
   m_ObjectHideFlags: 0
