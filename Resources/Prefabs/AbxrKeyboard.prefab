@@ -146,7 +146,6 @@ GameObject:
   - component: {fileID: 5635014306639256256}
   - component: {fileID: 2245562695882168521}
   - component: {fileID: 770285599164673319}
-  - component: {fileID: 6416578292745526760}
   m_Layer: 5
   m_Name: ShiftButton2
   m_TagString: Untagged
@@ -256,20 +255,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &6416578292745526760
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1018100142081175598}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1 &1308536455366478620
 GameObject:
   m_ObjectHideFlags: 0
@@ -595,7 +580,6 @@ GameObject:
   - component: {fileID: 1639435298702017065}
   - component: {fileID: 5158738927559242036}
   - component: {fileID: 7493263064005321298}
-  - component: {fileID: 985524993411406312}
   m_Layer: 5
   m_Name: SpaceButton
   m_TagString: Untagged
@@ -705,20 +689,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &985524993411406312
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2183381448802343484}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1 &2491713084037542120
 GameObject:
   m_ObjectHideFlags: 0
@@ -731,7 +701,6 @@ GameObject:
   - component: {fileID: 218262267243387800}
   - component: {fileID: 2606534154026120967}
   - component: {fileID: 8212989293743527555}
-  - component: {fileID: 6010341172026629718}
   m_Layer: 5
   m_Name: InputField
   m_TagString: Untagged
@@ -895,20 +864,6 @@ MonoBehaviour:
   m_isRichTextEditingAllowed: 0
   m_LineLimit: 0
   m_InputValidator: {fileID: 0}
---- !u!114 &6010341172026629718
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2491713084037542120}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1 &3327714178615185650
 GameObject:
   m_ObjectHideFlags: 0
@@ -1325,7 +1280,6 @@ GameObject:
   - component: {fileID: 1755575177451976692}
   - component: {fileID: 5196642097716447972}
   - component: {fileID: 280759534655850960}
-  - component: {fileID: 7961600100169805503}
   m_Layer: 5
   m_Name: DeleteButton
   m_TagString: Untagged
@@ -1435,20 +1389,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &7961600100169805503
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4910061245533988698}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1 &5011206017115823253
 GameObject:
   m_ObjectHideFlags: 0
@@ -1793,7 +1733,6 @@ GameObject:
   - component: {fileID: 2761609696599500627}
   - component: {fileID: 2989528247272887775}
   - component: {fileID: 3996242664046744773}
-  - component: {fileID: 8133666285967921706}
   m_Layer: 5
   m_Name: SubmitButton
   m_TagString: Untagged
@@ -1903,20 +1842,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &8133666285967921706
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7592991238087115633}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1 &7994663293096523517
 GameObject:
   m_ObjectHideFlags: 0
@@ -2292,7 +2217,6 @@ GameObject:
   - component: {fileID: 7158378704963189235}
   - component: {fileID: 2478737200107556644}
   - component: {fileID: 7034817201134555038}
-  - component: {fileID: 1876804865818335914}
   m_Layer: 5
   m_Name: ShiftButton1
   m_TagString: Untagged
@@ -2402,20 +2326,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &1876804865818335914
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9189112667423244874}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1001 &302007291292363215
 PrefabInstance:
   m_ObjectHideFlags: 0

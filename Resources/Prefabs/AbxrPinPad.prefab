@@ -185,7 +185,6 @@ GameObject:
   - component: {fileID: 218262267243387800}
   - component: {fileID: 2606534154026120967}
   - component: {fileID: 8212989293743527555}
-  - component: {fileID: 6010341172026629718}
   m_Layer: 5
   m_Name: InputField
   m_TagString: Untagged
@@ -349,20 +348,6 @@ MonoBehaviour:
   m_isRichTextEditingAllowed: 0
   m_LineLimit: 0
   m_InputValidator: {fileID: 0}
---- !u!114 &6010341172026629718
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2491713084037542120}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1 &3327714178615185650
 GameObject:
   m_ObjectHideFlags: 0
@@ -961,7 +946,6 @@ GameObject:
   - component: {fileID: 2761609696599500627}
   - component: {fileID: 2989528247272887775}
   - component: {fileID: 3996242664046744773}
-  - component: {fileID: 8659691987442253503}
   m_Layer: 5
   m_Name: SubmitButton
   m_TagString: Untagged
@@ -1071,20 +1055,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &8659691987442253503
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7592991238087115633}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e5f6ffc3a60abd24389d27039656b9fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  clickFeedBackForce: 0.6
-  clickDuration: 0.02
 --- !u!1 &7994663293096523517
 GameObject:
   m_ObjectHideFlags: 0
