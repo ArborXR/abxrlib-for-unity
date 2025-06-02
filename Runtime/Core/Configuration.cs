@@ -39,6 +39,6 @@ public class Configuration : ScriptableObject
     public int pruneSentItemsOlderThanHours = 12;
     public int maximumCachedItems = 1024;
     public bool retainLocalAfterSent;
-    public bool disableTelemetry;
+    public bool disableAutomaticTelemetry;
     public bool disableSceneEvents;
 }

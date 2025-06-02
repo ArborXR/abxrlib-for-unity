@@ -18,7 +18,7 @@ public class ConfigInspector : Editor
         EditorGUILayout.LabelField("Player Tracking", EditorStyles.boldLabel);
         
         // Disable headset tracking UI if telemetry is disabled
-        EditorGUI.BeginDisabledGroup(config.disableTelemetry);
+        EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
         config.headsetTracking = EditorGUILayout.Toggle(new GUIContent(
             "Headset/Controller Tracking", "Track the Headset and Controllers"), config.headsetTracking);
         config.trackingUpdatesPerMinute = EditorGUILayout.IntField(
@@ -42,7 +42,7 @@ public class ConfigInspector : Editor
         config.logsPerSendAttempt = EditorGUILayout.IntField("Logs Per Send Attempt", config.logsPerSendAttempt);
         
         // Disable telemetry entries field if telemetry is disabled
-        EditorGUI.BeginDisabledGroup(config.disableTelemetry);
+        EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
         config.telemetryEntriesPerSendAttempt = EditorGUILayout.IntField("Telemetry Entries Per Send Attempt", config.telemetryEntriesPerSendAttempt);
         EditorGUI.EndDisabledGroup();
         
@@ -51,7 +51,7 @@ public class ConfigInspector : Editor
             "Prune Sent Items Older Than Hours", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours);
         config.maximumCachedItems = EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems);
         config.retainLocalAfterSent = EditorGUILayout.Toggle("Retain Local After Sent", config.retainLocalAfterSent);
-        config.disableTelemetry = EditorGUILayout.Toggle("Disable Telemetry", config.disableTelemetry);
+        config.disableAutomaticTelemetry = EditorGUILayout.Toggle("Disable Automatic Telemetry", config.disableAutomaticTelemetry);
         config.disableSceneEvents = EditorGUILayout.Toggle("Disable Scene Events", config.disableSceneEvents);
 
         if (GUILayout.Button("Reset To Sending Rule Defaults"))
@@ -67,7 +67,7 @@ public class ConfigInspector : Editor
             config.pruneSentItemsOlderThanHours = 12;
             config.maximumCachedItems = 1024;
             config.retainLocalAfterSent = false;
-            config.disableTelemetry = false;
+            config.disableAutomaticTelemetry = false;
             config.disableSceneEvents = false;
         }
 

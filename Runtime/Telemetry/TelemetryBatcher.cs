@@ -46,12 +46,6 @@ public class TelemetryBatcher : MonoBehaviour
 	
 	public static void Add(string name, Dictionary<string, string> meta)
 	{
-		if (Configuration.Instance.disableTelemetry)
-		{
-			Debug.LogWarning("AbxrLib - Trying to add telemetry but telemetry is disabled.");
-			return;
-		}
-		
 		long telemetryTime = Utils.GetUnityTime();
 		var payload = new Payload
 		{

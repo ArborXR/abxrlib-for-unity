@@ -42,7 +42,13 @@ public static class Abxr
 		user
 	}
 
-    /// <summary>
+	/// <summary>
+	/// If you select 'Disable Automatic Telemetry' in the config,
+	/// you can manually start tracking this telemetry with this function call
+	/// </summary>
+	public static void TrackAutoTelemetry() => TrackSystemInfo.StartTracking();
+
+	/// <summary>
     /// Add log information at the 'Debug' level
     /// </summary>
     /// <param name="text">The log text</param>

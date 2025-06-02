@@ -8,15 +8,21 @@ public class TrackSystemInfo : MonoBehaviour
     private int _lastFrameCount;
     private float _lastTime;
     private const int FrameRateCheckIntervalSeconds = 10;
+    private static bool _tracking;
     
     private void Start()
     {
+        if (!Configuration.Instance.disableAutomaticTelemetry) _tracking = true;
         InvokeRepeating(nameof(CheckSystemInfo), 0, 60); // Call every 60 seconds
         InvokeRepeating(nameof(CheckFrameRate), 0, FrameRateCheckIntervalSeconds);
     }
 
+    public static void StartTracking() => _tracking = true;
+
     private void CheckSystemInfo()
     {
+        if (!_tracking) return;
+        
         var batteryData = new Dictionary<string, string>
         {
             ["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%",
@@ -35,6 +41,8 @@ public class TrackSystemInfo : MonoBehaviour
     
     private void CheckFrameRate()
     {
+        if (!_tracking) return;
+        
         float timeDiff = Time.time - _lastTime;
         if (timeDiff == 0) return;
         
