@@ -1208,7 +1208,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!114 &1262082790658887907
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1276,7 +1276,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   distanceFromCamera: 1.2
-  verticalOffset: -0.27
+  verticalOffset: -0.42
 --- !u!1001 &302007291292363215
 PrefabInstance:
   m_ObjectHideFlags: 0

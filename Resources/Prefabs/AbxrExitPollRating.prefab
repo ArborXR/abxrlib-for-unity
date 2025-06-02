@@ -1188,8 +1188,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9a2a647c952d43e0a7ce0b88a9e13cac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  thumbsUpButton: {fileID: 0}
-  thumbsDownButton: {fileID: 0}
   oneRatingButton: {fileID: 6959414956303563426}
   twoRatingButton: {fileID: 6558522249942624763}
   threeRatingButton: {fileID: 4828020215456442883}
@@ -1208,7 +1206,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   distanceFromCamera: 1.2
-  verticalOffset: -0.2
+  verticalOffset: -0.33
 --- !u!114 &3163135633173708067
 MonoBehaviour:
   m_ObjectHideFlags: 0

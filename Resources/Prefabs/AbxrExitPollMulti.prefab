@@ -236,7 +236,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   distanceFromCamera: 1.2
-  verticalOffset: -0.2
+  verticalOffset: -0.3
 --- !u!114 &6453116745983511067
 MonoBehaviour:
   m_ObjectHideFlags: 0

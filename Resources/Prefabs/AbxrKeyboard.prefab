@@ -2070,7 +2070,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   distanceFromCamera: 1.2
-  verticalOffset: -0.27
+  verticalOffset: -0.42
 --- !u!1 &9145034706330455114
 GameObject:
   m_ObjectHideFlags: 0

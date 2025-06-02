@@ -81,7 +81,7 @@ public class ExitPollHandler : MonoBehaviour
             _pollInstance = Instantiate(_multiPrefab);
             Transform panel = _pollInstance.transform.Find("Panel");
             RectTransform panelTransform = panel.GetComponentInChildren<RectTransform>();
-            float panelShift = 0.06f - (Responses[_prompt].Count - 2) * 0.03f;
+            float panelShift = 0.02f - (Responses[_prompt].Count - 2) * 0.03f;
             panelTransform.transform.position += new Vector3(0, panelShift, 0);
             foreach (var response in Responses[_prompt])
             {
