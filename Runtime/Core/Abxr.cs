@@ -278,6 +278,7 @@ public static class Abxr
 		meta["result_options"] = result.ToString();
 		AddDuration(AssessmentStartTimes, assessmentName, meta);
 		Event("assessment_complete", meta);
+		EventBatcher.SendNow();
 	}
 	
 	public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null)
