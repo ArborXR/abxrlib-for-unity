@@ -61,23 +61,27 @@ Developers can implement their own backend services by following the ABXR protoc
 
 ## Configuration
 
-### Setup & Authentication
+### Using with ArborXR Insights Early Access
 
-#### Use Early Access Credentials (**Not** the IDs from the [ArborXR Dashboard](https://app.arborxr.com/)):
+To use the ABXR SDK with ArborXR Insights Early Access program:
+
+#### Get Early Access Credentials
 1. Go to the ArborXR Insights Early Access web app and log in (will require [official Early Access sign up](https://arborxr.com/insights-early-access) & onboarding process to access).
 2. Grab these three values from the **View Data** screen of the specific app you are configuring:
 - App ID
 - Organization ID
 - Authentication Secret
 
-#### Update Your Unity Project:
+#### Configure Unity Project
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
 2. Paste in the Early Access App ID, Org ID, and Auth Secret. All 3 are required if you are testing from Unity itself.
 
 #### Alternative for Managed Headsets:
-
 If you're using an ArborXR-managed device, only the App ID is required. The Org ID and Auth Secret auto-fill. 
 On any non-managed headset, you must manually enter all three values for testing purposes only.
+
+### Using with Other Backend Services
+For information on implementing your own backend service or using other compatible services, please refer to the ABXR protocol specification.
 
 ---
 
