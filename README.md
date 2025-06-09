@@ -1,4 +1,6 @@
-# ArborXR Insights Unity SDK
+# ABXR SDK for Unity
+
+The name "ABXR" stands for "Analytics Backbone for XR" - representing our commitment to establishing an open standard for XR analytics and data collection.
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -15,23 +17,31 @@
 
 ### Overview
 
-The **ArborXR Insights SDK for Unity** empowers developers to seamlessly integrate enterprise-grade XR analytics and data tracking into their applications. Built on the **AbxrLib** runtime, this open-source library enables scalable event tracking, telemetry, and session-based storage—essential for enterprise and education XR environments.
-
-> **Note:** The name "Abxr" stands for "Analytics Backbone for XR" - representing our commitment to establishing an open standard for XR analytics and data collection.
-
-ArborXR Insights enhances product value by offering:
-- Seamless LMS & Business Intelligence integrations
-- A robust, analytics-driven backend
-- Encrypted, cross-session data persistence
-- AI-ready event streams
+The **ABXR SDK for Unity** is an open-source analytics and data collection library that provides developers with the tools to collect and send XR data to any service of their choice. Built on the **AbxrLib** runtime, this library enables scalable event tracking, telemetry, and session-based storage—essential for enterprise and education XR environments.
 
 ### Core Features
 
+The ABXR SDK provides:
 - **Event Tracking:** Monitor user behaviors, interactions, and system events.
 - **Spatial & Hardware Telemetry:** Capture headset/controller movement and hardware metrics.
 - **Object & System Info:** Track XR objects and environmental state.
 - **Storage & Session Management:** Support resumable training and long-form experiences.
 - **Logs:** Developer and system-level logs available across sessions.
+
+### Backend Services
+
+The ABXR SDK is designed to work with any backend service that implements the ABXR protocol. Currently supported services include:
+
+#### ArborXR Insights
+[ArborXR Insights](https://arborxr.com/insights) is the initial sponsor of the ABXR project and provides:
+- Seamless LMS & Business Intelligence integrations
+- A robust, analytics-driven backend
+- Encrypted, cross-session data persistence
+- AI-ready event streams
+- User-friendly dashboards and analytics tools
+
+#### Custom Implementations
+Developers can implement their own backend services by following the ABXR protocol specification. This allows for complete control over data storage, processing, and visualization.
 
 ---
 
@@ -45,7 +55,7 @@ ArborXR Insights enhances product value by offering:
    ```
    https://github.com/ArborXR/abxrlib-for-unity.git
    ```
-4. Once imported, you will see `ArborXR Insights` in your Unity toolbar.
+4. Once imported, you will see `Analytics for XR` in your Unity toolbar.
 
 ---
 
@@ -53,16 +63,16 @@ ArborXR Insights enhances product value by offering:
 
 ### Setup & Authentication
 
-#### Use Beta Credentials (**Not** the IDs from the [ArborXR Dashboard](https://app.arborxr.com/)):
-1. Go to the ArborXR Insights Beta web app and log in (will require [official beta sign up](https://arborxr.com/insights-beta) & onboarding process to access).
+#### Use Early Access Credentials (**Not** the IDs from the [ArborXR Dashboard](https://app.arborxr.com/)):
+1. Go to the ArborXR Insights Early Access web app and log in (will require [official Early Access sign up](https://arborxr.com/insights-early-access) & onboarding process to access).
 2. Grab these three values from the **View Data** screen of the specific app you are configuring:
 - App ID
 - Organization ID
 - Authentication Secret
 
 #### Update Your Unity Project:
-1. Open ArborXR Insights > Configuration in Unity Editor.
-2. Paste in the Beta App ID, Org ID, and Auth Secret. All 3 are required if you are testing from Unity itself.
+1. Open `Analytics for XR > Configuration` in the Unity Editor.
+2. Paste in the Early Access App ID, Org ID, and Auth Secret. All 3 are required if you are testing from Unity itself.
 
 #### Alternative for Managed Headsets:
 
@@ -388,7 +398,7 @@ A: Object tracking can be enabled by adding the Track Object component to any Ga
 
 ## Backend Integration: ArborXR Insights Storage API
 
-All Unity data is securely routed to the **ArborXR Insights Storage API**, which:
+When using [ArborXR Insights](https://arborxr.com/insights) as your backend service, the ABXR SDK securely routes all Unity data to the **ArborXR Insights Storage API**, which:
 - Validates authentication via signed JWTs
 - Ensures session continuity across user/device
 - Persists structured logs into MongoDB Atlas
