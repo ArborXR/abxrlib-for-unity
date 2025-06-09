@@ -17,7 +17,7 @@
 
 The **ArborXR Insights SDK for Unity** empowers developers to seamlessly integrate enterprise-grade XR analytics and data tracking into their applications. Built on the **AbxrLib** runtime, this open-source library enables scalable event tracking, telemetry, and session-based storage—essential for enterprise and education XR environments.
 
-> **Fun Fact:** The name "Abxr" stands for "All 'Bout XR" - a playful nod to our passion for everything XR!
+> **Note:** The name "Abxr" stands for "Analytics Backend for XR" - representing our commitment to establishing an open standard for XR analytics and data collection.
 
 ArborXR Insights enhances product value by offering:
 - Seamless LMS & Business Intelligence integrations
