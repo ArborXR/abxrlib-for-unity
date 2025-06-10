@@ -59,10 +59,13 @@ public class Authentication : MonoBehaviour
     public static IEnumerator Authenticate()
     {
         yield return AuthRequest();
-        yield return GetConfiguration();
-        if (!string.IsNullOrEmpty(_authMechanism?.prompt))
+        if (!string.IsNullOrEmpty(_authToken))
         {
-            yield return KeyboardAuthenticate();
+            yield return GetConfiguration();
+            if (!string.IsNullOrEmpty(_authMechanism?.prompt))
+            {
+                yield return KeyboardAuthenticate();
+            }
         }
     }
 
