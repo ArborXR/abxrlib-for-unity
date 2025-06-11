@@ -1,6 +1,6 @@
 # ABXR SDK for Unity
 
-The name "ABXR" stands for "Analytics Backbone for XR" - representing our commitment to establishing an open standard for XR analytics and data collection.
+The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source foundation for capturing and transmitting spatial, interaction, and performance data in XR. When combined with **ArborXR Insights**, ABXR transforms from a lightweight instrumentation layer into a full-scale enterprise analytics solution—unlocking powerful dashboards, LMS/BI integrations, and AI-enhanced insights.
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -17,7 +17,16 @@ The name "ABXR" stands for "Analytics Backbone for XR" - representing our commit
 
 ### Overview
 
-The **ABXR SDK for Unity** is an open-source analytics and data collection library that provides developers with the tools to collect and send XR data to any service of their choice. Built on the **AbxrLib** runtime, this library enables scalable event tracking, telemetry, and session-based storage—essential for enterprise and education XR environments.
+The **ABXR SDK for Unity** is an open-source analytics and data collection library that provides developers with the tools to collect and send XR data to any service of their choice. This library enables scalable event tracking, telemetry, and session-based storage—essential for enterprise and education XR environments.
+
+> 💡 **Quick Start:** Most developers can integrate ABXR SDK and log their first event in under **15 minutes**.
+
+**Why Use ABXR SDK?**
+
+- **Open-Source** & portable to any backend—no vendor lock-in  
+- **Quick integration**—track user interactions in minutes  
+- **Secure & scalable**—ready for enterprise use cases  
+- **Pluggable with ArborXR Insights**—seamless access to LMS/BI integrations, session replays, AI diagnostics, and more
 
 ### Core Features
 
@@ -33,12 +42,11 @@ The ABXR SDK provides:
 The ABXR SDK is designed to work with any backend service that implements the ABXR protocol. Currently supported services include:
 
 #### ArborXR Insights
-[ArborXR Insights](https://arborxr.com/insights) is the initial sponsor of the ABXR project and provides:
-- Seamless LMS & Business Intelligence integrations
-- A robust, analytics-driven backend
-- Encrypted, cross-session data persistence
-- AI-ready event streams
-- User-friendly dashboards and analytics tools
+When paired with [**ArborXR Insights**](https://arborxr.com/insights), ABXR becomes a full-service platform offering:
+- Seamless data pipeline from headset to dashboard
+- End-to-end session tracking, analysis, and replay
+- AI-driven insights for content quality, learner performance, and device usage
+- One-click LMS and BI integrations for scalable deployments
 
 #### Custom Implementations
 Developers can implement their own backend services by following the ABXR protocol specification. This allows for complete control over data storage, processing, and visualization.
@@ -400,23 +408,23 @@ A: Object tracking can be enabled by adding the Track Object component to any Ga
 
 ---
 
-## Backend Integration: ArborXR Insights Storage API
+## Persisting User State with ArborXR Insights
 
-When using [ArborXR Insights](https://arborxr.com/insights) as your backend service, the ABXR SDK securely routes all Unity data to the **ArborXR Insights Storage API**, which:
-- Validates authentication via signed JWTs
-- Ensures session continuity across user/device
-- Persists structured logs into MongoDB Atlas
-- Provides async-ready responses for batch telemetry logging
+The ABXR SDK includes a built-in storage interface that enables persistent session data across XR devices. This is ideal for applications with long-form content, resumable training, or user-specific learning paths.
 
-Example endpoints:
-- `/v1/collect/event` → Event logging
-- `/v1/collect/log` → Developer log ingestion
-- `/v1/collect/telemetry` → Positional + hardware data
-- `/v1/storage` → Persisted user/device state
+When integrated with **ArborXR Insights**, session state data is securely stored and can be retrieved from any device, enabling users to resume exactly where they left off. 
+
+### Benefits of Using ArborXR Insights for Storage:
+- Cross-device continuity and resuming sessions
+- Secure, compliant storage (GDPR, HIPAA-ready)
+- Configurable behaviors (e.g., `keepLatest`, append history)
+- Seamless AI and analytics integration for stored user states
+
+To use this feature, simply call the storage functions provided in the SDK (`SetStorageEntry`, `GetStorageEntry`, etc.). These entries are automatically synced with ArborXR’s cloud infrastructure, ensuring consistent data across sessions.
 
 ---
 
-## Web UI + Insights User API
+## ArborXR Insights Web Portal & API
 
 For dashboards, analytics queries, impersonation, and integration management, use the **ArborXR Insights User API**, accessible through the platform's admin portal.
 
