@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using UnityEngine;
 
 public static class RigDetector
 {
@@ -8,7 +10,7 @@ public static class RigDetector
     {
         if (!string.IsNullOrEmpty(_prefabSuffix)) return _prefabSuffix;
 #if UNITY_ANDROID && !UNITY_EDITOR
-        if (IsUsingOVR()) _prefabSuffix = "_Meta";
+        if (IsOVRCameraRigInUse()) _prefabSuffix = "_Meta";
         else _prefabSuffix = "_OpenXR";
 #else
         else _prefabSuffix = "_Default";
@@ -16,15 +18,38 @@ public static class RigDetector
         return _prefabSuffix;
     }
     
-    private static bool IsUsingOVR()
+    public static bool IsXRRigInUse()
     {
-        return FindType("OVRCameraRig") != null || FindType("OVRManager") != null;
+        return IsTypeInScene("UnityEngine.XR.Interaction.Toolkit.XRRig");
     }
 
-    private static bool IsUsingXRI()
+    public static bool IsOVRCameraRigInUse()
     {
-        return FindType("UnityEngine.XR.Interaction.Toolkit.XRInteractionManager") != null ||
-               FindType("UnityEngine.XR.Interaction.Toolkit.XRRig") != null;
+        return IsTypeInScene("OVRCameraRig");
+    }
+
+    private static bool IsTypeInScene(string typeName)
+    {
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                var type = asm.GetType(typeName, false);
+                if (type == null) continue;
+
+                var objects = UnityEngine.Object.FindObjectsOfType(typeof(GameObject));
+                foreach (var obj in objects)
+                {
+                    var components = ((GameObject)obj).GetComponents<Component>();
+                    if (components.Any(c => c && c.GetType() == type))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch { /* ignore */ }
+        }
+        return false;
     }
 
     private static Type FindType(string typeName)
