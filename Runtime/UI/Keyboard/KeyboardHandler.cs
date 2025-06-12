@@ -62,8 +62,8 @@ public class KeyboardHandler : MonoBehaviour
     
     private void Start()
     {
-        _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard");
-        _pinPadPrefab = Resources.Load<GameObject>("Prefabs/AbxrPinPad");
+        _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard" + RigDetector.PrefabSuffix());
+        _pinPadPrefab = Resources.Load<GameObject>("Prefabs/AbxrPinPad" + RigDetector.PrefabSuffix());
         _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
         if (!_keyboardPrefab)
         {
