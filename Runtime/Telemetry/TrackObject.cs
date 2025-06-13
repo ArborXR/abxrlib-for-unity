@@ -3,7 +3,7 @@ using System.Globalization;
 using UnityEngine;
 
 [DefaultExecutionOrder(100)] // Doesn't matter when this one runs
-[AddComponentMenu("ArborXR Insights/Track Object")]
+[AddComponentMenu("Analytics for XR/Track Object")]
 public class TrackObject : MonoBehaviour
 {
     private Vector3 _currentPosition;

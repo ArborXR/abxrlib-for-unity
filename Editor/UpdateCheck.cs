@@ -16,7 +16,7 @@ public class UpdateCheck
     private const int UpdateCheckFrequencyDays = 1;
     public const string UpdateCheckPref = "Abxr_updateCheck";
 
-    [MenuItem("ArborXR Insights/Check For Updates")]
+    [MenuItem("Analytics for XR/Check For Updates")]
     public static async void CheckForUpdatesMenu()
     {
         EditorPrefs.DeleteKey(SkippedVersionKey);
