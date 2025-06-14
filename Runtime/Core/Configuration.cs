@@ -3,13 +3,15 @@
 public class Configuration : ScriptableObject
 {
     private static Configuration _instance;
+    private const string CONFIG_NAME = "AbxrLib";
+    
     public static Configuration Instance
     {
         get
         {
             if (_instance) return _instance;
             
-            _instance = Resources.Load<Configuration>("ArborXR");
+            _instance = Resources.Load<Configuration>(CONFIG_NAME);
             if (!_instance)
             {
                 _instance = CreateInstance<Configuration>();
