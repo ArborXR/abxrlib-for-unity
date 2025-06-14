@@ -6,6 +6,8 @@ using UnityEngine;
 internal class Core
 {
     private static Configuration _config;
+    private const string NewConfigName = "AbxrLib";
+    private const string OldConfigName = "ArborXR";
     
     static Core()
     {
@@ -24,9 +26,20 @@ internal class Core
     {
         if (_config != null) return _config;
         
-        _config = Resources.Load<Configuration>("ArborXR");
+        // First try to load the new config name
+        _config = Resources.Load<Configuration>(NewConfigName);
         if (_config != null) return _config;
         
+        // If new config doesn't exist, try the old config name
+        _config = Resources.Load<Configuration>(OldConfigName);
+        if (_config != null)
+        {
+            // If old config exists but new one doesn't, migrate it
+            MigrateConfigToNewName();
+            return _config;
+        }
+        
+        // If neither exists, create new config with new name
         _config = ScriptableObject.CreateInstance<Configuration>();
         const string filepath = "Assets/Resources";
         if (!AssetDatabase.IsValidFolder(filepath))
@@ -34,10 +47,27 @@ internal class Core
             AssetDatabase.CreateFolder("Assets", "Resources");
         }
         
-        AssetDatabase.CreateAsset(_config, filepath + "/ArborXR.asset");
+        AssetDatabase.CreateAsset(_config, filepath + "/" + NewConfigName + ".asset");
         EditorUtility.SetDirty(GetConfig());
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
         return _config;
+    }
+
+    private static void MigrateConfigToNewName()
+    {
+        const string filepath = "Assets/Resources";
+        string oldPath = filepath + "/" + OldConfigName + ".asset";
+        string newPath = filepath + "/" + NewConfigName + ".asset";
+        
+        if (AssetDatabase.LoadAssetAtPath<Configuration>(oldPath) != null)
+        {
+            // Rename the asset
+            AssetDatabase.RenameAsset(oldPath, NewConfigName);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            
+            Debug.Log($"ArborXR configuration has been migrated to {NewConfigName}");
+        }
     }
 }
