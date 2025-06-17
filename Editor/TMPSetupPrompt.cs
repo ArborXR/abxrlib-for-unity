@@ -14,7 +14,7 @@ public static class TMPSetupPrompt
     private static void TryPromptTMPImport()
     {
         // This will trigger the TMP Essentials Import Prompt
-        if (TMP_Settings.instance) ;
+        if (TMP_Settings.instance) { }
     }
 }
 #endif
