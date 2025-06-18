@@ -113,11 +113,17 @@ public static class Abxr
     /// </summary>
     /// <param name="name">Name of the event</param>
     /// <param name="meta">Any additional information (optional)</param>
-	public static void Event(string name, Dictionary<string, string> meta = null)
+    /// <param name="sendTelemetry">Send telemetry with the event (optional)</param>
+    public static void Event(string name, Dictionary<string, string> meta = null, bool sendTelemetry = true)
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		EventBatcher.Add(name, meta);
+		if (sendTelemetry)
+		{
+			TrackSystemInfo.SendAll();
+			TrackInputDevices.SendLocationData();
+		}
 	}
 
 	/// <summary>

@@ -6,11 +6,12 @@ using UnityEngine.XR;
 [DefaultExecutionOrder(100)] // Doesn't matter when this one runs
 public class TrackInputDevices : MonoBehaviour
 {
-    public float positionUpdateIntervalSeconds = (float)(60.0 / Configuration.Instance.trackingUpdatesPerMinute);
+    private static readonly float PositionUpdateIntervalSeconds = (float)(60.0 / Configuration.Instance.trackingUpdatesPerMinute);
+    private static float _timer = 1f;
     
-    private InputDevice _rightController;
-    private InputDevice _leftController;
-    private InputDevice _hmd;
+    private static InputDevice _rightController;
+    private static InputDevice _leftController;
+    private static InputDevice _hmd;
 
     private const string HmdName = "Head";
     private const string RightControllerName = "Right Controller";
@@ -24,15 +25,14 @@ public class TrackInputDevices : MonoBehaviour
         _leftController  = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
         _rightController = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
         _hmd = InputDevices.GetDeviceAtXRNode(XRNode.Head);
-        
-        InvokeRepeating(nameof(UpdateLocationData), 0, positionUpdateIntervalSeconds);
-        
         InputDevices.deviceConnected += RegisterDevice;
     }
     
     private void Update()
     {
         CheckTriggers(); // Always check for triggers
+        _timer += Time.deltaTime;
+        if (_timer >= PositionUpdateIntervalSeconds) SendLocationData();
     }
 
     private void OnDestroy()
@@ -41,21 +41,23 @@ public class TrackInputDevices : MonoBehaviour
     }
 
     // Listen for hot-swaps and handle reconnects
-    private void RegisterDevice(InputDevice device)
+    private static void RegisterDevice(InputDevice device)
     {
         if (device.characteristics.HasFlag(InputDeviceCharacteristics.Left)) _leftController = device;
         if (device.characteristics.HasFlag(InputDeviceCharacteristics.Right)) _rightController = device;
         if (device.characteristics.HasFlag(InputDeviceCharacteristics.HeadMounted)) _hmd = device;
     }
 
-    private void UpdateLocationData()
+    public static void SendLocationData()
     {
-        UpdateLocationData(_rightController);
-        UpdateLocationData(_leftController);
-        UpdateLocationData(_hmd);
+        if (_timer == 0f) return; // Make sure not to send twice in the same update
+        _timer = 0; // Reset timer
+        SendLocationData(_rightController);
+        SendLocationData(_leftController);
+        SendLocationData(_hmd);
     }
 
-    private static void UpdateLocationData(InputDevice device)
+    private static void SendLocationData(InputDevice device)
     {
         if (!device.isValid) return;
         
