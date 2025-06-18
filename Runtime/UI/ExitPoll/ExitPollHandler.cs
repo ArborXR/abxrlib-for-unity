@@ -35,9 +35,9 @@ public class ExitPollHandler : MonoBehaviour
     {
         KeyboardHandler.OnKeyboardCreated += PauseExitPolling;
         KeyboardHandler.OnKeyboardDestroyed += ResumeExitPolling;
-        _ratingPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollRating");
-        _thumbsPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollThumbs");
-        _multiPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollMulti");
+        _ratingPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollRating" + RigDetector.PrefabSuffix());
+        _thumbsPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollThumbs" + RigDetector.PrefabSuffix());
+        _multiPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollMulti" + RigDetector.PrefabSuffix());
         _multiButtonPrefab = Resources.Load<GameObject>("Prefabs/AbxrExitPollMultiButton");
         _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
         if (!_ratingPrefab)
