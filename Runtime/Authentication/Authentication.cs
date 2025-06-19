@@ -85,10 +85,10 @@ public class Authentication : MonoBehaviour
     {
         if (!hasFocus)
         {
-            EventBatcher.SendNow();
-            TelemetryBatcher.SendNow();
-            LogBatcher.SendNow();
-            StorageBatcher.SendNow();
+            StartCoroutine(EventBatcher.Send());
+            StartCoroutine(TelemetryBatcher.Send());
+            StartCoroutine(LogBatcher.Send());
+            StartCoroutine(StorageBatcher.Send());
         }
     }
 

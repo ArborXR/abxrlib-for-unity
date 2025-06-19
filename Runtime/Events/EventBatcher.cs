@@ -7,41 +7,24 @@ using UnityEngine.Networking;
 
 public class EventBatcher : MonoBehaviour
 {
-	private static float _sendIntervalSeconds;
 	private const string UrlPath = "/v1/collect/event";
 	private static Uri _uri;
 	private static readonly List<Payload> Payloads = new();
 	private static readonly object Lock = new();
+	private static float _timer;
+	private static float _lastCallTime;
+	private const float MaxCallFrequencySeconds = 1f;
 	
 	private void Start()
 	{
 		_uri = new Uri(new Uri(Configuration.Instance.restUrl), UrlPath);
-		_sendIntervalSeconds = Configuration.Instance.sendNextBatchWaitSeconds;
-		StartCoroutine(SendLoop());
+		_timer = Configuration.Instance.sendNextBatchWaitSeconds;
 	}
-
-	public static void SendNow()
+	
+	private void Update()
 	{
-		CoroutineRunner.Instance.StartCoroutine(Send());
-	}
-
-	private static IEnumerator SendLoop()
-	{
-		while (true)
-		{
-			yield return new WaitForSeconds(_sendIntervalSeconds);
-			yield return Send();
-		}
-	}
-
-	private static IEnumerator Send()
-	{
-		if (!Authentication.Authenticated()) yield break;
-		_sendIntervalSeconds = Configuration.Instance.sendNextBatchWaitSeconds;
-		lock (Lock)
-		{
-			if (Payloads.Count > 0) yield return SendEvents();
-		}
+		_timer -= Time.deltaTime;
+		if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
 	}
 	
 	public static void Add(string name, Dictionary<string, string> meta)
@@ -59,13 +42,23 @@ public class EventBatcher : MonoBehaviour
 		    Payloads.Add(payload);
 		    if (Payloads.Count >= Configuration.Instance.eventsPerSendAttempt)
 		    {
-			    _sendIntervalSeconds = 1; // Send what we have soon
+			    _timer = 0; // Send on the next update
 		    }
 	    }
     }
 	
-	private static IEnumerator SendEvents()
+	public static IEnumerator Send()
 	{
+		if (Time.time - _lastCallTime < MaxCallFrequencySeconds) yield break;
+		
+		_lastCallTime = Time.time;
+		_timer = Configuration.Instance.sendNextBatchWaitSeconds; // reset timer
+		if (!Authentication.Authenticated()) yield break;
+		lock (Lock)
+		{
+			if (Payloads.Count == 0) yield break;
+		}
+		
 		List<Payload> eventsToSend;
 		lock (Lock)
         {
@@ -89,7 +82,7 @@ public class EventBatcher : MonoBehaviour
 		else
 		{
 			Debug.LogError($"AbxrLib - Event POST Request failed : {request.error} - {request.downloadHandler.text}");
-			_sendIntervalSeconds = Configuration.Instance.sendRetryIntervalSeconds;
+			_timer = Configuration.Instance.sendRetryIntervalSeconds;
 			lock (Lock)
 			{
 				Payloads.InsertRange(0, eventsToSend);
