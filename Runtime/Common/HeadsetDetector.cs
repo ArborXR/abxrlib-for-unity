@@ -46,14 +46,10 @@ public class HeadsetDetector : MonoBehaviour
         return true;
     }
     
-    private static void OnHeadsetRemovedDetected()
-    {
-        Abxr.onHeadsetRemoved?.Invoke();
-    }
+    private static void OnHeadsetRemovedDetected() { }
     
     private void OnHeadsetPutOnDetected()
     {
-        Abxr.onHeadsetPutOn?.Invoke();
         Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
             ExitPollHandler.PollType.MultipleChoice,
             new List<string>{ContinueSessionString, NewSessionString},
@@ -62,6 +58,10 @@ public class HeadsetDetector : MonoBehaviour
 
     private static void NewSessionCheck(string response)
     {
-        if (response == NewSessionString) Authentication.ReAuthenticate();
+        if (response == NewSessionString)
+        {
+            Authentication.ReAuthenticate();
+            Abxr.onHeadsetPutOnNewSession?.Invoke();
+        }
     }
 }

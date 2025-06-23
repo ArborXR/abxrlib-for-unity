@@ -375,11 +375,12 @@ Deliver questionnaires to users to gather feedback.
 public enum PollType
 {
     Thumbs,
-    Rating
+    Rating,
+    MultipleChoice
 }
 
 // C# Event Method Signature
-public void PollUser(string prompt, ExitPollHandler.PollType pollType)
+public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null)
 
 // Example usage
 Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
@@ -387,6 +388,14 @@ Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 **Poll Types:**
 - `Thumbs Up/Thumbs Down`
 - `Rating (1-5)`
+- `Multiple Choice (2-8 string options)`
+
+## Headset Removal (Session Integrity)
+To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.
+```cpp
+public static Action onHeadsetPutOnNewSession;
+```
+If the developer would like to have logic to correspond to these events, that would be done by subscribing to these events.
 
 ## Debug Window
 The Debug Window is a little bonus feature from the AbxrLib developers.

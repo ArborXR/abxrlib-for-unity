@@ -11,8 +11,7 @@ public static class Abxr
 	private static readonly Dictionary<string, DateTime> InteractionStartTimes = new();
 	private static readonly Dictionary<string, DateTime> LevelStartTimes = new();
 	
-	public static Action onHeadsetPutOn;
-	public static Action onHeadsetRemoved;
+	public static Action onHeadsetPutOnNewSession;
 	
 	public enum ResultOptions
 	{
