@@ -51,7 +51,7 @@ public class Authentication : MonoBehaviour
 
         SetSessionData();
         StartCoroutine(Authenticate());
-        StartCoroutine(CheckForReAuth());
+        StartCoroutine(PollForReAuth());
     }
 
     public static void SetSessionId(string sessionId) => _sessionId = sessionId;
@@ -69,7 +69,18 @@ public class Authentication : MonoBehaviour
         }
     }
 
-    private static IEnumerator CheckForReAuth()
+    public static void ReAuthenticate()
+    {
+        _sessionId = null;
+        _apiSecret = null;
+        _authMechanism = null;
+        _authToken = null;
+        _tokenExpiry = DateTime.MinValue;
+        
+        CoroutineRunner.Instance.StartCoroutine(Authenticate());
+    }
+
+    private static IEnumerator PollForReAuth()
     {
         while (true)
         {
@@ -83,13 +94,7 @@ public class Authentication : MonoBehaviour
     
     private void OnApplicationFocus(bool hasFocus)
     {
-        if (!hasFocus)
-        {
-            StartCoroutine(EventBatcher.Send());
-            StartCoroutine(TelemetryBatcher.Send());
-            StartCoroutine(LogBatcher.Send());
-            StartCoroutine(StorageBatcher.Send());
-        }
+        if (!hasFocus) Utils.SendAllData();
     }
 
     private static void GetConfigData()

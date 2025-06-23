@@ -34,6 +34,7 @@ public static class Initialize
         ObjectAttacher.Attach<TelemetryBatcher>("TelemetryBatcher");
         ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
 #if UNITY_ANDROID && !UNITY_EDITOR
+        ObjectAttacher.Attach<HeadsetDetector>("HeadsetDetector");
         if (Configuration.Instance.headsetTracking)
         {
             ObjectAttacher.Attach<TrackInputDevices>("TrackInputDevices");

@@ -143,4 +143,12 @@ public static class Utils
     }
     
     public static long GetUnityTime() => (long)(Time.time * 1000f) + Initialize.StartTimeMs;
+
+    public static void SendAllData()
+    {
+        CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
+        CoroutineRunner.Instance.StartCoroutine(TelemetryBatcher.Send());
+        CoroutineRunner.Instance.StartCoroutine(LogBatcher.Send());
+        CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
+    }
 }

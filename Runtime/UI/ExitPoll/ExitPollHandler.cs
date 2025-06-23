@@ -29,6 +29,7 @@ public class ExitPollHandler : MonoBehaviour
     
     private static readonly List<Tuple<string, PollType>> Polls = new();
     private static readonly Dictionary<string, List<string>> Responses = new();
+    private static readonly Dictionary<string, Action<string>> Callbacks = new();
     private static bool _isProcessing;
 
     private void Start()
@@ -52,10 +53,11 @@ public class ExitPollHandler : MonoBehaviour
         KeyboardHandler.OnKeyboardDestroyed -= ResumeExitPolling;
     }
     
-    public static void AddPoll(string prompt, PollType pollType, List<string> responses)
+    public static void AddPoll(string prompt, PollType pollType, List<string> responses, Action<string> callback)
     {
         Polls.Add(new Tuple<string, PollType>(prompt, pollType));
         if (responses != null) Responses[prompt] = responses;
+        if (callback != null) Callbacks[prompt] = callback;
         
         if (!_isProcessing) ProcessPoll();
     }
@@ -122,6 +124,7 @@ public class ExitPollHandler : MonoBehaviour
     {
         Destroy(_pollInstance);
         Destroy(_panelInstance);
+        if (Callbacks.TryGetValue(_prompt, out var callback)) callback.Invoke(response);
         Abxr.Event(PollEventString, new Dictionary<string, string>
         {
             [PollQuestionString] = _prompt,

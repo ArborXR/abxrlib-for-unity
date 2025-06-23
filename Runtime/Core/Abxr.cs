@@ -11,6 +11,9 @@ public static class Abxr
 	private static readonly Dictionary<string, DateTime> InteractionStartTimes = new();
 	private static readonly Dictionary<string, DateTime> LevelStartTimes = new();
 	
+	public static Action onHeadsetPutOn;
+	public static Action onHeadsetRemoved;
+	
 	public enum ResultOptions
 	{
 		Null,
@@ -379,7 +382,8 @@ public static class Abxr
 	/// <param name="prompt">The question being asked</param>
 	/// <param name="pollType">What kind of poll would you like</param>
 	/// <param name="responses">If a multiple choice poll, you need to provide between 2 and 8 possible responses</param>
-	public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null)
+	/// <param name="callback">Optional callback that will be called with the selected string value (Multiple-choice poll only)</param>
+	public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null)
 	{
 		if (pollType == ExitPollHandler.PollType.MultipleChoice)
 		{
@@ -396,7 +400,7 @@ public static class Abxr
 			}
 		}
 		
-		ExitPollHandler.AddPoll(prompt, pollType, responses);
+		ExitPollHandler.AddPoll(prompt, pollType, responses, callback);
 	}
 
 	public static void ReAuthenticate()
