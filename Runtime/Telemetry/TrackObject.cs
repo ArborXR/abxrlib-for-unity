@@ -8,11 +8,12 @@ public class TrackObject : MonoBehaviour
 {
     private Vector3 _currentPosition;
     private Quaternion _currentRotation;
-
-    private void Start()
+    private static float _timer = 1f;
+    
+    private void Update()
     {
-        float positionUpdateIntervalSeconds = (float)(60.0 / Configuration.Instance.trackingUpdatesPerMinute);
-        InvokeRepeating(nameof(UpdateLocation), 0, positionUpdateIntervalSeconds);
+        _timer += Time.deltaTime;
+        if (_timer >= Configuration.Instance.telemetryTrackingPeriodSeconds) UpdateLocation();
     }
 
     private void UpdateLocation()

@@ -26,18 +26,20 @@ public class Configuration : ScriptableObject
     [Tooltip("Optional")] public string authSecret;
     
     public bool headsetTracking = true;
-    public int trackingUpdatesPerMinute = 4;
+    public float positionTrackingPeriodSeconds = 1f;
     
     public string restUrl = "https://lib-backend.xrdm.dev/";
 
+    public float frameRateTrackingPeriodSeconds = 0.5f;
+    public float telemetryTrackingPeriodSeconds = 10f;
     public int sendRetriesOnFailure = 3;
     public int sendRetryIntervalSeconds = 3;
     public int sendNextBatchWaitSeconds = 30;
     public int stragglerTimeoutSeconds = 15;
-    public int eventsPerSendAttempt = 4;
-    public int logsPerSendAttempt = 4;
-    public int telemetryEntriesPerSendAttempt = 4;
-    public int storageEntriesPerSendAttempt = 4;
+    public int eventsPerSendAttempt = 16;
+    public int logsPerSendAttempt = 16;
+    public int telemetryEntriesPerSendAttempt = 16;
+    public int storageEntriesPerSendAttempt = 16;
     public int pruneSentItemsOlderThanHours = 12;
     public int maximumCachedItems = 1024;
     public bool retainLocalAfterSent;

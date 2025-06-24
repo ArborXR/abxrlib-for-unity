@@ -6,7 +6,6 @@ using UnityEngine.XR;
 [DefaultExecutionOrder(100)] // Doesn't matter when this one runs
 public class TrackInputDevices : MonoBehaviour
 {
-    private static readonly float PositionUpdateIntervalSeconds = (float)(60.0 / Configuration.Instance.trackingUpdatesPerMinute);
     private static float _timer = 1f;
     
     private static InputDevice _rightController;
@@ -32,7 +31,7 @@ public class TrackInputDevices : MonoBehaviour
     {
         CheckTriggers(); // Always check for triggers
         _timer += Time.deltaTime;
-        if (_timer >= PositionUpdateIntervalSeconds) SendLocationData();
+        if (_timer >= Configuration.Instance.positionTrackingPeriodSeconds) SendLocationData();
     }
 
     private void OnDestroy()

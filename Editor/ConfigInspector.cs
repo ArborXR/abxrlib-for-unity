@@ -21,8 +21,8 @@ public class ConfigInspector : Editor
         EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
         config.headsetTracking = EditorGUILayout.Toggle(new GUIContent(
             "Headset/Controller Tracking", "Track the Headset and Controllers"), config.headsetTracking);
-        config.trackingUpdatesPerMinute = EditorGUILayout.IntField(
-            "Tracking Updates Per Minute", config.trackingUpdatesPerMinute);
+        config.positionTrackingPeriodSeconds = EditorGUILayout.FloatField(
+            "Position Capture Period (seconds)", config.positionTrackingPeriodSeconds);
         EditorGUI.EndDisabledGroup();
         
         EditorGUILayout.Space();
@@ -32,6 +32,10 @@ public class ConfigInspector : Editor
         
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Data Sending Rules", EditorStyles.boldLabel);
+        config.telemetryTrackingPeriodSeconds = EditorGUILayout.FloatField(
+            "Telemetry Tracking Period (seconds)", config.telemetryTrackingPeriodSeconds);
+        config.frameRateTrackingPeriodSeconds = EditorGUILayout.FloatField(
+            "Frame Rate Tracking Period (seconds)", config.frameRateTrackingPeriodSeconds);
         config.sendRetriesOnFailure = EditorGUILayout.IntField("Send Retries On Failure", config.sendRetriesOnFailure);
         config.sendRetryIntervalSeconds = EditorGUILayout.IntField("Send Retry Interval Seconds", config.sendRetryIntervalSeconds);
         config.sendNextBatchWaitSeconds = EditorGUILayout.IntField("Send Next Batch Wait Seconds", config.sendNextBatchWaitSeconds);
@@ -56,14 +60,17 @@ public class ConfigInspector : Editor
 
         if (GUILayout.Button("Reset To Sending Rule Defaults"))
         {
+            config.positionTrackingPeriodSeconds = 1f;
+            config.telemetryTrackingPeriodSeconds = 10f;
+            config.frameRateTrackingPeriodSeconds = 0.5f;
             config.sendRetriesOnFailure = 3;
             config.sendRetryIntervalSeconds = 3;
             config.sendNextBatchWaitSeconds = 30;
             config.stragglerTimeoutSeconds = 15;
-            config.eventsPerSendAttempt = 4;
-            config.logsPerSendAttempt = 4;
-            config.telemetryEntriesPerSendAttempt = 4;
-            config.storageEntriesPerSendAttempt = 4;
+            config.eventsPerSendAttempt = 16;
+            config.logsPerSendAttempt = 16;
+            config.telemetryEntriesPerSendAttempt = 16;
+            config.storageEntriesPerSendAttempt = 16;
             config.pruneSentItemsOlderThanHours = 12;
             config.maximumCachedItems = 1024;
             config.retainLocalAfterSent = false;

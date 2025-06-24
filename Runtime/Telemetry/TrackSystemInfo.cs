@@ -7,8 +7,6 @@ public class TrackSystemInfo : MonoBehaviour
 {
     private static int _lastFrameCount;
     private static float _lastTime;
-    private const int FrameRateCheckIntervalSeconds = 10;
-    private const int SystemInfoCheckIntervalSeconds = 60;
     private static float _systemInfoTimer = 1f;
     private static float _frameRateTimer = 1f;
     private static bool _tracking;
@@ -22,8 +20,8 @@ public class TrackSystemInfo : MonoBehaviour
     {
         _systemInfoTimer += Time.deltaTime;
         _frameRateTimer += Time.deltaTime;
-        if (_systemInfoTimer >= SystemInfoCheckIntervalSeconds) CheckSystemInfo();
-        if (_frameRateTimer >= FrameRateCheckIntervalSeconds) CheckFrameRate();
+        if (_systemInfoTimer >= Configuration.Instance.telemetryTrackingPeriodSeconds) CheckSystemInfo();
+        if (_frameRateTimer >= Configuration.Instance.frameRateTrackingPeriodSeconds) CheckFrameRate();
     }
 
     public static void StartTracking() => _tracking = true;
