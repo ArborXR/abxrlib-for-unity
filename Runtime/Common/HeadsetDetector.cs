@@ -58,7 +58,8 @@ public class HeadsetDetector : MonoBehaviour
 
     private static void NewSessionCheck(string response)
     {
-        if (response == NewSessionString)
+        // We only care to reauthenticate if the app has logic defined for what to do in this scenario
+        if (response == NewSessionString && Abxr.onHeadsetPutOnNewSession != null)
         {
             Authentication.ReAuthenticate();
             Abxr.onHeadsetPutOnNewSession?.Invoke();
