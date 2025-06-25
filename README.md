@@ -205,7 +205,7 @@ Abxr.EventInteractionComplete("select_option_a", "true", "a", InteractionType.Se
 #### Levels
 ```cpp
 //C# Event Method Signatures
-public void Abxr.EventAssessmentStart(string assessmentName) 
+public void Abxr.EventLevelStart(string assessmentName) 
 
 public void Abxr.EventLevelComplete(string levelName, int score)
 public void Abxr.EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null)
