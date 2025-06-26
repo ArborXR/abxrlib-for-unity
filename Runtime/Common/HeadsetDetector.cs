@@ -48,8 +48,11 @@ public class HeadsetDetector : MonoBehaviour
     
     private static void OnHeadsetRemovedDetected() { }
     
-    private void OnHeadsetPutOnDetected()
+    private static void OnHeadsetPutOnDetected()
     {
+        // Don't bother asking if they aren't acting on this event
+        if (Abxr.onHeadsetPutOnNewSession == null) return;
+        
         Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
             ExitPollHandler.PollType.MultipleChoice,
             new List<string>{ContinueSessionString, NewSessionString},
@@ -58,8 +61,7 @@ public class HeadsetDetector : MonoBehaviour
 
     private static void NewSessionCheck(string response)
     {
-        // We only care to reauthenticate if the app has logic defined for what to do in this scenario
-        if (response == NewSessionString && Abxr.onHeadsetPutOnNewSession != null)
+        if (response == NewSessionString)
         {
             Authentication.ReAuthenticate();
             Abxr.onHeadsetPutOnNewSession?.Invoke();
