@@ -3,7 +3,7 @@
     "version": "1.1.6",
     "displayName": "AbxrLib for Unity",
     "description": "AbxrLib analytics for Unity",
-    "unity": "2022.3",
+    "unity": "2021.3",
     "author": {
       "name": "ArborXR",
       "url": "https://arborxr.com"
