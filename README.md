@@ -170,6 +170,9 @@ public void Abxr.EventObjectiveStart(string objectiveName)
 public void Abxr.EventObjectiveStart(string objectiveName, Dictionary<string, string> meta)
 public void Abxr.EventObjectiveStart(string objectiveName, string metaString = "")
 
+public void Abxr.EventObjectiveComplete(string objectiveName, int score, ResultOptions result = ResultOptions.Complete)
+public void Abxr.EventObjectiveComplete(string objectiveName, int score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
+
 // Example Usage
 Abxr.EventObjectiveStart("open_valve");
 Abxr.EventObjectiveComplete("open_valve", 100, ResultOptions.Complete);

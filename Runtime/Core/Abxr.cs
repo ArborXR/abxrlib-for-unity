@@ -277,12 +277,14 @@ public static class Abxr
 		AssessmentStartTimes[assessmentName] = DateTime.UtcNow;
 		Event("assessment_start", meta);
 	}
-	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
+	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
+		EventAssessmentComplete(assessmentName, int.Parse(score), result, meta);  // just here for backwards compatibility
+	public static void EventAssessmentComplete(string assessmentName, int score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["verb"] = "completed";
 		meta["assessment_name"] = assessmentName;
-		meta["score"] = score;
+		meta["score"] = score.ToString();
 		meta["result_options"] = result.ToString();
 		AddDuration(AssessmentStartTimes, assessmentName, meta);
 		Event("assessment_complete", meta);
@@ -297,12 +299,14 @@ public static class Abxr
 		ObjectiveStartTimes[objectiveName] = DateTime.UtcNow;
 		Event("objective_start", meta);
 	}
-	public static void EventObjectiveComplete(string objectiveName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
+	public static void EventObjectiveComplete(string objectiveName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
+		EventObjectiveComplete(objectiveName, int.Parse(score), result, meta);  // just here for backwards compatibility
+	public static void EventObjectiveComplete(string objectiveName, int score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["verb"] = "completed";
 		meta["objective_name"] = objectiveName;
-		meta["score"] = score;
+		meta["score"] = score.ToString();
 		meta["result_options"] = result.ToString();
 		AddDuration(ObjectiveStartTimes, objectiveName, meta);
 		Event("objective_complete", meta);
