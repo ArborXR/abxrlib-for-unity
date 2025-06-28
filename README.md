@@ -410,7 +410,7 @@ To use this feature, simply drag the `AbxrDebugWindow` Prefab from `AbxrLib for 
 ## FAQ
 
 ### Q: How do I retrieve my Application ID and Authorization Secret?
-A: Your Application ID can be found in the Web Dashboard under the application details. For the Authorization Secret, navigate to Settings > Organization Codes on the same dashboard.
+A: Your Application ID can be found in the Web Dashboard under the application details (you must be sure to use the App ID from the specific application you need data sent through). For the Authorization Secret, navigate to Settings > Organization Codes on the same dashboard.
 
 ### Q: How do I enable object tracking?
 A: Object tracking can be enabled by adding the Track Object component to any GameObject in your scene via the Unity Inspector.
