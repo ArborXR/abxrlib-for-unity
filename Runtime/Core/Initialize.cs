@@ -10,11 +10,11 @@ public static class Initialize
     private static void OnBeforeSceneLoad()
     {
         var version = typeof(JsonConvert).Assembly.GetName().Version;
-        Debug.Log($"Using Newtonsoft.Json version: {version}");
+        Debug.Log($"AbxrLib - Using Newtonsoft.Json version: {version}");
 
         if (version < new Version(13, 0, 0))
         {
-            Debug.LogError("Incompatible Newtonsoft.Json version loaded.");
+            Debug.LogError("AbxrLib - Incompatible Newtonsoft.Json version loaded.");
         }
         
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -40,6 +40,7 @@ public static class Initialize
             ObjectAttacher.Attach<TrackInputDevices>("TrackInputDevices");
         }
 #endif
+        Debug.Log("AbxrLib - Initialized.");
     }
 }
 
