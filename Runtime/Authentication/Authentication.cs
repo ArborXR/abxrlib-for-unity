@@ -111,7 +111,15 @@ public class Authentication : MonoBehaviour
         _partner = Partner.ArborXR;
         _orgId = Abxr.GetOrgId();
         _deviceId = Abxr.GetDeviceId();
-        _authSecret = Abxr.GetFingerprint();
+        try
+        {
+            var authSecret = Abxr.GetFingerprint();
+            _authSecret = authSecret;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"AbxrLib - {e.Message}");
+        }
         _userId = Abxr.GetAccessToken();
     }
 #if UNITY_WEBGL && !UNITY_EDITOR
