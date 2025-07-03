@@ -273,7 +273,7 @@ public static class Abxr
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["verb"] = "started";
-		meta["assessment_name"] = assessmentName;
+		meta["id"] = assessmentName;
 		AssessmentStartTimes[assessmentName] = DateTime.UtcNow;
 		Event("assessment_start", meta);
 	}
@@ -283,7 +283,7 @@ public static class Abxr
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["verb"] = "completed";
-		meta["assessment_name"] = assessmentName;
+		meta["id"] = assessmentName;
 		meta["score"] = score.ToString();
 		meta["result_options"] = result.ToString();
 		AddDuration(AssessmentStartTimes, assessmentName, meta);
@@ -295,7 +295,7 @@ public static class Abxr
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["verb"] = "started";
-		meta["objective_name"] = objectiveName;
+		meta["id"] = objectiveName;
 		ObjectiveStartTimes[objectiveName] = DateTime.UtcNow;
 		Event("objective_start", meta);
 	}
@@ -305,7 +305,7 @@ public static class Abxr
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["verb"] = "completed";
-		meta["objective_name"] = objectiveName;
+		meta["id"] = objectiveName;
 		meta["score"] = score.ToString();
 		meta["result_options"] = result.ToString();
 		AddDuration(ObjectiveStartTimes, objectiveName, meta);
@@ -316,24 +316,24 @@ public static class Abxr
     {
 	    meta ??= new Dictionary<string, string>();
         meta["verb"] = "started";
-        meta["interaction_name"] = interactionName;
+        meta["id"] = interactionName;
         InteractionStartTimes[interactionName] = DateTime.UtcNow;
         Event("interaction_start", meta);
     }
-	public static void EventInteractionComplete(string interactionName, string result, string resultDetails = "", InteractionType interactionType = InteractionType.Null, Dictionary<string, string> meta = null)
+	public static void EventInteractionComplete(string interactionName, string result, string resultOptions = "", InteractionType interactionType = InteractionType.Null, Dictionary<string, string> meta = null)
     {
 	    meta ??= new Dictionary<string, string>();
         meta["verb"] = "completed";
-        meta["interaction_name"] = interactionName;
+        meta["id"] = interactionName;
         meta["result"] = result;
-        meta["result_details"] = resultDetails;
+        meta["result_options"] = resultOptions;
         meta["lms_type"] = interactionType.ToString();
         AddDuration(InteractionStartTimes, interactionName, meta);
         
-        // Add assessment_name if there's only one AssessmentStartTimes value
+        // Add id if there's only one AssessmentStartTimes value
         if (AssessmentStartTimes.Count == 1)
         {
-	        meta["assessment_name"] = AssessmentStartTimes.First().Key;
+	        meta["assessment_id"] = AssessmentStartTimes.First().Key;
         }
         
         Event("interaction_complete", meta);
@@ -343,7 +343,7 @@ public static class Abxr
     {
 	    meta ??= new Dictionary<string, string>();
         meta["verb"] = "started";
-        meta["level_name"] = levelName;
+        meta["id"] = levelName;
         LevelStartTimes[levelName] = DateTime.UtcNow;
         Event("level_start", meta);
     }
@@ -351,7 +351,7 @@ public static class Abxr
     {
 	    meta ??= new Dictionary<string, string>();
         meta["verb"] = "completed";
-        meta["level_name"] = levelName;
+        meta["id"] = levelName;
         meta["score"] = score;
         AddDuration(LevelStartTimes, levelName, meta);
         Event("level_complete", meta);
