@@ -1237,8 +1237,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cc586c9ddf94214b78ab4dcd9e26307, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  distanceFromCamera: 1.2
-  verticalOffset: -0.42
+  distanceFromCamera: 0.8
+  verticalOffset: -0.38
 --- !u!1001 &302007291292363215
 PrefabInstance:
   m_ObjectHideFlags: 0
