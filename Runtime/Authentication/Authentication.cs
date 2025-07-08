@@ -18,10 +18,7 @@ public class Authentication : MonoBehaviour
     private static string _appId;
     private static Partner _partner = Partner.None;
     private static string _deviceModel;
-    private static string _osVersion;
     private static string _xrdmVersion;
-    private static string _appVersion;
-    private static string _unityVersion;
     private static string _ipAddress;
     private static string _sessionId;
     private static int _failedAuthAttempts;
@@ -222,9 +219,6 @@ public class Authentication : MonoBehaviour
             }
         }
 #endif
-        _osVersion = SystemInfo.operatingSystem;
-        _appVersion = Application.version;
-        _unityVersion = Application.unityVersion;
         //TODO Geolocation
     }
 
@@ -246,10 +240,11 @@ public class Authentication : MonoBehaviour
             ipAddress = _ipAddress,
             deviceModel = _deviceModel,
             geolocation = new Dictionary<string, string>(),
-            osVersion = _osVersion,
+            osVersion = SystemInfo.operatingSystem,
             xrdmVersion = _xrdmVersion,
-            appVersion = _appVersion,
-            unityVersion = _unityVersion,
+            appVersion = Application.version,
+            unityVersion = Application.unityVersion,
+            abxrVersion = AbxrVersion.Version,
             authMechanism = CreateAuthMechanismDict()
         };
         
@@ -394,6 +389,7 @@ public class Authentication : MonoBehaviour
         public string xrdmVersion;
         public string appVersion;
         public string unityVersion;
+        public string abxrVersion;
         public Dictionary<string, string> authMechanism;
     }
 
