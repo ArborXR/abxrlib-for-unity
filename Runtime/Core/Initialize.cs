@@ -40,7 +40,7 @@ public static class Initialize
             ObjectAttacher.Attach<TrackInputDevices>("TrackInputDevices");
         }
 #endif
-        Debug.Log($"AbxrLib - Version {AbxrVersion.Version} Initialized.");
+        Debug.Log($"AbxrLib - Version {AbxrLibVersion.Version} Initialized.");
     }
 }
 

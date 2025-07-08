@@ -244,7 +244,7 @@ public class Authentication : MonoBehaviour
             xrdmVersion = _xrdmVersion,
             appVersion = Application.version,
             unityVersion = Application.unityVersion,
-            abxrVersion = AbxrVersion.Version,
+            abxrLibVersion = AbxrLibVersion.Version,
             authMechanism = CreateAuthMechanismDict()
         };
         
@@ -389,7 +389,7 @@ public class Authentication : MonoBehaviour
         public string xrdmVersion;
         public string appVersion;
         public string unityVersion;
-        public string abxrVersion;
+        public string abxrLibVersion;
         public Dictionary<string, string> authMechanism;
     }
 
