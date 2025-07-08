@@ -1,6 +1,6 @@
 {
     "name": "com.arborxr.unity",
-    "version": "1.1.7",
+    "version": "1.1.8",
     "displayName": "AbxrLib for Unity",
     "description": "AbxrLib analytics for Unity",
     "unity": "2021.3",
