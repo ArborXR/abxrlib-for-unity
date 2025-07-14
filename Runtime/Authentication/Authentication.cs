@@ -18,6 +18,7 @@ public class Authentication : MonoBehaviour
     private static string _appId;
     private static Partner _partner = Partner.None;
     private static string _deviceModel;
+    private static string[] _deviceTags;
     private static string _xrdmVersion;
     private static string _ipAddress;
     private static string _sessionId;
@@ -108,6 +109,7 @@ public class Authentication : MonoBehaviour
         _partner = Partner.ArborXR;
         _orgId = Abxr.GetOrgId();
         _deviceId = Abxr.GetDeviceId();
+        _deviceTags = Abxr.GetDeviceTags();
         try
         {
             var authSecret = Abxr.GetFingerprint();
@@ -234,7 +236,7 @@ public class Authentication : MonoBehaviour
             authSecret = _authSecret,
             deviceId = _deviceId,
             userId = _userId,
-            tags = new string[] { },
+            tags = _deviceTags,
             sessionId = _sessionId,
             partner = _partner.ToString().ToLower(),
             ipAddress = _ipAddress,
