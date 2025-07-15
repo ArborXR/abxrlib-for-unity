@@ -1,4 +1,4 @@
 public static class AbxrLibVersion
 {
-    public const string Version = "1.1.8";
+    public const string Version = "1.1.9";
 }
