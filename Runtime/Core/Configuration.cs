@@ -28,7 +28,7 @@ public class Configuration : ScriptableObject
     public bool headsetTracking = true;
     public float positionTrackingPeriodSeconds = 1f;
     
-    public string restUrl = "https://lib-backend.xrdm.dev/";
+    public string restUrl = "https://lib-backend.xrdm.app/";
 
     public float frameRateTrackingPeriodSeconds = 0.5f;
     public float telemetryTrackingPeriodSeconds = 10f;
