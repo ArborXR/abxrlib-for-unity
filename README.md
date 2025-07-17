@@ -216,6 +216,11 @@ public void Abxr.EventLevelComplete(string levelName, int score, Dictionary<stri
 // Example Usage
 Abxr.EventLevelStart("level_1");
 Abxr.EventLevelComplete("level_1", 85);
+
+
+// For flagging critical training events (e.g., skipped safety checks, high-risk errors) for auto-inclusion in the Critical Choices Chart
+public void Abxr.EventCritical(string label)
+public void Abxr.EventCritical(string label, Dictionary<string, string> meta = null)
 ```
 
 **Parameters for all Event Wrapper Functions:**

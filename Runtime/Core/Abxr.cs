@@ -357,6 +357,12 @@ public static class Abxr
         Event("level_complete", meta);
     }
 
+	public static void EventCritical(string label, Dictionary<string, string> meta = null)
+	{
+		string taggedName = $"CRITICAL_ABXR_{label}";
+		Event(taggedName, meta);
+	}
+
 	// ---
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
