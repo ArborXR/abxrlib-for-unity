@@ -159,24 +159,24 @@ public class Authentication : MonoBehaviour
             return false;
         }
         
-        if (string.IsNullOrEmpty(_orgId))
-        {
-            Debug.LogError("AbxrLib - Missing Organization ID. Cannot authenticate.");
-            return false;
-        }
+        // if (string.IsNullOrEmpty(_orgId))
+        // {
+        //     Debug.LogError("AbxrLib - Missing Organization ID. Cannot authenticate.");
+        //     return false;
+        // }
         
-        const string orgIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
-        if (!Regex.IsMatch(_orgId, orgIdPattern))
-        {
-            Debug.LogError("AbxrLib - Invalid Organization ID. Cannot authenticate.");
-            return false;
-        }
+        // const string orgIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
+        // if (!Regex.IsMatch(_orgId, orgIdPattern))
+        // {
+        //     Debug.LogError("AbxrLib - Invalid Organization ID. Cannot authenticate.");
+        //     return false;
+        // }
         
-        if (string.IsNullOrEmpty(_authSecret))
-        {
-            Debug.LogError("AbxrLib - Missing Auth Secret. Cannot authenticate.");
-            return false;
-        }
+        // if (string.IsNullOrEmpty(_authSecret))
+        // {
+        //     Debug.LogError("AbxrLib - Missing Auth Secret. Cannot authenticate.");
+        //     return false;
+        // }
 
         return true;
     }
