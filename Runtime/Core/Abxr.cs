@@ -13,13 +13,33 @@ public static class Abxr
 	
 	public static Action onHeadsetPutOnNewSession;
 	
-	public enum ResultOptions
+	public enum ResultOptions // Only here for backwards compatibility
 	{
 		Null,
 		Pass,
 		Fail,
 		Complete,
-		Incomplete
+		Incomplete,
+		Browsed
+	}
+	
+	public static EventStatus ToEventStatus(this ResultOptions options) => options switch // Only here for backwards compatibility
+	{
+		ResultOptions.Null => EventStatus.Complete,
+		ResultOptions.Pass => EventStatus.Pass,
+		ResultOptions.Fail => EventStatus.Fail,
+		ResultOptions.Complete => EventStatus.Complete,
+		ResultOptions.Incomplete => EventStatus.Incomplete,
+		ResultOptions.Browsed => EventStatus.Browsed
+	};
+
+	public enum EventStatus
+	{
+		Pass,
+		Fail,
+		Complete,
+		Incomplete,
+		Browsed
 	}
 	
 	public enum InteractionType
@@ -29,7 +49,10 @@ public static class Abxr
 		Select,
 		Text,
 		Rating,
-		Number
+		Number,
+		Matching,
+		Performance,
+		Sequencing
 	}
 
 	public enum StoragePolicy
@@ -272,73 +295,67 @@ public static class Abxr
 	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
+		meta["type"] = "assessment";
 		meta["verb"] = "started";
-		meta["id"] = assessmentName;
 		AssessmentStartTimes[assessmentName] = DateTime.UtcNow;
-		Event("assessment_start", meta);
+		Event(assessmentName, meta);
 	}
 	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
-		EventAssessmentComplete(assessmentName, int.Parse(score), result, meta);  // just here for backwards compatibility
-	public static void EventAssessmentComplete(string assessmentName, int score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
+		EventAssessmentComplete(assessmentName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
+	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
+		meta["type"] = "assessment";
 		meta["verb"] = "completed";
-		meta["id"] = assessmentName;
 		meta["score"] = score.ToString();
-		meta["result_options"] = result.ToString();
+		meta["status"] = status.ToString();
 		AddDuration(AssessmentStartTimes, assessmentName, meta);
-		Event("assessment_complete", meta);
+		Event(assessmentName, meta);
 		CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
 	}
 	
 	public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
+		meta["type"] = "objective";
 		meta["verb"] = "started";
-		meta["id"] = objectiveName;
 		ObjectiveStartTimes[objectiveName] = DateTime.UtcNow;
-		Event("objective_start", meta);
+		Event(objectiveName, meta);
 	}
 	public static void EventObjectiveComplete(string objectiveName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
-		EventObjectiveComplete(objectiveName, int.Parse(score), result, meta);  // just here for backwards compatibility
-	public static void EventObjectiveComplete(string objectiveName, int score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
+		EventObjectiveComplete(objectiveName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
+	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
+		meta["type"] = "objective";
 		meta["verb"] = "completed";
-		meta["id"] = objectiveName;
 		meta["score"] = score.ToString();
-		meta["result_options"] = result.ToString();
+		meta["status"] = status.ToString();
 		AddDuration(ObjectiveStartTimes, objectiveName, meta);
-		Event("objective_complete", meta);
+		Event(objectiveName, meta);
 	}
 	
 	public static void EventInteractionStart(string interactionName, Dictionary<string, string> meta = null)
     {
 	    meta ??= new Dictionary<string, string>();
-        meta["verb"] = "started";
-        meta["id"] = interactionName;
-        InteractionStartTimes[interactionName] = DateTime.UtcNow;
-        Event("interaction_start", meta);
+	    meta["type"] = "interaction";
+	    meta["verb"] = "started";
+	    InteractionStartTimes[interactionName] = DateTime.UtcNow;
+	    Event(interactionName, meta);
     }
-	public static void EventInteractionComplete(string interactionName, string result, string resultOptions = "", InteractionType interactionType = InteractionType.Null, Dictionary<string, string> meta = null)
-    {
-	    meta ??= new Dictionary<string, string>();
-        meta["verb"] = "completed";
-        meta["id"] = interactionName;
-        meta["result"] = result;
-        meta["result_options"] = resultOptions;
-        meta["lms_type"] = interactionType.ToString();
-        AddDuration(InteractionStartTimes, interactionName, meta);
-        
-        // Add id if there's only one AssessmentStartTimes value
-        if (AssessmentStartTimes.Count == 1)
-        {
-	        meta["assessment_id"] = AssessmentStartTimes.First().Key;
-        }
-        
-        Event("interaction_complete", meta);
-    }
-	
+	public static void EventInteractionComplete(string interactionName, string result, string resultOptions = "", InteractionType interactionType = InteractionType.Null, Dictionary<string, string> meta = null) =>
+		EventInteractionComplete(interactionName, interactionType, result, meta); // Just here for backwards compatability
+	public static void EventInteractionComplete(string interactionName, InteractionType interactionType, string response = "", Dictionary<string, string> meta = null)
+	{
+		meta ??= new Dictionary<string, string>();
+		meta["type"] = "interaction";
+		meta["verb"] = "completed";
+		meta["interaction"] =  interactionType.ToString();
+		if (!string.IsNullOrEmpty(response)) meta["response"] = response;
+		AddDuration(InteractionStartTimes, interactionName, meta);
+		Event(interactionName, meta);
+	}
+
 	public static void EventLevelStart(string levelName, Dictionary<string, string> meta = null)
     {
 	    meta ??= new Dictionary<string, string>();
