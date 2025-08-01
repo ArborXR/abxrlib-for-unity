@@ -134,24 +134,23 @@ Assessments are intended to track the overall performance of a learner across mu
 
 ```cpp
 //C# List Definition
-public enum ResultOptions
+public enum EventStatus
 {
     Pass,
     Fail,
     Complete,
-    Incomplete
+    Incomplete,
+    Browsed
 }
 
 //C# Event Method Signatures
-public void Abxr.EventAssessmentStart(string assessmentName) 
 public void Abxr.EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
 
-public void Abxr.EventAssessmentComplete(string assessmentName, int score, ResultOptions result = ResultOptions.Complete)
-public void Abxr.EventAssessmentComplete(string assessmentName, int score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
+public void Abxr.EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
 
 // Example Usage
 Abxr.EventAssessmentStart("final_exam");
-Abxr.EventAssessmentComplete("final_exam", 92, ResultOptions.Pass);
+Abxr.EventAssessmentComplete("final_exam", 92, EventStatus.Pass);
 ```
 
 #### Objectives
@@ -166,16 +165,13 @@ public enum ResultOptions
 }
 
 //C# Event Method Signatures
-public void Abxr.EventObjectiveStart(string objectiveName)
-public void Abxr.EventObjectiveStart(string objectiveName, Dictionary<string, string> meta)
-public void Abxr.EventObjectiveStart(string objectiveName, string metaString = "")
+public void Abxr.EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null)
 
-public void Abxr.EventObjectiveComplete(string objectiveName, int score, ResultOptions result = ResultOptions.Complete)
-public void Abxr.EventObjectiveComplete(string objectiveName, int score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null)
+public void Abxr.EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
 
 // Example Usage
 Abxr.EventObjectiveStart("open_valve");
-Abxr.EventObjectiveComplete("open_valve", 100, ResultOptions.Complete);
+Abxr.EventObjectiveComplete("open_valve", 100, EventStatus.Complete);
 ```
 
 #### Interactions
@@ -188,20 +184,20 @@ public enum InteractionType
    Select, // true or false and the result_details value should be a single letter or for multiple choice a,b,c
    Text, // a string 
    Rating, // a single digit value
-   Number // integer
+   Number, // integer
+   Matching,
+   Performance,
+   Sequencing
 }
 
 //C# Event Method Signatures
-public void Abxr.EventInteractionStart(string interactionName)
+public void Abxr.EventInteractionStart(string interactionName, Dictionary<string, string> meta = null)
 
-public void Abxr.EventInteractionComplete(string interactionName, string result)
-public void Abxr.EventInteractionComplete(string interactionName, string result, string result_details = null)
-public void Abxr.EventInteractionComplete(string interactionName, string result, string result_details = null, InteractionType type = InteractionType.Text)
-public void Abxr.EventInteractionComplete(string interactionName, string result, string result_details = null, InteractionType type = InteractionType.Text, Dictionary<string, string> meta = null)
+public void Abxr.EventInteractionComplete(string interactionName, InteractionType interactionType, string response = "", Dictionary<string, string> meta = null)
 
 // Example Usage
 Abxr.EventInteractionStart("select_option_a");
-Abxr.EventInteractionComplete("select_option_a", "true", "a", InteractionType.Select);
+Abxr.EventInteractionComplete("select_option_a", InteractionType.Select, "true");
 ```
 
 ### Other Event Wrappers
