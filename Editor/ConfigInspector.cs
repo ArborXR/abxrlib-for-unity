@@ -29,7 +29,7 @@ public class ConfigInspector : Editor
         EditorGUILayout.LabelField("Network", EditorStyles.boldLabel);
         config.restUrl = EditorGUILayout.TextField(new GUIContent(
             "REST URL", "Should most likely be\nhttps://lib-backend.xrdm.app/ during Beta"), config.restUrl);
-        if (config.restUrl == "https://lib-backend.xrdm.dev/") config.restUrl = "https://lib-backend.xrdm.app/"; //TODO remove
+        //if (config.restUrl == "https://lib-backend.xrdm.dev/") config.restUrl = "https://lib-backend.xrdm.app/"; //TODO remove
         
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Data Sending Rules", EditorStyles.boldLabel);
