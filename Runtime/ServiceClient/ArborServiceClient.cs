@@ -1,3 +1,4 @@
+#if UNITY_ANDROID && !UNITY_EDITOR
 #nullable enable
 using System;
 using System.Threading.Tasks;
@@ -187,3 +188,4 @@ public class SdkException : Exception
     {
     }
 }
+#endif

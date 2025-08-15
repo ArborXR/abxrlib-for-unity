@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿#if UNITY_ANDROID && !UNITY_EDITOR
+using System.Collections.Generic;
 using UnityEngine;
 
 public class DeviceModel : MonoBehaviour
@@ -36,7 +37,6 @@ public class DeviceModel : MonoBehaviour
     
     private void Start()
     {
-#if UNITY_ANDROID && !UNITY_EDITOR
         deviceModel = GetSystemProperty("pxr.vendorhw.product.model");
         if (string.IsNullOrEmpty(deviceModel) || deviceModel == "Unknown")
         {
@@ -44,7 +44,6 @@ public class DeviceModel : MonoBehaviour
         }
 
         if (ModelTranslation.TryGetValue(deviceModel, out var value)) deviceModel = value;
-#endif
     }
 
     private static string GetSystemProperty(string propertyName)
@@ -53,3 +52,4 @@ public class DeviceModel : MonoBehaviour
         return systemProperties.CallStatic<string>("get", propertyName, "Unknown");
     }
 }
+#endif

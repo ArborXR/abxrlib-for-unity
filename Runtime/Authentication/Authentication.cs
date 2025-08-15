@@ -101,7 +101,7 @@ public class Authentication : MonoBehaviour
         _orgId = Configuration.Instance.orgID;
         _authSecret = Configuration.Instance.authSecret;
     }
-    
+#if UNITY_ANDROID && !UNITY_EDITOR
     private static void GetArborData()
     {
         if (!ArborServiceClient.IsConnected()) return;
@@ -121,6 +121,7 @@ public class Authentication : MonoBehaviour
         }
         _userId = Abxr.GetAccessToken();
     }
+#endif
 #if UNITY_WEBGL && !UNITY_EDITOR
     private static void GetQueryData()
     {
