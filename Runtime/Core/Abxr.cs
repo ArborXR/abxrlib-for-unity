@@ -30,7 +30,8 @@ public static class Abxr
 		ResultOptions.Fail => EventStatus.Fail,
 		ResultOptions.Complete => EventStatus.Complete,
 		ResultOptions.Incomplete => EventStatus.Incomplete,
-		ResultOptions.Browsed => EventStatus.Browsed
+		ResultOptions.Browsed => EventStatus.Browsed,
+		_ => EventStatus.Complete // Default case for any undefined enum values
 	};
 
 	public enum EventStatus

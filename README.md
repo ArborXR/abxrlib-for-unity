@@ -69,20 +69,24 @@ Developers can implement their own backend services by following the ABXR protoc
 
 ## Configuration
 
-### Using with ArborXR Insights Early Access
+### Using with ArborXR Insights
 
-To use the ABXR SDK with ArborXR Insights Early Access program:
+To use the ABXR SDK with ArborXR Insights:
 
-#### Get Early Access Credentials
-1. Go to the ArborXR Insights Early Access web app and log in (will require [official Early Access sign up](https://arborxr.com/insights-early-access) & onboarding process to access).
+#### Get Your Credentials
+1. Go to the ArborXR Insights web app and log in.
 2. Grab these three values from the **View Data** screen of the specific app you are configuring:
 - App ID
 - Organization ID
 - Authentication Secret
 
 #### Configure Unity Project
+
+> **⚠️ Security Note:** For production builds distributed to third parties, avoid compiling `Org ID` and `Auth Secret` directly into your Unity project. These credentials should only be compiled into builds when creating custom applications for specific individual clients. For general distribution, use ArborXR-managed devices or implement runtime credential provisioning.
+
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
-2. Paste in the Early Access App ID, Org ID, and Auth Secret. All 3 are required if you are testing from Unity itself.
+2. **For Development/Testing:** Paste in the App ID, Org ID, and Auth Secret. All 3 are required if you are testing from Unity itself.
+3. **For Production Builds:** Only include the App ID. Leave Org ID and Auth Secret empty for third-party distribution.
 
 #### Alternative for Managed Headsets:
 If you're using an ArborXR-managed device, only the App ID is required. The Org ID and Auth Secret auto-fill. 
@@ -124,8 +128,13 @@ Abxr.Event("player_teleported",
 
 Logs a named event with optional metadata and spatial context. Timestamps and origin (`user` or `system`) are automatically appended.
 
-### Event Wrappers (for LMS Compatibility)
--The LMS Event Functions are specialized versions of the Event method, tailored for common scenarios in XR experiences. These functions help enforce consistency in event logging across different parts of the application and are crucial for powering integrations with Learning Management System (LMS) platforms. By using these standardized wrapper functions, developers ensure that key events like starting or completing levels, assessments, or interactions are recorded in a uniform format. This consistency not only simplifies data analysis but also facilitates seamless communication with external educational systems, enhancing the overall learning ecosystem.
+### Analytics Event Wrappers (Essential for All Developers)
+
+**These analytics event functions are essential for ALL developers, not just those integrating with LMS platforms.** They provide standardized tracking for key user interactions and learning outcomes that are crucial for understanding user behavior, measuring engagement, and optimizing XR experiences.
+
+**EventAssessmentStart and EventAssessmentComplete should be considered REQUIRED for proper usage** of the ABXR SDK, as they provide critical insights into user performance and completion rates.
+
+The Analytics Event Functions are specialized versions of the Event method, tailored for common scenarios in XR experiences. These functions help enforce consistency in event logging across different parts of the application and provide valuable data for analytics, user experience optimization, and business intelligence. While they also power integrations with Learning Management System (LMS) platforms, their benefits extend far beyond educational use cases.
 
 #### Assessments
 Assessments are intended to track the overall performance of a learner across multiple Objectives and Interactions. 
