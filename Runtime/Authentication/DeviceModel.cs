@@ -1,8 +1,12 @@
 ﻿using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 public class DeviceModel : MonoBehaviour
 {
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [DllImport("__Internal")] private static extern string AbxrDetectDeviceModel();
+#endif
     public static string deviceModel;
 
     public static readonly Dictionary<string, string> ModelTranslation = new()
@@ -44,12 +48,18 @@ public class DeviceModel : MonoBehaviour
         }
 
         if (ModelTranslation.TryGetValue(deviceModel, out var value)) deviceModel = value;
+#elif UNITY_WEBGL && !UNITY_EDITOR
+        deviceModel = AbxrDetectDeviceModel() ?? "Unknown Browser";
+#else
+        deviceModel = "N/A";
 #endif
     }
 
+#if UNITY_ANDROID && !UNITY_EDITOR
     private static string GetSystemProperty(string propertyName)
     {
         using var systemProperties = new AndroidJavaClass("android.os.SystemProperties");
         return systemProperties.CallStatic<string>("get", propertyName, "Unknown");
     }
+#endif
 }

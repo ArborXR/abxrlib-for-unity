@@ -204,9 +204,9 @@ public class Authentication : MonoBehaviour
 
     private static void SetSessionData()
     {
+        _deviceModel = DeviceModel.deviceModel;
 #if UNITY_ANDROID && !UNITY_EDITOR
         _ipAddress = Utils.GetIPAddress();
-        if (!string.IsNullOrEmpty(DeviceModel.deviceModel)) _deviceModel = DeviceModel.deviceModel;
         
         var currentAssembly = Assembly.GetExecutingAssembly();
         AssemblyName[] referencedAssemblies = currentAssembly.GetReferencedAssemblies();

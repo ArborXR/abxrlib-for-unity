@@ -19,8 +19,8 @@ public static class Initialize
         
 #if UNITY_ANDROID && !UNITY_EDITOR
         ObjectAttacher.Attach<ExceptionLogger>("ExceptionLogger");
-        ObjectAttacher.Attach<DeviceModel>("DeviceModel");
 #endif
+        ObjectAttacher.Attach<DeviceModel>("DeviceModel");
         ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
 #if UNITY_ANDROID && !UNITY_EDITOR
         ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
