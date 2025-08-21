@@ -21,6 +21,9 @@ namespace Abxr.Runtime.Core
 		private static readonly Dictionary<string, DateTime> LevelStartTimes = new();
 	
 		public static Action onHeadsetPutOnNewSession;
+		
+		// 'true' for success and 'false' for failure
+		public static Action<bool, string> onAuthCompleted;
 	
 		public enum ResultOptions // Only here for backwards compatibility
 		{

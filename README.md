@@ -403,6 +403,12 @@ Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 - `Rating (1-5)`
 - `Multiple Choice (2-8 string options)`
 
+## Authentication Event
+To subscribe to Authentication success or failure, use the following Action. This returns 'true' for success and 'false' for failure (along with the error message in the failure case).
+```cpp
+public static Action onAuthCompleted;
+```
+
 ## Headset Removal (Session Integrity)
 To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.
 ```cpp

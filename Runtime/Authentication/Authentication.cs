@@ -270,11 +270,14 @@ namespace Abxr.Runtime.Authentication
                 Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                 _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
                 _keyboardAuthSuccess = true;
+                Core.Abxr.onAuthCompleted?.Invoke(true, string.Empty);
             }
             else
             {
-                Debug.LogError($"AbxrLib - Authentication failed : {request.error} - {request.downloadHandler.text}");
+                string error = $"{request.error} - {request.downloadHandler.text}";
+                Debug.LogError($"AbxrLib - Authentication failed : {error}");
                 _sessionId = null;
+                Core.Abxr.onAuthCompleted?.Invoke(false, error);
             }
         }
 
