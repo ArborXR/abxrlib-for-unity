@@ -2,68 +2,71 @@ using System;
 using System.Linq;
 using UnityEngine;
 
-public static class RigDetector
+namespace Abxr.Runtime.Common
 {
-    private static string _prefabSuffix = "";
-    
-    public static string PrefabSuffix()
+    public static class RigDetector
     {
-        if (!string.IsNullOrEmpty(_prefabSuffix)) return _prefabSuffix;
+        private static string _prefabSuffix = "";
+    
+        public static string PrefabSuffix()
+        {
+            if (!string.IsNullOrEmpty(_prefabSuffix)) return _prefabSuffix;
 #if UNITY_ANDROID && !UNITY_EDITOR
         if (IsOVRCameraRigInUse()) _prefabSuffix = "_Meta";
         else _prefabSuffix = "_OpenXR";
 #else
-        else _prefabSuffix = "_Default";
+            else _prefabSuffix = "_Default";
 #endif
-        return _prefabSuffix;
-    }
+            return _prefabSuffix;
+        }
     
-    public static bool IsXRRigInUse()
-    {
-        return IsTypeInScene("UnityEngine.XR.Interaction.Toolkit.XRRig");
-    }
-
-    public static bool IsOVRCameraRigInUse()
-    {
-        return IsTypeInScene("OVRCameraRig");
-    }
-
-    private static bool IsTypeInScene(string typeName)
-    {
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        public static bool IsXRRigInUse()
         {
-            try
-            {
-                var type = asm.GetType(typeName, false);
-                if (type == null) continue;
+            return IsTypeInScene("UnityEngine.XR.Interaction.Toolkit.XRRig");
+        }
 
-                var objects = UnityEngine.Object.FindObjectsOfType(typeof(GameObject));
-                foreach (var obj in objects)
+        public static bool IsOVRCameraRigInUse()
+        {
+            return IsTypeInScene("OVRCameraRig");
+        }
+
+        private static bool IsTypeInScene(string typeName)
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
                 {
-                    var components = ((GameObject)obj).GetComponents<Component>();
-                    if (components.Any(c => c && c.GetType() == type))
+                    var type = asm.GetType(typeName, false);
+                    if (type == null) continue;
+
+                    var objects = UnityEngine.Object.FindObjectsOfType(typeof(GameObject));
+                    foreach (var obj in objects)
                     {
-                        return true;
+                        var components = ((GameObject)obj).GetComponents<Component>();
+                        if (components.Any(c => c && c.GetType() == type))
+                        {
+                            return true;
+                        }
                     }
                 }
+                catch { /* ignore */ }
             }
-            catch { /* ignore */ }
+            return false;
         }
-        return false;
-    }
 
-    private static Type FindType(string typeName)
-    {
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        private static Type FindType(string typeName)
         {
-            try
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                var type = assembly.GetType(typeName, false);
-                if (type != null)
-                    return type;
+                try
+                {
+                    var type = assembly.GetType(typeName, false);
+                    if (type != null)
+                        return type;
+                }
+                catch { }
             }
-            catch { }
+            return null;
         }
-        return null;
     }
 }

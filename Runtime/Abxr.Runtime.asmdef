@@ -1,6 +1,6 @@
 {
     "name": "Abxr.Runtime",
-    "rootNamespace": "",
+    "rootNamespace": "Abxr.Runtime",
     "references": [
         "Unity.TextMeshPro",
         "Unity.InputSystem",
