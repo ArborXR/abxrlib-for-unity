@@ -45,4 +45,8 @@ public class Configuration : ScriptableObject
     public bool retainLocalAfterSent;
     public bool disableAutomaticTelemetry;
     public bool disableSceneEvents;
+
+    public GameObject KeyboardPrefab;
+    public GameObject PinPrefab;
+    public GameObject PanelPrefab;
 }
