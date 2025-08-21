@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-public static class Abxr
+namespace AbxrLib
+{
+	public static class Abxr
 {
 	private static readonly Dictionary<string, DateTime> AssessmentStartTimes = new();
 	private static readonly Dictionary<string, DateTime> ObjectiveStartTimes = new();
@@ -533,4 +535,36 @@ public static class Abxr
     /// <returns>The device fingerprint.</returns>
     public static string GetFingerprint() =>
 	    ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
+
+    // Authentication Events
+    /// <summary>Event fired when authentication succeeds</summary>
+    public static event Action OnAuthenticationSuccess;
+    
+    /// <summary>Event fired when authentication fails</summary>
+    /// <param name="errorMessage">The error message describing why authentication failed</param>
+    public static event Action<string> OnAuthenticationFailed;
+
+    /// <summary>
+    /// Sets the user ID for authentication
+    /// </summary>
+    /// <param name="userId">The User ID used during authentication (setting this will trigger re-authentication)</param>
+    public static void SetUserId(string userId)
+    {
+        Authentication.SetUserId(userId);
+        ReAuthenticate();
+    }
+
+    /// <summary>
+    /// Sets user metadata as a JSON string
+    /// </summary>
+    /// <param name="metaString">A string of key-value pairs in JSON format</param>
+    public static void SetUserMeta(string metaString)
+    {
+        Authentication.SetUserMeta(metaString);
+    }
+
+    // Internal methods to trigger events (called by Authentication class)
+    internal static void TriggerAuthenticationSuccess() => OnAuthenticationSuccess?.Invoke();
+    internal static void TriggerAuthenticationFailed(string error) => OnAuthenticationFailed?.Invoke(error);
+}
 }

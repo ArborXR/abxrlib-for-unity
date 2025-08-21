@@ -5,7 +5,9 @@ using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class StorageBatcher : MonoBehaviour
+namespace AbxrLib
+{
+	public class StorageBatcher : MonoBehaviour
 {
 	private const string UrlPath = "/v1/storage";
 	private static Uri _uri;
@@ -27,7 +29,7 @@ public class StorageBatcher : MonoBehaviour
 		if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
 	}
 	
-	public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
+	    public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
 	{
 		long storageTime = Utils.GetUnityTime();
 		string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(storageTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
@@ -96,7 +98,7 @@ public class StorageBatcher : MonoBehaviour
 		}
 	}
 
-	public static IEnumerator Get(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
+	    public static IEnumerator Get(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
 	{
 		if (!Authentication.Authenticated()) yield break;
 		
@@ -125,7 +127,7 @@ public class StorageBatcher : MonoBehaviour
 		}
 	}
 
-	public static IEnumerator Delete(Abxr.StorageScope scope, string name = "")
+	    public static IEnumerator Delete(Abxr.StorageScope scope, string name = "")
 	{
 		if (!Authentication.Authenticated()) yield break;
 		
@@ -159,8 +161,9 @@ public class StorageBatcher : MonoBehaviour
 		public List<Dictionary<string, string>> data;
 		public string scope;      // 'device' or 'user'
 	}
-	private class PayloadWrapper
-	{
-		public List<Payload> data;
+	        private class PayloadWrapper
+        {
+                public List<Payload> data;
+        }
 	}
 }

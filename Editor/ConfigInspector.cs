@@ -1,8 +1,10 @@
 ﻿using UnityEditor;
 using UnityEngine;
 
-[CustomEditor(typeof(Configuration))]
-public class ConfigInspector : Editor
+namespace AbxrLib
+{
+	[CustomEditor(typeof(Configuration))]
+	public class ConfigInspector : Editor
 {
     public override void OnInspectorGUI()
     {
@@ -95,4 +97,4 @@ public class ConfigInspector : Editor
         if (GUI.changed) EditorUtility.SetDirty(config);
     }
     
-}
+}}

@@ -4,7 +4,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class ExitPollHandler : MonoBehaviour
+namespace AbxrLib
+{
+	public class ExitPollHandler : MonoBehaviour
 {
     private static GameObject _panelPrefab;
     private static GameObject _ratingPrefab;
@@ -146,4 +148,4 @@ public class ExitPollHandler : MonoBehaviour
         if (_panelInstance) _panelInstance.SetActive(true);
         if (!_pollInstance) ProcessNextPoll();
     }
-}
+}}

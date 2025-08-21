@@ -1,6 +1,8 @@
 using UnityEngine;
 
-public class ScrollViewToggle : MonoBehaviour
+namespace AbxrLib
+{
+	public class ScrollViewToggle : MonoBehaviour
 {
     public GameObject scrollView; // Reference to the Scroll View GameObject
 
@@ -13,4 +15,4 @@ public class ScrollViewToggle : MonoBehaviour
     {
         scrollView.SetActive(false);
     }
-}
+}}

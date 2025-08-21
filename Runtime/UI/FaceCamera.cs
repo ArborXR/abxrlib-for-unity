@@ -1,6 +1,8 @@
 using UnityEngine;
 
-public class FaceCamera : MonoBehaviour
+namespace AbxrLib
+{
+	public class FaceCamera : MonoBehaviour
 {
     [Tooltip("How far in front of the camera the panel should float")]
     public float distanceFromCamera = 1.5f;
@@ -20,4 +22,4 @@ public class FaceCamera : MonoBehaviour
         // face the camera
         transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
     }
-}
+}}

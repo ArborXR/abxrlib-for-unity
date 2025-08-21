@@ -1,7 +1,9 @@
 ﻿using UnityEngine;
 using UnityEditor;
 
-public class Menu
+namespace AbxrLib
+{
+	public class Menu
 {
     private static Configuration _config;
     
@@ -16,4 +18,5 @@ public class Menu
     {
         Application.OpenURL("https://github.com/ArborXR/abxrlib-for-unity?tab=readme-ov-file#table-of-contents");
     }
+}
 }

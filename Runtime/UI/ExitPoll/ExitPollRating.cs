@@ -1,7 +1,9 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 
-public class ExitPollRating : MonoBehaviour
+namespace AbxrLib
+{
+	public class ExitPollRating : MonoBehaviour
 {
     public Button oneRatingButton;
     public Button twoRatingButton;
@@ -17,4 +19,4 @@ public class ExitPollRating : MonoBehaviour
         fourRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("4"));
         fiveRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("5"));
     }
-}
+}}

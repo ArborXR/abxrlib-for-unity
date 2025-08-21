@@ -2,8 +2,10 @@
 using UnityEditor;
 using UnityEngine;
 
-[InitializeOnLoad]
-internal class Core
+namespace AbxrLib
+{
+	[InitializeOnLoad]
+	internal class Core
 {
     private static Configuration _config;
     private const string NEW_CONFIG_NAME = "AbxrLib";
@@ -69,4 +71,4 @@ internal class Core
             Debug.Log($"ArborXR configuration has been migrated to {NEW_CONFIG_NAME}");
         }
     }
-}
+}}

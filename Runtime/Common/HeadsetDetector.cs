@@ -2,7 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR;
 
-public class HeadsetDetector : MonoBehaviour
+namespace AbxrLib
+{
+	public class HeadsetDetector : MonoBehaviour
 {
     private const float CheckIntervalSeconds = 1f;
     private const string NewSessionString = "No, I need to log in as someone else.";
@@ -67,4 +69,4 @@ public class HeadsetDetector : MonoBehaviour
             Abxr.onHeadsetPutOnNewSession?.Invoke();
         }
     }
-}
+}}

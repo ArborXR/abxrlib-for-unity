@@ -2,7 +2,9 @@
 using System;
 using System.IO;
 
-public class ExceptionLogger : MonoBehaviour
+namespace AbxrLib
+{
+	public class ExceptionLogger : MonoBehaviour
 {
     private void Awake()
     {
@@ -45,4 +47,4 @@ public class ExceptionLogger : MonoBehaviour
             Debug.LogError($"Failed to log to Android: {e.Message}");
         }
     }
-}
+}}

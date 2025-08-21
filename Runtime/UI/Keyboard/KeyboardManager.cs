@@ -2,7 +2,9 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-public class KeyboardManager : MonoBehaviour
+namespace AbxrLib
+{
+	public class KeyboardManager : MonoBehaviour
 {
     public static KeyboardManager Instance;
     public Button shiftButton1;
@@ -42,4 +44,4 @@ public class KeyboardManager : MonoBehaviour
         StartCoroutine(Authentication.KeyboardAuthenticate(inputField.text));
         inputField.text = "";
     }
-}
+}}

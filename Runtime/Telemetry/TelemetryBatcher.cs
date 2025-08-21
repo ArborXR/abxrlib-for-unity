@@ -5,7 +5,9 @@ using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class TelemetryBatcher : MonoBehaviour
+namespace AbxrLib
+{
+	public class TelemetryBatcher : MonoBehaviour
 {
 	private const string UrlPath = "/v1/collect/telemetry";
 	private static Uri _uri;
@@ -100,4 +102,4 @@ public class TelemetryBatcher : MonoBehaviour
 	{
 		public List<Payload> data;
 	}
-}
+}}

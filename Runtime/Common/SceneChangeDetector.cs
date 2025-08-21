@@ -2,7 +2,9 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public class SceneChangeDetector : MonoBehaviour
+namespace AbxrLib
+{
+	public class SceneChangeDetector : MonoBehaviour
 {
     public static string CurrentSceneName;
     
@@ -46,4 +48,4 @@ public class SceneChangeDetector : MonoBehaviour
             Abxr.Event("Scene Unloaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
         }
     }
-}
+}}

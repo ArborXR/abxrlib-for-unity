@@ -3,7 +3,9 @@ using System;
 using System.Threading.Tasks;
 using UnityEngine;
 
-public static class AndroidJavaObjectExt
+namespace AbxrLib
+{
+	public static class AndroidJavaObjectExt
 {
     public static T CallResult<T>(this AndroidJavaObject native, string methodName, params object[] args) =>
         native.Call<AndroidJavaObject>(methodName, args) is var result
@@ -186,4 +188,4 @@ public class SdkException : Exception
     public SdkException(string message) : base(message)
     {
     }
-}
+}}

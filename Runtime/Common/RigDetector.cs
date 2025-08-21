@@ -2,7 +2,9 @@ using System;
 using System.Linq;
 using UnityEngine;
 
-public static class RigDetector
+namespace AbxrLib
+{
+	public static class RigDetector
 {
     private static string _prefabSuffix = "";
     
@@ -66,4 +68,4 @@ public static class RigDetector
         }
         return null;
     }
-}
+}}

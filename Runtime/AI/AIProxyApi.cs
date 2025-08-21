@@ -6,7 +6,9 @@ using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class AIProxyApi : MonoBehaviour
+namespace AbxrLib
+{
+	public class AIProxyApi : MonoBehaviour
 {
     private const string UrlPath = "/v1/services/llm";
     private static readonly List<string> PastMessages = new();
@@ -57,4 +59,4 @@ public class AIProxyApi : MonoBehaviour
         public string llmProvider;
         public List<string> pastMessages;
     }
-}
+}}

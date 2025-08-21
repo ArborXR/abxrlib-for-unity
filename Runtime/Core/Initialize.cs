@@ -2,7 +2,9 @@
 using Newtonsoft.Json;
 using UnityEngine;
 
-public static class Initialize
+namespace AbxrLib
+{
+	public static class Initialize
 {
     public static readonly long StartTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     
@@ -42,14 +44,15 @@ public static class Initialize
 #endif
         Debug.Log($"AbxrLib - Version {AbxrLibVersion.Version} Initialized.");
     }
-}
+	}
 
-public class ObjectAttacher : MonoBehaviour
-{
-    public static T Attach<T>(string name) where T : MonoBehaviour
-    {
-        var go = new GameObject(name);
-        DontDestroyOnLoad(go);
-        return go.AddComponent<T>();
-    }
+	public class ObjectAttacher : MonoBehaviour
+	{
+	    public static T Attach<T>(string name) where T : MonoBehaviour
+	    {
+	        var go = new GameObject(name);
+	        DontDestroyOnLoad(go);
+	        return go.AddComponent<T>();
+	    }
+	}
 }

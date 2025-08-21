@@ -2,7 +2,9 @@
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-public class DeviceModel : MonoBehaviour
+namespace AbxrLib
+{
+	public class DeviceModel : MonoBehaviour
 {
 #if UNITY_WEBGL && !UNITY_EDITOR
     [DllImport("__Internal")] private static extern string AbxrDetectDeviceModel();
@@ -62,4 +64,4 @@ public class DeviceModel : MonoBehaviour
         return systemProperties.CallStatic<string>("get", propertyName, "Unknown");
     }
 #endif
-}
+}}

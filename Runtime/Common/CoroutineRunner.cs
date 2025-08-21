@@ -1,6 +1,8 @@
 using UnityEngine;
 
-public class CoroutineRunner : MonoBehaviour
+namespace AbxrLib
+{
+	public class CoroutineRunner : MonoBehaviour
 {
     private static CoroutineRunner _instance;
 
@@ -16,4 +18,5 @@ public class CoroutineRunner : MonoBehaviour
             return _instance;
         }
     }
+	}
 }

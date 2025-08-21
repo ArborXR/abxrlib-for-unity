@@ -3,7 +3,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class DebugWindow : MonoBehaviour
+namespace AbxrLib
+{
+	public class DebugWindow : MonoBehaviour
 {
     public TMP_Text logText;
     public ScrollRect scrollRect;
@@ -32,4 +34,5 @@ public class DebugWindow : MonoBehaviour
         // Scroll to the bottom to show the latest text
         scrollRect.verticalNormalizedPosition = 0f;
     }
+}
 }

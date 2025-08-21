@@ -2,8 +2,10 @@
 using System.Globalization;
 using UnityEngine;
 
-[DefaultExecutionOrder(100)] // Doesn't matter when this one runs
-public class TrackSystemInfo : MonoBehaviour
+namespace AbxrLib
+{
+	[DefaultExecutionOrder(100)] // Doesn't matter when this one runs
+	public class TrackSystemInfo : MonoBehaviour
 {
     private static int _lastFrameCount;
     private static float _lastTime;
@@ -72,4 +74,5 @@ public class TrackSystemInfo : MonoBehaviour
         _lastFrameCount = Time.frameCount;
         _lastTime = Time.time;
     }
+}
 }

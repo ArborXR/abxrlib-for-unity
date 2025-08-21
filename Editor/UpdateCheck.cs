@@ -7,7 +7,9 @@ using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-public class UpdateCheck
+namespace AbxrLib
+{
+	public class UpdateCheck
 {
     private const string PackageUrl = "https://github.com/ArborXR/abxrlib-for-unity.git";
     private const string VersionUrl = "https://api.github.com/repos/ArborXR/abxrlib-for-unity/releases/latest";
@@ -150,4 +152,5 @@ public class UpdateCheck
     {
         public string tag_name; // Represents the version tag, e.g., "v1.0.0"
     }
+}
 }

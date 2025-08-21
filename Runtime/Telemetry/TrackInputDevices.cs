@@ -3,8 +3,10 @@ using System.Globalization;
 using UnityEngine;
 using UnityEngine.XR;
 
-[DefaultExecutionOrder(100)] // Doesn't matter when this one runs
-public class TrackInputDevices : MonoBehaviour
+namespace AbxrLib
+{
+	[DefaultExecutionOrder(100)] // Doesn't matter when this one runs
+	public class TrackInputDevices : MonoBehaviour
 {
     private static float _timer = 1f;
     
@@ -128,4 +130,5 @@ public class TrackInputDevices : MonoBehaviour
             }
         }
     }
+}
 }

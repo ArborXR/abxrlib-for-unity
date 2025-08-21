@@ -5,7 +5,9 @@ using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class EventBatcher : MonoBehaviour
+namespace AbxrLib
+{
+	public class EventBatcher : MonoBehaviour
 {
 	private const string UrlPath = "/v1/collect/event";
 	private static Uri _uri;
@@ -96,8 +98,9 @@ public class EventBatcher : MonoBehaviour
 	    public string name;
 	    public Dictionary<string, string> meta;
     }
-	private class PayloadWrapper
+	        private class PayloadWrapper
     {
-	    public List<Payload> data;
+            public List<Payload> data;
     }
+	}
 }

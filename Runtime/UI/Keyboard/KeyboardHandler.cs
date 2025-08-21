@@ -3,7 +3,9 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 
-public class KeyboardHandler : MonoBehaviour
+namespace AbxrLib
+{
+	public class KeyboardHandler : MonoBehaviour
 {
     public static event Action OnKeyboardCreated;
     public static event Action OnKeyboardDestroyed;
@@ -82,4 +84,4 @@ public class KeyboardHandler : MonoBehaviour
             yield return new WaitForSeconds(0.5f); // Wait before running again
         }
     }
-}
+}}

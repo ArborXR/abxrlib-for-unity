@@ -8,7 +8,9 @@ using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public static class Utils
+namespace AbxrLib
+{
+	public static class Utils
 {
     public static string ComputeSha256Hash(string rawData)
     {
@@ -151,4 +153,5 @@ public static class Utils
         CoroutineRunner.Instance.StartCoroutine(LogBatcher.Send());
         CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
     }
+	}
 }

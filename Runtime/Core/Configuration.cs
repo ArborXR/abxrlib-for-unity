@@ -1,6 +1,8 @@
 ﻿using UnityEngine;
 
-public class Configuration : ScriptableObject
+namespace AbxrLib
+{
+	public class Configuration : ScriptableObject
 {
     private static Configuration _instance;
     private const string CONFIG_NAME = "AbxrLib";
@@ -45,4 +47,5 @@ public class Configuration : ScriptableObject
     public bool retainLocalAfterSent;
     public bool disableAutomaticTelemetry;
     public bool disableSceneEvents;
+	}
 }

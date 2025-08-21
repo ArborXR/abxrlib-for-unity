@@ -8,8 +8,10 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Scripting;
 
-[DefaultExecutionOrder(1)]
-public class Authentication : MonoBehaviour
+namespace AbxrLib
+{
+	[DefaultExecutionOrder(1)]
+	public class Authentication : MonoBehaviour
 {
     private static string _orgId;
     private static string _deviceId;
@@ -53,6 +55,20 @@ public class Authentication : MonoBehaviour
     }
 
     public static void SetSessionId(string sessionId) => _sessionId = sessionId;
+
+    private static string _userMeta;
+
+    /// <summary>
+    /// Sets the user ID for authentication
+    /// </summary>
+    /// <param name="userId">The user ID to set</param>
+    public static void SetUserId(string userId) => _userId = userId;
+
+    /// <summary>
+    /// Sets user metadata as a JSON string
+    /// </summary>
+    /// <param name="metaString">A string of key-value pairs in JSON format</param>
+    public static void SetUserMeta(string metaString) => _userMeta = metaString;
 
     public static IEnumerator Authenticate()
     {
@@ -264,11 +280,18 @@ public class Authentication : MonoBehaviour
             Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
             _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
             _keyboardAuthSuccess = true;
+            
+            // Trigger authentication success event
+            Abxr.TriggerAuthenticationSuccess();
         }
         else
         {
-            Debug.LogError($"AbxrLib - Authentication failed : {request.error} - {request.downloadHandler.text}");
+            string errorMessage = $"Authentication failed: {request.error} - {request.downloadHandler.text}";
+            Debug.LogError($"AbxrLib - {errorMessage}");
             _sessionId = null;
+            
+            // Trigger authentication failed event
+            Abxr.TriggerAuthenticationFailed(errorMessage);
         }
     }
 
@@ -408,4 +431,5 @@ public class Authentication : MonoBehaviour
         None,
         ArborXR
     }
+	}
 }

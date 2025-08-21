@@ -5,7 +5,9 @@ using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class LogBatcher : MonoBehaviour
+namespace AbxrLib
+{
+	public class LogBatcher : MonoBehaviour
 {
 	private const string UrlPath = "/v1/collect/log";
 	private static Uri _uri;
@@ -98,8 +100,9 @@ public class LogBatcher : MonoBehaviour
 		public string text;
 		public Dictionary<string, string> meta;
 	}
-	private class PayloadWrapper
-	{
-		public List<Payload> data;
+	        private class PayloadWrapper
+        {
+                public List<Payload> data;
+        }
 	}
 }
