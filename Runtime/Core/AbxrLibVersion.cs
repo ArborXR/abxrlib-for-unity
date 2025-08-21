@@ -2,6 +2,6 @@ namespace Abxr.Runtime.Core
 {
     public static class AbxrLibVersion
     {
-        public const string Version = "1.1.9";
+        public const string Version = "1.2.0";
     }
 }
