@@ -1,14 +1,17 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-public class ExitPollThumbs : MonoBehaviour
+namespace Abxr.Runtime.UI.ExitPoll
 {
-    public Button thumbsUpButton;
-    public Button thumbsDownButton;
-    
-    private void Start()
+    public class ExitPollThumbs : MonoBehaviour
     {
-        thumbsUpButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("up"));
-        thumbsDownButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("down"));
+        public Button thumbsUpButton;
+        public Button thumbsDownButton;
+    
+        private void Start()
+        {
+            thumbsUpButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("up"));
+            thumbsDownButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("down"));
+        }
     }
 }

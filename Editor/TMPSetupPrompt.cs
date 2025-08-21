@@ -1,20 +1,23 @@
 #if UNITY_EDITOR
-using UnityEditor;
 using TMPro;
+using UnityEditor;
 
-[InitializeOnLoad]
-public static class TMPSetupPrompt
+namespace Abxr.Editor
 {
-    static TMPSetupPrompt()
+    [InitializeOnLoad]
+    public static class TMPSetupPrompt
     {
-        // Delay so Unity has time to initialize all menus
-        EditorApplication.delayCall += TryPromptTMPImport;
-    }
+        static TMPSetupPrompt()
+        {
+            // Delay so Unity has time to initialize all menus
+            EditorApplication.delayCall += TryPromptTMPImport;
+        }
 
-    private static void TryPromptTMPImport()
-    {
-        // This will trigger the TMP Essentials Import Prompt
-        if (TMP_Settings.instance) { }
+        private static void TryPromptTMPImport()
+        {
+            // This will trigger the TMP Essentials Import Prompt
+            if (TMP_Settings.instance) { }
+        }
     }
 }
 #endif
