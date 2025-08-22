@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using AbxrLib.Runtime.AI;
+using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Events;
 using AbxrLib.Runtime.Logs;
 using AbxrLib.Runtime.ServiceClient;
@@ -441,20 +444,20 @@ using UnityEngine;
 		}
 
 		public static void ReAuthenticate()
-		{
-			CoroutineRunner.Instance.StartCoroutine(Authentication.Authentication.Authenticate());
+	{
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 		}
 
 		public static void StartNewSession()
-		{
-			Authentication.Authentication.SetSessionId(Guid.NewGuid().ToString());
-			CoroutineRunner.Instance.StartCoroutine(Authentication.Authentication.Authenticate());
+	{
+		Authentication.SetSessionId(Guid.NewGuid().ToString());
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 		}
 
 		public static void ContinueSession(string sessionId)
-		{
-			Authentication.Authentication.SetSessionId(sessionId);
-			CoroutineRunner.Instance.StartCoroutine(Authentication.Authentication.Authenticate());
+	{
+		Authentication.SetSessionId(sessionId);
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 		}
 	
 		private static void AddDuration(Dictionary<string, DateTime> startTimes, string name, Dictionary<string, string> meta)
