@@ -250,6 +250,7 @@ namespace Abxr.Runtime.Authentication
                 xrdmVersion = _xrdmVersion,
                 appVersion = Application.version,
                 unityVersion = Application.unityVersion,
+                abxrLibType = "unity",
                 abxrLibVersion = AbxrLibVersion.Version,
                 authMechanism = CreateAuthMechanismDict()
             };
@@ -398,6 +399,7 @@ namespace Abxr.Runtime.Authentication
             public string xrdmVersion;
             public string appVersion;
             public string unityVersion;
+            public string abxrLibType;
             public string abxrLibVersion;
             public Dictionary<string, string> authMechanism;
         }
