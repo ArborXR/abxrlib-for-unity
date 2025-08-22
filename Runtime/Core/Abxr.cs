@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Abxr.Runtime.Core
 {
-	public static class Abxr
+	public static class AbxrCore
 	{
 		private static readonly Dictionary<string, DateTime> AssessmentStartTimes = new();
 		private static readonly Dictionary<string, DateTime> ObjectiveStartTimes = new();
