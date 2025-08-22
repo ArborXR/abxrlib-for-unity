@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections;
-using Abxr.Runtime.Common;
+using AbxrLib.Runtime.Common;
 using TMPro;
 using UnityEngine;
 
-namespace Abxr.Runtime.UI.Keyboard
+namespace AbxrLib.Runtime.UI.Keyboard
 {
     public class KeyboardHandler : MonoBehaviour
     {

@@ -1,12 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using Abxr.Runtime.Common;
-using Abxr.Runtime.UI.Keyboard;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.UI.Keyboard;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Abxr.Runtime.UI.ExitPoll
+namespace AbxrLib.Runtime.UI.ExitPoll
 {
     public class ExitPollHandler : MonoBehaviour
     {
@@ -129,7 +129,7 @@ namespace Abxr.Runtime.UI.ExitPoll
             Destroy(_pollInstance);
             Destroy(_panelInstance);
             if (Callbacks.TryGetValue(_prompt, out var callback)) callback.Invoke(response);
-            Core.Abxr.Event(PollEventString, new Dictionary<string, string>
+            Abxr.Event(PollEventString, new Dictionary<string, string>
             {
                 [PollQuestionString] = _prompt,
                 [PollResponseString] = response

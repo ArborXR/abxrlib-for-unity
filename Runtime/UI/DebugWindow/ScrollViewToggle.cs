@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Abxr.Runtime.UI.DebugWindow
+namespace AbxrLib.Runtime.UI.DebugWindow
 {
     public class ScrollViewToggle : MonoBehaviour
     {
