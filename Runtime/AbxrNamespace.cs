@@ -7,57 +7,102 @@ using System.Collections.Generic;
 using UnityEngine;
 using Abxr.Runtime.UI.ExitPoll;
 
-namespace Abxr
+namespace AbxrLib
 {
-    // Forward the enums from Abxr.Runtime.Core.Abxr to the Abxr namespace
+    // Forward the enums from Abxr.Runtime.Core.Abxr to the AbxrLib namespace
     public enum ResultOptions
     {
-        Null = Runtime.Core.Abxr.ResultOptions.Null,
-        Pass = Runtime.Core.Abxr.ResultOptions.Pass,
-        Fail = Runtime.Core.Abxr.ResultOptions.Fail,
-        Complete = Runtime.Core.Abxr.ResultOptions.Complete,
-        Incomplete = Runtime.Core.Abxr.ResultOptions.Incomplete,
-        Browsed = Runtime.Core.Abxr.ResultOptions.Browsed
+        Null = Abxr.Runtime.Core.Abxr.ResultOptions.Null,
+        Pass = Abxr.Runtime.Core.Abxr.ResultOptions.Pass,
+        Fail = Abxr.Runtime.Core.Abxr.ResultOptions.Fail,
+        Complete = Abxr.Runtime.Core.Abxr.ResultOptions.Complete,
+        Incomplete = Abxr.Runtime.Core.Abxr.ResultOptions.Incomplete,
+        Browsed = Abxr.Runtime.Core.Abxr.ResultOptions.Browsed
     }
 
     public enum EventStatus
     {
-        Pass = Runtime.Core.Abxr.EventStatus.Pass,
-        Fail = Runtime.Core.Abxr.EventStatus.Fail,
-        Complete = Runtime.Core.Abxr.EventStatus.Complete,
-        Incomplete = Runtime.Core.Abxr.EventStatus.Incomplete,
-        Browsed = Runtime.Core.Abxr.EventStatus.Browsed
+        Pass = Abxr.Runtime.Core.Abxr.EventStatus.Pass,
+        Fail = Abxr.Runtime.Core.Abxr.EventStatus.Fail,
+        Complete = Abxr.Runtime.Core.Abxr.EventStatus.Complete,
+        Incomplete = Abxr.Runtime.Core.Abxr.EventStatus.Incomplete,
+        Browsed = Abxr.Runtime.Core.Abxr.EventStatus.Browsed
     }
 
     public enum InteractionType
     {
-        Null = Runtime.Core.Abxr.InteractionType.Null,
-        Bool = Runtime.Core.Abxr.InteractionType.Bool,
-        Select = Runtime.Core.Abxr.InteractionType.Select,
-        Text = Runtime.Core.Abxr.InteractionType.Text,
-        Rating = Runtime.Core.Abxr.InteractionType.Rating,
-        Number = Runtime.Core.Abxr.InteractionType.Number,
-        Matching = Runtime.Core.Abxr.InteractionType.Matching,
-        Performance = Runtime.Core.Abxr.InteractionType.Performance,
-        Sequencing = Runtime.Core.Abxr.InteractionType.Sequencing
+        Null = Abxr.Runtime.Core.Abxr.InteractionType.Null,
+        Bool = Abxr.Runtime.Core.Abxr.InteractionType.Bool,
+        Select = Abxr.Runtime.Core.Abxr.InteractionType.Select,
+        Text = Abxr.Runtime.Core.Abxr.InteractionType.Text,
+        Rating = Abxr.Runtime.Core.Abxr.InteractionType.Rating,
+        Number = Abxr.Runtime.Core.Abxr.InteractionType.Number,
+        Matching = Abxr.Runtime.Core.Abxr.InteractionType.Matching,
+        Performance = Abxr.Runtime.Core.Abxr.InteractionType.Performance,
+        Sequencing = Abxr.Runtime.Core.Abxr.InteractionType.Sequencing
     }
 
     public enum StoragePolicy
     {
-        keepLatest = Runtime.Core.Abxr.StoragePolicy.keepLatest,
-        appendHistory = Runtime.Core.Abxr.StoragePolicy.appendHistory
+        keepLatest = Abxr.Runtime.Core.Abxr.StoragePolicy.keepLatest,
+        appendHistory = Abxr.Runtime.Core.Abxr.StoragePolicy.appendHistory
     }
 
     public enum StorageScope
     {
-        device = Runtime.Core.Abxr.StorageScope.device,
-        user = Runtime.Core.Abxr.StorageScope.user
+        device = Abxr.Runtime.Core.Abxr.StorageScope.device,
+        user = Abxr.Runtime.Core.Abxr.StorageScope.user
     }
 }
 
 // Create a static class with the exact methods expected by users
 public static class Abxr
 {
+    // Expose enums as nested types so users can access Abxr.ResultOptions
+    public enum ResultOptions
+    {
+        Null = AbxrLib.ResultOptions.Null,
+        Pass = AbxrLib.ResultOptions.Pass,
+        Fail = AbxrLib.ResultOptions.Fail,
+        Complete = AbxrLib.ResultOptions.Complete,
+        Incomplete = AbxrLib.ResultOptions.Incomplete,
+        Browsed = AbxrLib.ResultOptions.Browsed
+    }
+
+    public enum EventStatus
+    {
+        Pass = AbxrLib.EventStatus.Pass,
+        Fail = AbxrLib.EventStatus.Fail,
+        Complete = AbxrLib.EventStatus.Complete,
+        Incomplete = AbxrLib.EventStatus.Incomplete,
+        Browsed = AbxrLib.EventStatus.Browsed
+    }
+
+    public enum InteractionType
+    {
+        Null = AbxrLib.InteractionType.Null,
+        Bool = AbxrLib.InteractionType.Bool,
+        Select = AbxrLib.InteractionType.Select,
+        Text = AbxrLib.InteractionType.Text,
+        Rating = AbxrLib.InteractionType.Rating,
+        Number = AbxrLib.InteractionType.Number,
+        Matching = AbxrLib.InteractionType.Matching,
+        Performance = AbxrLib.InteractionType.Performance,
+        Sequencing = AbxrLib.InteractionType.Sequencing
+    }
+
+    public enum StoragePolicy
+    {
+        keepLatest = AbxrLib.StoragePolicy.keepLatest,
+        appendHistory = AbxrLib.StoragePolicy.appendHistory
+    }
+
+    public enum StorageScope
+    {
+        device = AbxrLib.StorageScope.device,
+        user = AbxrLib.StorageScope.user
+    }
+
     // Events
     public static Action onHeadsetPutOnNewSession
     {
@@ -101,25 +146,25 @@ public static class Abxr
         Abxr.Runtime.Core.Abxr.TelemetryEntry(name, meta);
 
     // Storage Methods
-    public static IEnumerator StorageGetDefaultEntry(Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback) => 
+    public static IEnumerator StorageGetDefaultEntry(StorageScope scope, Action<List<Dictionary<string, string>>> callback) => 
         Abxr.Runtime.Core.Abxr.StorageGetDefaultEntry((Abxr.Runtime.Core.Abxr.StorageScope)scope, callback);
     
-    public static IEnumerator StorageGetEntry(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback) => 
+    public static IEnumerator StorageGetEntry(string name, StorageScope scope, Action<List<Dictionary<string, string>>> callback) => 
         Abxr.Runtime.Core.Abxr.StorageGetEntry(name, (Abxr.Runtime.Core.Abxr.StorageScope)scope, callback);
     
-    public static void StorageSetDefaultEntry(Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy = Abxr.StoragePolicy.keepLatest) => 
+    public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest) => 
         Abxr.Runtime.Core.Abxr.StorageSetDefaultEntry(entry, (Abxr.Runtime.Core.Abxr.StorageScope)scope, (Abxr.Runtime.Core.Abxr.StoragePolicy)policy);
     
-    public static void StorageSetEntry(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy = Abxr.StoragePolicy.keepLatest) => 
+    public static void StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest) => 
         Abxr.Runtime.Core.Abxr.StorageSetEntry(name, entry, (Abxr.Runtime.Core.Abxr.StorageScope)scope, (Abxr.Runtime.Core.Abxr.StoragePolicy)policy);
     
-    public static void StorageRemoveDefaultEntry(Abxr.StorageScope scope = Abxr.StorageScope.user) => 
+    public static void StorageRemoveDefaultEntry(StorageScope scope = StorageScope.user) => 
         Abxr.Runtime.Core.Abxr.StorageRemoveDefaultEntry((Abxr.Runtime.Core.Abxr.StorageScope)scope);
     
-    public static void StorageRemoveEntry(string name, Abxr.StorageScope scope = Abxr.StorageScope.user) => 
+    public static void StorageRemoveEntry(string name, StorageScope scope = StorageScope.user) => 
         Abxr.Runtime.Core.Abxr.StorageRemoveEntry(name, (Abxr.Runtime.Core.Abxr.StorageScope)scope);
     
-    public static void StorageRemoveMultipleEntries(Abxr.StorageScope scope = Abxr.StorageScope.user) => 
+    public static void StorageRemoveMultipleEntries(StorageScope scope = StorageScope.user) => 
         Abxr.Runtime.Core.Abxr.StorageRemoveMultipleEntries((Abxr.Runtime.Core.Abxr.StorageScope)scope);
 
     // AI Methods
@@ -133,28 +178,28 @@ public static class Abxr
     public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventAssessmentStart(assessmentName, meta);
     
-    public static void EventAssessmentComplete(string assessmentName, string score, Abxr.ResultOptions result = Abxr.ResultOptions.Complete, Dictionary<string, string> meta = null) => 
+    public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventAssessmentComplete(assessmentName, score, (Abxr.Runtime.Core.Abxr.ResultOptions)result, meta);
     
-    public static void EventAssessmentComplete(string assessmentName, int score, Abxr.EventStatus status = Abxr.EventStatus.Complete, Dictionary<string, string> meta = null) => 
+    public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventAssessmentComplete(assessmentName, score, (Abxr.Runtime.Core.Abxr.EventStatus)status, meta);
 
     public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventObjectiveStart(objectiveName, meta);
     
-    public static void EventObjectiveComplete(string objectiveName, string score, Abxr.ResultOptions result = Abxr.ResultOptions.Complete, Dictionary<string, string> meta = null) => 
+    public static void EventObjectiveComplete(string objectiveName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventObjectiveComplete(objectiveName, score, (Abxr.Runtime.Core.Abxr.ResultOptions)result, meta);
     
-    public static void EventObjectiveComplete(string objectiveName, int score, Abxr.EventStatus status = Abxr.EventStatus.Complete, Dictionary<string, string> meta = null) => 
+    public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventObjectiveComplete(objectiveName, score, (Abxr.Runtime.Core.Abxr.EventStatus)status, meta);
 
     public static void EventInteractionStart(string interactionName, Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventInteractionStart(interactionName, meta);
     
-    public static void EventInteractionComplete(string interactionName, string result, string resultOptions = "", Abxr.InteractionType interactionType = Abxr.InteractionType.Null, Dictionary<string, string> meta = null) => 
+    public static void EventInteractionComplete(string interactionName, string result, string resultOptions = "", InteractionType interactionType = InteractionType.Null, Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventInteractionComplete(interactionName, result, resultOptions, (Abxr.Runtime.Core.Abxr.InteractionType)interactionType, meta);
     
-    public static void EventInteractionComplete(string interactionName, Abxr.InteractionType interactionType, string response = "", Dictionary<string, string> meta = null) => 
+    public static void EventInteractionComplete(string interactionName, InteractionType interactionType, string response = "", Dictionary<string, string> meta = null) => 
         Abxr.Runtime.Core.Abxr.EventInteractionComplete(interactionName, (Abxr.Runtime.Core.Abxr.InteractionType)interactionType, response, meta);
 
     public static void EventLevelStart(string levelName, Dictionary<string, string> meta = null) => 
@@ -170,7 +215,7 @@ public static class Abxr
     public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null) => 
         Abxr.Runtime.Core.Abxr.PresentKeyboard(promptText, keyboardType, emailDomain);
 
-    public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null) => 
+    public static void PollUser(string prompt, Abxr.Runtime.UI.ExitPoll.ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null) => 
         Abxr.Runtime.Core.Abxr.PollUser(prompt, pollType, responses, callback);
 
     // Authentication Methods
