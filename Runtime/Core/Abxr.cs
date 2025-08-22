@@ -11,8 +11,8 @@ using Abxr.Runtime.UI.ExitPoll;
 using Abxr.Runtime.UI.Keyboard;
 using UnityEngine;
 
-namespace Abxr.Runtime.Core
-{
+//namespace Abxr.Runtime.Core
+//{
 	public static class Abxr
 	{
 		private static readonly Dictionary<string, DateTime> AssessmentStartTimes = new();
@@ -546,4 +546,4 @@ namespace Abxr.Runtime.Core
 		public static string GetFingerprint() =>
 			ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
 	}
-}
+//}
