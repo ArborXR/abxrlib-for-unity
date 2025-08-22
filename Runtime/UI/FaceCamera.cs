@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Abxr.Runtime.UI
+namespace AbxrLib.Runtime.UI
 {
     public class FaceCamera : MonoBehaviour
     {

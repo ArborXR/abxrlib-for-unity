@@ -1,6 +1,6 @@
 {
     "name": "Abxr.Editor",
-    "rootNamespace": "Abxr.Editor",
+    "rootNamespace": "AbxrLib.Editor",
     "references": [
         "Unity.TextMeshPro",
         "Abxr.Runtime"

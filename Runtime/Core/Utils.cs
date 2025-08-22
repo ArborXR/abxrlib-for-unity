@@ -4,16 +4,16 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
-using Abxr.Runtime.Common;
-using Abxr.Runtime.Events;
-using Abxr.Runtime.Logs;
-using Abxr.Runtime.Storage;
-using Abxr.Runtime.Telemetry;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Events;
+using AbxrLib.Runtime.Logs;
+using AbxrLib.Runtime.Storage;
+using AbxrLib.Runtime.Telemetry;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Abxr.Runtime.Core
+namespace AbxrLib.Runtime.Core
 {
     public static class Utils
     {

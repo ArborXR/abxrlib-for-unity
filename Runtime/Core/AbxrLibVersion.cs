@@ -1,4 +1,4 @@
-namespace Abxr.Runtime.Core
+namespace AbxrLib.Runtime.Core
 {
     public static class AbxrLibVersion
     {

@@ -3,16 +3,16 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Abxr.Runtime.Common;
-using Abxr.Runtime.Core;
-using Abxr.Runtime.ServiceClient;
-using Abxr.Runtime.UI.Keyboard;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.ServiceClient;
+using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Scripting;
 
-namespace Abxr.Runtime.Authentication
+namespace AbxrLib.Runtime.Authentication
 {
     [DefaultExecutionOrder(1)]
     public class Authentication : MonoBehaviour

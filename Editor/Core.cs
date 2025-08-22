@@ -1,9 +1,9 @@
 ﻿using System;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace Abxr.Editor
+namespace AbxrLib.Editor
 {
     [InitializeOnLoad]
     internal class Core

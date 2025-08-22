@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Abxr.Runtime.Common
+namespace AbxrLib.Runtime.Common
 {
     public class CoroutineRunner : MonoBehaviour
     {

@@ -1,10 +1,10 @@
 ﻿using System.Collections.Generic;
 using System.Globalization;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Core;
 using UnityEngine;
 using UnityEngine.XR;
 
-namespace Abxr.Runtime.Telemetry
+namespace AbxrLib.Runtime.Telemetry
 {
     [DefaultExecutionOrder(100)] // Doesn't matter when this one runs
     public class TrackInputDevices : MonoBehaviour

@@ -1,8 +1,8 @@
-﻿using Abxr.Runtime.Core;
+﻿using AbxrLib.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
-namespace Abxr.Editor
+namespace AbxrLib.Editor
 {
     [CustomEditor(typeof(Configuration))]
     public class ConfigInspector : UnityEditor.Editor

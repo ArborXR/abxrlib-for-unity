@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using Abxr.Runtime.Common;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Core;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Abxr.Runtime.Telemetry
+namespace AbxrLib.Runtime.Telemetry
 {
 	public class TelemetryBatcher : MonoBehaviour
 	{

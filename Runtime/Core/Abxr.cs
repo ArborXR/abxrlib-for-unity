@@ -1,17 +1,17 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using Abxr.Runtime.Common;
-using Abxr.Runtime.Events;
-using Abxr.Runtime.Logs;
-using Abxr.Runtime.ServiceClient;
-using Abxr.Runtime.Storage;
-using Abxr.Runtime.Telemetry;
-using Abxr.Runtime.UI.ExitPoll;
-using Abxr.Runtime.UI.Keyboard;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Events;
+using AbxrLib.Runtime.Logs;
+using AbxrLib.Runtime.ServiceClient;
+using AbxrLib.Runtime.Storage;
+using AbxrLib.Runtime.Telemetry;
+using AbxrLib.Runtime.UI.ExitPoll;
+using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
-namespace Abxr.Runtime.Core
+namespace AbxrLib.Runtime.Core
 {
 	public static class AbxrCore
 	{

@@ -2,7 +2,7 @@
 using System.IO;
 using UnityEngine;
 
-namespace Abxr.Runtime.Common
+namespace AbxrLib.Runtime.Common
 {
     public class ExceptionLogger : MonoBehaviour
     {

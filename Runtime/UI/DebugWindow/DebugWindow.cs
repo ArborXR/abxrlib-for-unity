@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Abxr.Runtime.UI.DebugWindow
+namespace AbxrLib.Runtime.UI.DebugWindow
 {
     public class DebugWindow : MonoBehaviour
     {

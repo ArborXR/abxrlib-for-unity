@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using Abxr.Runtime.UI.ExitPoll;
+using AbxrLib.Runtime.UI.ExitPoll;
 using UnityEngine;
 using UnityEngine.XR;
 
-namespace Abxr.Runtime.Common
+namespace AbxrLib.Runtime.Common
 {
     public class HeadsetDetector : MonoBehaviour
     {

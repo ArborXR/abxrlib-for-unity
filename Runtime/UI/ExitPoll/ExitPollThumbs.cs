@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Abxr.Runtime.UI.ExitPoll
+namespace AbxrLib.Runtime.UI.ExitPoll
 {
     public class ExitPollThumbs : MonoBehaviour
     {

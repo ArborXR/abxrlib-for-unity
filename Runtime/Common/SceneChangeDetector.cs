@@ -1,9 +1,9 @@
 ﻿using System.Collections.Generic;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Core;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace Abxr.Runtime.Common
+namespace AbxrLib.Runtime.Common
 {
     public class SceneChangeDetector : MonoBehaviour
     {
