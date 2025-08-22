@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Core;
 using UnityEngine;
 
-namespace Abxr.Runtime.Telemetry
+namespace AbxrLib.Runtime.Telemetry
 {
     [DefaultExecutionOrder(100)] // Doesn't matter when this one runs
     [AddComponentMenu("Analytics for XR/Track Object")]

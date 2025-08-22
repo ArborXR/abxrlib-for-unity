@@ -2,7 +2,7 @@
 using System.Runtime.InteropServices;
 using UnityEngine;
 
-namespace Abxr.Runtime.Authentication
+namespace AbxrLib.Runtime.Authentication
 {
     public class DeviceModel : MonoBehaviour
     {

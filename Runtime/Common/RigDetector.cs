@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using UnityEngine;
 
-namespace Abxr.Runtime.Common
+namespace AbxrLib.Runtime.Common
 {
     public static class RigDetector
     {

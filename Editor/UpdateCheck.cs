@@ -7,7 +7,7 @@ using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
-namespace Abxr.Editor
+namespace AbxrLib.Editor
 {
     public class UpdateCheck
     {

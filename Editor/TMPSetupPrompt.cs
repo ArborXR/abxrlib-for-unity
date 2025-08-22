@@ -2,7 +2,7 @@
 using TMPro;
 using UnityEditor;
 
-namespace Abxr.Editor
+namespace AbxrLib.Editor
 {
     [InitializeOnLoad]
     public static class TMPSetupPrompt
