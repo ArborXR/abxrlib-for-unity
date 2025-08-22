@@ -422,9 +422,9 @@ namespace AbxrLib.Runtime.Core
 		/// <param name="pollType">What kind of poll would you like</param>
 		/// <param name="responses">If a multiple choice poll, you need to provide between 2 and 8 possible responses</param>
 		/// <param name="callback">Optional callback that will be called with the selected string value (Multiple-choice poll only)</param>
-		public static void PollUser(string prompt, Abxr.Runtime.UI.ExitPoll.ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null)
+		public static void PollUser(string prompt, AbxrLib.Runtime.UI.ExitPoll.ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null)
 		{
-			if (pollType == Abxr.Runtime.UI.ExitPoll.ExitPollHandler.PollType.MultipleChoice)
+			if (pollType == AbxrLib.Runtime.UI.ExitPoll.ExitPollHandler.PollType.MultipleChoice)
 			{
 				if (responses == null)
 				{

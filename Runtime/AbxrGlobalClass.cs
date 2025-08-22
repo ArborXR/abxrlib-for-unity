@@ -9,52 +9,59 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+// Type aliases to reference enums from AbxrCore (single source of truth)
+using ResultOptions = AbxrLib.Runtime.Core.AbxrCore.ResultOptions;
+using EventStatus = AbxrLib.Runtime.Core.AbxrCore.EventStatus;
+using InteractionType = AbxrLib.Runtime.Core.AbxrCore.InteractionType;
+using StoragePolicy = AbxrLib.Runtime.Core.AbxrCore.StoragePolicy;
+using StorageScope = AbxrLib.Runtime.Core.AbxrCore.StorageScope;
+
 // Create a global Abxr class that forwards to AbxrLib.Runtime.Core.AbxrCore
 public static class Abxr
 {
-    // Forward all the enums as nested types
+    // Nested enums that reference the source enums from AbxrCore (single source of truth)
     public enum ResultOptions
     {
-        Null = 0,
-        Pass = 1,
-        Fail = 2,
-        Complete = 3,
-        Incomplete = 4,
-        Browsed = 5
+        Null = (int)AbxrLib.Runtime.Core.AbxrCore.ResultOptions.Null,
+        Pass = (int)AbxrLib.Runtime.Core.AbxrCore.ResultOptions.Pass,
+        Fail = (int)AbxrLib.Runtime.Core.AbxrCore.ResultOptions.Fail,
+        Complete = (int)AbxrLib.Runtime.Core.AbxrCore.ResultOptions.Complete,
+        Incomplete = (int)AbxrLib.Runtime.Core.AbxrCore.ResultOptions.Incomplete,
+        Browsed = (int)AbxrLib.Runtime.Core.AbxrCore.ResultOptions.Browsed
     }
 
     public enum EventStatus
     {
-        Pass = 0,
-        Fail = 1,
-        Complete = 2,
-        Incomplete = 3,
-        Browsed = 4
+        Pass = (int)AbxrLib.Runtime.Core.AbxrCore.EventStatus.Pass,
+        Fail = (int)AbxrLib.Runtime.Core.AbxrCore.EventStatus.Fail,
+        Complete = (int)AbxrLib.Runtime.Core.AbxrCore.EventStatus.Complete,
+        Incomplete = (int)AbxrLib.Runtime.Core.AbxrCore.EventStatus.Incomplete,
+        Browsed = (int)AbxrLib.Runtime.Core.AbxrCore.EventStatus.Browsed
     }
 
     public enum InteractionType
     {
-        Null = 0,
-        Bool = 1,
-        Select = 2,
-        Text = 3,
-        Rating = 4,
-        Number = 5,
-        Matching = 6,
-        Performance = 7,
-        Sequencing = 8
+        Null = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Null,
+        Bool = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Bool,
+        Select = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Select,
+        Text = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Text,
+        Rating = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Rating,
+        Number = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Number,
+        Matching = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Matching,
+        Performance = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Performance,
+        Sequencing = (int)AbxrLib.Runtime.Core.AbxrCore.InteractionType.Sequencing
     }
 
     public enum StoragePolicy
     {
-        keepLatest = 0,
-        appendHistory = 1
+        keepLatest = (int)AbxrLib.Runtime.Core.AbxrCore.StoragePolicy.keepLatest,
+        appendHistory = (int)AbxrLib.Runtime.Core.AbxrCore.StoragePolicy.appendHistory
     }
 
     public enum StorageScope
     {
-        device = 0,
-        user = 1
+        device = (int)AbxrLib.Runtime.Core.AbxrCore.StorageScope.device,
+        user = (int)AbxrLib.Runtime.Core.AbxrCore.StorageScope.user
     }
 
     // Forward all static properties
