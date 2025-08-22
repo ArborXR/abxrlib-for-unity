@@ -83,8 +83,8 @@ namespace Abxr.Runtime.Telemetry
                 ["z"] = rotation.z.ToString(CultureInfo.InvariantCulture),
                 ["w"] = rotation.w.ToString(CultureInfo.InvariantCulture)
             };
-            Core.Abxr.TelemetryEntry(deviceName + " Position", positionDict);
-            Core.Abxr.TelemetryEntry(deviceName + " Rotation", rotationDict);
+            Core.AbxrCore.TelemetryEntry(deviceName + " Position", positionDict);
+            Core.AbxrCore.TelemetryEntry(deviceName + " Rotation", rotationDict);
         }
 
         private void CheckTriggers()
@@ -109,7 +109,7 @@ namespace Abxr.Runtime.Telemetry
                     {
                         [trigger.name] = action
                     };
-                    Core.Abxr.TelemetryEntry($"Right Controller {trigger.name}", telemetryData);
+                    Core.AbxrCore.TelemetryEntry($"Right Controller {trigger.name}", telemetryData);
                     _rightTriggerValues[trigger] = pressed;
                 }
             }
@@ -126,7 +126,7 @@ namespace Abxr.Runtime.Telemetry
                     {
                         [trigger.name] = action
                     };
-                    Core.Abxr.TelemetryEntry($"Left Controller {trigger.name}", telemetryData);
+                    Core.AbxrCore.TelemetryEntry($"Left Controller {trigger.name}", telemetryData);
                     _leftTriggerValues[trigger] = pressed;
                 }
             }

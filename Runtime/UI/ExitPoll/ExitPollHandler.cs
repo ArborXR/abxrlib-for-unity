@@ -129,7 +129,7 @@ namespace Abxr.Runtime.UI.ExitPoll
             Destroy(_pollInstance);
             Destroy(_panelInstance);
             if (Callbacks.TryGetValue(_prompt, out var callback)) callback.Invoke(response);
-            Core.Abxr.Event(PollEventString, new Dictionary<string, string>
+            Core.AbxrCore.Event(PollEventString, new Dictionary<string, string>
             {
                 [PollQuestionString] = _prompt,
                 [PollResponseString] = response

@@ -30,7 +30,7 @@ namespace Abxr.Runtime.Common
             CurrentSceneName = newScene.name;
             if (!Configuration.Instance.disableSceneEvents)
             {
-                Core.Abxr.Event("Scene Changed", new Dictionary<string, string> { ["Scene Name"] = newScene.name });
+                Core.AbxrCore.Event("Scene Changed", new Dictionary<string, string> { ["Scene Name"] = newScene.name });
             }
         }
     
@@ -38,7 +38,7 @@ namespace Abxr.Runtime.Common
         {
             if (!Configuration.Instance.disableSceneEvents)
             {
-                Core.Abxr.Event("Scene Loaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
+                Core.AbxrCore.Event("Scene Loaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
             }
         }
     
@@ -46,7 +46,7 @@ namespace Abxr.Runtime.Common
         {
             if (!Configuration.Instance.disableSceneEvents)
             {
-                Core.Abxr.Event("Scene Unloaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
+                Core.AbxrCore.Event("Scene Unloaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
             }
         }
     }

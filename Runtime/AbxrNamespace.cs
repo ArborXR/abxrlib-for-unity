@@ -188,6 +188,6 @@ public static class Abxr
     public static bool GetIsAuthenticated() => Abxr.Runtime.Core.AbxrCore.GetIsAuthenticated();
     public static string GetAccessToken() => Abxr.Runtime.Core.AbxrCore.GetAccessToken();
     public static string GetRefreshToken() => Abxr.Runtime.Core.AbxrCore.GetRefreshToken();
-    public static DateTime? GetExpiresDateUtc() => Abxr.Runtime.Core.AbxrCoreCore.GetExpiresDateUtc();
-    public static string GetFingerprint() => Abxr.Runtime.Core.AbxrCoreCore.GetFingerprint();
+    public static DateTime? GetExpiresDateUtc() => Abxr.Runtime.Core.AbxrCore.GetExpiresDateUtc();
+    public static string GetFingerprint() => Abxr.Runtime.Core.AbxrCore.GetFingerprint();
 }
