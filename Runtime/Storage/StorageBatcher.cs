@@ -31,7 +31,7 @@ namespace AbxrLib.Runtime.Storage
 			if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
 		}
 	
-		public static void Add(string name, Dictionary<string, string> entry, Core.Abxr.StorageScope scope, Core.Abxr.StoragePolicy policy)
+		public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
 		{
 			long storageTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(storageTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
@@ -100,7 +100,7 @@ namespace AbxrLib.Runtime.Storage
 			}
 		}
 
-		public static IEnumerator Get(string name, Core.Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
+		public static IEnumerator Get(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
 		{
 			if (!Authentication.Authentication.Authenticated()) yield break;
 		
@@ -129,7 +129,7 @@ namespace AbxrLib.Runtime.Storage
 			}
 		}
 
-		public static IEnumerator Delete(Core.Abxr.StorageScope scope, string name = "")
+		public static IEnumerator Delete(Abxr.StorageScope scope, string name = "")
 		{
 			if (!Authentication.Authentication.Authenticated()) yield break;
 		

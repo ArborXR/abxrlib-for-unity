@@ -54,9 +54,9 @@ namespace AbxrLib.Runtime.Common
         private static void OnHeadsetPutOnDetected()
         {
             // Don't bother asking if they aren't acting on this event
-            if (Core.Abxr.onHeadsetPutOnNewSession == null) return;
+            if (Abxr.onHeadsetPutOnNewSession == null) return;
         
-            Core.Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
+            Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
                 ExitPollHandler.PollType.MultipleChoice,
                 new List<string>{ContinueSessionString, NewSessionString},
                 NewSessionCheck);
@@ -67,7 +67,7 @@ namespace AbxrLib.Runtime.Common
             if (response == NewSessionString)
             {
                 Authentication.Authentication.ReAuthenticate();
-                Core.Abxr.onHeadsetPutOnNewSession?.Invoke();
+                Abxr.onHeadsetPutOnNewSession?.Invoke();
             }
         }
     }

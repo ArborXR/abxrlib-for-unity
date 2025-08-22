@@ -32,7 +32,7 @@ namespace AbxrLib.Runtime.Telemetry
                 ["y"] = transform.position.y.ToString(CultureInfo.InvariantCulture),
                 ["z"] = transform.position.z.ToString(CultureInfo.InvariantCulture)
             };
-            Core.Abxr.TelemetryEntry(name + " Position", positionDict);
+            Abxr.TelemetryEntry(name + " Position", positionDict);
         }
     }
 }

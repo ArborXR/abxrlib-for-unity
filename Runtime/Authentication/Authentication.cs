@@ -113,19 +113,19 @@ namespace AbxrLib.Runtime.Authentication
             if (!ArborServiceClient.IsConnected()) return;
         
             _partner = Partner.ArborXR;
-            _orgId = Core.Abxr.GetOrgId();
-            _deviceId = Core.Abxr.GetDeviceId();
-            _deviceTags = Core.Abxr.GetDeviceTags();
+            _orgId = Abxr.GetOrgId();
+            _deviceId = Abxr.GetDeviceId();
+            _deviceTags = Abxr.GetDeviceTags();
             try
             {
-                var authSecret = Core.Abxr.GetFingerprint();
+                var authSecret = Abxr.GetFingerprint();
                 _authSecret = authSecret;
             }
             catch (Exception e)
             {
                 Debug.LogError($"AbxrLib - {e.Message}");
             }
-            _userId = Core.Abxr.GetAccessToken();
+            _userId = Abxr.GetAccessToken();
         }
 #if UNITY_WEBGL && !UNITY_EDITOR
         private static void GetQueryData()
@@ -204,7 +204,7 @@ namespace AbxrLib.Runtime.Authentication
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
             prompt += _authMechanism.prompt;
-            Core.Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
+            Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
             _failedAuthAttempts++;
         }
 
@@ -271,14 +271,14 @@ namespace AbxrLib.Runtime.Authentication
                 Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                 _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
                 _keyboardAuthSuccess = true;
-                Core.Abxr.onAuthCompleted?.Invoke(true, string.Empty);
+                Abxr.onAuthCompleted?.Invoke(true, string.Empty);
             }
             else
             {
                 string error = $"{request.error} - {request.downloadHandler.text}";
                 Debug.LogError($"AbxrLib - Authentication failed : {error}");
                 _sessionId = null;
-                Core.Abxr.onAuthCompleted?.Invoke(false, error);
+                Abxr.onAuthCompleted?.Invoke(false, error);
             }
         }
 
