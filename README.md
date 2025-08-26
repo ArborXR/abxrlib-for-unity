@@ -165,15 +165,6 @@ Abxr.EventAssessmentComplete("final_exam", 92, EventStatus.Pass);
 
 #### Objectives
 ```cpp
-//C# List Definition
-public enum ResultOptions
-{
-    Pass,
-    Fail,
-    Complete,
-    Incomplete
-}
-
 //C# Event Method Signatures
 public void Abxr.EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null)
 
@@ -223,7 +214,6 @@ public void Abxr.EventLevelComplete(string levelName, int score, Dictionary<stri
 Abxr.EventLevelStart("level_1");
 Abxr.EventLevelComplete("level_1", 85);
 
-
 // For flagging critical training events (e.g., skipped safety checks, high-risk errors) for auto-inclusion in the Critical Choices Chart
 public void Abxr.EventCritical(string label)
 public void Abxr.EventCritical(string label, Dictionary<string, string> meta = null)
@@ -232,7 +222,6 @@ public void Abxr.EventCritical(string label, Dictionary<string, string> meta = n
 **Parameters for all Event Wrapper Functions:**
 - `levelName/assessmentName/objectiveName/interactionName` (string): The identifier for the assessment, objective, interaction, or level.
 - `score` (int): The numerical score achieved. While typically between 1-100, any integer is valid. In metadata, you can also set a minScore and maxScore to define the range of scores for this objective.
-- `result` (ResultOptions for Assessment and Objective): The basic result of the assessment or objective.
 - `result` (Interactions): The result for the interaction is based on the InteractionType.
 - `result_details` (string): Optional. Additional details about the result. For interactions, this can be a single character or a string. For example: "a", "b", "c" or "correct", "incorrect".
 - `type` (InteractionType): Optional. The type of interaction for this event.
@@ -469,24 +458,6 @@ Abxr.Track("subscription_started", mixpanelStyleProps);
 ```
 
 Properties are automatically converted to the appropriate format for ABXR's backend while maintaining full compatibility with your existing Mixpanel integration patterns.
-
-### Authentication Methods
-
-#### SetUserId
-```cpp
-//C# Event Method Signatures
-public void Abxr.SetUserId(string userId)
-```
-
-#### SetUserMeta
-```cpp
-//C# Event Method Signatures
-public void Abxr.SetUserMeta(string metaString)
-```
-
-**Parameters:**
-- `userId` (string): The User ID used during authentication (setting this with trigger re-authentication).
-- `metaString` (string): A string of key-value pairs in JSON format.
 
 ## Exit Polls
 Deliver questionnaires to users to gather feedback.
