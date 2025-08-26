@@ -14,6 +14,31 @@ using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
+/// <summary>
+/// Mixpanel compatibility class for property values
+/// This class provides compatibility with Mixpanel Unity SDK for easier migration
+/// </summary>
+public class Value : Dictionary<string, object>
+{
+	public Value() : base() { }
+	
+	public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
+	
+	/// <summary>
+	/// Converts Value properties to Dictionary<string, string> for use with AbxrLib Event system
+	/// </summary>
+	/// <returns>Dictionary with all values converted to strings</returns>
+	public Dictionary<string, string> ToDictionary()
+	{
+		var result = new Dictionary<string, string>();
+		foreach (var kvp in this)
+		{
+			result[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+		}
+		return result;
+	}
+}
+
 public static class Abxr
 {
 	private static readonly Dictionary<string, DateTime> AssessmentStartTimes = new();
@@ -304,6 +329,61 @@ public static class Abxr
 	{
 		yield return AIProxyApi.SendPrompt(prompt, llmProvider, pastMessages, callback);
 	}
+
+	#region Mixpanel Compatibility Methods
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with just a name
+	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	public static void Track(string eventName)
+	{
+		Event(eventName);
+	}
+
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with properties
+	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	/// <param name="properties">Properties to send with the event (Mixpanel Value format)</param>
+	public static void Track(string eventName, Value properties)
+	{
+		if (properties == null)
+		{
+			Event(eventName);
+			return;
+		}
+		
+		Event(eventName, properties.ToDictionary());
+	}
+
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with properties as Dictionary
+	/// This method provides additional flexibility for migration from Mixpanel Unity SDK
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	/// <param name="properties">Properties to send with the event as Dictionary</param>
+	public static void Track(string eventName, Dictionary<string, object> properties)
+	{
+		if (properties == null)
+		{
+			Event(eventName);
+			return;
+		}
+
+		var stringProperties = new Dictionary<string, string>();
+		foreach (var kvp in properties)
+		{
+			stringProperties[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+		}
+		
+		Event(eventName, stringProperties);
+	}
+	#endregion
 
 	// Event wrapper functions
 	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)

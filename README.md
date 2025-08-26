@@ -7,9 +7,10 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
 2. [Installation](#installation)
 3. [Configuration](#configuration)
 4. [Sending Data](#sending-data)
-5. [FAQ](#faq)
-6. [Troubleshooting](#troubleshooting)
-7. [Contact](#contact)
+5. [Mixpanel Migration & Compatibility](#mixpanel-migration--compatibility)
+6. [FAQ](#faq)
+7. [Troubleshooting](#troubleshooting)
+8. [Contact](#contact)
 
 ---
 
@@ -362,6 +363,112 @@ Abxr.AIProxy("Provide me a randomized greeting that includes common small talk a
 **Returns:** The AI-generated response as a string.
 
 **Note:** AIProxy calls are processed immediately and bypass the cache system. However, they still respect the SendRetriesOnFailure and SendRetryInterval settings.
+
+---
+
+## Mixpanel Migration & Compatibility
+
+The ABXR SDK provides full compatibility with Mixpanel's Unity SDK, making migration simple and straightforward. You can replace your existing Mixpanel tracking calls with minimal code changes while gaining access to ABXR's advanced XR analytics capabilities.
+
+### Why Migrate from Mixpanel?
+
+- **XR-Native Analytics**: Purpose-built for spatial computing and immersive experiences
+- **Advanced Session Management**: Resume training across devices and sessions  
+- **Enterprise Features**: LMS integrations, SCORM/xAPI support, and AI-powered insights
+- **Spatial Tracking**: Built-in support for 3D position data and XR interactions
+- **Open Source**: No vendor lock-in, deploy to any backend service
+
+### Migration Guide
+
+#### Before (Mixpanel):
+```cpp
+using mixpanel;
+
+// Track with event-name
+Mixpanel.Track("Sent Message");
+
+// Track with event-name and properties
+var props = new Value();
+props["Plan"] = "Premium";
+props["UserID"] = 12345;
+Mixpanel.Track("Plan Selected", props);
+```
+
+#### After (ABXR SDK):
+```cpp
+// Track with event-name
+Abxr.Track("Sent Message");
+
+// Track with event-name and properties
+var props = new Value();
+props["Plan"] = "Premium";
+props["UserID"] = 12345;
+Abxr.Track("Plan Selected", props);
+```
+
+### Mixpanel Compatibility Methods
+
+The ABXR SDK includes a complete `Value` class and `Track` methods that match Mixpanel's API:
+
+```cpp
+//C# Compatibility Class
+public class Value : Dictionary<string, object>
+{
+    public Value() : base() { }
+    public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
+    public Dictionary<string, string> ToDictionary()  // Converts to ABXR format
+}
+
+//C# Track Method Signatures
+public static void Abxr.Track(string eventName)
+public static void Abxr.Track(string eventName, Value properties)
+public static void Abxr.Track(string eventName, Dictionary<string, object> properties)
+
+// Example Usage - Drop-in Replacement
+Abxr.Track("user_signup");
+Abxr.Track("purchase_completed", new Value { ["amount"] = 29.99, ["currency"] = "USD" });
+```
+
+### Key Differences & Advantages
+
+| Feature | Mixpanel | ABXR SDK |
+|---------|----------|-----------|
+| **Basic Event Tracking** | ✅ | ✅ |
+| **Custom Properties** | ✅ | ✅ |
+| **3D Spatial Data** | ❌ | ✅ (Built-in Vector3 support) |
+| **XR-Specific Events** | ❌ | ✅ (Assessments, Interactions, Objectives) |
+| **Session Persistence** | Limited | ✅ (Cross-device, resumable sessions) |
+| **Enterprise LMS Integration** | ❌ | ✅ (SCORM, xAPI, major LMS platforms) |
+| **Real-time Collaboration** | ❌ | ✅ (Multi-user session tracking) |
+| **Open Source** | ❌ | ✅ |
+
+### Migration Steps
+
+1. **Install ABXR SDK** following the [Installation](#installation) guide
+2. **Configure your project** with ABXR credentials from [Configuration](#configuration)  
+3. **Replace Mixpanel calls** with `Abxr.Track()` - no other changes needed
+4. **Optional: Enhanced Features** - Add XR-specific tracking like spatial events and assessments:
+   ```cpp
+   // Enhanced XR tracking beyond Mixpanel capabilities
+   Abxr.Event("object_grabbed", transform.position);  // Include 3D position
+   Abxr.EventAssessmentStart("safety_training");       // LMS-compatible assessments
+   ```
+
+### Value Class Compatibility
+
+The included `Value` class is fully compatible with Mixpanel's implementation:
+
+```cpp
+var mixpanelStyleProps = new Value();
+mixpanelStyleProps["user_id"] = "12345";
+mixpanelStyleProps["plan_type"] = "premium";
+mixpanelStyleProps["trial_days"] = 30;
+
+// Works exactly the same as Mixpanel
+Abxr.Track("subscription_started", mixpanelStyleProps);
+```
+
+Properties are automatically converted to the appropriate format for ABXR's backend while maintaining full compatibility with your existing Mixpanel integration patterns.
 
 ### Authentication Methods
 
