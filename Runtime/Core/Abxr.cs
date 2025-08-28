@@ -41,6 +41,7 @@ public class Value : Dictionary<string, object>
 
 public static class Abxr
 {
+	private static readonly Dictionary<string, DateTime> TimedEventStartTimes = new();
 	private static readonly Dictionary<string, DateTime> AssessmentStartTimes = new();
 	private static readonly Dictionary<string, DateTime> ObjectiveStartTimes = new();
 	private static readonly Dictionary<string, DateTime> InteractionStartTimes = new();
@@ -182,6 +183,10 @@ public static class Abxr
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		
+		// Add duration if this was a timed event (StartTimedEvent functionality)
+		AddDuration(TimedEventStartTimes, name, meta);
+		
 		EventBatcher.Add(name, meta);
 		if (sendTelemetry)
 		{
@@ -330,83 +335,16 @@ public static class Abxr
 		yield return AIProxyApi.SendPrompt(prompt, llmProvider, pastMessages, callback);
 	}
 
-	#region Mixpanel Compatibility Methods
 	/// <summary>
-	/// Mixpanel compatibility method - tracks an event with just a name
-	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
-	/// Internally calls the AbxrLib Event method
+	/// Start timing an event
+	/// Call Event() later with the same event name to automatically include duration
+	/// Works with all event methods since they use Event() internally
 	/// </summary>
-	/// <param name="eventName">Name of the event to track</param>
-	public static void Track(string eventName)
+	/// <param name="eventName">Name of the event to start timing</param>
+	public static void StartTimedEvent(string eventName)
 	{
-		var meta = new Dictionary<string, string>
-		{
-			["AbxrMethod"] = "Track"
-		};
-		Event(eventName, meta);
+		TimedEventStartTimes[eventName] = DateTime.UtcNow;
 	}
-
-	/// <summary>
-	/// Mixpanel compatibility method - tracks an event with properties
-	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
-	/// Internally calls the AbxrLib Event method
-	/// </summary>
-	/// <param name="eventName">Name of the event to track</param>
-	/// <param name="properties">Properties to send with the event (Mixpanel Value format)</param>
-	public static void Track(string eventName, Value properties)
-	{
-		Dictionary<string, string> meta;
-		
-		if (properties == null)
-		{
-			meta = new Dictionary<string, string>
-			{
-				["AbxrMethod"] = "Track"
-			};
-		}
-		else
-		{
-			meta = properties.ToDictionary();
-			meta["AbxrMethod"] = "Track";
-		}
-		
-		Event(eventName, meta);
-	}
-
-	/// <summary>
-	/// Mixpanel compatibility method - tracks an event with properties as Dictionary
-	/// This method provides additional flexibility for migration from Mixpanel Unity SDK
-	/// Internally calls the AbxrLib Event method
-	/// </summary>
-	/// <param name="eventName">Name of the event to track</param>
-	/// <param name="properties">Properties to send with the event as Dictionary</param>
-	public static void Track(string eventName, Dictionary<string, object> properties)
-	{
-		Dictionary<string, string> stringProperties;
-		
-		if (properties == null)
-		{
-			stringProperties = new Dictionary<string, string>
-			{
-				["AbxrMethod"] = "Track"
-			};
-		}
-		else
-		{
-			stringProperties = new Dictionary<string, string>
-			{
-				["AbxrMethod"] = "Track"
-			};
-			
-			foreach (var kvp in properties)
-			{
-				stringProperties[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
-			}
-		}
-		
-		Event(eventName, stringProperties);
-	}
-	#endregion
 
 	// Event wrapper functions
 	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
@@ -649,4 +587,83 @@ public static class Abxr
 	/// <returns>The device fingerprint.</returns>
 	public static string GetFingerprint() =>
 		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
+
+	#region Mixpanel Compatibility Methods
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with just a name
+	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	public static void Track(string eventName)
+	{
+		var meta = new Dictionary<string, string>
+		{
+			["AbxrMethod"] = "Track"
+		};
+		Event(eventName, meta);
+	}
+
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with properties
+	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	/// <param name="properties">Properties to send with the event (Mixpanel Value format)</param>
+	public static void Track(string eventName, Value properties)
+	{
+		Dictionary<string, string> meta;
+		
+		if (properties == null)
+		{
+			meta = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
+		}
+		else
+		{
+			meta = properties.ToDictionary();
+			meta["AbxrMethod"] = "Track";
+		}
+		
+		Event(eventName, meta);
+	}
+
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with properties as Dictionary
+	/// This method provides additional flexibility for migration from Mixpanel Unity SDK
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	/// <param name="properties">Properties to send with the event as Dictionary</param>
+	public static void Track(string eventName, Dictionary<string, object> properties)
+	{
+		Dictionary<string, string> stringProperties;
+		
+		if (properties == null)
+		{
+			stringProperties = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
+		}
+		else
+		{
+			stringProperties = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
+			
+			foreach (var kvp in properties)
+			{
+				stringProperties[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+			}
+		}
+		
+		Event(eventName, stringProperties);
+	}
+	#endregion
+
 }

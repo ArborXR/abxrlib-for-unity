@@ -229,6 +229,35 @@ public void Abxr.EventCritical(string label, Dictionary<string, string> meta = n
 
 **Note:** All complete events automatically calculate duration if a corresponding start event was logged.
 
+### Timed Events
+
+The ABXR SDK includes a built-in timing system that allows you to measure the duration of any event. This is useful for tracking how long users spend on specific activities.
+
+```cpp
+//C# Timed Event Method Signature
+public static void Abxr.StartTimedEvent(string eventName)
+
+// Example Usage
+Abxr.StartTimedEvent("Image Upload");
+// ... user performs upload activity for 20 seconds ...
+Abxr.Event("Image Upload"); // Duration automatically included: 20 seconds
+
+// Works with all event methods
+Abxr.StartTimedEvent("Assessment");
+// ... later ...
+Abxr.EventAssessmentComplete("Assessment", 95, EventStatus.Pass); // Duration included
+
+// Also works with Mixpanel compatibility methods
+Abxr.StartTimedEvent("User Session");
+// ... later ...
+Abxr.Track("User Session"); // Duration automatically included
+```
+
+**Parameters:**
+- `eventName` (string): The name of the event to start timing. Must match the event name used later.
+
+**Note:** The timer automatically adds a `duration` field (in seconds) to any subsequent event with the same name. The timer is automatically removed after the first matching event.
+
 ---
 
 ### Logging
@@ -367,37 +396,41 @@ The ABXR SDK provides full compatibility with Mixpanel's Unity SDK, making migra
 - **Spatial Tracking**: Built-in support for 3D position data and XR interactions
 - **Open Source**: No vendor lock-in, deploy to any backend service
 
-### Migration Guide
+### 3-Step Migration:
 
-#### Before (Mixpanel):
+#### Step 1: Remove Mixpanel References
 ```cpp
-using mixpanel;
+// Remove or comment out these lines:
+// using mixpanel;
+// Any Mixpanel initialization code...
 
-// Track with event-name
-Mixpanel.Track("Sent Message");
-
-// Track with event-name and properties
-var props = new Value();
-props["Plan"] = "Premium";
-props["UserID"] = 12345;
-Mixpanel.Track("Plan Selected", props);
+// ABXR SDK is already available - no additional using statements needed
 ```
 
-#### After (ABXR SDK):
-```cpp
-// Track with event-name
-Abxr.Track("Sent Message");
+#### Step 2: Configure ABXR SDK
+Follow the [Configuration](#configuration) section to set up your App ID, Org ID, and Auth Secret in the Unity Editor.
 
-// Track with event-name and properties
+#### Step 3: Simple String Replace
+```cpp
+// Find and replace throughout your codebase:
+// Mixpanel.Track  ->  Abxr.Track
+
+// Before (Mixpanel)
+Mixpanel.Track("Sent Message");
 var props = new Value();
+props["Plan"] = "Premium"; 
+Mixpanel.Track("Plan Selected", props);
+
+// After (just string replace!)
+Abxr.Track("Sent Message");
+var props = new Value();  // Value class included for compatibility
 props["Plan"] = "Premium";
-props["UserID"] = 12345;
 Abxr.Track("Plan Selected", props);
 ```
 
 ### Mixpanel Compatibility Methods
 
-The ABXR SDK includes a complete `Value` class and `Track` methods that match Mixpanel's API:
+The ABXR SDK includes a complete `Value` class, `Track` methods, and `StartTimedEvent` that match Mixpanel's API:
 
 ```cpp
 //C# Compatibility Class
@@ -408,7 +441,8 @@ public class Value : Dictionary<string, object>
     public Dictionary<string, string> ToDictionary()  // Converts to ABXR format
 }
 
-//C# Track Method Signatures
+//C# Track Method Signatures  
+public static void Abxr.StartTimedEvent(string eventName)
 public static void Abxr.Track(string eventName)
 public static void Abxr.Track(string eventName, Value properties)
 public static void Abxr.Track(string eventName, Dictionary<string, object> properties)
@@ -416,6 +450,13 @@ public static void Abxr.Track(string eventName, Dictionary<string, object> prope
 // Example Usage - Drop-in Replacement
 Abxr.Track("user_signup");
 Abxr.Track("purchase_completed", new Value { ["amount"] = 29.99, ["currency"] = "USD" });
+
+// Timed Events (matches Mixpanel exactly!)
+Abxr.StartTimedEvent("Image Upload");
+// ... 20 seconds later ...
+Abxr.Track("Image Upload"); // Duration automatically added: 20 seconds
+// OR
+Abxr.Event("Image Upload"); // Also works with Event() - duration added automatically!
 ```
 
 ### Key Differences & Advantages
@@ -431,17 +472,22 @@ Abxr.Track("purchase_completed", new Value { ["amount"] = 29.99, ["currency"] = 
 | **Real-time Collaboration** | ❌ | ✅ (Multi-user session tracking) |
 | **Open Source** | ❌ | ✅ |
 
-### Migration Steps
+### Migration Summary
 
-1. **Install ABXR SDK** following the [Installation](#installation) guide
-2. **Configure your project** with ABXR credentials from [Configuration](#configuration)  
-3. **Replace Mixpanel calls** with `Abxr.Track()` - no other changes needed
-4. **Optional: Enhanced Features** - Add XR-specific tracking like spatial events and assessments:
-   ```cpp
-   // Enhanced XR tracking beyond Mixpanel capabilities
-   Abxr.Event("object_grabbed", transform.position);  // Include 3D position
-   Abxr.EventAssessmentStart("safety_training");       // LMS-compatible assessments
-   ```
+**Migration Time: ~10 minutes for most projects**
+
+1. **Install ABXR SDK** - Follow [Installation](#installation) guide
+2. **Configure credentials** - Set App ID, Org ID, Auth Secret in Unity Editor  
+3. **String replace** - `Mixpanel.Track` → `Abxr.Track` throughout your code
+4. **Remove Mixpanel** - Comment out `using mixpanel;` and config code
+5. **Done!** - All your existing tracking calls now work with ABXR
+
+**Optional:** Add XR-specific features like spatial tracking and LMS assessments:
+```cpp
+// Enhanced XR tracking beyond Mixpanel capabilities  
+Abxr.Event("object_grabbed", transform.position);  // Include 3D position
+Abxr.EventAssessmentStart("safety_training");       // LMS-compatible assessments
+```
 
 ### Value Class Compatibility
 
