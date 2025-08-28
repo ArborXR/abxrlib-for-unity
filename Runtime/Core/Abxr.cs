@@ -339,7 +339,11 @@ public static class Abxr
 	/// <param name="eventName">Name of the event to track</param>
 	public static void Track(string eventName)
 	{
-		Event(eventName);
+		var meta = new Dictionary<string, string>
+		{
+			["AbxrMethod"] = "Track"
+		};
+		Event(eventName, meta);
 	}
 
 	/// <summary>
@@ -351,13 +355,22 @@ public static class Abxr
 	/// <param name="properties">Properties to send with the event (Mixpanel Value format)</param>
 	public static void Track(string eventName, Value properties)
 	{
+		Dictionary<string, string> meta;
+		
 		if (properties == null)
 		{
-			Event(eventName);
-			return;
+			meta = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
+		}
+		else
+		{
+			meta = properties.ToDictionary();
+			meta["AbxrMethod"] = "Track";
 		}
 		
-		Event(eventName, properties.ToDictionary());
+		Event(eventName, meta);
 	}
 
 	/// <summary>
@@ -369,16 +382,26 @@ public static class Abxr
 	/// <param name="properties">Properties to send with the event as Dictionary</param>
 	public static void Track(string eventName, Dictionary<string, object> properties)
 	{
+		Dictionary<string, string> stringProperties;
+		
 		if (properties == null)
 		{
-			Event(eventName);
-			return;
+			stringProperties = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
 		}
-
-		var stringProperties = new Dictionary<string, string>();
-		foreach (var kvp in properties)
+		else
 		{
-			stringProperties[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+			stringProperties = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
+			
+			foreach (var kvp in properties)
+			{
+				stringProperties[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+			}
 		}
 		
 		Event(eventName, stringProperties);
