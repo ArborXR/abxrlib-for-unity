@@ -16,6 +16,7 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
    - [Telemetry](#telemetry)
    - [AI Integration](#ai-integration)
    - [Exit Polls](#exit-polls)
+   - [Metadata Formats](#metadata-formats)
 5. [Advanced Features](#advanced-features)
    - [Module Targets](#module-targets)
    - [Authentication](#authentication)
@@ -36,7 +37,7 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
 
 The **ABXR SDK for Unity** is an open-source analytics and data collection library that provides developers with the tools to collect and send XR data to any service of their choice. This library enables scalable event tracking, telemetry, and session-based storage—essential for enterprise and education XR environments.
 
-> 💡 **Quick Start:** Most developers can integrate ABXR SDK and log their first event in under **15 minutes**.
+> **Quick Start:** Most developers can integrate ABXR SDK and log their first event in under **15 minutes**.
 
 **Why Use ABXR SDK?**
 
@@ -419,6 +420,217 @@ Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 - `Thumbs Up/Thumbs Down`
 - `Rating (1-5)`
 - `Multiple Choice (2-8 string options)`
+
+### Metadata Formats
+
+The ABXR SDK supports multiple flexible formats for the `meta` parameter in all event and log methods. All formats are automatically converted to `Dictionary<string, string>` for use with the Unity SDK:
+
+#### 1. Dictionary<string, string> (Native)
+```cpp
+// Native C# format - most efficient
+var meta = new Dictionary<string, string>
+{
+    ["action"] = "click",
+    ["timestamp"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+    ["userId"] = "12345",
+    ["completed"] = "true"
+};
+
+Abxr.Event("user_action", meta);
+Abxr.LogInfo("User login", new Dictionary<string, string> 
+{
+    ["username"] = "john_doe",
+    ["loginMethod"] = "oauth",
+    ["deviceType"] = "quest3"
+});
+```
+
+#### 2. Dictionary<string, object> (Mixpanel Compatibility)
+```cpp
+// Automatically converts objects to strings
+var mixpanelStyle = new Dictionary<string, object>
+{
+    ["score"] = 95,           // Converted to "95"
+    ["completed"] = true,     // Converted to "true"
+    ["timestamp"] = DateTime.UtcNow,  // Converted to ISO string
+    ["userData"] = new { name = "John", level = 5 }  // Converted to JSON
+};
+
+Abxr.Track("assessment_complete", mixpanelStyle);
+```
+
+#### 3. Abxr.Value Class (Full Mixpanel Compatibility)
+```cpp
+// Drop-in replacement for Mixpanel's Value class
+var props = new Abxr.Value();
+props["plan"] = "Premium";
+props["amount"] = 29.99;
+props["currency"] = "USD";
+
+Abxr.Track("purchase_completed", props);
+```
+
+#### 4. Anonymous Objects (via Reflection)
+```cpp
+// Convenient for simple metadata (performance cost for reflection)
+Abxr.Event("button_click", new { 
+    buttonId = "submit_btn", 
+    screenName = "checkout", 
+    userTier = "premium" 
+}.ToDictionary());
+
+// Helper extension method for anonymous objects
+public static Dictionary<string, string> ToDictionary(this object obj)
+{
+    return obj.GetType().GetProperties()
+        .ToDictionary(p => p.Name, p => p.GetValue(obj)?.ToString() ?? "");
+}
+```
+
+#### 5. No Metadata
+```cpp
+// Events and logs work fine without metadata
+Abxr.Event("app_started");
+Abxr.LogInfo("Application initialized");
+```
+
+#### 6. Vector3 Position Data (Unity Specific)
+```cpp
+// Unity-specific: Automatic position metadata
+Vector3 playerPosition = transform.position;
+Abxr.Event("player_teleported", playerPosition, new Dictionary<string, string>
+{
+    ["destination"] = "spawn_point",
+    ["method"] = "instant"
+});
+
+// Automatically adds: position_x, position_y, position_z to metadata
+```
+
+#### Automatic Type Conversion Examples
+
+The SDK automatically handles type conversion:
+
+```cpp
+var metadata = new Dictionary<string, object>
+{
+    ["score"] = 95,              // int → "95"
+    ["passed"] = true,           // bool → "true"
+    ["duration"] = 45.7f,        // float → "45.7"
+    ["timestamp"] = DateTime.UtcNow,  // DateTime → ISO string
+    ["player"] = new { name = "John", level = 5 }  // object → JSON string
+};
+
+Abxr.EventAssessmentComplete("math_test", 95, EventStatus.Pass, metadata);
+```
+
+#### Super Properties Integration
+
+All metadata formats work seamlessly with Super Properties:
+
+```cpp
+// Set super properties once
+Abxr.Register("user_type", "premium");
+Abxr.Register("app_version", "1.2.3");
+
+// All events automatically include super properties
+Abxr.Event("button_click", new Dictionary<string, string> { ["button"] = "submit" });
+// Final metadata: { "button": "submit", "user_type": "premium", "app_version": "1.2.3" }
+```
+
+#### JSON Array Handling
+
+Unity has specific considerations when working with JSON arrays in metadata:
+
+##### **Supported: Pre-serialized JSON Strings**
+```cpp
+// This works perfectly - JSON string is passed through as-is
+var meta = new Dictionary<string, string>
+{
+    ["items"] = "[\"sword\", \"shield\", \"potion\"]",
+    ["scores"] = "[95, 87, 92, 88]", 
+    ["coordinates"] = "[{\"x\":1.5, \"y\":2.3}, {\"x\":4.1, \"y\":1.7}]"
+};
+
+Abxr.Event("inventory_updated", meta);
+```
+
+##### **Problem: Raw C# Arrays/Lists**
+```cpp
+// This does NOT work as expected - calls .ToString() on arrays
+var meta = new Dictionary<string, object>
+{
+    ["items"] = new string[] {"sword", "shield", "potion"}, // Becomes "System.String[]"
+    ["scores"] = new List<int> {95, 87, 92, 88}             // Becomes "System.Collections.Generic.List`1[System.Int32]"
+};
+
+Abxr.Track("inventory_updated", meta); // Results in useless string representations!
+```
+
+##### **Solutions: Manual JSON Serialization**
+```cpp
+// Option 1: Using JsonUtility (Unity built-in)
+var items = new string[] {"sword", "shield", "potion"};
+var scores = new int[] {95, 87, 92, 88};
+
+// Simple wrapper class for arrays
+[System.Serializable]
+public class JsonArray<T> { public T[] array; }
+
+var meta = new Dictionary<string, string>
+{
+    ["items"] = JsonUtility.ToJson(new JsonArray<string> { array = items }).Replace("{\"array\":", "").Replace("}", ""),
+    ["scores"] = JsonUtility.ToJson(new JsonArray<int> { array = scores }).Replace("{\"array\":", "").Replace("}", "")
+};
+
+// Option 2: Using System.Text.Json (Unity 2021.2+)
+using System.Text.Json;
+var meta = new Dictionary<string, string>
+{
+    ["items"] = JsonSerializer.Serialize(items),
+    ["scores"] = JsonSerializer.Serialize(scores)
+};
+
+// Option 3: Manual string building (simple arrays)
+var meta = new Dictionary<string, string>
+{
+    ["items"] = "[\"" + string.Join("\", \"", items) + "\"]",
+    ["scores"] = "[" + string.Join(", ", scores) + "]"
+};
+
+// Option 4: Helper Extension Method
+public static class ArrayExtensions
+{
+    public static string ToJsonArray<T>(this T[] array)
+    {
+        if (typeof(T) == typeof(string))
+            return "[\"" + string.Join("\", \"", array) + "\"]";
+        else
+            return "[" + string.Join(", ", array) + "]";
+    }
+}
+
+// Usage with helper:
+var meta = new Dictionary<string, string>
+{
+    ["items"] = items.ToJsonArray(),    // ["sword", "shield", "potion"]
+    ["scores"] = scores.ToJsonArray()   // [95, 87, 92, 88]
+};
+
+Abxr.Event("inventory_updated", meta);
+```
+
+**Key Takeaway:** Always serialize arrays to JSON strings before passing to ABXR SDK methods.
+
+**All event and log methods support these flexible metadata formats:**
+- `Abxr.Event(name, meta?)`
+- `Abxr.Event(name, position, meta?)` (Unity-specific)
+- `Abxr.EventAssessmentStart/Complete(..., meta?)`
+- `Abxr.EventObjectiveStart/Complete(..., meta?)`
+- `Abxr.EventInteractionStart/Complete(..., meta?)`
+- `Abxr.EventLevelStart/Complete(..., meta?)`
+- `Abxr.LogDebug/Info/Warn/Error/Critical(message, meta?)`
+- `Abxr.Track(eventName, properties?)` (Mixpanel compatibility)
 
 ---
 
