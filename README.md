@@ -637,14 +637,296 @@ Abxr.Event("inventory_updated", meta);
 ## Advanced Features
 
 ### Module Targets
-The **Module Target** feature enables developers to create single applications with multiple modules, where each module can be its own assignment in an LMS. 
-(!!Feature coming soon!!)
+
+The **Module Target** feature enables developers to create single applications with multiple modules, where each module can be its own assignment in an LMS. When a learner enters from the LMS for a specific module, the application can automatically direct the user to that module within the application. Individual grades and results are then tracked for that specific assignment in the LMS.
+
+#### Setting Up Module Target Callbacks
+
+```cpp
+// Subscribe to module target availability events
+Abxr.onModuleTargetAvailable = (moduleTargetData) =>
+{
+    Debug.Log($"Module target available: {moduleTargetData.moduleTarget}");
+    Debug.Log($"User ID: {moduleTargetData.userId}");
+    Debug.Log($"User Email: {moduleTargetData.userEmail}");
+    Debug.Log($"Is Authenticated: {moduleTargetData.isAuthenticated}");
+    
+    // Navigate user to the specified module
+    switch(moduleTargetData.moduleTarget)
+    {
+        case "intro":
+            NavigateToIntroModule();
+            break;
+        case "lesson1":
+            NavigateToLesson1();
+            break;
+        case "final_exam":
+            NavigateToFinalExam();
+            break;
+        default:
+            ShowModuleSelectionMenu();
+            break;
+    }
+};
+```
+
+#### Getting Module Target Information
+
+You can also retrieve module target information directly:
+
+```cpp
+// Get current module target (returns null if none set)
+string currentModule = Abxr.GetModuleTarget();
+Debug.Log($"Current module: {currentModule}");
+
+// Check if a specific module is the current target
+if (Abxr.GetModuleTarget() == "lesson1")
+{
+    Debug.Log("User is in Lesson 1 assignment");
+    EnableLesson1Features();
+}
+
+// Get current user information
+var userId = Abxr.GetUserId();
+var userData = Abxr.GetUserData();
+string userEmail = Abxr.GetUserEmail();
+```
+
+#### Best Practices
+
+1. **Set up callback early**: Subscribe before the authentication process completes
+2. **Handle all cases**: Include default behavior for unknown or null module targets
+3. **Validate modules**: Check if requested module exists before navigation
+4. **Progress tracking**: Use assessment events to track module completion
+5. **Error handling**: Handle cases where navigation fails or module is invalid
+
+#### Example: Complete Multi-Module Setup
+
+```cpp
+public class MultiModuleManager : MonoBehaviour
+{
+    [System.Serializable]
+    public class ModuleInfo
+    {
+        public string name;
+        public string sceneName;
+        public GameObject moduleObject;
+    }
+
+    [SerializeField] private ModuleInfo[] modules;
+    
+    void Start()
+    {
+        // Set up module target callback before authentication
+        Abxr.onModuleTargetAvailable = OnModuleTargetAvailable;
+        
+        // Set up authentication completion callback
+        Abxr.OnAuthCompleted(OnAuthCompleted);
+    }
+    
+    private void OnModuleTargetAvailable(Abxr.ModuleTargetData moduleData)
+    {
+        var module = System.Array.Find(modules, m => m.name == moduleData.moduleTarget);
+        
+        if (module != null)
+        {
+            Debug.Log($"Navigating to module: {module.name}");
+            LoadModule(module);
+            
+            // Start assessment tracking for this module
+            Abxr.EventAssessmentStart(moduleData.moduleTarget, new Dictionary<string, string>
+            {
+                ["module_name"] = module.name,
+                ["user_id"] = moduleData.userId?.ToString() ?? "unknown"
+            });
+        }
+        else if (string.IsNullOrEmpty(moduleData.moduleTarget))
+        {
+            Debug.Log("No specific module target - showing main menu");
+            ShowModuleSelectionMenu();
+        }
+        else
+        {
+            Debug.LogWarning($"Unknown module target: {moduleData.moduleTarget}");
+            ShowModuleSelectionMenu();
+        }
+    }
+    
+    private void OnAuthCompleted(Abxr.AuthCompletedData authData)
+    {
+        if (authData.success)
+        {
+            Debug.Log("Authentication completed successfully!");
+            
+            if (authData.isReauthentication)
+            {
+                Debug.Log("User reauthenticated - refreshing data");
+                RefreshUserData();
+            }
+            else
+            {
+                Debug.Log("Initial authentication - full setup");
+                InitializeUserInterface();
+            }
+        }
+        else
+        {
+            Debug.LogError("Authentication failed");
+        }
+    }
+    
+    private void LoadModule(ModuleInfo module)
+    {
+        // Your module loading logic here
+        if (!string.IsNullOrEmpty(module.sceneName))
+        {
+            SceneManager.LoadScene(module.sceneName);
+        }
+        else if (module.moduleObject != null)
+        {
+            module.moduleObject.SetActive(true);
+        }
+    }
+    
+    private void ShowModuleSelectionMenu()
+    {
+        // Show your module selection UI
+    }
+    
+    private void RefreshUserData()
+    {
+        // Refresh user-specific data
+    }
+    
+    private void InitializeUserInterface()
+    {
+        // Initialize UI components
+    }
+}
+```
+
+#### Data Structures
+
+The module target callback provides a `ModuleTargetData` object with the following properties:
+
+```cpp
+public class ModuleTargetData
+{
+    public string moduleTarget;     // The target module identifier from LMS
+    public object userData;         // Additional user data from authentication
+    public object userId;           // User identifier
+    public string userEmail;        // User email address
+    public bool isAuthenticated;    // Authentication status
+}
+```
+
+**Note:** The actual implementation of user data retrieval (`GetUserData`, `GetUserId`, `GetUserEmail`, `GetModuleTarget`) needs to be completed by integrating with your authentication system. The current implementation provides placeholder methods that return null and should be connected to your authentication response data.
 
 ### Authentication
-To subscribe to Authentication success or failure, use the following Action. This returns 'true' for success and 'false' for failure (along with the error message in the failure case).
+
+The ABXR SDK provides comprehensive authentication completion callbacks that deliver detailed user and module information. This enables rich post-authentication workflows including automatic module navigation and personalized user experiences.
+
+#### Authentication Completion Callback
+
+Subscribe to authentication events to receive detailed information about the authenticated user and any module targets from LMS integration:
+
 ```cpp
-public static Action onAuthCompleted;
+// Subscribe to authentication completion events
+Abxr.OnAuthCompleted((authData) =>
+{
+    Debug.Log($"Authentication completed: {authData.success}");
+    Debug.Log($"User ID: {authData.userId}");
+    Debug.Log($"User Email: {authData.userEmail}");
+    Debug.Log($"Module Target: {authData.moduleTarget}");
+    Debug.Log($"Is Reauthentication: {authData.isReauthentication}");
+    
+    if (authData.success)
+    {
+        // Authentication was successful
+        if (authData.isReauthentication)
+        {
+            // User reauthenticated - maybe just refresh data
+            Debug.Log("Welcome back!");
+            RefreshUserData();
+        }
+        else
+        {
+            // Initial authentication - full setup
+            Debug.Log("Welcome! Setting up your experience...");
+            InitializeUserInterface();
+            LoadUserPreferences();
+        }
+        
+        // Check if we have a module target from auth
+        if (!string.IsNullOrEmpty(authData.moduleTarget))
+        {
+            NavigateToModule(authData.moduleTarget);
+        }
+    }
+});
+
+// Multiple callbacks are supported
+Abxr.OnAuthCompleted(HandleUserSetup);
+Abxr.OnAuthCompleted(HandleAnalyticsInit);
+
+// Remove specific callback when no longer needed
+Abxr.RemoveAuthCompletedCallback(HandleUserSetup);
+
+// Clear all callbacks
+Abxr.ClearAuthCompletedCallbacks();
 ```
+
+#### Callback Management
+
+The authentication system supports multiple subscribers for flexible integration:
+
+```cpp
+// Store callback reference for later management
+System.Action<Abxr.AuthCompletedData> authCallback = (authData) =>
+{
+    if (authData.success)
+    {
+        InitializeUserInterface();
+        if (authData.moduleTarget != null)
+        {
+            NavigateToModule(authData.moduleTarget);
+        }
+    }
+};
+
+// Subscribe to authentication events
+Abxr.OnAuthCompleted(authCallback);
+
+// Remove callback when component is destroyed
+void OnDestroy()
+{
+    Abxr.RemoveAuthCompletedCallback(authCallback);
+}
+```
+
+#### Authentication Data Structure
+
+The callback provides an `AuthCompletedData` object with comprehensive authentication information:
+
+```cpp
+public class AuthCompletedData
+{
+    public bool success;             // Whether authentication was successful
+    public object userData;          // Additional user data from authentication response
+    public object userId;            // User identifier
+    public string userEmail;         // User email address
+    public string moduleTarget;      // Target module from LMS (if applicable)
+    public bool isReauthentication;  // Whether this was a reauthentication (vs initial auth)
+}
+```
+
+#### Use Cases
+
+- **Post-authentication setup**: Initialize UI components and load user preferences
+- **Module navigation**: Automatically direct users to specific LMS assignments 
+- **Personalization**: Customize experience based on user data
+- **Session management**: Handle reauthentication vs initial authentication differently
+- **Error handling**: Respond appropriately to authentication failures
 
 ### Headset Removal
 To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.

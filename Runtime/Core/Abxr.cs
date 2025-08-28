@@ -32,8 +32,11 @@ public static class Abxr
 
 	public static Action onHeadsetPutOnNewSession;
 
-	// 'true' for success and 'false' for failure
-	public static Action<bool, string> onAuthCompleted;
+	// Module Target callback for LMS multi-module applications
+	public static Action<ModuleTargetData> onModuleTargetAvailable;
+
+	// Internal list of authentication completion callbacks
+	private static readonly List<System.Action<AuthCompletedData>> authCompletedCallbacks = new();
 
 	/// <summary>
 	/// Mixpanel compatibility class for property values
@@ -114,6 +117,52 @@ public static class Abxr
 	{
 		device,
 		user
+	}
+
+	/// <summary>
+	/// Data structure for module target information from LMS integration
+	/// </summary>
+	[System.Serializable]
+	public class ModuleTargetData
+	{
+		public string moduleTarget;     // The target module identifier from LMS
+		public object userData;         // Additional user data from authentication
+		public object userId;           // User identifier
+		public string userEmail;        // User email address
+		public bool isAuthenticated;    // Authentication status
+
+		public ModuleTargetData(string moduleTarget, object userData, object userId, string userEmail, bool isAuthenticated)
+		{
+			this.moduleTarget = moduleTarget;
+			this.userData = userData;
+			this.userId = userId;
+			this.userEmail = userEmail;
+			this.isAuthenticated = isAuthenticated;
+		}
+	}
+
+	/// <summary>
+	/// Data structure for authentication completion information
+	/// </summary>
+	[System.Serializable]
+	public class AuthCompletedData
+	{
+		public bool success;             // Whether authentication was successful
+		public object userData;          // Additional user data from authentication response
+		public object userId;            // User identifier
+		public string userEmail;         // User email address
+		public string moduleTarget;      // Target module from LMS (if applicable)
+		public bool isReauthentication;  // Whether this was a reauthentication (vs initial auth)
+
+		public AuthCompletedData(bool success, object userData, object userId, string userEmail, string moduleTarget, bool isReauthentication)
+		{
+			this.success = success;
+			this.userData = userData;
+			this.userId = userId;
+			this.userEmail = userEmail;
+			this.moduleTarget = moduleTarget;
+			this.isReauthentication = isReauthentication;
+		}
 	}
 
 	/// <summary>
@@ -691,7 +740,15 @@ public static class Abxr
 	/// </summary>
 	public static void ReAuthenticate()
 	{
-		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
+		CoroutineRunner.Instance.StartCoroutine(ReAuthenticateCoroutine());
+	}
+
+	private static IEnumerator ReAuthenticateCoroutine()
+	{
+		yield return Authentication.Authenticate();
+		
+		// Notify callbacks after reauthentication completes
+		NotifyAuthCompleted(IsAuthenticated(), true);
 	}
 
 	/// <summary>
@@ -702,7 +759,15 @@ public static class Abxr
 	public static void StartNewSession()
 	{
 		Authentication.SetSessionId(Guid.NewGuid().ToString());
-		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
+		CoroutineRunner.Instance.StartCoroutine(StartNewSessionCoroutine());
+	}
+
+	private static IEnumerator StartNewSessionCoroutine()
+	{
+		yield return Authentication.Authenticate();
+		
+		// Notify callbacks after new session authentication completes
+		NotifyAuthCompleted(IsAuthenticated(), false);
 	}
 
 	/// <summary>
@@ -713,7 +778,15 @@ public static class Abxr
 	public static void ContinueSession(string sessionId)
 	{
 		Authentication.SetSessionId(sessionId);
-		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
+		CoroutineRunner.Instance.StartCoroutine(ContinueSessionCoroutine());
+	}
+
+	private static IEnumerator ContinueSessionCoroutine()
+	{
+		yield return Authentication.Authenticate();
+		
+		// Notify callbacks after session continuation completes
+		NotifyAuthCompleted(IsAuthenticated(), true);
 	}
 
 	private static void AddDuration(Dictionary<string, DateTime> startTimes, string name, Dictionary<string, string> meta)
@@ -802,6 +875,198 @@ public static class Abxr
 	/// <returns>The device fingerprint.</returns>
 	public static string GetFingerprint() =>
 		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
+
+	#region Module Target and User Data Methods
+
+	/// <summary>
+	/// Get the current module target from authentication response
+	/// Returns null if no module target is set or authentication hasn't completed
+	/// </summary>
+	/// <returns>The module target identifier, or null if none</returns>
+	public static string GetModuleTarget()
+	{
+		// TODO: This needs to be implemented to retrieve module target from authentication response
+		// For now returning null as placeholder - should integrate with authentication system
+		return null;
+	}
+
+	/// <summary>
+	/// Get additional user data from authentication response
+	/// </summary>
+	/// <returns>User data object, or null if not available</returns>
+	public static object GetUserData()
+	{
+		// TODO: This needs to be implemented to retrieve user data from authentication response
+		// Should integrate with the authentication system to return user-specific data
+		return null;
+	}
+
+	/// <summary>
+	/// Get the user ID from authentication response
+	/// </summary>
+	/// <returns>User ID object, or null if not available</returns>
+	public static object GetUserId()
+	{
+		// TODO: This needs to be implemented to retrieve user ID from authentication response
+		// Should integrate with the authentication system to return user identifier
+		return null;
+	}
+
+	/// <summary>
+	/// Get the user email from authentication response
+	/// </summary>
+	/// <returns>User email string, or null if not available</returns>
+	public static string GetUserEmail()
+	{
+		// TODO: This needs to be implemented to retrieve user email from authentication response
+		// Should integrate with the authentication system to return user email address
+		return null;
+	}
+
+	/// <summary>
+	/// Check if authentication is currently completed and valid
+	/// </summary>
+	/// <returns>True if authenticated, false otherwise</returns>
+	public static bool IsAuthenticated()
+	{
+		// This could integrate with existing authentication state or ArborServiceClient
+		return ArborServiceClient.IsConnected() && GetIsAuthenticated();
+	}
+
+	/// <summary>
+	/// Trigger module target callback if module target data is available
+	/// Should be called internally when authentication completes with module target information
+	/// </summary>
+	public static void NotifyModuleTargetAvailable()
+	{
+		if (onModuleTargetAvailable != null)
+		{
+			var moduleTarget = GetModuleTarget();
+			
+			// Only notify if we have valid module target data
+			if (!string.IsNullOrEmpty(moduleTarget))
+			{
+				var moduleTargetData = new ModuleTargetData(
+					moduleTarget,
+					GetUserData(),
+					GetUserId(),
+					GetUserEmail(),
+					IsAuthenticated()
+				);
+
+				try
+				{
+					onModuleTargetAvailable.Invoke(moduleTargetData);
+				}
+				catch (System.Exception ex)
+				{
+					LogError($"Error in module target callback: {ex.Message}");
+				}
+			}
+		}
+	}
+
+	/// <summary>
+	/// Subscribe to authentication completion events for post-auth initialization
+	/// Perfect for initializing UI components, loading user data, or showing welcome messages
+	/// Callback fires immediately if authentication has already completed
+	/// </summary>
+	/// <param name="callback">Function to call when authentication completes successfully</param>
+	public static void OnAuthCompleted(System.Action<AuthCompletedData> callback)
+	{
+		if (callback == null)
+		{
+			LogError("Authentication callback cannot be null");
+			return;
+		}
+
+		authCompletedCallbacks.Add(callback);
+
+		// If already authenticated, notify immediately
+		if (IsAuthenticated())
+		{
+			var authData = new AuthCompletedData(
+				true,
+				GetUserData(),
+				GetUserId(),
+				GetUserEmail(),
+				GetModuleTarget(),
+				false
+			);
+
+			try
+			{
+				callback.Invoke(authData);
+			}
+			catch (System.Exception ex)
+			{
+				LogError($"Error in authentication completion callback: {ex.Message}");
+			}
+		}
+	}
+
+	/// <summary>
+	/// Remove a specific authentication completion callback
+	/// </summary>
+	/// <param name="callback">The callback function to remove</param>
+	public static void RemoveAuthCompletedCallback(System.Action<AuthCompletedData> callback)
+	{
+		if (callback != null)
+		{
+			authCompletedCallbacks.Remove(callback);
+		}
+	}
+
+	/// <summary>
+	/// Clear all authentication completion callbacks
+	/// </summary>
+	public static void ClearAuthCompletedCallbacks()
+	{
+		authCompletedCallbacks.Clear();
+	}
+
+	/// <summary>
+	/// Trigger authentication completion callback
+	/// Should be called internally when authentication completes
+	/// </summary>
+	/// <param name="success">Whether authentication was successful</param>
+	/// <param name="isReauthentication">Whether this was a reauthentication vs initial auth</param>
+	public static void NotifyAuthCompleted(bool success, bool isReauthentication = false)
+	{
+		if (authCompletedCallbacks.Count == 0)
+		{
+			return;
+		}
+
+		var authData = new AuthCompletedData(
+			success,
+			GetUserData(),
+			GetUserId(),
+			GetUserEmail(),
+			GetModuleTarget(),
+			isReauthentication
+		);
+
+		for (int i = 0; i < authCompletedCallbacks.Count; i++)
+		{
+			try
+			{
+				authCompletedCallbacks[i].Invoke(authData);
+			}
+			catch (System.Exception ex)
+			{
+				LogError($"Error in authentication completion callback: {ex.Message}");
+			}
+		}
+
+		// Also notify module target if we have one and auth was successful
+		if (success)
+		{
+			NotifyModuleTargetAvailable();
+		}
+	}
+
+	#endregion
 
 	#region Mixpanel Compatibility Methods
 	/// <summary>
