@@ -17,14 +17,16 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
    - [AI Integration](#ai-integration)
    - [Exit Polls](#exit-polls)
 5. [Advanced Features](#advanced-features)
+   - [Module Targets](#module-targets)
    - [Authentication](#authentication)
    - [Headset Removal](#headset-removal)
+   - [Session Management](#session-management)
    - [Debug Window](#debug-window)
    - [ArborXR Device Management](#arborxr-device-management)
    - [Mixpanel Compatibility](#mixpanel-compatibility)
-6. [FAQ](#faq)
-7. [Troubleshooting](#troubleshooting)
 8. [Support](#support)
+   - [Resources](#resources)
+   - [FAQ](#faq)
 
 ---
 
@@ -422,6 +424,10 @@ Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 
 ## Advanced Features
 
+### Module Targets
+The **Module Target** feature enables developers to create single applications with multiple modules, where each module can be its own assignment in an LMS. 
+(!!Feature coming soon!!)
+
 ### Authentication
 To subscribe to Authentication success or failure, use the following Action. This returns 'true' for success and 'false' for failure (along with the error message in the failure case).
 ```cpp
@@ -434,6 +440,67 @@ To improve session fidelity and reduce user spoofing or unintended headset shari
 public static Action onHeadsetPutOnNewSession;
 ```
 If the developer would like to have logic to correspond to these events, that would be done by subscribing to these events.
+
+### Session Management
+
+The ABXR SDK provides comprehensive session management capabilities that allow you to control authentication state and session continuity. These methods are particularly useful for multi-user environments, testing scenarios, and creating seamless user experiences across devices and time.
+
+#### ReAuthenticate
+Trigger manual reauthentication with existing stored parameters. This method is primarily useful for testing authentication flows or recovering from authentication issues.
+
+```cpp
+//C# Method Signature
+public static void Abxr.ReAuthenticate()
+
+// Example Usage
+Abxr.ReAuthenticate();
+```
+
+**Use Cases:**
+- Testing authentication flows during development
+- Recovering from authentication errors
+- Refreshing expired credentials
+- Debugging authentication issues
+
+#### StartNewSession
+Start a new session with a fresh session identifier. This method generates a new session ID and performs fresh authentication, making it ideal for starting new training experiences or resetting user context.
+
+```cpp
+//C# Method Signature
+public static void Abxr.StartNewSession()
+
+// Example Usage
+Abxr.StartNewSession();
+```
+
+**Use Cases:**
+- Starting new training modules or courses
+- Resetting user progress for a fresh start
+- Creating separate sessions for different users on the same device
+- Beginning new assessment attempts
+
+#### ContinueSession
+Continue an existing session using a specific session identifier. This method allows resuming previous sessions for continuity across devices or time, enabling users to pick up where they left off.
+
+```cpp
+//C# Method Signature
+public static void Abxr.ContinueSession(string sessionId)
+
+// Example Usage
+string previousSessionId = "550e8400-e29b-41d4-a716-446655440000";
+Abxr.ContinueSession(previousSessionId);
+```
+
+**Parameters:**
+- `sessionId` (string): The session ID to continue (must be a valid existing session)
+
+**Use Cases:**
+- Resuming training across different devices
+- Continuing sessions after app restarts
+- Implementing "Continue where you left off" functionality
+- Multi-session learning experiences
+
+**Note:** All session management methods work asynchronously and will trigger the `onAuthCompleted` callback when authentication completes, allowing you to respond to success or failure states.
 
 ### Debug Window
 The Debug Window is a little bonus feature from the AbxrLib developers.
@@ -495,6 +562,10 @@ To use this feature, simply drag the `AbxrDebugWindow` Prefab from `AbxrLib for 
 #### Abxr.GetExpiresDateUtc()
 - Return Type: datetime
 - Description: when the SSO access token expires in UTC time
+
+#### Abxr.GetFingerprint()
+- Return Type: string
+- Description: the device fingerprint
 
 ### Mixpanel Compatibility
 
@@ -670,6 +741,13 @@ Abxr.Track("subscription_started", mixpanelStyleProps);
 
 Properties are automatically converted to the appropriate format for ABXR's backend while maintaining full compatibility with your existing Mixpanel integration patterns.
 
+## Support
+
+## Resources
+
+- **Docs:** [https://help.arborxr.com/](https://help.arborxr.com/)
+- **GitHub:** [https://github.com/ArborXR/abxrlib-for-unity](https://github.com/ArborXR/abxrlib-for-unity)
+
 ## FAQ
 
 ### How do I retrieve my Application ID and Authorization Secret?
@@ -677,11 +755,3 @@ Your Application ID can be found in the Web Dashboard under the application deta
 
 ### How do I enable object tracking?
 Object tracking can be enabled by adding the Track Object component to any GameObject in your scene via the Unity Inspector.
-
-
-## Troubleshooting
-
-## Support
-
-- **Docs:** [https://help.arborxr.com/](https://help.arborxr.com/)
-- **GitHub:** [https://github.com/ArborXR/abxrlib-for-unity](https://github.com/ArborXR/abxrlib-for-unity)
