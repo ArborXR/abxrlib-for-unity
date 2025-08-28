@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using AbxrLib.Runtime.AI;
 using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
@@ -46,6 +47,13 @@ public static class Abxr
 	private static readonly Dictionary<string, DateTime> ObjectiveStartTimes = new();
 	private static readonly Dictionary<string, DateTime> InteractionStartTimes = new();
 	private static readonly Dictionary<string, DateTime> LevelStartTimes = new();
+	private static readonly Dictionary<string, string> SuperProperties = new();
+	private const string SuperPropertiesKey = "AbxrSuperProperties";
+
+	static Abxr()
+	{
+		LoadSuperProperties();
+	}
 
 	public static Action onHeadsetPutOnNewSession;
 
@@ -183,6 +191,16 @@ public static class Abxr
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		
+		// Add super properties to all events
+		foreach (var superProperty in SuperProperties)
+		{
+			// Super properties don't overwrite event-specific properties
+			if (!meta.ContainsKey(superProperty.Key))
+			{
+				meta[superProperty.Key] = superProperty.Value;
+			}
+		}
 		
 		// Add duration if this was a timed event (StartTimedEvent functionality)
 		AddDuration(TimedEventStartTimes, name, meta);
@@ -344,6 +362,118 @@ public static class Abxr
 	public static void StartTimedEvent(string eventName)
 	{
 		TimedEventStartTimes[eventName] = DateTime.UtcNow;
+	}
+
+	/// <summary>
+	/// Register a super property that will be automatically included in all events
+	/// Super properties persist across app sessions and are stored locally
+	/// </summary>
+	/// <param name="key">Property name</param>
+	/// <param name="value">Property value</param>
+	public static void Register(string key, string value)
+	{
+		SuperProperties[key] = value;
+		SaveSuperProperties();
+	}
+
+	/// <summary>
+	/// Register a super property only if it doesn't already exist
+	/// Will not overwrite existing super properties with the same key
+	/// </summary>
+	/// <param name="key">Property name</param>
+	/// <param name="value">Property value</param>
+	public static void RegisterOnce(string key, string value)
+	{
+		if (!SuperProperties.ContainsKey(key))
+		{
+			SuperProperties[key] = value;
+			SaveSuperProperties();
+		}
+	}
+
+	/// <summary>
+	/// Remove a super property
+	/// </summary>
+	/// <param name="key">Property name to remove</param>
+	public static void Unregister(string key)
+	{
+		SuperProperties.Remove(key);
+		SaveSuperProperties();
+	}
+
+	/// <summary>
+	/// Clear all super properties
+	/// Clears all superProperties from persistent storage (matches Mixpanel.Reset())
+	/// </summary>
+	public static void Reset()
+	{
+		SuperProperties.Clear();
+		SaveSuperProperties();
+	}
+
+	/// <summary>
+	/// Get a copy of all current super properties
+	/// </summary>
+	/// <returns>Dictionary containing all super properties</returns>
+	public static Dictionary<string, string> GetSuperProperties()
+	{
+		return new Dictionary<string, string>(SuperProperties);
+	}
+
+	private static void LoadSuperProperties()
+	{
+		string json = PlayerPrefs.GetString(SuperPropertiesKey, "{}");
+		try
+		{
+			var dict = JsonUtility.FromJson<SerializableDictionary>(json);
+			if (dict?.items != null)
+			{
+				SuperProperties.Clear();
+				foreach (var item in dict.items)
+				{
+					SuperProperties[item.key] = item.value;
+				}
+			}
+		}
+		catch (System.Exception e)
+		{
+			Debug.LogWarning($"AbxrLib: Failed to load super properties: {e.Message}");
+		}
+	}
+
+	private static void SaveSuperProperties()
+	{
+		try
+		{
+			var dict = new SerializableDictionary
+			{
+				items = SuperProperties.Select(kvp => new SerializableKeyValuePair
+				{
+					key = kvp.Key,
+					value = kvp.Value
+				}).ToArray()
+			};
+			string json = JsonUtility.ToJson(dict);
+			PlayerPrefs.SetString(SuperPropertiesKey, json);
+			PlayerPrefs.Save();
+		}
+		catch (System.Exception e)
+		{
+			Debug.LogWarning($"AbxrLib: Failed to save super properties: {e.Message}");
+		}
+	}
+
+	[System.Serializable]
+	private class SerializableDictionary
+	{
+		public SerializableKeyValuePair[] items;
+	}
+
+	[System.Serializable]
+	private class SerializableKeyValuePair
+	{
+		public string key;
+		public string value;
 	}
 
 	// Event wrapper functions
