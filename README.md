@@ -423,7 +423,7 @@ Mixpanel.Track("Plan Selected", props);
 
 // After (just string replace!)
 Abxr.Track("Sent Message");
-var props = new Value();  // Value class included for compatibility
+var props = new Abxr.Value();  // Abxr.Value class included for compatibility
 props["Plan"] = "Premium";
 Abxr.Track("Plan Selected", props);
 ```
@@ -475,11 +475,11 @@ Abxr.Reset(); // Remove all super properties (matches Mixpanel.Reset())
 
 ### Mixpanel Compatibility Methods
 
-The ABXR SDK includes a complete `Value` class, `Track`, `StartTimedEvent` and `Register` methods that match Mixpanel's API:
+The ABXR SDK includes a complete `Abxr.Value` class, `Track`, `StartTimedEvent` and `Register` methods that match Mixpanel's API:
 
 ```cpp
 //C# Compatibility Class
-public class Value : Dictionary<string, object>
+public class Abxr.Value : Dictionary<string, object>
 {
     public Value() : base() { }
     public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
@@ -489,12 +489,12 @@ public class Value : Dictionary<string, object>
 //C# Track Method Signatures  
 public static void Abxr.StartTimedEvent(string eventName)
 public static void Abxr.Track(string eventName)
-public static void Abxr.Track(string eventName, Value properties)
+public static void Abxr.Track(string eventName, Abxr.Value properties)
 public static void Abxr.Track(string eventName, Dictionary<string, object> properties)
 
 // Example Usage - Drop-in Replacement
 Abxr.Track("user_signup");
-Abxr.Track("purchase_completed", new Value { ["amount"] = 29.99, ["currency"] = "USD" });
+Abxr.Track("purchase_completed", new Abxr.Value { ["amount"] = 29.99, ["currency"] = "USD" });
 
 // Timed Events (matches Mixpanel exactly!)
 Abxr.StartTimedEvent("Table puzzled");
@@ -544,10 +544,10 @@ Abxr.EventAssessmentStart("safety_training");       // LMS-compatible assessment
 
 ### Value Class Compatibility
 
-The included `Value` class is fully compatible with Mixpanel's implementation:
+The included `Abxr.Value` class is fully compatible with Mixpanel's implementation:
 
 ```cpp
-var mixpanelStyleProps = new Value();
+var mixpanelStyleProps = new Abxr.Value();
 mixpanelStyleProps["user_id"] = "12345";
 mixpanelStyleProps["plan_type"] = "premium";
 mixpanelStyleProps["trial_days"] = 30;

@@ -15,31 +15,6 @@ using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
-/// <summary>
-/// Mixpanel compatibility class for property values
-/// This class provides compatibility with Mixpanel Unity SDK for easier migration
-/// </summary>
-public class Value : Dictionary<string, object>
-{
-	public Value() : base() { }
-	
-	public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
-	
-	/// <summary>
-	/// Converts Value properties to Dictionary<string, string> for use with AbxrLib Event system
-	/// </summary>
-	/// <returns>Dictionary with all values converted to strings</returns>
-	public Dictionary<string, string> ToDictionary()
-	{
-		var result = new Dictionary<string, string>();
-		foreach (var kvp in this)
-		{
-			result[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
-		}
-		return result;
-	}
-}
-
 public static class Abxr
 {
 	private static readonly Dictionary<string, DateTime> TimedEventStartTimes = new();
@@ -59,6 +34,32 @@ public static class Abxr
 
 	// 'true' for success and 'false' for failure
 	public static Action<bool, string> onAuthCompleted;
+
+	/// <summary>
+	/// Mixpanel compatibility class for property values
+	/// This class provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Usage: new Abxr.Value() instead of global Value class
+	/// </summary>
+	public class Value : Dictionary<string, object>
+	{
+		public Value() : base() { }
+		
+		public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
+		
+		/// <summary>
+		/// Converts Value properties to Dictionary<string, string> for use with AbxrLib Event system
+		/// </summary>
+		/// <returns>Dictionary with all values converted to strings</returns>
+		public Dictionary<string, string> ToDictionary()
+		{
+			var result = new Dictionary<string, string>();
+			foreach (var kvp in this)
+			{
+				result[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+			}
+			return result;
+		}
+	}
 
 	public enum ResultOptions // Only here for backwards compatibility
 	{
@@ -824,8 +825,8 @@ public static class Abxr
 	/// Internally calls the AbxrLib Event method
 	/// </summary>
 	/// <param name="eventName">Name of the event to track</param>
-	/// <param name="properties">Properties to send with the event (Mixpanel Value format)</param>
-	public static void Track(string eventName, Value properties)
+	/// <param name="properties">Properties to send with the event (Abxr.Value format)</param>
+	public static void Track(string eventName, Abxr.Value properties)
 	{
 		Dictionary<string, string> meta;
 		
