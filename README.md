@@ -238,9 +238,9 @@ The ABXR SDK includes a built-in timing system that allows you to measure the du
 public static void Abxr.StartTimedEvent(string eventName)
 
 // Example Usage
-Abxr.StartTimedEvent("Image Upload");
-// ... user performs upload activity for 20 seconds ...
-Abxr.Event("Image Upload"); // Duration automatically included: 20 seconds
+Abxr.StartTimedEvent("Table puzzle");
+// ... user performs puzzle activity for 20 seconds ...
+Abxr.Event("Table puzzle"); // Duration automatically included: 20 seconds
 
 // Works with all event methods
 Abxr.StartTimedEvent("Assessment");
@@ -497,11 +497,9 @@ Abxr.Track("user_signup");
 Abxr.Track("purchase_completed", new Value { ["amount"] = 29.99, ["currency"] = "USD" });
 
 // Timed Events (matches Mixpanel exactly!)
-Abxr.StartTimedEvent("Image Upload");
+Abxr.StartTimedEvent("Table puzzled");
 // ... 20 seconds later ...
-Abxr.Track("Image Upload"); // Duration automatically added: 20 seconds
-// OR
-Abxr.Event("Image Upload"); // Also works with Event() - duration added automatically!
+Abxr.Track("Table puzzle"); // Duration automatically added: 20 seconds
 
 // Super Properties (global properties included in all events)
 Abxr.Register("user_type", "premium"); // Same as Mixpanel.Register()
