@@ -7,10 +7,24 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
 2. [Installation](#installation)
 3. [Configuration](#configuration)
 4. [Sending Data](#sending-data)
-5. [Mixpanel Migration & Compatibility](#mixpanel-migration--compatibility)
+   - [Events](#events)
+   - [Analytics Event Wrappers](#analytics-event-wrappers-essential-for-all-developers)
+   - [Timed Events](#timed-events)
+   - [Super Properties](#super-properties)
+   - [Logging](#logging)
+   - [Storage](#storage)
+   - [Telemetry](#telemetry)
+   - [AI Integration](#ai-integration)
+   - [Exit Polls](#exit-polls)
+5. [Advanced Features](#advanced-features)
+   - [Authentication](#authentication)
+   - [Headset Removal](#headset-removal)
+   - [Debug Window](#debug-window)
+   - [ArborXR Device Management](#arborxr-device-management)
+   - [Mixpanel Compatibility](#mixpanel-compatibility)
 6. [FAQ](#faq)
 7. [Troubleshooting](#troubleshooting)
-8. [Contact](#contact)
+8. [Support](#support)
 
 ---
 
@@ -100,7 +114,7 @@ For information on implementing your own backend service or using other compatib
 
 ## Sending Data
 
-### Event Methods
+### Events
 ```cpp
 //C# Event Method Signatures
 public void Abxr.Event(string name);
@@ -286,7 +300,7 @@ Abxr.LogError("Critical error in assessment phase");
 
 ---
 
-### Storage API
+### Storage
 The Storage API enables developers to store and retrieve learner/player progress, facilitating the creation of long-form training content. When users log in using ArborXR's facility or the developer's in-app solution, these methods allow users to continue their progress on different headsets, ensuring a seamless learning experience across multiple sessions or devices.
 
 #### Save Progress
@@ -361,7 +375,7 @@ Abxr.Telemetry("headset_position", new Dictionary<string, string> { {"x", "1.23"
 - `data` (Dictionary<string, string>): Key-value pairs of telemetry data.
 
 ---
-### AI Integration Methods
+### AI Integration
 The Integration Methods offer developers access to additional services, enabling customized experiences for enterprise users. Currently, this includes access to GPT services through the AIProxy method, allowing for advanced AI-powered interactions within the XR environment. More integration services are planned for future releases, further expanding the capabilities available to developers for creating tailored enterprise solutions.
 
 #### AIProxy
@@ -382,183 +396,7 @@ Abxr.AIProxy("Provide me a randomized greeting that includes common small talk a
 
 **Note:** AIProxy calls are processed immediately and bypass the cache system. However, they still respect the SendRetriesOnFailure and SendRetryInterval settings.
 
----
-
-## Mixpanel Migration & Compatibility
-
-The ABXR SDK provides full compatibility with Mixpanel's Unity SDK, making migration simple and straightforward. You can replace your existing Mixpanel tracking calls with minimal code changes while gaining access to ABXR's advanced XR analytics capabilities.
-
-### Why Migrate from Mixpanel?
-
-- **XR-Native Analytics**: Purpose-built for spatial computing and immersive experiences
-- **Advanced Session Management**: Resume training across devices and sessions  
-- **Enterprise Features**: LMS integrations, SCORM/xAPI support, and AI-powered insights
-- **Spatial Tracking**: Built-in support for 3D position data and XR interactions
-- **Open Source**: No vendor lock-in, deploy to any backend service
-
-### 3-Step Migration:
-
-#### Step 1: Remove Mixpanel References
-```cpp
-// Remove or comment out these lines:
-// using mixpanel;
-// Any Mixpanel initialization code...
-
-// ABXR SDK is already available - no additional using statements needed
-```
-
-#### Step 2: Configure ABXR SDK
-Follow the [Configuration](#configuration) section to set up your App ID, Org ID, and Auth Secret in the Unity Editor.
-
-#### Step 3: Simple String Replace
-```cpp
-// Find and replace throughout your codebase:
-// Mixpanel.Track  ->  Abxr.Track
-
-// Before (Mixpanel)
-Mixpanel.Track("Sent Message");
-var props = new Value();
-props["Plan"] = "Premium"; 
-Mixpanel.Track("Plan Selected", props);
-
-// After (just string replace!)
-Abxr.Track("Sent Message");
-var props = new Abxr.Value();  // Abxr.Value class included for compatibility
-props["Plan"] = "Premium";
-Abxr.Track("Plan Selected", props);
-```
-
-### Super Properties
-
-Super Properties are global event properties that are automatically included in all events. They persist across app sessions and are perfect for setting user attributes, application state, or any data you want included in every event.
-
-```cpp
-//C# Super Properties Method Signatures
-public static void Abxr.Register(string key, string value)
-public static void Abxr.RegisterOnce(string key, string value)
-public static void Abxr.Unregister(string key)
-public static void Abxr.Reset()
-public static Dictionary<string, string> Abxr.GetSuperProperties()
-
-// Example Usage
-// Set user properties that will be included in all events
-Abxr.Register("user_type", "premium");
-Abxr.Register("app_version", "1.2.3");
-Abxr.Register("device_type", "quest3");
-
-// All subsequent events automatically include these properties
-Abxr.Event("button_click"); // Includes user_type, app_version, device_type
-Abxr.EventAssessmentStart("quiz"); // Also includes all super properties
-Abxr.Track("purchase"); // Mixpanel compatibility method also gets super properties
-
-// Set default values that won't overwrite existing super properties
-Abxr.RegisterOnce("user_tier", "free"); // Only sets if not already set
-Abxr.RegisterOnce("user_tier", "premium"); // Ignored - "free" remains
-
-// Manage super properties
-Abxr.Unregister("device_type"); // Remove specific super property
-var props = Abxr.GetSuperProperties(); // Get all current super properties
-Abxr.Reset(); // Remove all super properties (matches Mixpanel.Reset())
-```
-
-**Key Features:**
-- **Automatic Inclusion**: Super properties are automatically added to every event
-- **Persistent Storage**: Super properties persist across app launches using PlayerPrefs
-- **No Overwriting**: Super properties don't overwrite event-specific properties with the same name
-- **Universal**: Works with all event methods (Event, Track, EventAssessmentStart, etc.)
-
-**Use Cases:**
-- User attributes (subscription type, user level, demographics)
-- Application state (app version, build number, feature flags)
-- Device information (device type, OS version, screen size)
-- Session context (session ID, experiment groups, A/B test variants)
-
-### Mixpanel Compatibility Methods
-
-The ABXR SDK includes a complete `Abxr.Value` class, `Track`, `StartTimedEvent` and `Register` methods that match Mixpanel's API:
-
-```cpp
-//C# Compatibility Class
-public class Abxr.Value : Dictionary<string, object>
-{
-    public Value() : base() { }
-    public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
-    public Dictionary<string, string> ToDictionary()  // Converts to ABXR format
-}
-
-//C# Track Method Signatures  
-public static void Abxr.StartTimedEvent(string eventName)
-public static void Abxr.Track(string eventName)
-public static void Abxr.Track(string eventName, Abxr.Value properties)
-public static void Abxr.Track(string eventName, Dictionary<string, object> properties)
-
-// Example Usage - Drop-in Replacement
-Abxr.Track("user_signup");
-Abxr.Track("purchase_completed", new Abxr.Value { ["amount"] = 29.99, ["currency"] = "USD" });
-
-// Timed Events (matches Mixpanel exactly!)
-Abxr.StartTimedEvent("Table puzzled");
-// ... 20 seconds later ...
-Abxr.Track("Table puzzle"); // Duration automatically added: 20 seconds
-
-// Super Properties (global properties included in all events)
-Abxr.Register("user_type", "premium"); // Same as Mixpanel.Register()
-Abxr.RegisterOnce("device", "quest3");  // Same as Mixpanel.RegisterOnce()
-// All events now include user_type and device automatically!
-```
-
-**Additional Core Features Beyond Mixpanel:**
-ABXR also includes core [Super Properties](#super-properties) functionality (`Register`, `RegisterOnce`) that works identically to Mixpanel, plus advanced [Timed Events](#timed-events) that work universally across all event types.
-
-### Key Differences & Advantages
-
-| Feature | Mixpanel | ABXR SDK |
-|---------|----------|-----------|
-| **Basic Event Tracking** | ✅ | ✅ |
-| **Custom Properties** | ✅ | ✅ |
-| **Super Properties** | ✅ | ✅ (Register/RegisterOnce available) |
-| **Timed Events** | ✅ | ✅ (StartTimedEvent available) |
-| **3D Spatial Data** | ❌ | ✅ (Built-in Vector3 support) |
-| **XR-Specific Events** | ❌ | ✅ (Assessments, Interactions, Objectives) |
-| **Session Persistence** | Limited | ✅ (Cross-device, resumable sessions) |
-| **Enterprise LMS Integration** | ❌ | ✅ (SCORM, xAPI, major LMS platforms) |
-| **Real-time Collaboration** | ❌ | ✅ (Multi-user session tracking) |
-| **Open Source** | ❌ | ✅ |
-
-### Migration Summary
-
-**Migration Time: ~10 minutes for most projects**
-
-1. **Install ABXR SDK** - Follow [Installation](#installation) guide
-2. **Configure credentials** - Set App ID, Org ID, Auth Secret in Unity Editor  
-3. **String replace** - `Mixpanel.Track` → `Abxr.Track` throughout your code
-4. **Remove Mixpanel** - Comment out `using mixpanel;` and config code
-5. **Done!** - All your existing tracking calls now work with ABXR
-
-**Optional:** Add XR-specific features like spatial tracking and LMS assessments:
-```cpp
-// Enhanced XR tracking beyond Mixpanel capabilities  
-Abxr.Event("object_grabbed", transform.position);  // Include 3D position
-Abxr.EventAssessmentStart("safety_training");       // LMS-compatible assessments
-```
-
-### Value Class Compatibility
-
-The included `Abxr.Value` class is fully compatible with Mixpanel's implementation:
-
-```cpp
-var mixpanelStyleProps = new Abxr.Value();
-mixpanelStyleProps["user_id"] = "12345";
-mixpanelStyleProps["plan_type"] = "premium";
-mixpanelStyleProps["trial_days"] = 30;
-
-// Works exactly the same as Mixpanel
-Abxr.Track("subscription_started", mixpanelStyleProps);
-```
-
-Properties are automatically converted to the appropriate format for ABXR's backend while maintaining full compatibility with your existing Mixpanel integration patterns.
-
-## Exit Polls
+### Exit Polls
 Deliver questionnaires to users to gather feedback.
 ```cpp
 // C# List Definition
@@ -580,70 +418,31 @@ Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 - `Rating (1-5)`
 - `Multiple Choice (2-8 string options)`
 
-## Authentication Event
+---
+
+## Advanced Features
+
+### Authentication
 To subscribe to Authentication success or failure, use the following Action. This returns 'true' for success and 'false' for failure (along with the error message in the failure case).
 ```cpp
 public static Action onAuthCompleted;
 ```
 
-## Headset Removal (Session Integrity)
+### Headset Removal
 To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.
 ```cpp
 public static Action onHeadsetPutOnNewSession;
 ```
 If the developer would like to have logic to correspond to these events, that would be done by subscribing to these events.
 
-## Debug Window
+### Debug Window
 The Debug Window is a little bonus feature from the AbxrLib developers.
 To help with general debugging, this feature routes a copy of all AbxrLib messages (Logs, Events, etc) to a window within the VR space. This enables developers to view logs in VR without having to repeatedly take on and off your headset while debugging.
 
-### Setup
+#### Setup
 To use this feature, simply drag the `AbxrDebugWindow` Prefab from `AbxrLib for Unity/Resources/Prefabs`, to whatever object in the scene you want this window attached to (i.e. `Left Controller`).
 
-## FAQ
-
-### Q: How do I retrieve my Application ID and Authorization Secret?
-A: Your Application ID can be found in the Web Dashboard under the application details (you must be sure to use the App ID from the specific application you need data sent through). For the Authorization Secret, navigate to Settings > Organization Codes on the same dashboard.
-
-### Q: How do I enable object tracking?
-A: Object tracking can be enabled by adding the Track Object component to any GameObject in your scene via the Unity Inspector.
-
-
-## Troubleshooting
-
----
-
-## Persisting User State with ArborXR Insights
-
-The ABXR SDK includes a built-in storage interface that enables persistent session data across XR devices. This is ideal for applications with long-form content, resumable training, or user-specific learning paths.
-
-When integrated with **ArborXR Insights**, session state data is securely stored and can be retrieved from any device, enabling users to resume exactly where they left off. 
-
-### Benefits of Using ArborXR Insights for Storage:
-- Cross-device continuity and resuming sessions
-- Secure, compliant storage (GDPR, HIPAA-ready)
-- Configurable behaviors (e.g., `keepLatest`, append history)
-- Seamless AI and analytics integration for stored user states
-
-To use this feature, simply call the storage functions provided in the SDK (`SetStorageEntry`, `GetStorageEntry`, etc.). These entries are automatically synced with ArborXR’s cloud infrastructure, ensuring consistent data across sessions.
-
----
-
-## ArborXR Insights Web Portal & API
-
-For dashboards, analytics queries, impersonation, and integration management, use the **ArborXR Insights User API**, accessible through the platform's admin portal.
-
-Example features:
-- Visualize training completion & performance by cohort
-- Export SCORM/xAPI-compatible results
-- Query trends in interaction data
-
-Endpoints of note:
-- `/v1/analytics/dashboard`
-- `/v1/admin/system/organization/{org_id}`
-- `/v1/analytics/data`
-
-## ArborXR Device Management
+### ArborXR Device Management
 
 #### Abxr.GetDeviceId()
 - Return Type: string
@@ -697,7 +496,190 @@ Endpoints of note:
 - Return Type: datetime
 - Description: when the SSO access token expires in UTC time
 
----
+### Mixpanel Compatibility
+
+The ABXR SDK provides full compatibility with Mixpanel's Unity SDK, making migration simple and straightforward. You can replace your existing Mixpanel tracking calls with minimal code changes while gaining access to ABXR's advanced XR analytics capabilities.
+
+#### Why Migrate from Mixpanel?
+
+- **XR-Native Analytics**: Purpose-built for spatial computing and immersive experiences
+- **Advanced Session Management**: Resume training across devices and sessions  
+- **Enterprise Features**: LMS integrations, SCORM/xAPI support, and AI-powered insights
+- **Spatial Tracking**: Built-in support for 3D position data and XR interactions
+- **Open Source**: No vendor lock-in, deploy to any backend service
+
+#### 3-Step Migration:
+
+##### Step 1: Remove Mixpanel References
+```cpp
+// Remove or comment out these lines:
+// using mixpanel;
+// Any Mixpanel initialization code...
+
+// ABXR SDK is already available - no additional using statements needed
+```
+
+##### Step 2: Configure ABXR SDK
+Follow the [Configuration](#configuration) section to set up your App ID, Org ID, and Auth Secret in the Unity Editor.
+
+##### Step 3: Simple String Replace
+```cpp
+// Find and replace throughout your codebase:
+// Mixpanel.Track  ->  Abxr.Track
+
+// Before (Mixpanel)
+Mixpanel.Track("Sent Message");
+var props = new Value();
+props["Plan"] = "Premium"; 
+Mixpanel.Track("Plan Selected", props);
+
+// After (just string replace!)
+Abxr.Track("Sent Message");
+var props = new Abxr.Value();  // Abxr.Value class included for compatibility
+props["Plan"] = "Premium";
+Abxr.Track("Plan Selected", props);
+```
+
+#### Super Properties
+
+Super Properties are global event properties that are automatically included in all events. They persist across app sessions and are perfect for setting user attributes, application state, or any data you want included in every event.
+
+```cpp
+//C# Super Properties Method Signatures
+public static void Abxr.Register(string key, string value)
+public static void Abxr.RegisterOnce(string key, string value)
+public static void Abxr.Unregister(string key)
+public static void Abxr.Reset()
+public static Dictionary<string, string> Abxr.GetSuperProperties()
+
+// Example Usage
+// Set user properties that will be included in all events
+Abxr.Register("user_type", "premium");
+Abxr.Register("app_version", "1.2.3");
+Abxr.Register("device_type", "quest3");
+
+// All subsequent events automatically include these properties
+Abxr.Event("button_click"); // Includes user_type, app_version, device_type
+Abxr.EventAssessmentStart("quiz"); // Also includes all super properties
+Abxr.Track("purchase"); // Mixpanel compatibility method also gets super properties
+
+// Set default values that won't overwrite existing super properties
+Abxr.RegisterOnce("user_tier", "free"); // Only sets if not already set
+Abxr.RegisterOnce("user_tier", "premium"); // Ignored - "free" remains
+
+// Manage super properties
+Abxr.Unregister("device_type"); // Remove specific super property
+var props = Abxr.GetSuperProperties(); // Get all current super properties
+Abxr.Reset(); // Remove all super properties (matches Mixpanel.Reset())
+```
+
+**Key Features:**
+- **Automatic Inclusion**: Super properties are automatically added to every event
+- **Persistent Storage**: Super properties persist across app launches using PlayerPrefs
+- **No Overwriting**: Super properties don't overwrite event-specific properties with the same name
+- **Universal**: Works with all event methods (Event, Track, EventAssessmentStart, etc.)
+
+**Use Cases:**
+- User attributes (subscription type, user level, demographics)
+- Application state (app version, build number, feature flags)
+- Device information (device type, OS version, screen size)
+- Session context (session ID, experiment groups, A/B test variants)
+
+#### Mixpanel Compatibility Methods
+
+The ABXR SDK includes a complete `Abxr.Value` class, `Track`, `StartTimedEvent` and `Register` methods that match Mixpanel's API:
+
+```cpp
+//C# Compatibility Class
+public class Abxr.Value : Dictionary<string, object>
+{
+    public Value() : base() { }
+    public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
+    public Dictionary<string, string> ToDictionary()  // Converts to ABXR format
+}
+
+//C# Track Method Signatures  
+public static void Abxr.StartTimedEvent(string eventName)
+public static void Abxr.Track(string eventName)
+public static void Abxr.Track(string eventName, Abxr.Value properties)
+public static void Abxr.Track(string eventName, Dictionary<string, object> properties)
+
+// Example Usage - Drop-in Replacement
+Abxr.Track("user_signup");
+Abxr.Track("purchase_completed", new Abxr.Value { ["amount"] = 29.99, ["currency"] = "USD" });
+
+// Timed Events (matches Mixpanel exactly!)
+Abxr.StartTimedEvent("Table puzzle");
+// ... 20 seconds later ...
+Abxr.Track("Table puzzle"); // Duration automatically added: 20 seconds
+
+// Super Properties (global properties included in all events)
+Abxr.Register("user_type", "premium"); // Same as Mixpanel.Register()
+Abxr.RegisterOnce("device", "quest3");  // Same as Mixpanel.RegisterOnce()
+// All events now include user_type and device automatically!
+```
+
+**Additional Core Features Beyond Mixpanel:**
+ABXR also includes core [Super Properties](#super-properties) functionality (`Register`, `RegisterOnce`) that works identically to Mixpanel, plus advanced [Timed Events](#timed-events) that work universally across all event types.
+
+#### Key Differences & Advantages
+
+| Feature | Mixpanel | ABXR SDK |
+|---------|----------|-----------|
+| **Basic Event Tracking** | ✅ | ✅ |
+| **Custom Properties** | ✅ | ✅ |
+| **Super Properties** | ✅ | ✅ (Register/RegisterOnce available) |
+| **Timed Events** | ✅ | ✅ (StartTimedEvent available) |
+| **3D Spatial Data** | ❌ | ✅ (Built-in Vector3 support) |
+| **XR-Specific Events** | ❌ | ✅ (Assessments, Interactions, Objectives) |
+| **Session Persistence** | Limited | ✅ (Cross-device, resumable sessions) |
+| **Enterprise LMS Integration** | ❌ | ✅ (SCORM, xAPI, major LMS platforms) |
+| **Real-time Collaboration** | ❌ | ✅ (Multi-user session tracking) |
+| **Open Source** | ❌ | ✅ |
+
+#### Migration Summary
+
+**Migration Time: ~10 minutes for most projects**
+
+1. **Install ABXR SDK** - Follow [Installation](#installation) guide
+2. **Configure credentials** - Set App ID, Org ID, Auth Secret in Unity Editor  
+3. **String replace** - `Mixpanel.Track` → `Abxr.Track` throughout your code
+4. **Remove Mixpanel** - Comment out `using mixpanel;` and config code
+5. **Done!** - All your existing tracking calls now work with ABXR
+
+**Optional:** Add XR-specific features like spatial tracking and LMS assessments:
+```cpp
+// Enhanced XR tracking beyond Mixpanel capabilities  
+Abxr.Event("object_grabbed", transform.position);  // Include 3D position
+Abxr.EventAssessmentStart("safety_training");       // LMS-compatible assessments
+```
+
+#### Value Class Compatibility
+
+The included `Abxr.Value` class is fully compatible with Mixpanel's implementation:
+
+```cpp
+var mixpanelStyleProps = new Abxr.Value();
+mixpanelStyleProps["user_id"] = "12345";
+mixpanelStyleProps["plan_type"] = "premium";
+mixpanelStyleProps["trial_days"] = 30;
+
+// Works exactly the same as Mixpanel
+Abxr.Track("subscription_started", mixpanelStyleProps);
+```
+
+Properties are automatically converted to the appropriate format for ABXR's backend while maintaining full compatibility with your existing Mixpanel integration patterns.
+
+## FAQ
+
+### How do I retrieve my Application ID and Authorization Secret?
+Your Application ID can be found in the Web Dashboard under the application details (you must be sure to use the App ID from the specific application you need data sent through). For the Authorization Secret, navigate to Settings > Organization Codes on the same dashboard.
+
+### How do I enable object tracking?
+Object tracking can be enabled by adding the Track Object component to any GameObject in your scene via the Unity Inspector.
+
+
+## Troubleshooting
 
 ## Support
 
