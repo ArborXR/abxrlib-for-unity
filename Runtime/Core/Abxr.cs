@@ -229,10 +229,22 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Add telemetry information
+	/// Start timing an event
+	/// Call Event() later with the same event name to automatically include duration
+	/// Works with all event methods since they use Event() internally
 	/// </summary>
-	/// <param name="name">Name of the telemetry</param>
-	/// <param name="meta">Any additional information</param>
+	/// <param name="eventName">Name of the event to start timing</param>
+	public static void StartTimedEvent(string eventName)
+	{
+		TimedEventStartTimes[eventName] = DateTime.UtcNow;
+	}
+
+	/// <summary>
+	/// Send spatial, hardware, or system telemetry data for XR analytics
+	/// Captures headset/controller movements, performance metrics, and environmental data
+	/// </summary>
+	/// <param name="name">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
+	/// <param name="meta">Key-value pairs of telemetry measurements</param>
 	public static void TelemetryEntry(string name, Dictionary<string, string> meta)
 	{
 		meta ??= new Dictionary<string, string>();
@@ -354,17 +366,6 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Start timing an event
-	/// Call Event() later with the same event name to automatically include duration
-	/// Works with all event methods since they use Event() internally
-	/// </summary>
-	/// <param name="eventName">Name of the event to start timing</param>
-	public static void StartTimedEvent(string eventName)
-	{
-		TimedEventStartTimes[eventName] = DateTime.UtcNow;
-	}
-
-	/// <summary>
 	/// Register a super property that will be automatically included in all events
 	/// Super properties persist across app sessions and are stored locally
 	/// </summary>
@@ -477,6 +478,14 @@ public static class Abxr
 	}
 
 	// Event wrapper functions
+	
+	/// <summary>
+	/// Start tracking an assessment - essential for LMS integration and analytics
+	/// Assessments track overall learner performance across multiple objectives and interactions
+	/// Think of this as the learner's score for a specific course or curriculum
+	/// </summary>
+	/// <param name="assessmentName">Name of the assessment to start</param>
+	/// <param name="meta">Optional metadata with assessment details</param>
 	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
@@ -485,6 +494,15 @@ public static class Abxr
 		AssessmentStartTimes[assessmentName] = DateTime.UtcNow;
 		Event(assessmentName, meta);
 	}
+	
+	/// <summary>
+	/// Complete an assessment with score and status - triggers LMS grade recording
+	/// When complete, automatically records and closes the assessment in supported LMS platforms
+	/// </summary>
+	/// <param name="assessmentName">Name of the assessment (must match the start event)</param>
+	/// <param name="score">Numerical score achieved (typically 0-100, but any integer is valid)</param>
+	/// <param name="status">Result status of the assessment (Pass, Fail, Complete, etc.)</param>
+	/// <param name="meta">Optional metadata with completion details</param>
 	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
 		EventAssessmentComplete(assessmentName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
 	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
@@ -499,6 +517,12 @@ public static class Abxr
 		CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
 	}
 
+	/// <summary>
+	/// Start tracking an objective - individual learning goals within assessments
+	/// Objectives represent specific tasks or skills that contribute to overall assessment scores
+	/// </summary>
+	/// <param name="objectiveName">Name of the objective to start</param>
+	/// <param name="meta">Optional metadata with objective details</param>
 	public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
@@ -507,6 +531,15 @@ public static class Abxr
 		ObjectiveStartTimes[objectiveName] = DateTime.UtcNow;
 		Event(objectiveName, meta);
 	}
+	
+	/// <summary>
+	/// Complete an objective with score and status - contributes to overall assessment
+	/// Objectives automatically calculate duration if corresponding start event was logged
+	/// </summary>
+	/// <param name="objectiveName">Name of the objective (must match the start event)</param>
+	/// <param name="score">Numerical score achieved for this objective</param>
+	/// <param name="status">Result status (Complete, Pass, Fail, etc.)</param>
+	/// <param name="meta">Optional metadata with completion details</param>
 	public static void EventObjectiveComplete(string objectiveName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
 		EventObjectiveComplete(objectiveName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
 	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
@@ -520,6 +553,12 @@ public static class Abxr
 		Event(objectiveName, meta);
 	}
 
+	/// <summary>
+	/// Start tracking a user interaction - granular user actions within objectives
+	/// Interactions capture specific user behaviors like clicks, selections, or inputs
+	/// </summary>
+	/// <param name="interactionName">Name of the interaction to start</param>
+	/// <param name="meta">Optional metadata with interaction context</param>
 	public static void EventInteractionStart(string interactionName, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
@@ -528,6 +567,15 @@ public static class Abxr
 		InteractionStartTimes[interactionName] = DateTime.UtcNow;
 		Event(interactionName, meta);
 	}
+	
+	/// <summary>
+	/// Complete an interaction with type, response, and optional metadata
+	/// Interactions automatically calculate duration if corresponding start event was logged
+	/// </summary>
+	/// <param name="interactionName">Name of the interaction (must match the start event)</param>
+	/// <param name="interactionType">Type of interaction (Select, Text, Bool, Rating, etc.)</param>
+	/// <param name="response">User's response or result (e.g., "A", "correct", "blue_button")</param>
+	/// <param name="meta">Optional metadata with interaction details</param>
 	public static void EventInteractionComplete(string interactionName, string result, string resultOptions = "", InteractionType interactionType = InteractionType.Null, Dictionary<string, string> meta = null) =>
 		EventInteractionComplete(interactionName, interactionType, result, meta); // Just here for backwards compatability
 	public static void EventInteractionComplete(string interactionName, InteractionType interactionType, string response = "", Dictionary<string, string> meta = null)
@@ -541,6 +589,12 @@ public static class Abxr
 		Event(interactionName, meta);
 	}
 
+	/// <summary>
+	/// Start tracking a level or stage in your application
+	/// Levels represent discrete sections or progressions in games, training, or experiences
+	/// </summary>
+	/// <param name="levelName">Name of the level to start</param>
+	/// <param name="meta">Optional metadata with level details</param>
 	public static void EventLevelStart(string levelName, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
@@ -549,6 +603,14 @@ public static class Abxr
 		LevelStartTimes[levelName] = DateTime.UtcNow;
 		Event("level_start", meta);
 	}
+	
+	/// <summary>
+	/// Complete a level with score and optional metadata
+	/// Levels automatically calculate duration if corresponding start event was logged
+	/// </summary>
+	/// <param name="levelName">Name of the level (must match the start event)</param>
+	/// <param name="score">Numerical score achieved for this level</param>
+	/// <param name="meta">Optional metadata with completion details</param>
 	public static void EventLevelComplete(string levelName, string score, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
@@ -559,6 +621,13 @@ public static class Abxr
 		Event("level_complete", meta);
 	}
 
+	/// <summary>
+	/// Flag critical training events for auto-inclusion in the Critical Choices Chart
+	/// Use this to mark important safety checks, high-risk errors, or critical decision points
+	/// These events receive special treatment in analytics dashboards and reports
+	/// </summary>
+	/// <param name="label">Label for the critical event (will be prefixed with CRITICAL_ABXR_)</param>
+	/// <param name="meta">Optional metadata with critical event details</param>
 	public static void EventCritical(string label, Dictionary<string, string> meta = null)
 	{
 		string taggedName = $"CRITICAL_ABXR_{label}";
@@ -614,17 +683,32 @@ public static class Abxr
 		ExitPollHandler.AddPoll(prompt, pollType, responses, callback);
 	}
 
+	/// <summary>
+	/// Trigger manual reauthentication with existing stored parameters
+	/// Primarily useful for testing authentication flows or recovering from auth issues
+	/// Resets authentication state and attempts to re-authenticate with stored credentials
+	/// </summary>
 	public static void ReAuthenticate()
 	{
 		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 	}
 
+	/// <summary>
+	/// Start a new session with a fresh session identifier
+	/// Generates a new session ID and performs fresh authentication
+	/// Useful for starting new training experiences or resetting user context
+	/// </summary>
 	public static void StartNewSession()
 	{
 		Authentication.SetSessionId(Guid.NewGuid().ToString());
 		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 	}
 
+	/// <summary>
+	/// Continue an existing session using a specific session identifier
+	/// Allows resuming previous sessions for continuity across devices or time
+	/// </summary>
+	/// <param name="sessionId">The session ID to continue (must be a valid existing session)</param>
 	public static void ContinueSession(string sessionId)
 	{
 		Authentication.SetSessionId(sessionId);
