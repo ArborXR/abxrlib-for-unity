@@ -127,14 +127,14 @@ public static class Abxr
 	/// Data structure for module target information from LMS integration
 	/// </summary>
 	[System.Serializable]
-	public class ModuleTargetData
+	public class CurrentSessionData
 	{
 		public string moduleTarget;     // The target module identifier from LMS
 		public object userData;         // Additional user data from authentication
 		public object userId;           // User identifier
 		public string userEmail;        // User email address
 
-		public ModuleTargetData(string moduleTarget, object userData, object userId, string userEmail)
+		public CurrentSessionData(string moduleTarget, object userData, object userId, string userEmail)
 		{
 			this.moduleTarget = moduleTarget;
 			this.userData = userData;
@@ -919,8 +919,8 @@ public static class Abxr
 	/// Returns null when no more module targets are available
 	/// Each call removes the next module target from the queue and updates persistent storage
 	/// </summary>
-	/// <returns>The next ModuleTargetData or null if queue is empty</returns>
-	public static ModuleTargetData GetModuleTarget()
+	/// <returns>The next CurrentSessionData or null if queue is empty</returns>
+	public static CurrentSessionData GetModuleTarget()
 	{
 		// Load queue from storage if empty (in case of app restart)
 		if (moduleTargetQueue.Count == 0)
@@ -940,8 +940,8 @@ public static class Abxr
 		// Update persistent storage with remaining queue
 		SaveModuleTargetQueue();
 		
-		// Create ModuleTargetData with current session data
-		return new ModuleTargetData(
+		// Create CurrentSessionData with current session data
+		return new CurrentSessionData(
 			nextModuleTargetId,
 			GetUserData(),
 			GetUserId(),

@@ -687,7 +687,7 @@ You can also process module targets sequentially:
 
 ```cpp
 // Get the next module target from the queue
-ModuleTargetData nextTarget = Abxr.GetModuleTarget();
+CurrentSessionData nextTarget = Abxr.GetModuleTarget();
 if (nextTarget != null)
 {
     Debug.Log($"Processing module: {nextTarget.moduleTarget}");
@@ -880,10 +880,10 @@ public class MultiModuleManager : MonoBehaviour
 
 #### Data Structures
 
-The module target callback provides a `ModuleTargetData` object with the following properties:
+The module target callback provides a `CurrentSessionData` object with the following properties:
 
 ```cpp
-public class ModuleTargetData
+public class CurrentSessionData
 {
     public string moduleTarget;     // The target module identifier from LMS
     public object userData;         // Additional user data from authentication
