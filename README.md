@@ -309,10 +309,10 @@ The Storage API enables developers to store and retrieve learner/player progress
 #### Save Progress
 ```cpp
 //C# Event Method Signatures
-public void Abxr.SetStorageEntry(Dictionary<string, string> data, string name = "state", bool keep_latest = true, string origin = null, bool session_data = false)
+public void Abxr.StorageSetEntry(Dictionary<string, string> data, string name = "state", bool keep_latest = true, string origin = null, bool session_data = false)
 
 // Example usage
-Abxr.SetStorageEntry(new Dictionary<string, string>{{"progress", "75%"}});
+Abxr.StorageSetEntry(new Dictionary<string, string>{{"progress", "75%"}});
 ```
 **Parameters:**
 - `data` (Dictionary<string, string>): The key-value pairs to store.
@@ -324,10 +324,10 @@ Abxr.SetStorageEntry(new Dictionary<string, string>{{"progress", "75%"}});
 #### Retrieve Data
 ```cpp
 //C# Event Method Signatures
-public Dictionary<string, string> Abxr.GetStorageEntry(string name = "state", string origin = null, string[] tags_any = null, string[] tags_all = null, bool user_only = false)
+public Dictionary<string, string> Abxr.StorageGetEntry(string name = "state", string origin = null, string[] tags_any = null, string[] tags_all = null, bool user_only = false)
 
 // Example usage
-var state = Abxr.GetStorageEntry("state");
+var state = Abxr.StorageGetEntry("state");
 ```
 **Parameters:**
 - `name` (string): Optional. The identifier of the storage entry to retrieve. Default is "state".
@@ -341,13 +341,27 @@ var state = Abxr.GetStorageEntry("state");
 #### Remove Storage
 ```cpp
 //C# Event Method Signatures
-public void Abxr.RemoveStorageEntry(string name = "state")
+public void Abxr.StorageRemoveEntry(string name = "state")
 
 // Example usage
-Abxr.RemoveStorageEntry("state");
+Abxr.StorageRemoveEntry("state");
 ```
 **Parameters:**
 - `name` (string): Optional. The identifier of the storage entry to remove. Default is "state".
+
+#### Remove Default Storage Entry
+```cpp
+//C# Event Method Signatures
+public void Abxr.StorageRemoveDefaultEntry(StorageScope scope = StorageScope.user)
+
+// Example usage
+Abxr.StorageRemoveDefaultEntry(StorageScope.user);
+Abxr.StorageRemoveDefaultEntry(); // Defaults to user scope
+```
+**Parameters:**
+- `scope` (StorageScope): Optional. Remove from 'device' or 'user' storage. Default is 'user'.
+
+**Note:** This is a convenience method that removes the default "state" entry. It's equivalent to calling `RemoveStorageEntry("state")` but allows you to specify the storage scope.
 
 #### Get All Entries
 ```cpp
@@ -939,23 +953,6 @@ If the developer would like to have logic to correspond to these events, that wo
 
 The ABXR SDK provides comprehensive session management capabilities that allow you to control authentication state and session continuity. These methods are particularly useful for multi-user environments, testing scenarios, and creating seamless user experiences across devices and time.
 
-#### ReAuthenticate
-Trigger manual reauthentication with existing stored parameters. This method is primarily useful for testing authentication flows or recovering from authentication issues.
-
-```cpp
-//C# Method Signature
-public static void Abxr.ReAuthenticate()
-
-// Example Usage
-Abxr.ReAuthenticate();
-```
-
-**Use Cases:**
-- Testing authentication flows during development
-- Recovering from authentication errors
-- Refreshing expired credentials
-- Debugging authentication issues
-
 #### StartNewSession
 Start a new session with a fresh session identifier. This method generates a new session ID and performs fresh authentication, making it ideal for starting new training experiences or resetting user context.
 
@@ -973,26 +970,22 @@ Abxr.StartNewSession();
 - Creating separate sessions for different users on the same device
 - Beginning new assessment attempts
 
-#### ContinueSession
-Continue an existing session using a specific session identifier. This method allows resuming previous sessions for continuity across devices or time, enabling users to pick up where they left off.
+#### ReAuthenticate
+Trigger manual reauthentication with existing stored parameters. This method is primarily useful for testing authentication flows or recovering from authentication issues.
 
 ```cpp
 //C# Method Signature
-public static void Abxr.ContinueSession(string sessionId)
+public static void Abxr.ReAuthenticate()
 
 // Example Usage
-string previousSessionId = "550e8400-e29b-41d4-a716-446655440000";
-Abxr.ContinueSession(previousSessionId);
+Abxr.ReAuthenticate();
 ```
 
-**Parameters:**
-- `sessionId` (string): The session ID to continue (must be a valid existing session)
-
 **Use Cases:**
-- Resuming training across different devices
-- Continuing sessions after app restarts
-- Implementing "Continue where you left off" functionality
-- Multi-session learning experiences
+- Testing authentication flows during development
+- Recovering from authentication errors
+- Refreshing expired credentials
+- Debugging authentication issues
 
 **Note:** All session management methods work asynchronously and will trigger the `onAuthCompleted` callback when authentication completes, allowing you to respond to success or failure states.
 

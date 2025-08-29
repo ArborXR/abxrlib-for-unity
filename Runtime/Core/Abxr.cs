@@ -770,25 +770,6 @@ public static class Abxr
 		NotifyAuthCompleted(IsAuthenticated(), false);
 	}
 
-	/// <summary>
-	/// Continue an existing session using a specific session identifier
-	/// Allows resuming previous sessions for continuity across devices or time
-	/// </summary>
-	/// <param name="sessionId">The session ID to continue (must be a valid existing session)</param>
-	public static void ContinueSession(string sessionId)
-	{
-		Authentication.SetSessionId(sessionId);
-		CoroutineRunner.Instance.StartCoroutine(ContinueSessionCoroutine());
-	}
-
-	private static IEnumerator ContinueSessionCoroutine()
-	{
-		yield return Authentication.Authenticate();
-		
-		// Notify callbacks after session continuation completes
-		NotifyAuthCompleted(IsAuthenticated(), true);
-	}
-
 	private static void AddDuration(Dictionary<string, DateTime> startTimes, string name, Dictionary<string, string> meta)
 	{
 		meta ??= new Dictionary<string, string>();
