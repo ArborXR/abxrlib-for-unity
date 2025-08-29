@@ -290,15 +290,21 @@ Abxr.Log("Info", "Module started");
 
 Use standard or severity-specific logging:
 ```cpp
-//C# Event Method Signatures
-public void Abxr.LogDebug(string message)
-public void Abxr.LogInfo(string message)
-public void Abxr.LogWarn(string message)
-public void Abxr.LogError(string message)
-public void Abxr.LogCritical(string message)
+//C# Method Signatures
+public static void Abxr.LogDebug(string text, Dictionary<string, string> meta = null)
+public static void Abxr.LogInfo(string text, Dictionary<string, string> meta = null)
+public static void Abxr.LogWarn(string text, Dictionary<string, string> meta = null)
+public static void Abxr.LogError(string text, Dictionary<string, string> meta = null)
+public static void Abxr.LogCritical(string text, Dictionary<string, string> meta = null)
 
 // Example usage
 Abxr.LogError("Critical error in assessment phase");
+
+// With metadata
+Abxr.LogDebug("User interaction", new Dictionary<string, string> {
+    {"action", "button_click"},
+    {"screen", "main_menu"}
+});
 ```
 
 ---
