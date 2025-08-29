@@ -1085,12 +1085,12 @@ public static class Abxr
 
 	/// <summary>
 	/// Trigger authentication completion callback
-	/// Should be called internally when authentication completes
+	/// Internal method - called by authentication system when authentication completes
 	/// </summary>
 	/// <param name="success">Whether authentication was successful</param>
 	/// <param name="isReauthentication">Whether this was a reauthentication vs initial auth</param>
 	/// <param name="moduleTargets">Optional list of module targets from authentication response</param>
-	public static void NotifyAuthCompleted(bool success, bool isReauthentication = false, List<string> moduleTargets = null)
+	internal static void NotifyAuthCompleted(bool success, bool isReauthentication = false, List<string> moduleTargets = null)
 	{
 		string firstModuleTarget = null;
 		
