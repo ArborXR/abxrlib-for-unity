@@ -654,51 +654,28 @@ Abxr.Event("inventory_updated", meta);
 
 The **Module Target** feature enables developers to create single applications with multiple modules, where each module can be its own assignment in an LMS. When a learner enters from the LMS for a specific module, the application can automatically direct the user to that module within the application. Individual grades and results are then tracked for that specific assignment in the LMS.
 
-#### Setting Up Module Target Callbacks
-
-```cpp
-// Subscribe to module target availability events
-Abxr.onModuleTargetAvailable = (moduleTargetData) =>
-{
-    Debug.Log($"Module target available: {moduleTargetData.moduleTarget}");
-    Debug.Log($"User ID: {moduleTargetData.userId}");
-    Debug.Log($"User Email: {moduleTargetData.userEmail}");
-    Debug.Log($"Is Authenticated: {moduleTargetData.isAuthenticated}");
-    
-    // Navigate user to the specified module
-    switch(moduleTargetData.moduleTarget)
-    {
-        case "intro":
-            NavigateToIntroModule();
-            break;
-        case "lesson1":
-            NavigateToLesson1();
-            break;
-        case "final_exam":
-            NavigateToFinalExam();
-            break;
-        default:
-            ShowModuleSelectionMenu();
-            break;
-    }
-};
-```
-
 #### Getting Module Target Information
 
-You can also retrieve module target information directly:
+You can also process module targets sequentially:
 
 ```cpp
-// Get current module target (returns null if none set)
-string currentModule = Abxr.GetModuleTarget();
-Debug.Log($"Current module: {currentModule}");
-
-// Check if a specific module is the current target
-if (Abxr.GetModuleTarget() == "lesson1")
+// Get the next module target from the queue
+ModuleTargetData nextTarget = Abxr.GetModuleTarget();
+if (nextTarget != null)
 {
-    Debug.Log("User is in Lesson 1 assignment");
-    EnableLesson1Features();
+    Debug.Log($"Processing module: {nextTarget.moduleTarget}");
+    EnableModuleFeatures(nextTarget.moduleTarget);
+    NavigateToModule(nextTarget.moduleTarget);
 }
+else
+{
+    Debug.Log("All modules completed!");
+    ShowCompletionScreen();
+}
+
+// Check remaining module count
+int remaining = Abxr.GetModuleTargetCount();
+Debug.Log($"Modules remaining: {remaining}");
 
 // Get current user information
 var userId = Abxr.GetUserId();
@@ -708,11 +685,13 @@ string userEmail = Abxr.GetUserEmail();
 
 #### Best Practices
 
-1. **Set up callback early**: Subscribe before the authentication process completes
-2. **Handle all cases**: Include default behavior for unknown or null module targets
-3. **Validate modules**: Check if requested module exists before navigation
-4. **Progress tracking**: Use assessment events to track module completion
-5. **Error handling**: Handle cases where navigation fails or module is invalid
+1. **Set up auth callback early**: Subscribe to `OnAuthCompleted` before authentication starts
+2. **Handle first module**: Process the first module target from `authData.moduleTarget` 
+3. **Use GetModuleTarget() sequentially**: Call after completing each module to get the next one
+4. **Validate modules**: Check if requested module exists before navigation
+5. **Progress tracking**: Use assessment events to track module completion
+6. **Error handling**: Handle cases where navigation fails or module is invalid
+7. **Check completion**: Use `GetModuleTarget()` returning null to detect when all modules are done
 
 #### Example: Complete Multi-Module Setup
 
@@ -731,39 +710,8 @@ public class MultiModuleManager : MonoBehaviour
     
     void Start()
     {
-        // Set up module target callback before authentication
-        Abxr.onModuleTargetAvailable = OnModuleTargetAvailable;
-        
         // Set up authentication completion callback
         Abxr.OnAuthCompleted(OnAuthCompleted);
-    }
-    
-    private void OnModuleTargetAvailable(Abxr.ModuleTargetData moduleData)
-    {
-        var module = System.Array.Find(modules, m => m.name == moduleData.moduleTarget);
-        
-        if (module != null)
-        {
-            Debug.Log($"Navigating to module: {module.name}");
-            LoadModule(module);
-            
-            // Start assessment tracking for this module
-            Abxr.EventAssessmentStart(moduleData.moduleTarget, new Dictionary<string, string>
-            {
-                ["module_name"] = module.name,
-                ["user_id"] = moduleData.userId?.ToString() ?? "unknown"
-            });
-        }
-        else if (string.IsNullOrEmpty(moduleData.moduleTarget))
-        {
-            Debug.Log("No specific module target - showing main menu");
-            ShowModuleSelectionMenu();
-        }
-        else
-        {
-            Debug.LogWarning($"Unknown module target: {moduleData.moduleTarget}");
-            ShowModuleSelectionMenu();
-        }
     }
     
     private void OnAuthCompleted(Abxr.AuthCompletedData authData)
@@ -771,6 +719,8 @@ public class MultiModuleManager : MonoBehaviour
         if (authData.success)
         {
             Debug.Log("Authentication completed successfully!");
+            Debug.Log($"User ID: {authData.userId}");
+            Debug.Log($"User Email: {authData.userEmail}");
             
             if (authData.isReauthentication)
             {
@@ -782,10 +732,68 @@ public class MultiModuleManager : MonoBehaviour
                 Debug.Log("Initial authentication - full setup");
                 InitializeUserInterface();
             }
+            
+            // Handle first module target from authentication
+            if (!string.IsNullOrEmpty(authData.moduleTarget))
+            {
+                Debug.Log($"Starting with module: {authData.moduleTarget}");
+                NavigateToModule(authData.moduleTarget);
+            }
+            else
+            {
+                Debug.Log("No initial module target - showing main menu");
+                ShowModuleSelectionMenu();
+            }
         }
         else
         {
             Debug.LogError("Authentication failed");
+        }
+    }
+    
+    // Call this when a module is completed to check for next module
+    public void OnModuleCompleted(string completedModuleName)
+    {
+        Debug.Log($"Module '{completedModuleName}' completed!");
+        
+        // Complete the assessment for this module
+        Abxr.EventAssessmentComplete(completedModuleName, 100, Abxr.EventStatus.Complete);
+        
+        // Check if there are more modules to process
+        var nextModule = Abxr.GetModuleTarget();
+        if (nextModule != null)
+        {
+            Debug.Log($"Next module available: {nextModule.moduleTarget}");
+            NavigateToModule(nextModule.moduleTarget);
+        }
+        else
+        {
+            Debug.Log("All modules completed - showing completion screen");
+            ShowCompletionScreen();
+        }
+    }
+    
+    private void NavigateToModule(string moduleTargetId)
+    {
+        var module = System.Array.Find(modules, m => m.name == moduleTargetId);
+        
+        if (module != null)
+        {
+            Debug.Log($"Navigating to module: {module.name}");
+            LoadModule(module);
+            
+            // Start assessment tracking for this module
+            Abxr.EventAssessmentStart(moduleTargetId, new Dictionary<string, string>
+            {
+                ["module_name"] = module.name,
+                ["user_id"] = Abxr.GetUserId()?.ToString() ?? "unknown",
+                ["user_email"] = Abxr.GetUserEmail() ?? "unknown"
+            });
+        }
+        else
+        {
+            Debug.LogWarning($"Unknown module target: {moduleTargetId}");
+            ShowModuleSelectionMenu();
         }
     }
     
@@ -805,6 +813,11 @@ public class MultiModuleManager : MonoBehaviour
     private void ShowModuleSelectionMenu()
     {
         // Show your module selection UI
+    }
+    
+    private void ShowCompletionScreen()
+    {
+        // Show completion UI or return to main menu
     }
     
     private void RefreshUserData()
@@ -834,7 +847,7 @@ public class ModuleTargetData
 }
 ```
 
-**Note:** The actual implementation of user data retrieval (`GetUserData`, `GetUserId`, `GetUserEmail`, `GetModuleTarget`) needs to be completed by integrating with your authentication system. The current implementation provides placeholder methods that return null and should be connected to your authentication response data.
+**Note:** The actual implementation of user data retrieval (`GetUserData`, `GetUserId`, `GetUserEmail`) has been completed and now properly integrates with the authentication system. Module targets are now handled through the sequential `GetModuleTarget()` method which processes targets from the authentication response.
 
 ### Authentication
 

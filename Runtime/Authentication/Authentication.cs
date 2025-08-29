@@ -34,6 +34,11 @@ namespace AbxrLib.Runtime.Authentication
         private static string _apiSecret;
         private static AuthMechanism _authMechanism;
         private static DateTime _tokenExpiry = DateTime.MinValue;
+        
+        // User data from authentication response
+        private static Dictionary<string, object> _userDataCache;
+        private static string _userEmailCache;
+        private static object _userIdCache;
     
         private const string DeviceIdKey = "abxrlib_device_id";
 
@@ -80,6 +85,11 @@ namespace AbxrLib.Runtime.Authentication
             _authMechanism = null;
             _authToken = null;
             _tokenExpiry = DateTime.MinValue;
+            
+            // Clear cached user data
+            _userDataCache = null;
+            _userIdCache = null;
+            _userEmailCache = null;
         
             CoroutineRunner.Instance.StartCoroutine(Authenticate());
         }
@@ -125,7 +135,7 @@ namespace AbxrLib.Runtime.Authentication
             {
                 Debug.LogError($"AbxrLib - {e.Message}");
             }
-            _userId = Abxr.GetAccessToken();
+            // Note: _userId will be properly set from JWT token during authentication
         }
 #if UNITY_WEBGL && !UNITY_EDITOR
         private static void GetQueryData()
@@ -270,15 +280,29 @@ namespace AbxrLib.Runtime.Authentication
                 _apiSecret = postResponse.Secret;
                 Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                 _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                
+                // Extract and cache user data from JWT token
+                CacheUserDataFromJwt(decodedJwt);
+                
                 _keyboardAuthSuccess = true;
-                Abxr.onAuthCompleted?.Invoke(true, string.Empty);
+                
+                // Notify authentication completion with new callback system
+                // TODO: Parse module targets from auth response if available
+                Abxr.NotifyAuthCompleted(true, false);
             }
             else
             {
                 string error = $"{request.error} - {request.downloadHandler.text}";
                 Debug.LogError($"AbxrLib - Authentication failed : {error}");
                 _sessionId = null;
-                Abxr.onAuthCompleted?.Invoke(false, error);
+                
+                // Clear cached user data on failure
+                _userDataCache = null;
+                _userIdCache = null;
+                _userEmailCache = null;
+                
+                // Notify authentication failure
+                Abxr.NotifyAuthCompleted(false, false);
             }
         }
 
@@ -345,6 +369,54 @@ namespace AbxrLib.Runtime.Authentication
             if (!string.IsNullOrEmpty(payload.pruneSentItemsOlderThan)) Configuration.Instance.pruneSentItemsOlderThanHours = Convert.ToInt32(payload.pruneSentItemsOlderThan);
             if (!string.IsNullOrEmpty(payload.maximumCachedItems)) Configuration.Instance.maximumCachedItems = Convert.ToInt32(payload.maximumCachedItems);
             if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) Configuration.Instance.retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
+        }
+
+        // User data access methods
+        public static Dictionary<string, object> GetUserData()
+        {
+            return _userDataCache;
+        }
+
+        public static object GetUserId()
+        {
+            return _userIdCache;
+        }
+
+        public static string GetUserEmail()
+        {
+            return _userEmailCache;
+        }
+
+        private static void CacheUserDataFromJwt(Dictionary<string, object> decodedJwt)
+        {
+            try
+            {
+                // Extract user ID from JWT (typically 'sub' claim)
+                if (decodedJwt.ContainsKey("sub"))
+                {
+                    _userIdCache = decodedJwt["sub"];
+                }
+                else if (decodedJwt.ContainsKey("userId"))
+                {
+                    _userIdCache = decodedJwt["userId"];
+                }
+
+                // Extract user email from JWT
+                if (decodedJwt.ContainsKey("email"))
+                {
+                    _userEmailCache = decodedJwt["email"]?.ToString();
+                }
+
+                // Cache the entire JWT payload as user data
+                _userDataCache = new Dictionary<string, object>(decodedJwt);
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib - Failed to cache user data from JWT: {ex.Message}");
+                _userDataCache = null;
+                _userIdCache = null;
+                _userEmailCache = null;
+            }
         }
     
         [Preserve]

@@ -32,8 +32,9 @@ public static class Abxr
 
 	public static Action onHeadsetPutOnNewSession;
 
-	// Module Target callback for LMS multi-module applications
-	public static Action<ModuleTargetData> onModuleTargetAvailable;
+	// Module Target queue for sequential LMS multi-module applications
+	private static Queue<string> moduleTargetQueue = new Queue<string>();
+	private const string ModuleTargetQueueKey = "AbxrModuleTargetQueue";
 
 	// Internal list of authentication completion callbacks
 	private static readonly List<System.Action<AuthCompletedData>> authCompletedCallbacks = new();
@@ -859,17 +860,7 @@ public static class Abxr
 
 	#region Module Target and User Data Methods
 
-	/// <summary>
-	/// Get the current module target from authentication response
-	/// Returns null if no module target is set or authentication hasn't completed
-	/// </summary>
-	/// <returns>The module target identifier, or null if none</returns>
-	public static string GetModuleTarget()
-	{
-		// TODO: This needs to be implemented to retrieve module target from authentication response
-		// For now returning null as placeholder - should integrate with authentication system
-		return null;
-	}
+
 
 	/// <summary>
 	/// Get additional user data from authentication response
@@ -877,9 +868,7 @@ public static class Abxr
 	/// <returns>User data object, or null if not available</returns>
 	public static object GetUserData()
 	{
-		// TODO: This needs to be implemented to retrieve user data from authentication response
-		// Should integrate with the authentication system to return user-specific data
-		return null;
+		return Authentication.GetUserData();
 	}
 
 	/// <summary>
@@ -888,9 +877,7 @@ public static class Abxr
 	/// <returns>User ID object, or null if not available</returns>
 	public static object GetUserId()
 	{
-		// TODO: This needs to be implemented to retrieve user ID from authentication response
-		// Should integrate with the authentication system to return user identifier
-		return null;
+		return Authentication.GetUserId();
 	}
 
 	/// <summary>
@@ -899,9 +886,7 @@ public static class Abxr
 	/// <returns>User email string, or null if not available</returns>
 	public static string GetUserEmail()
 	{
-		// TODO: This needs to be implemented to retrieve user email from authentication response
-		// Should integrate with the authentication system to return user email address
-		return null;
+		return Authentication.GetUserEmail();
 	}
 
 	/// <summary>
@@ -915,42 +900,153 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Trigger module target callback if module target data is available
-	/// Should be called internally when authentication completes with module target information
+	/// Get the next module target from the queue for sequential module processing
+	/// Returns null when no more module targets are available
+	/// Each call removes the next module target from the queue and updates persistent storage
 	/// </summary>
-	public static void NotifyModuleTargetAvailable()
+	/// <returns>The next ModuleTargetData or null if queue is empty</returns>
+	public static ModuleTargetData GetModuleTarget()
 	{
-		if (onModuleTargetAvailable != null)
+		// Load queue from storage if empty (in case of app restart)
+		if (moduleTargetQueue.Count == 0)
 		{
-			var moduleTarget = GetModuleTarget();
-			
-			// Only notify if we have valid module target data
-			if (!string.IsNullOrEmpty(moduleTarget))
-			{
-				var moduleTargetData = new ModuleTargetData(
-					moduleTarget,
-					GetUserData(),
-					GetUserId(),
-					GetUserEmail(),
-					IsAuthenticated()
-				);
+			LoadModuleTargetQueue();
+		}
 
-				try
-				{
-					onModuleTargetAvailable.Invoke(moduleTargetData);
-				}
-				catch (System.Exception ex)
-				{
-					LogError($"Error in module target callback: {ex.Message}");
-				}
+		// Return null if no more module targets
+		if (moduleTargetQueue.Count == 0)
+		{
+			return null;
+		}
+
+		// Pop the next module target from the queue
+		var nextModuleTargetId = moduleTargetQueue.Dequeue();
+		
+		// Update persistent storage with remaining queue
+		SaveModuleTargetQueue();
+		
+		// Create ModuleTargetData with current session data
+		return new ModuleTargetData(
+			nextModuleTargetId,
+			GetUserData(),
+			GetUserId(),
+			GetUserEmail(),
+			IsAuthenticated()
+		);
+	}
+
+	/// <summary>
+	/// Initialize the module targets from authentication response
+	/// Should be called when authentication completes with module target data
+	/// </summary>
+	/// <param name="moduleTargets">List of module target identifiers from auth response</param>
+	public static void SetModuleTargets(List<string> moduleTargets)
+	{
+		if (moduleTargets == null || moduleTargets.Count == 0)
+		{
+			return;
+		}
+
+		// Clear existing queue
+		moduleTargetQueue.Clear();
+
+		// Add each module target ID to the queue
+		foreach (var moduleTargetId in moduleTargets)
+		{
+			if (!string.IsNullOrEmpty(moduleTargetId))
+			{
+				moduleTargetQueue.Enqueue(moduleTargetId);
 			}
 		}
+
+		// Save to persistent storage
+		SaveModuleTargetQueue();
+	}
+
+	/// <summary>
+	/// Get the current number of module targets remaining
+	/// </summary>
+	/// <returns>Number of module targets remaining</returns>
+	public static int GetModuleTargetCount()
+	{
+		if (moduleTargetQueue.Count == 0)
+		{
+			LoadModuleTargetQueue();
+		}
+		return moduleTargetQueue.Count;
+	}
+
+	/// <summary>
+	/// Clear all module targets and storage
+	/// </summary>
+	public static void ClearModuleTargets()
+	{
+		moduleTargetQueue.Clear();
+		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, ModuleTargetQueueKey));
+	}
+
+	private static void SaveModuleTargetQueue()
+	{
+		try
+		{
+			var moduleTargetList = moduleTargetQueue.ToArray();
+			var serializedData = new Dictionary<string, string>
+			{
+				["moduleTargets"] = string.Join(",", moduleTargetList)
+			};
+
+			StorageSetEntry(ModuleTargetQueueKey, serializedData, StorageScope.user, StoragePolicy.keepLatest);
+		}
+		catch (System.Exception ex)
+		{
+			LogError($"Failed to save module target queue: {ex.Message}");
+		}
+	}
+
+	private static void LoadModuleTargetQueue()
+	{
+		try
+		{
+			CoroutineRunner.Instance.StartCoroutine(LoadModuleTargetQueueCoroutine());
+		}
+		catch (System.Exception ex)
+		{
+			LogError($"Failed to load module target queue: {ex.Message}");
+		}
+	}
+
+	private static IEnumerator LoadModuleTargetQueueCoroutine()
+	{
+		yield return StorageGetEntry(ModuleTargetQueueKey, StorageScope.user, result =>
+		{
+			if (result != null && result.Count > 0)
+			{
+				var data = result[0]; // Get the first (and should be only) entry
+				if (data.ContainsKey("moduleTargets"))
+				{
+					moduleTargetQueue.Clear();
+					
+					var moduleTargetsString = data["moduleTargets"];
+					if (!string.IsNullOrEmpty(moduleTargetsString))
+					{
+						var moduleTargets = moduleTargetsString.Split(',');
+						foreach (var moduleTarget in moduleTargets)
+						{
+							if (!string.IsNullOrEmpty(moduleTarget.Trim()))
+							{
+								moduleTargetQueue.Enqueue(moduleTarget.Trim());
+							}
+						}
+					}
+				}
+			}
+		});
 	}
 
 	/// <summary>
 	/// Subscribe to authentication completion events for post-auth initialization
 	/// Perfect for initializing UI components, loading user data, or showing welcome messages
-	/// Callback fires immediately if authentication has already completed
+	/// Callbacks are triggered via NotifyAuthCompleted() when authentication completes
 	/// </summary>
 	/// <param name="callback">Function to call when authentication completes successfully</param>
 	public static void OnAuthCompleted(System.Action<AuthCompletedData> callback)
@@ -962,28 +1058,9 @@ public static class Abxr
 		}
 
 		authCompletedCallbacks.Add(callback);
-
-		// If already authenticated, notify immediately
-		if (IsAuthenticated())
-		{
-			var authData = new AuthCompletedData(
-				true,
-				GetUserData(),
-				GetUserId(),
-				GetUserEmail(),
-				GetModuleTarget(),
-				false
-			);
-
-			try
-			{
-				callback.Invoke(authData);
-			}
-			catch (System.Exception ex)
-			{
-				LogError($"Error in authentication completion callback: {ex.Message}");
-			}
-		}
+		
+		// Note: Callbacks are triggered only via NotifyAuthCompleted() to ensure consistent data
+		// No immediate callback - wait for proper authentication completion notification
 	}
 
 	/// <summary>
@@ -1012,8 +1089,25 @@ public static class Abxr
 	/// </summary>
 	/// <param name="success">Whether authentication was successful</param>
 	/// <param name="isReauthentication">Whether this was a reauthentication vs initial auth</param>
-	public static void NotifyAuthCompleted(bool success, bool isReauthentication = false)
+	/// <param name="moduleTargets">Optional list of module targets from authentication response</param>
+	public static void NotifyAuthCompleted(bool success, bool isReauthentication = false, List<string> moduleTargets = null)
 	{
+		string firstModuleTarget = null;
+		
+		// Handle module targets if provided and authentication was successful
+		if (success && moduleTargets != null && moduleTargets.Count > 0)
+		{
+			// Take the first module target for immediate use in OnAuthCompleted
+			firstModuleTarget = moduleTargets[0];
+			
+			// Queue the remaining module targets for GetModuleTarget() calls
+			if (moduleTargets.Count > 1)
+			{
+				var remainingTargets = moduleTargets.GetRange(1, moduleTargets.Count - 1);
+				SetModuleTargets(remainingTargets);
+			}
+		}
+
 		if (authCompletedCallbacks.Count == 0)
 		{
 			return;
@@ -1024,7 +1118,7 @@ public static class Abxr
 			GetUserData(),
 			GetUserId(),
 			GetUserEmail(),
-			GetModuleTarget(),
+			firstModuleTarget, // First module target from the provided list, or null
 			isReauthentication
 		);
 
@@ -1038,12 +1132,6 @@ public static class Abxr
 			{
 				LogError($"Error in authentication completion callback: {ex.Message}");
 			}
-		}
-
-		// Also notify module target if we have one and auth was successful
-		if (success)
-		{
-			NotifyModuleTargetAvailable();
 		}
 	}
 
