@@ -373,11 +373,38 @@ var allEntries = Abxr.GetAllStorageEntries();
 ```
 **Returns:** A dictionary containing all storage entries for the current user/device.
 
+#### Remove All Storage Entries for Scope
+```cpp
+//C# Event Method Signatures
+public void Abxr.StorageRemoveMultipleEntries(StorageScope scope = StorageScope.user)
+
+// Example usage
+Abxr.StorageRemoveMultipleEntries(StorageScope.user); // Clear all user data
+Abxr.StorageRemoveMultipleEntries(StorageScope.device); // Clear all device data
+Abxr.StorageRemoveMultipleEntries(); // Defaults to user scope
+```
+**Parameters:**
+- `scope` (StorageScope): Optional. Remove all from 'device' or 'user' storage. Default is 'user'.
+
+**Note:** This is a bulk operation that clears all stored entries at once. Use with caution as this cannot be undone.
+
 ---
 
 ### Telemetry
 The Telemetry Methods provide comprehensive tracking of the XR environment. By default, they capture headset and controller movements, but can be extended to track any custom objects in the virtual space. These functions also allow collection of system-level data such as frame rates or device temperatures. This versatile tracking enables developers to gain deep insights into user interactions and application performance, facilitating optimization and enhancing the overall XR experience.
 
+#### Manual Telemetry Activation
+```cpp
+//C# Event Method Signatures
+public static void Abxr.TrackAutoTelemetry()
+
+// Example usage
+Abxr.TrackAutoTelemetry(); // Start manual telemetry tracking
+```
+
+**Use Case:** If you select 'Disable Automatic Telemetry' in the AbxrLib configuration, you can manually start tracking system telemetry with this function call. This captures headset/controller movements, performance metrics, and environmental data on demand.
+
+#### Custom Telemetry Logging
 To log spatial or system telemetry:
 ```cpp
 //C# Event Method Signatures
@@ -683,6 +710,25 @@ var userData = Abxr.GetUserData();
 string userEmail = Abxr.GetUserEmail();
 ```
 
+#### Module Target Management
+
+You can also manage the module target queue directly:
+
+```cpp
+// Clear all module targets and storage
+Abxr.ClearModuleTargets();
+
+// Check how many module targets remain
+int count = Abxr.GetModuleTargetCount();
+Debug.Log($"Modules remaining: {count}");
+```
+
+**Use Cases:**
+- **Reset state**: Clear module targets when starting a new experience
+- **Error recovery**: Clear corrupted module target data
+- **Testing**: Reset module queue during development
+- **Session management**: Clean up between different users
+
 #### Best Practices
 
 1. **Set up auth callback early**: Subscribe to `OnAuthCompleted` before authentication starts
@@ -843,7 +889,6 @@ public class ModuleTargetData
     public object userData;         // Additional user data from authentication
     public object userId;           // User identifier
     public string userEmail;        // User email address
-    public bool isAuthenticated;    // Authentication status
 }
 ```
 
@@ -954,6 +999,52 @@ public class AuthCompletedData
 - **Personalization**: Customize experience based on user data
 - **Session management**: Handle reauthentication vs initial authentication differently
 - **Error handling**: Respond appropriately to authentication failures
+
+#### Connection Status Check
+
+You can check if AbxrLib has an active connection to the server at any time:
+
+```cpp
+//C# Method Signature
+public static bool Abxr.ConnectionActive()
+
+// Example usage
+if (Abxr.ConnectionActive())
+{
+    Debug.Log("AbxrLib is connected and ready to send data");
+    // Proceed with data operations
+    Abxr.Event("app_ready");
+}
+else
+{
+    Debug.Log("Connection not active - waiting for authentication");
+    // Set up authentication callbacks
+    Abxr.OnAuthCompleted((authData) => {
+        if (authData.success) {
+            Debug.Log("Connection established successfully!");
+        }
+    });
+}
+
+// Conditional feature access
+if (Abxr.ConnectionActive())
+{
+    ShowConnectedFeatures();
+    SendTelemetryData();
+}
+else
+{
+    UseOfflineMode();
+}
+```
+
+**Returns:** Boolean indicating if the library can communicate with the server
+
+**Use Cases:**
+- **Conditional logic**: Only send events/logs when connection is active
+- **UI state management**: Show online/offline status indicators
+- **Error prevention**: Check connection before making API calls
+- **Feature gating**: Enable/disable features that require server communication
 
 ### Headset Removal
 To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.

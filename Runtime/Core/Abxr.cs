@@ -38,6 +38,9 @@ public static class Abxr
 
 	// Internal list of authentication completion callbacks
 	private static readonly List<System.Action<AuthCompletedData>> authCompletedCallbacks = new();
+	
+	// Connection status - tracks whether AbxrLib can communicate with the server
+	private static bool connectionActive = false;
 
 	/// <summary>
 	/// Mixpanel compatibility class for property values
@@ -130,15 +133,13 @@ public static class Abxr
 		public object userData;         // Additional user data from authentication
 		public object userId;           // User identifier
 		public string userEmail;        // User email address
-		public bool isAuthenticated;    // Authentication status
 
-		public ModuleTargetData(string moduleTarget, object userData, object userId, string userEmail, bool isAuthenticated)
+		public ModuleTargetData(string moduleTarget, object userData, object userId, string userEmail)
 		{
 			this.moduleTarget = moduleTarget;
 			this.userData = userData;
 			this.userId = userId;
 			this.userEmail = userEmail;
-			this.isAuthenticated = isAuthenticated;
 		}
 	}
 
@@ -167,10 +168,19 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// If you select 'Disable Automatic Telemetry' in the config,
-	/// you can manually start tracking this telemetry with this function call
+	/// Manual telemetry activation for disabled automatic telemetry
+	/// If you select 'Disable Automatic Telemetry' in the AbxrLib configuration,
+	/// you can manually start tracking system telemetry with this function call.
+	/// This captures headset/controller movements, performance metrics, and environmental data.
 	/// </summary>
 	public static void TrackAutoTelemetry() => TrackSystemInfo.StartTracking();
+
+	/// <summary>
+	/// Check if AbxrLib has an active connection to the server and can send data
+	/// This indicates whether the library is configured and ready to communicate
+	/// </summary>
+	/// <returns>True if connection is active, false otherwise</returns>
+	public static bool ConnectionActive() => connectionActive;
 
 	/// <summary>
 	/// Add log information at the 'Debug' level
@@ -685,7 +695,12 @@ public static class Abxr
 		Event(taggedName, meta);
 	}
 
-	// ---
+	/// <summary>
+	/// INTERNAL USE ONLY - Present virtual keyboard for authentication
+	/// This method should only be called by the authentication system during 
+	/// the authentication process: Authentication.Authenticate() -> KeyboardAuthenticate() -> PresentKeyboard()
+	/// Do not call this directly in application code - use the authentication callbacks instead
+	/// </summary>
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
 		if (keyboardType is "text" or null)
@@ -930,17 +945,16 @@ public static class Abxr
 			nextModuleTargetId,
 			GetUserData(),
 			GetUserId(),
-			GetUserEmail(),
-			IsAuthenticated()
+			GetUserEmail()
 		);
 	}
 
 	/// <summary>
 	/// Initialize the module targets from authentication response
-	/// Should be called when authentication completes with module target data
+	/// Internal method - called by authentication system when authentication completes
 	/// </summary>
 	/// <param name="moduleTargets">List of module target identifiers from auth response</param>
-	public static void SetModuleTargets(List<string> moduleTargets)
+	internal static void SetModuleTargets(List<string> moduleTargets)
 	{
 		if (moduleTargets == null || moduleTargets.Count == 0)
 		{
@@ -1092,6 +1106,9 @@ public static class Abxr
 	/// <param name="moduleTargets">Optional list of module targets from authentication response</param>
 	internal static void NotifyAuthCompleted(bool success, bool isReauthentication = false, List<string> moduleTargets = null)
 	{
+		// Update connection status based on authentication success
+		connectionActive = success;
+		
 		string firstModuleTarget = null;
 		
 		// Handle module targets if provided and authentication was successful
