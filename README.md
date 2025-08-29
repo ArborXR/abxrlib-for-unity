@@ -721,12 +721,12 @@ string userEmail = Abxr.GetUserEmail();
 You can also manage the module target queue directly:
 
 ```cpp
-// Clear all module targets and storage
-Abxr.ClearModuleTargets();
-
 // Check how many module targets remain
 int count = Abxr.GetModuleTargetCount();
 Debug.Log($"Modules remaining: {count}");
+
+// Clear all module targets and storage
+Abxr.ClearModuleTargets();
 ```
 
 **Use Cases:**
@@ -745,145 +745,6 @@ Debug.Log($"Modules remaining: {count}");
 6. **Error handling**: Handle cases where navigation fails or module is invalid
 7. **Check completion**: Use `GetModuleTarget()` returning null to detect when all modules are done
 
-#### Example: Complete Multi-Module Setup
-
-```cpp
-public class MultiModuleManager : MonoBehaviour
-{
-    [System.Serializable]
-    public class ModuleInfo
-    {
-        public string name;
-        public string sceneName;
-        public GameObject moduleObject;
-    }
-
-    [SerializeField] private ModuleInfo[] modules;
-    
-    void Start()
-    {
-        // Set up authentication completion callback
-        Abxr.OnAuthCompleted(OnAuthCompleted);
-    }
-    
-    private void OnAuthCompleted(Abxr.AuthCompletedData authData)
-    {
-        if (authData.success)
-        {
-            Debug.Log("Authentication completed successfully!");
-            Debug.Log($"User ID: {authData.userId}");
-            Debug.Log($"User Email: {authData.userEmail}");
-            
-            if (authData.isReauthentication)
-            {
-                Debug.Log("User reauthenticated - refreshing data");
-                RefreshUserData();
-            }
-            else
-            {
-                Debug.Log("Initial authentication - full setup");
-                InitializeUserInterface();
-            }
-            
-            // Handle first module target from authentication
-            if (!string.IsNullOrEmpty(authData.moduleTarget))
-            {
-                Debug.Log($"Starting with module: {authData.moduleTarget}");
-                NavigateToModule(authData.moduleTarget);
-            }
-            else
-            {
-                Debug.Log("No initial module target - showing main menu");
-                ShowModuleSelectionMenu();
-            }
-        }
-        else
-        {
-            Debug.LogError("Authentication failed");
-        }
-    }
-    
-    // Call this when a module is completed to check for next module
-    public void OnModuleCompleted(string completedModuleName)
-    {
-        Debug.Log($"Module '{completedModuleName}' completed!");
-        
-        // Complete the assessment for this module
-        Abxr.EventAssessmentComplete(completedModuleName, 100, Abxr.EventStatus.Complete);
-        
-        // Check if there are more modules to process
-        var nextModule = Abxr.GetModuleTarget();
-        if (nextModule != null)
-        {
-            Debug.Log($"Next module available: {nextModule.moduleTarget}");
-            NavigateToModule(nextModule.moduleTarget);
-        }
-        else
-        {
-            Debug.Log("All modules completed - showing completion screen");
-            ShowCompletionScreen();
-        }
-    }
-    
-    private void NavigateToModule(string moduleTargetId)
-    {
-        var module = System.Array.Find(modules, m => m.name == moduleTargetId);
-        
-        if (module != null)
-        {
-            Debug.Log($"Navigating to module: {module.name}");
-            LoadModule(module);
-            
-            // Start assessment tracking for this module
-            Abxr.EventAssessmentStart(moduleTargetId, new Dictionary<string, string>
-            {
-                ["module_name"] = module.name,
-                ["user_id"] = Abxr.GetUserId()?.ToString() ?? "unknown",
-                ["user_email"] = Abxr.GetUserEmail() ?? "unknown"
-            });
-        }
-        else
-        {
-            Debug.LogWarning($"Unknown module target: {moduleTargetId}");
-            ShowModuleSelectionMenu();
-        }
-    }
-    
-    private void LoadModule(ModuleInfo module)
-    {
-        // Your module loading logic here
-        if (!string.IsNullOrEmpty(module.sceneName))
-        {
-            SceneManager.LoadScene(module.sceneName);
-        }
-        else if (module.moduleObject != null)
-        {
-            module.moduleObject.SetActive(true);
-        }
-    }
-    
-    private void ShowModuleSelectionMenu()
-    {
-        // Show your module selection UI
-    }
-    
-    private void ShowCompletionScreen()
-    {
-        // Show completion UI or return to main menu
-    }
-    
-    private void RefreshUserData()
-    {
-        // Refresh user-specific data
-    }
-    
-    private void InitializeUserInterface()
-    {
-        // Initialize UI components
-    }
-}
-```
-
 #### Data Structures
 
 The module target callback provides a `CurrentSessionData` object with the following properties:
@@ -897,8 +758,6 @@ public class CurrentSessionData
     public string userEmail;        // User email address
 }
 ```
-
-**Note:** The actual implementation of user data retrieval (`GetUserData`, `GetUserId`, `GetUserEmail`) has been completed and now properly integrates with the authentication system. Module targets are now handled through the sequential `GetModuleTarget()` method which processes targets from the authentication response.
 
 ### Authentication
 
