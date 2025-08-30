@@ -149,18 +149,19 @@ Logs a named event with optional metadata and spatial context. Timestamps and or
 
 ### Analytics Event Wrappers (Essential for All Developers)
 
-**These analytics event functions are essential for ALL developers, not just those integrating with LMS platforms.** They provide standardized tracking for key user interactions and learning outcomes that are crucial for understanding user behavior, measuring engagement, and optimizing XR experiences and powering integrations with Learning Management System (LMS) platforms, their benefits extend far beyond educational use cases..
+**These analytics event functions are essential for ALL developers** They provide standardized tracking for key user interactions and learning outcomes that are crucial for understanding user behavior, measuring engagement, and optimizing XR experiences and power the analytics dashboards and reporting features. They also essential for integrations with Learning Management System (LMS) platforms.
 
-**EventAssessmentStart and EventAssessmentComplete should be considered REQUIRED for proper usage** of the ABXRLib SDK, as they provide critical insights into user performance and completion rates.
+**EventAssessmentStart and EventAssessmentComplete are REQUIRED for all ArborXR Insights usage**
 
 #### Assessments, Objectives & Interactions
-Assessments are intended to track the overall performance of a learner across multiple Objectives and 
-Interactions. 
-* Think of it as the learner's score for a specific course or curriculum.
-* When the Assessment is complete, it will automatically record and close out the Assessment in the various LMS 
-platforms we support.
-Objectives are sub-tasks within an assessment
-Interactions are sub-tasts to an assessment or objective
+
+These three event types work together to provide comprehensive tracking of user progress:
+
+- **Assessment**: Tracks overall performance across an entire experience, course, or curriculum. Think of it as the final score or outcome for a complete learning module. When an Assessment completes, it automatically records and closes out the session in supported LMS platforms.
+
+- **Objective**: Tracks specific learning goals or sub-tasks within an assessment. These represent individual skills, concepts, or milestones that contribute to the overall assessment score.
+
+- **Interaction**: Tracks individual user responses or actions within an objective or assessment. These capture specific user inputs, choices, or behaviors that demonstrate engagement and learning progress.
 
 ```cpp
 // Status enumeration for all analytics events
