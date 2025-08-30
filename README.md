@@ -1,4 +1,4 @@
-# ABXR SDK for Unity
+# ABXRLib SDK for Unity
 
 The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source foundation for capturing and transmitting spatial, interaction, and performance data in XR. When combined with **ArborXR Insights**, ABXR transforms from a lightweight instrumentation layer into a full-scale enterprise analytics solution—unlocking powerful dashboards, LMS/BI integrations, and AI-enhanced insights.
 
@@ -35,11 +35,11 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
 
 ### Overview
 
-The **ABXR SDK for Unity** is an open-source analytics and data collection library that provides developers with the tools to collect and send XR data to any service of their choice. This library enables scalable event tracking, telemetry, and session-based storage—essential for enterprise and education XR environments.
+The **ABXRLib SDK for Unity** is an open-source analytics and data collection library that provides developers with the tools to collect and send XR data to any service of their choice. This library enables scalable event tracking, telemetry, and session-based storage—essential for enterprise and education XR environments.
 
-> **Quick Start:** Most developers can integrate ABXR SDK and log their first event in under **15 minutes**.
+> **Quick Start:** Most developers can integrate ABXRLib SDK and log their first event in under **15 minutes**.
 
-**Why Use ABXR SDK?**
+**Why Use ABXRLib SDK?**
 
 - **Open-Source** & portable to any backend—no vendor lock-in  
 - **Quick integration**—track user interactions in minutes  
@@ -48,7 +48,7 @@ The **ABXR SDK for Unity** is an open-source analytics and data collection libra
 
 ### Core Features
 
-The ABXR SDK provides:
+The ABXRLib SDK provides:
 - **Event Tracking:** Monitor user behaviors, interactions, and system events.
 - **Spatial & Hardware Telemetry:** Capture headset/controller movement and hardware metrics.
 - **Object & System Info:** Track XR objects and environmental state.
@@ -57,7 +57,7 @@ The ABXR SDK provides:
 
 ### Backend Services
 
-The ABXR SDK is designed to work with any backend service that implements the ABXR protocol. Currently supported services include:
+The ABXRLib SDK is designed to work with any backend service that implements the ABXR protocol. Currently supported services include:
 
 #### ArborXR Insights
 When paired with [**ArborXR Insights**](https://arborxr.com/insights), ABXR becomes a full-service platform offering:
@@ -89,7 +89,7 @@ Developers can implement their own backend services by following the ABXR protoc
 
 ### Using with ArborXR Insights
 
-To use the ABXR SDK with ArborXR Insights:
+To use the ABXRLib SDK with ArborXR Insights:
 
 #### Get Your Credentials
 1. Go to the ArborXR Insights web app and log in.
@@ -151,7 +151,7 @@ Logs a named event with optional metadata and spatial context. Timestamps and or
 
 **These analytics event functions are essential for ALL developers, not just those integrating with LMS platforms.** They provide standardized tracking for key user interactions and learning outcomes that are crucial for understanding user behavior, measuring engagement, and optimizing XR experiences and powering integrations with Learning Management System (LMS) platforms, their benefits extend far beyond educational use cases..
 
-**EventAssessmentStart and EventAssessmentComplete should be considered REQUIRED for proper usage** of the ABXR SDK, as they provide critical insights into user performance and completion rates.
+**EventAssessmentStart and EventAssessmentComplete should be considered REQUIRED for proper usage** of the ABXRLib SDK, as they provide critical insights into user performance and completion rates.
 
 #### Assessments, Objectives & Interactions
 Assessments are intended to track the overall performance of a learner across multiple Objectives and 
@@ -202,7 +202,7 @@ Abxr.EventCritical("safety_violation");
 
 ### Timed Events
 
-The ABXR SDK includes a built-in timing system that allows you to measure the duration of any event. This is useful for tracking how long users spend on specific activities.
+The ABXRLib SDK includes a built-in timing system that allows you to measure the duration of any event. This is useful for tracking how long users spend on specific activities.
 
 ```cpp
 //C# Timed Event Method Signature
@@ -366,7 +366,7 @@ Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 
 ### Metadata Formats
 
-The ABXR SDK supports multiple flexible metadata formats. All formats are automatically converted to `Dictionary<string, string>`:
+The ABXRLib SDK supports multiple flexible metadata formats. All formats are automatically converted to `Dictionary<string, string>`:
 
 ```cpp
 // 1. Native C# Dictionary (most efficient)
@@ -423,7 +423,7 @@ public static string ToJsonArray<T>(this T[] array) =>
         : "[" + string.Join(", ", array) + "]";
 ```
 
-**Key Takeaway:** Always serialize arrays to JSON strings before passing to ABXR SDK methods.
+**Key Takeaway:** Always serialize arrays to JSON strings before passing to ABXRLib SDK methods.
 **Key Takeaway:** All event and log methods support these flexible metadata formats
 
 ---
@@ -508,7 +508,7 @@ public class CurrentSessionData
 
 ### Authentication
 
-The ABXR SDK provides comprehensive authentication completion callbacks that deliver detailed user and module information. This enables rich post-authentication workflows including automatic module navigation and personalized user experiences.
+The ABXRLib SDK provides comprehensive authentication completion callbacks that deliver detailed user and module information. This enables rich post-authentication workflows including automatic module navigation and personalized user experiences.
 
 #### Authentication Completion Callback
 
@@ -617,7 +617,7 @@ If the developer would like to have logic to correspond to these events, that wo
 
 ### Session Management
 
-The ABXR SDK provides comprehensive session management capabilities that allow you to control authentication state and session continuity. These methods are particularly useful for multi-user environments, testing scenarios, and creating seamless user experiences across devices and time.
+The ABXRLib SDK provides comprehensive session management capabilities that allow you to control authentication state and session continuity. These methods are particularly useful for multi-user environments, testing scenarios, and creating seamless user experiences across devices and time.
 
 #### StartNewSession
 Start a new session with a fresh session identifier. This method generates a new session ID and performs fresh authentication, making it ideal for starting new training experiences or resetting user context.
@@ -664,7 +664,7 @@ To use this feature, simply drag the `AbxrDebugWindow` Prefab from `AbxrLib for 
 
 ### ArborXR Device Management
 
-These methods provide access to device-level information and SSO authentication status on ArborXR-managed devices. These are convenience methods that operate at the device level, separate from the app-level authentication managed by the ABXR SDK.
+These methods provide access to device-level information and SSO authentication status on ArborXR-managed devices. These are convenience methods that operate at the device level, separate from the app-level authentication managed by the ABXRLib SDK.
 
 #### Abxr.GetDeviceId()
 - Return Type: string
@@ -724,7 +724,7 @@ These methods provide access to device-level information and SSO authentication 
 
 ### Mixpanel Compatibility
 
-The ABXR SDK provides full compatibility with Mixpanel's Unity SDK, making migration simple and straightforward. You can replace your existing Mixpanel tracking calls with minimal code changes while gaining access to ABXR's advanced XR analytics capabilities.
+The ABXRLib SDK provides full compatibility with Mixpanel's Unity SDK, making migration simple and straightforward. You can replace your existing Mixpanel tracking calls with minimal code changes while gaining access to ABXR's advanced XR analytics capabilities.
 
 #### Why Migrate from Mixpanel?
 
@@ -736,7 +736,7 @@ The ABXR SDK provides full compatibility with Mixpanel's Unity SDK, making migra
 
 **Migration Steps:**
 1. Remove Mixpanel references (`using mixpanel;`)
-2. Configure ABXR SDK credentials in Unity Editor
+2. Configure ABXRLib SDK credentials in Unity Editor
 3. Replace `Mixpanel.Track` → `Abxr.Track` throughout codebase
 4. Replace `new Value();` → `new Abxr.Value();` throughout codebase
 
@@ -769,7 +769,7 @@ Abxr.Track("puzzle_solving"); // Duration automatically included
 
 #### Key Advantages Over Mixpanel
 
-| Feature | Mixpanel | ABXR SDK |
+| Feature | Mixpanel | ABXRLib SDK |
 |---------|----------|-----------|
 | **Basic Event Tracking** | ✅ | ✅ |
 | **Custom Properties** | ✅ | ✅ |
