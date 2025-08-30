@@ -149,11 +149,9 @@ Logs a named event with optional metadata and spatial context. Timestamps and or
 
 ### Analytics Event Wrappers (Essential for All Developers)
 
-**These analytics event functions are essential for ALL developers, not just those integrating with LMS platforms.** They provide standardized tracking for key user interactions and learning outcomes that are crucial for understanding user behavior, measuring engagement, and optimizing XR experiences.
+**These analytics event functions are essential for ALL developers, not just those integrating with LMS platforms.** They provide standardized tracking for key user interactions and learning outcomes that are crucial for understanding user behavior, measuring engagement, and optimizing XR experiences and powering integrations with Learning Management System (LMS) platforms, their benefits extend far beyond educational use cases..
 
 **EventAssessmentStart and EventAssessmentComplete should be considered REQUIRED for proper usage** of the ABXR SDK, as they provide critical insights into user performance and completion rates.
-
-The Analytics Event Functions are specialized versions of the Event method, tailored for common scenarios in XR experiences. These functions help enforce consistency in event logging across different parts of the application and provide valuable data for analytics, user experience optimization, and business intelligence. While they also power integrations with Learning Management System (LMS) platforms, their benefits extend far beyond educational use cases.
 
 #### Assessments, Objectives & Interactions
 Assessments are intended to track the overall performance of a learner across multiple Objectives and 
@@ -231,7 +229,24 @@ Abxr.Track("User Session"); // Duration automatically included
 
 **Note:** The timer automatically adds a `duration` field (in seconds) to any subsequent event with the same name. The timer is automatically removed after the first matching event.
 
+#### Super Properties
 
+Global properties automatically included in all events:
+
+```cpp
+// Set persistent properties (included in all events)
+Abxr.Register("user_type", "premium");
+Abxr.Register("app_version", "1.2.3");
+
+// Set only if not already set
+Abxr.RegisterOnce("user_tier", "free");
+
+// Management
+Abxr.Unregister("device_type");  // Remove specific property
+Abxr.Reset();                    // Clear all super properties
+```
+
+Perfect for user attributes, app state, and device information that should be included with every event.
 
 ### Logging
 The Log Methods provide straightforward logging functionality, similar to syslogs. These functions are available to developers by default, even across enterprise users, allowing for consistent and accessible logging across different deployment scenarios.
@@ -268,27 +283,32 @@ Abxr.LogDebug("User interaction", new Dictionary<string, string> {
 ### Storage
 The Storage API enables developers to store and retrieve learner/player progress, facilitating the creation of long-form training content. When users log in using ArborXR's facility or the developer's in-app solution, these methods allow users to continue their progress on different headsets, ensuring a seamless learning experience across multiple sessions or devices.
 
-#### Save Progress
 ```cpp
 // Save progress data
-Abxr.StorageSetEntry(("state", new Dictionary<string, string>{{"progress", "75%"}});
+Abxr.StorageSetEntry("state", new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
+Abxr.StorageSetDefaultEntry(new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
 
-// Retrieve progress data
-var state = Abxr.StorageGetEntry("state"); // Returns dictionary containing the retrieved storage entry.
+// Retrieve progress data (requires coroutine)
+StartCoroutine(Abxr.StorageGetEntry("state", StorageScope.user, result => {
+    Debug.Log("Retrieved data: " + result);
+}));
+
+StartCoroutine(Abxr.StorageGetDefaultEntry(StorageScope.user, result => {
+    Debug.Log("Retrieved default data: " + result);
+}));
 
 // Remove storage entries  
-Abxr.StorageRemoveEntry("state");                    // Remove specific entry
-Abxr.StorageRemoveDefaultEntry(StorageScope.user);   // Remove default entry for user/device
+Abxr.StorageRemoveEntry("state", StorageScope.user);
+Abxr.StorageRemoveDefaultEntry(StorageScope.user);
 Abxr.StorageRemoveMultipleEntries(StorageScope.user); // Clear all entries (use with caution)
-
-// Get all entries
-var allEntries = Abxr.GetAllStorageEntries();
 ```
 
 **Parameters:**
-- `name` (string): Optional. The identifier for this storage entry. Default is "state".
-- `data` (Dictionary<string, string>): The key-value pairs to store.
-- `scope` (StorageScope): Optional. Remove from 'device' or 'user' storage. Default is 'user'.
+- `name` (string): The identifier for this storage entry.
+- `entry` (Dictionary<string, string>): The key-value pairs to store.
+- `scope` (StorageScope): Store/retrieve from 'device' or 'user' storage.
+- `policy` (StoragePolicy): How data should be stored - 'keepLatest' or 'appendHistory' (defaults to 'keepLatest').
+- `callback` (Action): Callback function for retrieval operations.
 
 ---
 
@@ -300,29 +320,36 @@ The Telemetry Methods provide comprehensive tracking of the XR environment. By d
 Abxr.TrackAutoTelemetry();
 
 // Custom telemetry logging
-Abxr.Telemetry("headset_position", new Dictionary<string, string> { 
+Abxr.TelemetryEntry("headset_position", new Dictionary<string, string> { 
     {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
 });
 ```
 
 **Parameters:**
-- `name` (string): The type of telemetry data (e.g., "OS_Version", "Battery_Level", "RAM_Usage").
-- `data` (Dictionary<string, string>): Key-value pairs of telemetry data.
+- `name` (string): The type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level").
+- `meta` (Dictionary<string, string>): Key-value pairs of telemetry measurements.
 
 ---
 ### AI Integration
 
 ```cpp
-// Access GPT services for AI-powered interactions
-string response = Abxr.AIProxy("How can I help you today?", past_messages: "", bot_id: "assistant_bot");
+// Access GPT services for AI-powered interactions (requires coroutine)
+StartCoroutine(Abxr.AIProxy("How can I help you today?", "gpt-4", result => {
+    Debug.Log("AI Response: " + result);
+}));
+
+// With previous messages for context
+var pastMessages = new List<string> {"Hello", "Hi there! How can I help?"};
+StartCoroutine(Abxr.AIProxy("What's the weather like?", pastMessages, "gpt-4", result => {
+    Debug.Log("AI Response: " + result);
+}));
 ```
 
 **Parameters:**
 - `prompt` (string): The input prompt for the AI.
-- `past_messages` (string): Optional. Previous conversation history for context.
-- `bot_id` (string): Optional. An identifier for a specific pre-defined chatbot.
-
-**Returns:** The AI-generated response as a string.
+- `llmProvider` (string): The LLM provider identifier.
+- `pastMessages` (List<string>): Optional. Previous conversation history for context.
+- `callback` (Action<string>): Callback function that receives the AI response.
 
 **Note:** AIProxy calls are processed immediately and bypass the cache system.
 
@@ -545,16 +572,15 @@ You can check if AbxrLib has an active connection to the server at any time:
 public static bool Abxr.ConnectionActive()
 
 // Example usage
+// Check app-level connection status  
 if (Abxr.ConnectionActive())
 {
     Debug.Log("AbxrLib is connected and ready to send data");
-    // Proceed with data operations
     Abxr.Event("app_ready");
 }
 else
 {
     Debug.Log("Connection not active - waiting for authentication");
-    // Set up authentication callbacks
     Abxr.OnAuthCompleted((authData) => {
         if (authData.success) {
             Debug.Log("Connection established successfully!");
@@ -574,11 +600,11 @@ else
 }
 ```
 
-**Returns:** Boolean indicating if the library can communicate with the server
+**Returns:** Boolean indicating if the library has an active connection and can communicate with the server (app-level authentication status)
 
 **Use Cases:**
 - **Conditional logic**: Only send events/logs when connection is active
-- **UI state management**: Show online/offline status indicators
+- **UI state management**: Show online/offline status indicators  
 - **Error prevention**: Check connection before making API calls
 - **Feature gating**: Enable/disable features that require server communication
 
@@ -637,6 +663,8 @@ To help with general debugging, this feature routes a copy of all AbxrLib messag
 To use this feature, simply drag the `AbxrDebugWindow` Prefab from `AbxrLib for Unity/Resources/Prefabs`, to whatever object in the scene you want this window attached to (i.e. `Left Controller`).
 
 ### ArborXR Device Management
+
+These methods provide access to device-level information and SSO authentication status on ArborXR-managed devices. These are convenience methods that operate at the device level, separate from the app-level authentication managed by the ABXR SDK.
 
 #### Abxr.GetDeviceId()
 - Return Type: string
@@ -720,25 +748,6 @@ The ABXR SDK provides full compatibility with Mixpanel's Unity SDK, making migra
 // Before; var props = new Value();
 // After: var props = new Abxr.Value(); 
 ```
-
-#### Super Properties
-
-Global properties automatically included in all events:
-
-```cpp
-// Set persistent properties (included in all events)
-Abxr.Register("user_type", "premium");
-Abxr.Register("app_version", "1.2.3");
-
-// Set only if not already set
-Abxr.RegisterOnce("user_tier", "free");
-
-// Management
-Abxr.Unregister("device_type");  // Remove specific property
-Abxr.Reset();                    // Clear all super properties
-```
-
-Perfect for user attributes, app state, and device information that should be included with every event.
 
 #### Drop-in Compatibility Methods
 

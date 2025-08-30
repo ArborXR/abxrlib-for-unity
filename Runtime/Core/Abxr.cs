@@ -763,8 +763,9 @@ public static class Abxr
 	{
 		yield return Authentication.Authenticate();
 		
-		// Notify callbacks after reauthentication completes
-		NotifyAuthCompleted(IsAuthenticated(), true);
+		// Need to call NotifyAuthCompleted with isReauthentication=true 
+		// (Authentication.Authenticate() calls it with false)
+		NotifyAuthCompleted(connectionActive, true);
 	}
 
 	/// <summary>
@@ -781,9 +782,7 @@ public static class Abxr
 	private static IEnumerator StartNewSessionCoroutine()
 	{
 		yield return Authentication.Authenticate();
-		
-		// Notify callbacks after new session authentication completes
-		NotifyAuthCompleted(IsAuthenticated(), false);
+		// Note: Authentication.Authenticate() already calls NotifyAuthCompleted() internally
 	}
 
 	private static void AddDuration(Dictionary<string, DateTime> startTimes, string name, Dictionary<string, string> meta)
@@ -902,16 +901,6 @@ public static class Abxr
 	public static string GetUserEmail()
 	{
 		return Authentication.GetUserEmail();
-	}
-
-	/// <summary>
-	/// Check if authentication is currently completed and valid
-	/// </summary>
-	/// <returns>True if authenticated, false otherwise</returns>
-	public static bool IsAuthenticated()
-	{
-		// This could integrate with existing authentication state or ArborServiceClient
-		return ArborServiceClient.IsConnected() && GetIsAuthenticated();
 	}
 
 	/// <summary>
