@@ -167,6 +167,14 @@ Interactions are sub-tasts to an assessment or objective
 public enum EventStatus { Pass, Fail, Complete, Incomplete, Browsed }
 public enum InteractionType { Null, Bool, Select, Text, Rating, Number, Matching, Performance, Sequencing }
 
+//C# Method Signatures
+public static void Abxr.EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null);
+public static void Abxr.EventAssessmentComplete(string assessmentName, int score, EventStatus status, Dictionary<string, string> meta = null);
+public static void Abxr.EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null);
+public static void Abxr.EventObjectiveComplete(string objectiveName, int score, EventStatus status, Dictionary<string, string> meta = null);
+public static void Abxr.EventInteractionStart(string interactionName, Dictionary<string, string> meta = null);
+public static void Abxr.EventInteractionComplete(string interactionName, InteractionType type, string result, Dictionary<string, string> meta = null);
+
 // Assessment tracking (overall course/curriculum performance)
 Abxr.EventAssessmentStart("final_exam");
 Abxr.EventAssessmentComplete("final_exam", 92, EventStatus.Pass);
@@ -182,6 +190,11 @@ Abxr.EventInteractionComplete("select_option_a", InteractionType.Select, "true")
 
 #### Additional Event Wrappers
 ```cpp
+//C# Method Signatures
+public static void Abxr.EventLevelStart(string levelName, Dictionary<string, string> meta = null);
+public static void Abxr.EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null);
+public static void Abxr.EventCritical(string eventName, Dictionary<string, string> meta = null);
+
 // Level tracking 
 Abxr.EventLevelStart("level_1");
 Abxr.EventLevelComplete("level_1", 85);
@@ -234,6 +247,10 @@ Abxr.Track("User Session"); // Duration automatically included
 Global properties automatically included in all events:
 
 ```cpp
+//C# Method Signatures
+public static void Abxr.Register(string key, string value);
+public static void Abxr.RegisterOnce(string key, string value);
+
 // Set persistent properties (included in all events)
 Abxr.Register("user_type", "premium");
 Abxr.Register("app_version", "1.2.3");
@@ -284,6 +301,13 @@ Abxr.LogDebug("User interaction", new Dictionary<string, string> {
 The Storage API enables developers to store and retrieve learner/player progress, facilitating the creation of long-form training content. When users log in using ArborXR's facility or the developer's in-app solution, these methods allow users to continue their progress on different headsets, ensuring a seamless learning experience across multiple sessions or devices.
 
 ```cpp
+//C# Method Signatures
+public static void Abxr.StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest);
+public static void Abxr.StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest);
+public static IEnumerator Abxr.StorageGetEntry(string name, StorageScope scope, Action<string> callback);
+public static IEnumerator Abxr.StorageGetDefaultEntry(StorageScope scope, Action<string> callback);
+public static void Abxr.StorageRemoveEntry(string name, StorageScope scope);
+
 // Save progress data
 Abxr.StorageSetEntry("state", new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
 Abxr.StorageSetDefaultEntry(new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
@@ -316,6 +340,9 @@ Abxr.StorageRemoveMultipleEntries(StorageScope.user); // Clear all entries (use 
 The Telemetry Methods provide comprehensive tracking of the XR environment. By default, they capture headset and controller movements, but can be extended to track any custom objects in the virtual space. These functions also allow collection of system-level data such as frame rates or device temperatures. This versatile tracking enables developers to gain deep insights into user interactions and application performance, facilitating optimization and enhancing the overall XR experience.
 
 ```cpp
+//C# Method Signatures
+public static void Abxr.TelemetryEntry(string name, Dictionary<string, string> meta);
+
 // Manual telemetry activation (when auto-telemetry is disabled)
 Abxr.TrackAutoTelemetry();
 
@@ -356,13 +383,15 @@ StartCoroutine(Abxr.AIProxy("What's the weather like?", pastMessages, "gpt-4", r
 ### Exit Polls
 Deliver questionnaires to users to gather feedback.
 ```cpp
+// Poll type enumeration
+public enum PollType { Thumbs, Rating, MultipleChoice }
+
+//C# Method Signatures
+public static void Abxr.PollUser(string question, PollType pollType);
+
 // Poll types: Thumbs, Rating (1-5), MultipleChoice (2-8 options)
 Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 ```
-**Poll Types:**
-- `Thumbs Up/Thumbs Down`
-- `Rating (1-5)`
-- `Multiple Choice (2-8 string options)`
 
 ### Metadata Formats
 
@@ -752,6 +781,11 @@ The ABXRLib SDK provides full compatibility with Mixpanel's Unity SDK, making mi
 #### Drop-in Compatibility Methods
 
 ```cpp
+//C# Method Signatures
+public static void Abxr.Track(string eventName);
+public static void Abxr.Track(string eventName, Abxr.Value properties);
+public static void Abxr.Track(string eventName, Dictionary<string, object> properties);
+
 // Abxr.Value class for Mixpanel compatibility
 var props = new Abxr.Value();
 props["amount"] = 29.99;
