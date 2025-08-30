@@ -139,6 +139,7 @@ Abxr.Event("player_teleported",
     new Vector3(1.5f, 0.0f, -3.2f)
 );
 ```
+
 **Parameters:**
 - `name` (string): The name of the event. Use snake_case for better analytics processing.
 - `meta` (Dictionary<string, string>): Optional. Additional key-value pairs describing the event.
@@ -154,86 +155,41 @@ Logs a named event with optional metadata and spatial context. Timestamps and or
 
 The Analytics Event Functions are specialized versions of the Event method, tailored for common scenarios in XR experiences. These functions help enforce consistency in event logging across different parts of the application and provide valuable data for analytics, user experience optimization, and business intelligence. While they also power integrations with Learning Management System (LMS) platforms, their benefits extend far beyond educational use cases.
 
-#### Assessments
-Assessments are intended to track the overall performance of a learner across multiple Objectives and Interactions. 
+#### Assessments, Objectives & Interactions
+Assessments are intended to track the overall performance of a learner across multiple Objectives and 
+Interactions. 
 * Think of it as the learner's score for a specific course or curriculum.
-* When the Assessment is complete, it will automatically record and close out the Assessment in the various LMS platforms we support.
+* When the Assessment is complete, it will automatically record and close out the Assessment in the various LMS 
+platforms we support.
+Objectives are sub-tasks within an assessment
+Interactions are sub-tasts to an assessment or objective
 
 ```cpp
-//C# List Definition
-public enum EventStatus
-{
-    Pass,
-    Fail,
-    Complete,
-    Incomplete,
-    Browsed
-}
+// Status enumeration for all analytics events
+public enum EventStatus { Pass, Fail, Complete, Incomplete, Browsed }
+public enum InteractionType { Null, Bool, Select, Text, Rating, Number, Matching, Performance, Sequencing }
 
-//C# Event Method Signatures
-public void Abxr.EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
-
-public void Abxr.EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
-
-// Example Usage
+// Assessment tracking (overall course/curriculum performance)
 Abxr.EventAssessmentStart("final_exam");
 Abxr.EventAssessmentComplete("final_exam", 92, EventStatus.Pass);
-```
 
-#### Objectives
-```cpp
-//C# Event Method Signatures
-public void Abxr.EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null)
-
-public void Abxr.EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
-
-// Example Usage
+// Objective tracking (specific learning goals)
 Abxr.EventObjectiveStart("open_valve");
 Abxr.EventObjectiveComplete("open_valve", 100, EventStatus.Complete);
-```
 
-#### Interactions
-```cpp
-//C# List Definition
-public enum InteractionType
-{
-   Null, 
-   Bool, // 1 or 0
-   Select, // true or false and the result_details value should be a single letter or for multiple choice a,b,c
-   Text, // a string 
-   Rating, // a single digit value
-   Number, // integer
-   Matching,
-   Performance,
-   Sequencing
-}
-
-//C# Event Method Signatures
-public void Abxr.EventInteractionStart(string interactionName, Dictionary<string, string> meta = null)
-
-public void Abxr.EventInteractionComplete(string interactionName, InteractionType interactionType, string response = "", Dictionary<string, string> meta = null)
-
-// Example Usage
+// Interaction tracking (individual user responses)
 Abxr.EventInteractionStart("select_option_a");
 Abxr.EventInteractionComplete("select_option_a", InteractionType.Select, "true");
 ```
 
-### Other Event Wrappers
-#### Levels
+#### Additional Event Wrappers
 ```cpp
-//C# Event Method Signatures
-public void Abxr.EventLevelStart(string assessmentName) 
-
-public void Abxr.EventLevelComplete(string levelName, int score)
-public void Abxr.EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null)
-
-// Example Usage
+// Level tracking 
 Abxr.EventLevelStart("level_1");
 Abxr.EventLevelComplete("level_1", 85);
 
-// For flagging critical training events (e.g., skipped safety checks, high-risk errors) for auto-inclusion in the Critical Choices Chart
-public void Abxr.EventCritical(string label)
-public void Abxr.EventCritical(string label, Dictionary<string, string> meta = null)
+// Critical event flagging (for safety training, high-risk errors, etc.)
+Abxr.EventCritical("safety_violation");
 ```
 
 **Parameters for all Event Wrapper Functions:**
@@ -314,110 +270,39 @@ The Storage API enables developers to store and retrieve learner/player progress
 
 #### Save Progress
 ```cpp
-//C# Event Method Signatures
-public void Abxr.StorageSetEntry(Dictionary<string, string> data, string name = "state", bool keep_latest = true, string origin = null, bool session_data = false)
+// Save progress data
+Abxr.StorageSetEntry(("state", new Dictionary<string, string>{{"progress", "75%"}});
 
-// Example usage
-Abxr.StorageSetEntry(new Dictionary<string, string>{{"progress", "75%"}});
-```
-**Parameters:**
-- `data` (Dictionary<string, string>): The key-value pairs to store.
-- `name` (string): Optional. The identifier for this storage entry. Default is "state".
-- `keep_latest` (bool): Optional. If true, only the most recent entry is kept. If false, entries are appended. Default is true.
-- `origin` (string): Optional. The source of the data (e.g., "system").
-- `session_data` (bool): Optional. If true, the data is specific to the current session. Default is false.
+// Retrieve progress data
+var state = Abxr.StorageGetEntry("state"); // Returns dictionary containing the retrieved storage entry.
 
-#### Retrieve Data
-```cpp
-//C# Event Method Signatures
-public Dictionary<string, string> Abxr.StorageGetEntry(string name = "state", string origin = null, string[] tags_any = null, string[] tags_all = null, bool user_only = false)
+// Remove storage entries  
+Abxr.StorageRemoveEntry("state");                    // Remove specific entry
+Abxr.StorageRemoveDefaultEntry(StorageScope.user);   // Remove default entry for user/device
+Abxr.StorageRemoveMultipleEntries(StorageScope.user); // Clear all entries (use with caution)
 
-// Example usage
-var state = Abxr.StorageGetEntry("state");
-```
-**Parameters:**
-- `name` (string): Optional. The identifier of the storage entry to retrieve. Default is "state".
-- `origin` (string): Optional. Filter entries by their origin ("system", "user", or "admin").
-- `tags_any` (string[]): Optional. Retrieve entries matching any of these tags.
-- `tags_all` (string[]): Optional. Retrieve entries matching all of these tags.
-- `user_only` (bool): Optional. If true, retrieve data for the current user across all devices for this app. Default is false.
-
-**Returns:** A dictionary containing the retrieved storage entry.
-
-#### Remove Storage
-```cpp
-//C# Event Method Signatures
-public void Abxr.StorageRemoveEntry(string name = "state")
-
-// Example usage
-Abxr.StorageRemoveEntry("state");
-```
-**Parameters:**
-- `name` (string): Optional. The identifier of the storage entry to remove. Default is "state".
-
-#### Remove Default Storage Entry
-```cpp
-//C# Event Method Signatures
-public void Abxr.StorageRemoveDefaultEntry(StorageScope scope = StorageScope.user)
-
-// Example usage
-Abxr.StorageRemoveDefaultEntry(StorageScope.user);
-Abxr.StorageRemoveDefaultEntry(); // Defaults to user scope
-```
-**Parameters:**
-- `scope` (StorageScope): Optional. Remove from 'device' or 'user' storage. Default is 'user'.
-
-**Note:** This is a convenience method that removes the default "state" entry. It's equivalent to calling `RemoveStorageEntry("state")` but allows you to specify the storage scope.
-
-#### Get All Entries
-```cpp
-//C# Event Method Signatures
-public Dictionary<string, string> Abxr.GetAllStorageEntries()
-
-// Example usage
+// Get all entries
 var allEntries = Abxr.GetAllStorageEntries();
 ```
-**Returns:** A dictionary containing all storage entries for the current user/device.
 
-#### Remove All Storage Entries for Scope
-```cpp
-//C# Event Method Signatures
-public void Abxr.StorageRemoveMultipleEntries(StorageScope scope = StorageScope.user)
-
-// Example usage
-Abxr.StorageRemoveMultipleEntries(StorageScope.user); // Clear all user data
-Abxr.StorageRemoveMultipleEntries(StorageScope.device); // Clear all device data
-Abxr.StorageRemoveMultipleEntries(); // Defaults to user scope
-```
 **Parameters:**
-- `scope` (StorageScope): Optional. Remove all from 'device' or 'user' storage. Default is 'user'.
-
-**Note:** This is a bulk operation that clears all stored entries at once. Use with caution as this cannot be undone.
+- `name` (string): Optional. The identifier for this storage entry. Default is "state".
+- `data` (Dictionary<string, string>): The key-value pairs to store.
+- `scope` (StorageScope): Optional. Remove from 'device' or 'user' storage. Default is 'user'.
 
 ---
 
 ### Telemetry
 The Telemetry Methods provide comprehensive tracking of the XR environment. By default, they capture headset and controller movements, but can be extended to track any custom objects in the virtual space. These functions also allow collection of system-level data such as frame rates or device temperatures. This versatile tracking enables developers to gain deep insights into user interactions and application performance, facilitating optimization and enhancing the overall XR experience.
 
-#### Manual Telemetry Activation
 ```cpp
-//C# Event Method Signatures
-public static void Abxr.TrackAutoTelemetry()
+// Manual telemetry activation (when auto-telemetry is disabled)
+Abxr.TrackAutoTelemetry();
 
-// Example usage
-Abxr.TrackAutoTelemetry(); // Start manual telemetry tracking
-```
-
-**Use Case:** If you select 'Disable Automatic Telemetry' in the AbxrLib configuration, you can manually start tracking system telemetry with this function call. This captures headset/controller movements, performance metrics, and environmental data on demand.
-
-#### Custom Telemetry Logging
-To log spatial or system telemetry:
-```cpp
-//C# Event Method Signatures
-public void Abxr.Telemetry(string name, Dictionary<string, string> data)
-
-// Example usage
-Abxr.Telemetry("headset_position", new Dictionary<string, string> { {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} });
+// Custom telemetry logging
+Abxr.Telemetry("headset_position", new Dictionary<string, string> { 
+    {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
+});
 ```
 
 **Parameters:**
@@ -426,15 +311,10 @@ Abxr.Telemetry("headset_position", new Dictionary<string, string> { {"x", "1.23"
 
 ---
 ### AI Integration
-The Integration Methods offer developers access to additional services, enabling customized experiences for enterprise users. Currently, this includes access to GPT services through the AIProxy method, allowing for advanced AI-powered interactions within the XR environment. More integration services are planned for future releases, further expanding the capabilities available to developers for creating tailored enterprise solutions.
 
-#### AIProxy
 ```cpp
-//C# Event Method Signatures
-public string Abxr.AIProxy(string prompt, string past_messages = "", string bot_id = "")
-
-// Example usage
-Abxr.AIProxy("Provide me a randomized greeting that includes common small talk and ends by asking some form of how can I help");
+// Access GPT services for AI-powered interactions
+string response = Abxr.AIProxy("How can I help you today?", past_messages: "", bot_id: "assistant_bot");
 ```
 
 **Parameters:**
@@ -444,23 +324,12 @@ Abxr.AIProxy("Provide me a randomized greeting that includes common small talk a
 
 **Returns:** The AI-generated response as a string.
 
-**Note:** AIProxy calls are processed immediately and bypass the cache system. However, they still respect the SendRetriesOnFailure and SendRetryInterval settings.
+**Note:** AIProxy calls are processed immediately and bypass the cache system.
 
 ### Exit Polls
 Deliver questionnaires to users to gather feedback.
 ```cpp
-// C# List Definition
-public enum PollType
-{
-    Thumbs,
-    Rating,
-    MultipleChoice
-}
-
-// C# Event Method Signature
-public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null)
-
-// Example usage
+// Poll types: Thumbs, Rating (1-5), MultipleChoice (2-8 options)
 Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 ```
 **Poll Types:**
@@ -470,214 +339,65 @@ Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 
 ### Metadata Formats
 
-The ABXR SDK supports multiple flexible formats for the `meta` parameter in all event and log methods. All formats are automatically converted to `Dictionary<string, string>` for use with the Unity SDK:
+The ABXR SDK supports multiple flexible metadata formats. All formats are automatically converted to `Dictionary<string, string>`:
 
-#### 1. Dictionary<string, string> (Native)
 ```cpp
-// Native C# format - most efficient
-var meta = new Dictionary<string, string>
+// 1. Native C# Dictionary (most efficient)
+Abxr.Event("user_action", new Dictionary<string, string>
 {
     ["action"] = "click",
-    ["timestamp"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-    ["userId"] = "12345",
-    ["completed"] = "true"
-};
-
-Abxr.Event("user_action", meta);
-Abxr.LogInfo("User login", new Dictionary<string, string> 
-{
-    ["username"] = "john_doe",
-    ["loginMethod"] = "oauth",
-    ["deviceType"] = "quest3"
+    ["userId"] = "12345"
 });
-```
 
-#### 2. Dictionary<string, object> (Mixpanel Compatibility)
-```cpp
-// Automatically converts objects to strings
-var mixpanelStyle = new Dictionary<string, object>
+// 2. Mixpanel-style Dictionary (auto-converts objects)
+Abxr.Track("assessment_complete", new Dictionary<string, object>
 {
-    ["score"] = 95,           // Converted to "95"
-    ["completed"] = true,     // Converted to "true"
-    ["timestamp"] = DateTime.UtcNow,  // Converted to ISO string
-    ["userData"] = new { name = "John", level = 5 }  // Converted to JSON
-};
+    ["score"] = 95,           // → "95"
+    ["completed"] = true,     // → "true"
+    ["timestamp"] = DateTime.UtcNow  // → ISO string
+});
 
-Abxr.Track("assessment_complete", mixpanelStyle);
-```
-
-#### 3. Abxr.Value Class (Full Mixpanel Compatibility)
-```cpp
-// Drop-in replacement for Mixpanel's Value class
+// 3. Abxr.Value class (Mixpanel compatibility)
 var props = new Abxr.Value();
 props["plan"] = "Premium";
 props["amount"] = 29.99;
-props["currency"] = "USD";
-
 Abxr.Track("purchase_completed", props);
-```
 
-#### 4. Anonymous Objects (via Reflection)
-```cpp
-// Convenient for simple metadata (performance cost for reflection)
-Abxr.Event("button_click", new { 
-    buttonId = "submit_btn", 
-    screenName = "checkout", 
-    userTier = "premium" 
-}.ToDictionary());
-
-// Helper extension method for anonymous objects
-public static Dictionary<string, string> ToDictionary(this object obj)
-{
-    return obj.GetType().GetProperties()
-        .ToDictionary(p => p.Name, p => p.GetValue(obj)?.ToString() ?? "");
-}
-```
-
-#### 5. No Metadata
-```cpp
-// Events and logs work fine without metadata
+// 4. No metadata
 Abxr.Event("app_started");
-Abxr.LogInfo("Application initialized");
+
+// 5. With Unity Vector3 position data
+Abxr.Event("player_teleported", transform.position, 
+    new Dictionary<string, string> { ["destination"] = "spawn_point" });
 ```
 
-#### 6. Vector3 Position Data (Unity Specific)
+#### JSON Arrays in Metadata
+
+** Use pre-serialized JSON strings:**
 ```cpp
-// Unity-specific: Automatic position metadata
-Vector3 playerPosition = transform.position;
-Abxr.Event("player_teleported", playerPosition, new Dictionary<string, string>
-{
-    ["destination"] = "spawn_point",
-    ["method"] = "instant"
-});
-
-// Automatically adds: position_x, position_y, position_z to metadata
-```
-
-#### Automatic Type Conversion Examples
-
-The SDK automatically handles type conversion:
-
-```cpp
-var metadata = new Dictionary<string, object>
-{
-    ["score"] = 95,              // int → "95"
-    ["passed"] = true,           // bool → "true"
-    ["duration"] = 45.7f,        // float → "45.7"
-    ["timestamp"] = DateTime.UtcNow,  // DateTime → ISO string
-    ["player"] = new { name = "John", level = 5 }  // object → JSON string
-};
-
-Abxr.EventAssessmentComplete("math_test", 95, EventStatus.Pass, metadata);
-```
-
-#### Super Properties Integration
-
-All metadata formats work seamlessly with Super Properties:
-
-```cpp
-// Set super properties once
-Abxr.Register("user_type", "premium");
-Abxr.Register("app_version", "1.2.3");
-
-// All events automatically include super properties
-Abxr.Event("button_click", new Dictionary<string, string> { ["button"] = "submit" });
-// Final metadata: { "button": "submit", "user_type": "premium", "app_version": "1.2.3" }
-```
-
-#### JSON Array Handling
-
-Unity has specific considerations when working with JSON arrays in metadata:
-
-##### **Supported: Pre-serialized JSON Strings**
-```cpp
-// This works perfectly - JSON string is passed through as-is
 var meta = new Dictionary<string, string>
 {
     ["items"] = "[\"sword\", \"shield\", \"potion\"]",
-    ["scores"] = "[95, 87, 92, 88]", 
-    ["coordinates"] = "[{\"x\":1.5, \"y\":2.3}, {\"x\":4.1, \"y\":1.7}]"
+    ["scores"] = "[95, 87, 92, 88]"
 };
-
-Abxr.Event("inventory_updated", meta);
 ```
 
-##### **Problem: Raw C# Arrays/Lists**
+** Avoid raw arrays/lists:**
 ```cpp
-// This does NOT work as expected - calls .ToString() on arrays
-var meta = new Dictionary<string, object>
-{
-    ["items"] = new string[] {"sword", "shield", "potion"}, // Becomes "System.String[]"
-    ["scores"] = new List<int> {95, 87, 92, 88}             // Becomes "System.Collections.Generic.List`1[System.Int32]"
-};
-
-Abxr.Track("inventory_updated", meta); // Results in useless string representations!
+// Don't do this - becomes "System.String[]"
+["items"] = new string[] {"sword", "shield", "potion"}
 ```
 
-##### **Solutions: Manual JSON Serialization**
+**Quick serialization helper:**
 ```cpp
-// Option 1: Using JsonUtility (Unity built-in)
-var items = new string[] {"sword", "shield", "potion"};
-var scores = new int[] {95, 87, 92, 88};
-
-// Simple wrapper class for arrays
-[System.Serializable]
-public class JsonArray<T> { public T[] array; }
-
-var meta = new Dictionary<string, string>
-{
-    ["items"] = JsonUtility.ToJson(new JsonArray<string> { array = items }).Replace("{\"array\":", "").Replace("}", ""),
-    ["scores"] = JsonUtility.ToJson(new JsonArray<int> { array = scores }).Replace("{\"array\":", "").Replace("}", "")
-};
-
-// Option 2: Using System.Text.Json (Unity 2021.2+)
-using System.Text.Json;
-var meta = new Dictionary<string, string>
-{
-    ["items"] = JsonSerializer.Serialize(items),
-    ["scores"] = JsonSerializer.Serialize(scores)
-};
-
-// Option 3: Manual string building (simple arrays)
-var meta = new Dictionary<string, string>
-{
-    ["items"] = "[\"" + string.Join("\", \"", items) + "\"]",
-    ["scores"] = "[" + string.Join(", ", scores) + "]"
-};
-
-// Option 4: Helper Extension Method
-public static class ArrayExtensions
-{
-    public static string ToJsonArray<T>(this T[] array)
-    {
-        if (typeof(T) == typeof(string))
-            return "[\"" + string.Join("\", \"", array) + "\"]";
-        else
-            return "[" + string.Join(", ", array) + "]";
-    }
-}
-
-// Usage with helper:
-var meta = new Dictionary<string, string>
-{
-    ["items"] = items.ToJsonArray(),    // ["sword", "shield", "potion"]
-    ["scores"] = scores.ToJsonArray()   // [95, 87, 92, 88]
-};
-
-Abxr.Event("inventory_updated", meta);
+public static string ToJsonArray<T>(this T[] array) =>
+    typeof(T) == typeof(string) 
+        ? "[\"" + string.Join("\", \"", array) + "\"]"
+        : "[" + string.Join(", ", array) + "]";
 ```
 
 **Key Takeaway:** Always serialize arrays to JSON strings before passing to ABXR SDK methods.
-
-**All event and log methods support these flexible metadata formats:**
-- `Abxr.Event(name, meta?)`
-- `Abxr.Event(name, position, meta?)` (Unity-specific)
-- `Abxr.EventAssessmentStart/Complete(..., meta?)`
-- `Abxr.EventObjectiveStart/Complete(..., meta?)`
-- `Abxr.EventInteractionStart/Complete(..., meta?)`
-- `Abxr.EventLevelStart/Complete(..., meta?)`
-- `Abxr.LogDebug/Info/Warn/Error/Critical(message, meta?)`
-- `Abxr.Track(eventName, properties?)` (Mixpanel compatibility)
+**Key Takeaway:** All event and log methods support these flexible metadata formats
 
 ---
 
@@ -765,80 +485,31 @@ The ABXR SDK provides comprehensive authentication completion callbacks that del
 
 #### Authentication Completion Callback
 
-Subscribe to authentication events to receive detailed information about the authenticated user and any module targets from LMS integration:
+Subscribe to authentication events to receive user information and module targets:
 
 ```cpp
-// Subscribe to authentication completion events
+// Basic authentication callback
 Abxr.OnAuthCompleted((authData) =>
 {
-    Debug.Log($"Authentication completed: {authData.success}");
-    Debug.Log($"User ID: {authData.userId}");
-    Debug.Log($"User Email: {authData.userEmail}");
-    Debug.Log($"Module Target: {authData.moduleTarget}");
-    Debug.Log($"Is Reauthentication: {authData.isReauthentication}");
-    
     if (authData.success)
     {
-        // Authentication was successful
-        if (authData.isReauthentication)
-        {
-            // User reauthenticated - maybe just refresh data
-            Debug.Log("Welcome back!");
-            RefreshUserData();
-        }
-        else
-        {
-            // Initial authentication - full setup
-            Debug.Log("Welcome! Setting up your experience...");
-            InitializeUserInterface();
-            LoadUserPreferences();
-        }
+        Debug.Log($"Welcome {authData.userEmail}!");
         
-        // Check if we have a module target from auth
+        // Handle initial vs reauthentication
+        if (authData.isReauthentication)
+            RefreshUserData();
+        else
+            InitializeUserInterface();
+        
+        // Navigate to module if specified
         if (!string.IsNullOrEmpty(authData.moduleTarget))
-        {
             NavigateToModule(authData.moduleTarget);
-        }
     }
 });
 
-// Multiple callbacks are supported
-Abxr.OnAuthCompleted(HandleUserSetup);
-Abxr.OnAuthCompleted(HandleAnalyticsInit);
-
-// Remove specific callback when no longer needed
-Abxr.RemoveAuthCompletedCallback(HandleUserSetup);
-
-// Clear all callbacks
-Abxr.ClearAuthCompletedCallbacks();
-```
-
-#### Callback Management
-
-The authentication system supports multiple subscribers for flexible integration:
-
-```cpp
-// Store callback reference for later management
-System.Action<Abxr.AuthCompletedData> authCallback = (authData) =>
-{
-    if (authData.success)
-    {
-        InitializeUserInterface();
-        if (authData.moduleTarget != null)
-        {
-            NavigateToModule(authData.moduleTarget);
-        }
-    }
-};
-
-// Subscribe to authentication events
-Abxr.OnAuthCompleted(authCallback);
-
-// Remove callback when component is destroyed
-void OnDestroy()
-{
-    Abxr.RemoveAuthCompletedCallback(authCallback);
-}
+// Callback management
+Abxr.RemoveAuthCompletedCallback(authCallback);  // Remove specific callback
+Abxr.ClearAuthCompletedCallbacks();              // Clear all callbacks
 ```
 
 #### Authentication Data Structure
@@ -1035,121 +706,59 @@ The ABXR SDK provides full compatibility with Mixpanel's Unity SDK, making migra
 - **Spatial Tracking**: Built-in support for 3D position data and XR interactions
 - **Open Source**: No vendor lock-in, deploy to any backend service
 
-#### 3-Step Migration:
+**Migration Steps:**
+1. Remove Mixpanel references (`using mixpanel;`)
+2. Configure ABXR SDK credentials in Unity Editor
+3. Replace `Mixpanel.Track` → `Abxr.Track` throughout codebase
+4. Replace `new Value();` → `new Abxr.Value();` throughout codebase
 
-##### Step 1: Remove Mixpanel References
 ```cpp
-// Remove or comment out these lines:
-// using mixpanel;
-// Any Mixpanel initialization code...
-
-// ABXR SDK is already available - no additional using statements needed
-```
-
-##### Step 2: Configure ABXR SDK
-Follow the [Configuration](#configuration) section to set up your App ID, Org ID, and Auth Secret in the Unity Editor.
-
-##### Step 3: Simple String Replace
-```cpp
-// Find and replace throughout your codebase:
-// Mixpanel.Track  ->  Abxr.Track
-
-// Before (Mixpanel)
-Mixpanel.Track("Sent Message");
-var props = new Value();
-props["Plan"] = "Premium"; 
-Mixpanel.Track("Plan Selected", props);
-
-// After (just string replace!)
-Abxr.Track("Sent Message");
-var props = new Abxr.Value();  // Abxr.Value class included for compatibility
-props["Plan"] = "Premium";
-Abxr.Track("Plan Selected", props);
+// Mixpanel → ABXR migration example
+// Before: Mixpanel.Track("Plan Selected", props);
+// After:  Abxr.Track("Plan Selected", props);
+//
+// Before; var props = new Value();
+// After: var props = new Abxr.Value(); 
 ```
 
 #### Super Properties
 
-Super Properties are global event properties that are automatically included in all events. They persist across app sessions and are perfect for setting user attributes, application state, or any data you want included in every event.
+Global properties automatically included in all events:
 
 ```cpp
-//C# Super Properties Method Signatures
-public static void Abxr.Register(string key, string value)
-public static void Abxr.RegisterOnce(string key, string value)
-public static void Abxr.Unregister(string key)
-public static void Abxr.Reset()
-public static Dictionary<string, string> Abxr.GetSuperProperties()
-
-// Example Usage
-// Set user properties that will be included in all events
+// Set persistent properties (included in all events)
 Abxr.Register("user_type", "premium");
 Abxr.Register("app_version", "1.2.3");
-Abxr.Register("device_type", "quest3");
 
-// All subsequent events automatically include these properties
-Abxr.Event("button_click"); // Includes user_type, app_version, device_type
-Abxr.EventAssessmentStart("quiz"); // Also includes all super properties
-Abxr.Track("purchase"); // Mixpanel compatibility method also gets super properties
+// Set only if not already set
+Abxr.RegisterOnce("user_tier", "free");
 
-// Set default values that won't overwrite existing super properties
-Abxr.RegisterOnce("user_tier", "free"); // Only sets if not already set
-Abxr.RegisterOnce("user_tier", "premium"); // Ignored - "free" remains
-
-// Manage super properties
-Abxr.Unregister("device_type"); // Remove specific super property
-var props = Abxr.GetSuperProperties(); // Get all current super properties
-Abxr.Reset(); // Remove all super properties (matches Mixpanel.Reset())
+// Management
+Abxr.Unregister("device_type");  // Remove specific property
+Abxr.Reset();                    // Clear all super properties
 ```
 
-**Key Features:**
-- **Automatic Inclusion**: Super properties are automatically added to every event
-- **Persistent Storage**: Super properties persist across app launches using PlayerPrefs
-- **No Overwriting**: Super properties don't overwrite event-specific properties with the same name
-- **Universal**: Works with all event methods (Event, Track, EventAssessmentStart, etc.)
+Perfect for user attributes, app state, and device information that should be included with every event.
 
-**Use Cases:**
-- User attributes (subscription type, user level, demographics)
-- Application state (app version, build number, feature flags)
-- Device information (device type, OS version, screen size)
-- Session context (session ID, experiment groups, A/B test variants)
-
-#### Mixpanel Compatibility Methods
-
-The ABXR SDK includes a complete `Abxr.Value` class, `Track`, `StartTimedEvent` and `Register` methods that match Mixpanel's API:
+#### Drop-in Compatibility Methods
 
 ```cpp
-//C# Compatibility Class
-public class Abxr.Value : Dictionary<string, object>
-{
-    public Value() : base() { }
-    public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
-    public Dictionary<string, string> ToDictionary()  // Converts to ABXR format
-}
+// Abxr.Value class for Mixpanel compatibility
+var props = new Abxr.Value();
+props["amount"] = 29.99;
+props["currency"] = "USD";
 
-//C# Track Method Signatures  
-public static void Abxr.StartTimedEvent(string eventName)
-public static void Abxr.Track(string eventName)
-public static void Abxr.Track(string eventName, Abxr.Value properties)
-public static void Abxr.Track(string eventName, Dictionary<string, object> properties)
-
-// Example Usage - Drop-in Replacement
+// Track methods (exactly like Mixpanel)
 Abxr.Track("user_signup");
-Abxr.Track("purchase_completed", new Abxr.Value { ["amount"] = 29.99, ["currency"] = "USD" });
+Abxr.Track("purchase_completed", props);
 
-// Timed Events (matches Mixpanel exactly!)
-Abxr.StartTimedEvent("Table puzzle");
-// ... 20 seconds later ...
-Abxr.Track("Table puzzle"); // Duration automatically added: 20 seconds
-
-// Super Properties (global properties included in all events)
-Abxr.Register("user_type", "premium"); // Same as Mixpanel.Register()
-Abxr.RegisterOnce("device", "quest3");  // Same as Mixpanel.RegisterOnce()
-// All events now include user_type and device automatically!
+// Timed events
+Abxr.StartTimedEvent("puzzle_solving");
+// ... later ...
+Abxr.Track("puzzle_solving"); // Duration automatically included
 ```
 
-**Additional Core Features Beyond Mixpanel:**
-ABXR also includes core [Super Properties](#super-properties) functionality (`Register`, `RegisterOnce`) that works identically to Mixpanel, plus advanced [Timed Events](#timed-events) that work universally across all event types.
-
-#### Key Differences & Advantages
+#### Key Advantages Over Mixpanel
 
 | Feature | Mixpanel | ABXR SDK |
 |---------|----------|-----------|
@@ -1164,38 +773,7 @@ ABXR also includes core [Super Properties](#super-properties) functionality (`Re
 | **Real-time Collaboration** | ❌ | ✅ (Multi-user session tracking) |
 | **Open Source** | ❌ | ✅ |
 
-#### Migration Summary
-
-**Migration Time: ~10 minutes for most projects**
-
-1. **Install ABXR SDK** - Follow [Installation](#installation) guide
-2. **Configure credentials** - Set App ID, Org ID, Auth Secret in Unity Editor  
-3. **String replace** - `Mixpanel.Track` → `Abxr.Track` throughout your code
-4. **Remove Mixpanel** - Comment out `using mixpanel;` and config code
-5. **Done!** - All your existing tracking calls now work with ABXR
-
-**Optional:** Add XR-specific features like spatial tracking and LMS assessments:
-```cpp
-// Enhanced XR tracking beyond Mixpanel capabilities  
-Abxr.Event("object_grabbed", transform.position);  // Include 3D position
-Abxr.EventAssessmentStart("safety_training");       // LMS-compatible assessments
-```
-
-#### Value Class Compatibility
-
-The included `Abxr.Value` class is fully compatible with Mixpanel's implementation:
-
-```cpp
-var mixpanelStyleProps = new Abxr.Value();
-mixpanelStyleProps["user_id"] = "12345";
-mixpanelStyleProps["plan_type"] = "premium";
-mixpanelStyleProps["trial_days"] = 30;
-
-// Works exactly the same as Mixpanel
-Abxr.Track("subscription_started", mixpanelStyleProps);
-```
-
-Properties are automatically converted to the appropriate format for ABXR's backend while maintaining full compatibility with your existing Mixpanel integration patterns.
+**Migration:** Simply replace `Mixpanel.Track` → `Abxr.Track` throughout your codebase.
 
 ## Support
 
