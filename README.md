@@ -151,7 +151,7 @@ Logs a named event with optional metadata and spatial context. Timestamps and or
 
 **These analytics event functions are essential for ALL developers** They provide standardized tracking for key user interactions and learning outcomes that are crucial for understanding user behavior, measuring engagement, and optimizing XR experiences and power the analytics dashboards and reporting features. They also essential for integrations with Learning Management System (LMS) platforms.
 
-**EventAssessmentStart and EventAssessmentComplete are REQUIRED for all ArborXR Insights usage**
+**EventAssessmentStart** and **EventAssessmentComplete** are **REQUIRED** for all ArborXR Insights usage
 
 #### Assessments, Objectives & Interactions
 
