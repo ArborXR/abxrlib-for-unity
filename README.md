@@ -456,6 +456,67 @@ public static string ToJsonArray<T>(this T[] array) =>
 **Key Takeaway:** Always serialize arrays to JSON strings before passing to ABXRLib SDK methods.
 **Key Takeaway:** All event and log methods support these flexible metadata formats
 
+### Automatic Data Collection
+
+The ABXRLib SDK automatically enhances your data with additional context and metadata without requiring explicit configuration:
+
+#### Scene Name Auto-Addition
+Every event, log entry, and telemetry data point automatically includes the current Unity scene name:
+```cpp
+Abxr.Event("button_pressed"); // Automatically includes {"sceneName": "MainMenu"}
+Abxr.LogInfo("User logged in"); // Automatically includes {"sceneName": "LoginScene"}
+```
+
+#### Super Properties Auto-Merge
+Super properties are automatically merged into **every** event's metadata. Event-specific properties take precedence when keys conflict:
+```cpp
+// Set super properties
+Abxr.Register("app_version", "1.2.3");
+Abxr.Register("user_type", "premium");
+
+// Every event automatically includes super properties
+Abxr.Event("level_complete", new Dictionary<string, string> {
+    {"level", "3"}, 
+    {"user_type", "trial"}  // This overrides the super property
+});
+// Result includes: app_version=1.2.3, user_type=trial, level=3, sceneName=CurrentScene
+```
+
+#### Automatic Telemetry Triggering
+Every call to `Abxr.Event()` automatically triggers system telemetry collection unless explicitly disabled:
+```cpp
+// These automatically send telemetry data
+Abxr.Event("user_action");                    // sendTelemetry=true (default)
+Abxr.Event("quiet_event", meta, false);       // sendTelemetry=false (manual override)
+
+// Automatic telemetry includes:
+// - TrackSystemInfo.SendAll() - performance metrics, hardware info
+// - TrackInputDevices.SendLocationData() - headset/controller positions
+```
+
+#### Duration Auto-Calculation
+When using timed events or event wrappers, duration is automatically calculated and included:
+```cpp
+// Manual timed events
+Abxr.StartTimedEvent("puzzle_solving");
+// ... 30 seconds later ...
+Abxr.Event("puzzle_solving"); // Automatically includes {"duration": "30"}
+
+// Event wrapper functions automatically handle duration
+Abxr.EventAssessmentStart("final_exam");
+// ... 45 seconds later ...
+Abxr.EventAssessmentComplete("final_exam", 95, EventStatus.Pass); // Automatically includes duration
+
+// Works for all start/complete pairs:
+// - EventAssessmentStart/Complete
+// - EventObjectiveStart/Complete  
+// - EventInteractionStart/Complete
+// - EventLevelStart/Complete
+
+// Duration defaults to "0" if no corresponding start event was found
+// Timer is automatically removed after the first matching event
+```
+
 ---
 
 ## Advanced Features
@@ -511,6 +572,30 @@ Abxr.ClearModuleTargets();
 - **Error recovery**: Clear corrupted module target data
 - **Testing**: Reset module queue during development
 - **Session management**: Clean up between different users
+
+#### Persistence and Recovery
+
+Module targets are automatically persisted across app sessions and device restarts:
+
+```cpp
+// Module targets are automatically saved when received from authentication
+// No manual intervention required
+
+// When app restarts or crashes, module queue is automatically restored
+CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads from storage if needed
+```
+
+**Automatic Recovery Features:**
+- **Session Persistence**: Module target queue survives app crashes and restarts
+- **Lazy Loading**: Queue is automatically loaded from storage when first accessed
+- **Error Resilience**: Failed storage operations are logged but don't crash the application
+- **Cross-Session Continuity**: Users can continue multi-module experiences across sessions
+
+**Storage Details:**
+- Module targets are stored in user-scoped storage (not device-scoped)
+- Storage key: `"AbxrModuleTargetQueue"` (handled internally)
+- Automatic cleanup when `ClearModuleTargets()` is called
+- Uses ABXRLib's storage system for reliability and sync capabilities
 
 #### Best Practices
 
