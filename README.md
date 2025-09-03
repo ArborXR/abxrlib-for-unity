@@ -530,7 +530,7 @@ The **Module Target** feature enables developers to create single applications w
 You can also process module targets sequentially:
 
 ```cpp
-// Get the next module target from the queue
+// Get the next module target from available modules
 CurrentSessionData nextTarget = Abxr.GetModuleTarget();
 if (nextTarget != null)
 {
@@ -556,46 +556,58 @@ string userEmail = Abxr.GetUserEmail();
 
 #### Module Target Management
 
-You can also manage the module target queue directly:
+You can manage module progress and access rich module data:
 
 ```cpp
-// Check how many module targets remain
-int count = Abxr.GetModuleTargetCount();
-Debug.Log($"Modules remaining: {count}");
+// Check remaining modules and preview current
+int remaining = Abxr.GetModuleTargetCount();
+ModuleData currentModule = Abxr.GetCurrentModule();
+if (currentModule != null)
+{
+    Debug.Log($"Next: {currentModule.name} ({remaining} remaining)");
+}
 
-// Clear all module targets and storage
+// Get all available modules
+var allModules = Abxr.GetAvailableModules();
+Debug.Log($"Total modules: {allModules.Count}");
+
+// Reset progress or access learner data
 Abxr.ClearModuleTargets();
+var learnerData = Abxr.GetLearnerData();
 ```
 
 **Use Cases:**
-- **Reset state**: Clear module targets when starting a new experience
-- **Error recovery**: Clear corrupted module target data
-- **Testing**: Reset module queue during development
+- **Reset state**: Reset module progress when starting a new experience
+- **Error recovery**: Clear module progress and restart from beginning
+- **Testing**: Reset module sequence during development
 - **Session management**: Clean up between different users
+- **Rich module data**: Access complete module information including names, IDs, and ordering
 
 #### Persistence and Recovery
 
-Module targets are automatically persisted across app sessions and device restarts:
+Module progress is automatically persisted across app sessions and device restarts:
 
 ```cpp
-// Module targets are automatically saved when received from authentication
-// No manual intervention required
+// Module data is automatically retrieved from authentication response
+// Module progress is automatically saved when advancing through modules
 
-// When app restarts or crashes, module queue is automatically restored
-CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads from storage if needed
+// When app restarts or crashes, module progress is automatically restored
+CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads progress from storage if needed
 ```
 
 **Automatic Recovery Features:**
-- **Session Persistence**: Module target queue survives app crashes and restarts
-- **Lazy Loading**: Queue is automatically loaded from storage when first accessed
+- **Session Persistence**: Module progress survives app crashes and restarts
+- **Lazy Loading**: Progress is automatically loaded from storage when first accessed
 - **Error Resilience**: Failed storage operations are logged but don't crash the application
 - **Cross-Session Continuity**: Users can continue multi-module experiences across sessions
+- **Rich Data Access**: Complete module information available from authentication response
 
 **Storage Details:**
-- Module targets are stored in user-scoped storage (not device-scoped)
-- Storage key: `"AbxrModuleTargetQueue"` (handled internally)
+- Module progress is stored in user-scoped storage (not device-scoped)
+- Storage key: `"AbxrModuleIndex"` (handled internally)
 - Automatic cleanup when `ClearModuleTargets()` is called
 - Uses ABXRLib's storage system for reliability and sync capabilities
+- Module data comes directly from authentication response for accuracy
 
 #### Best Practices
 
@@ -722,6 +734,43 @@ else
 - **UI state management**: Show online/offline status indicators  
 - **Error prevention**: Check connection before making API calls
 - **Feature gating**: Enable/disable features that require server communication
+
+#### Accessing Learner Data
+
+After authentication completes, you can access comprehensive learner data and preferences:
+
+```cpp
+// Get learner data and preferences
+Dictionary<string, object> learnerData = Abxr.GetLearnerData();
+if (learnerData != null)
+{
+    var userName = learnerData["name"]?.ToString();
+    var audioPreference = learnerData["audioPreference"]?.ToString();
+    
+    Debug.Log($"Welcome back, {userName}!");
+    SetAudioLevel(audioPreference);
+}
+
+// Check connection status before accessing data
+if (Abxr.ConnectionActive())
+{
+    CustomizeExperience(Abxr.GetLearnerData());
+}
+```
+
+**Returns:** Dictionary containing learner data from the authentication response, or null if not authenticated
+
+**Available Data (when provided by authentication response):**
+- **User Preferences**: `audioPreference`, `speedPreference`, `textPreference`
+- **User Information**: `name`, `email`, `id`, `user_id`
+- **Custom Fields**: Any additional data provided in the userData object
+
+**Use Cases:**
+- **Personalization**: Customize audio levels, playback speed, and text size based on user preferences
+- **Accessibility**: Apply user-specific accessibility settings automatically
+- **User Experience**: Greet users by name and show personalized content
+- **Analytics**: Track usage patterns based on user preferences
+- **Adaptive Content**: Adjust content difficulty or presentation based on user data
 
 ### Headset Removal
 To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.

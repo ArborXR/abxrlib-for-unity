@@ -39,6 +39,10 @@ namespace AbxrLib.Runtime.Authentication
         private static Dictionary<string, object> _userDataCache;
         private static string _userEmailCache;
         private static object _userIdCache;
+        
+        // Complete authentication response data
+        private static string _authResponseAppId;
+        private static List<Dictionary<string, object>> _authResponseModules;
     
         private const string DeviceIdKey = "abxrlib_device_id";
 
@@ -90,6 +94,8 @@ namespace AbxrLib.Runtime.Authentication
             _userDataCache = null;
             _userIdCache = null;
             _userEmailCache = null;
+            _authResponseAppId = null;
+            _authResponseModules = null;
         
             CoroutineRunner.Instance.StartCoroutine(Authenticate());
         }
@@ -281,14 +287,16 @@ namespace AbxrLib.Runtime.Authentication
                 Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                 _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
                 
-                // Extract and cache user data from JWT token
-                CacheUserDataFromJwt(decodedJwt);
+                // Cache complete authentication response data
+                CacheAuthResponseData(postResponse, decodedJwt);
                 
                 _keyboardAuthSuccess = true;
                 
-                // Notify authentication completion with new callback system
-                // TODO: Parse module targets from auth response if available
-                Abxr.NotifyAuthCompleted(true, false);
+                // Extract module targets for notification
+                List<string> moduleTargets = ExtractModuleTargets(postResponse.Modules);
+                
+                // Notify authentication completion with complete auth response data
+                Abxr.NotifyAuthCompleted(true, false, moduleTargets);
             }
             else
             {
@@ -300,6 +308,8 @@ namespace AbxrLib.Runtime.Authentication
                 _userDataCache = null;
                 _userIdCache = null;
                 _userEmailCache = null;
+                _authResponseAppId = null;
+                _authResponseModules = null;
                 
                 // Notify authentication failure
                 Abxr.NotifyAuthCompleted(false, false);
@@ -385,6 +395,125 @@ namespace AbxrLib.Runtime.Authentication
         public static string GetUserEmail()
         {
             return _userEmailCache;
+        }
+
+        internal static string GetToken()
+        {
+            return _authToken;
+        }
+
+        internal static string GetSecret()
+        {
+            return _apiSecret;
+        }
+
+        public static string GetAppId()
+        {
+            return _authResponseAppId;
+        }
+
+        public static List<Dictionary<string, object>> GetModules()
+        {
+            return _authResponseModules;
+        }
+
+        private static void CacheAuthResponseData(AuthResponse authResponse, Dictionary<string, object> decodedJwt)
+        {
+            try
+            {
+                // Cache data from auth response (if available)
+                if (authResponse.UserData != null)
+                {
+                    _userDataCache = authResponse.UserData;
+                    
+                    // Extract user email from userData if available
+                    if (authResponse.UserData.ContainsKey("email"))
+                    {
+                        _userEmailCache = authResponse.UserData["email"]?.ToString();
+                    }
+                }
+                else
+                {
+                    // Fallback to JWT data if no userData in response
+                    _userDataCache = new Dictionary<string, object>(decodedJwt);
+                    
+                    if (decodedJwt.ContainsKey("email"))
+                    {
+                        _userEmailCache = decodedJwt["email"]?.ToString();
+                    }
+                }
+
+                // Cache user ID from auth response or fallback to JWT
+                if (authResponse.UserId != null)
+                {
+                    _userIdCache = authResponse.UserId;
+                }
+                else
+                {
+                    // Extract user ID from JWT (typically 'sub' claim)
+                    if (decodedJwt.ContainsKey("sub"))
+                    {
+                        _userIdCache = decodedJwt["sub"];
+                    }
+                    else if (decodedJwt.ContainsKey("userId"))
+                    {
+                        _userIdCache = decodedJwt["userId"];
+                    }
+                }
+
+                // Cache appId and modules from auth response
+                _authResponseAppId = authResponse.AppId;
+                _authResponseModules = authResponse.Modules ?? new List<Dictionary<string, object>>();
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib - Failed to cache auth response data: {ex.Message}");
+                _userDataCache = null;
+                _userIdCache = null;
+                _userEmailCache = null;
+                _authResponseAppId = null;
+                _authResponseModules = null;
+            }
+        }
+
+        private static List<string> ExtractModuleTargets(List<Dictionary<string, object>> modules)
+        {
+            var moduleTargets = new List<string>();
+            if (modules == null) return moduleTargets;
+
+            try
+            {
+                // Create a list of modules with their order for sorting
+                var modulesWithOrder = new List<(Dictionary<string, object> module, int order)>();
+                
+                foreach (var module in modules)
+                {
+                    int order = 0;
+                    if (module.ContainsKey("order") && module["order"] != null)
+                    {
+                        int.TryParse(module["order"].ToString(), out order);
+                    }
+                    modulesWithOrder.Add((module, order));
+                }
+
+                // Sort modules by order field
+                modulesWithOrder.Sort((a, b) => a.order.CompareTo(b.order));
+
+                // Extract targets in correct order
+                foreach (var (module, _) in modulesWithOrder)
+                {
+                    if (module.ContainsKey("target") && module["target"] != null)
+                    {
+                        moduleTargets.Add(module["target"].ToString());
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib - Failed to extract module targets: {ex.Message}");
+            }
+
+            return moduleTargets;
         }
 
         private static void CacheUserDataFromJwt(Dictionary<string, object> decodedJwt)
@@ -481,6 +610,10 @@ namespace AbxrLib.Runtime.Authentication
         {
             public string Token;
             public string Secret;
+            public Dictionary<string, object> UserData;
+            public object UserId;
+            public string AppId;
+            public List<Dictionary<string, object>> Modules;
 
             [Preserve]
             public AuthResponse() {}
