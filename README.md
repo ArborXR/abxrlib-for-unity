@@ -25,6 +25,7 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
    - [Debug Window](#debug-window)
    - [ArborXR Device Management](#arborxr-device-management)
    - [Mixpanel Compatibility](#mixpanel-compatibility)
+   - [Cognitive3D Compatibility](#cognitive3d-compatibility)
 8. [Support](#support)
    - [Resources](#resources)
    - [FAQ](#faq)
@@ -530,7 +531,7 @@ The **Module Target** feature enables developers to create single applications w
 You can also process module targets sequentially:
 
 ```cpp
-// Get the next module target from the queue
+// Get the next module target from available modules
 CurrentSessionData nextTarget = Abxr.GetModuleTarget();
 if (nextTarget != null)
 {
@@ -556,46 +557,58 @@ string userEmail = Abxr.GetUserEmail();
 
 #### Module Target Management
 
-You can also manage the module target queue directly:
+You can manage module progress and access rich module data:
 
 ```cpp
-// Check how many module targets remain
-int count = Abxr.GetModuleTargetCount();
-Debug.Log($"Modules remaining: {count}");
+// Check remaining modules and preview current
+int remaining = Abxr.GetModuleTargetCount();
+ModuleData currentModule = Abxr.GetCurrentModule();
+if (currentModule != null)
+{
+    Debug.Log($"Next: {currentModule.name} ({remaining} remaining)");
+}
 
-// Clear all module targets and storage
+// Get all available modules
+var allModules = Abxr.GetAvailableModules();
+Debug.Log($"Total modules: {allModules.Count}");
+
+// Reset progress or access learner data
 Abxr.ClearModuleTargets();
+var learnerData = Abxr.GetLearnerData();
 ```
 
 **Use Cases:**
-- **Reset state**: Clear module targets when starting a new experience
-- **Error recovery**: Clear corrupted module target data
-- **Testing**: Reset module queue during development
+- **Reset state**: Reset module progress when starting a new experience
+- **Error recovery**: Clear module progress and restart from beginning
+- **Testing**: Reset module sequence during development
 - **Session management**: Clean up between different users
+- **Rich module data**: Access complete module information including names, IDs, and ordering
 
 #### Persistence and Recovery
 
-Module targets are automatically persisted across app sessions and device restarts:
+Module progress is automatically persisted across app sessions and device restarts:
 
 ```cpp
-// Module targets are automatically saved when received from authentication
-// No manual intervention required
+// Module data is automatically retrieved from authentication response
+// Module progress is automatically saved when advancing through modules
 
-// When app restarts or crashes, module queue is automatically restored
-CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads from storage if needed
+// When app restarts or crashes, module progress is automatically restored
+CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads progress from storage if needed
 ```
 
 **Automatic Recovery Features:**
-- **Session Persistence**: Module target queue survives app crashes and restarts
-- **Lazy Loading**: Queue is automatically loaded from storage when first accessed
+- **Session Persistence**: Module progress survives app crashes and restarts
+- **Lazy Loading**: Progress is automatically loaded from storage when first accessed
 - **Error Resilience**: Failed storage operations are logged but don't crash the application
 - **Cross-Session Continuity**: Users can continue multi-module experiences across sessions
+- **Rich Data Access**: Complete module information available from authentication response
 
 **Storage Details:**
-- Module targets are stored in user-scoped storage (not device-scoped)
-- Storage key: `"AbxrModuleTargetQueue"` (handled internally)
+- Module progress is stored in user-scoped storage (not device-scoped)
+- Storage key: `"AbxrModuleIndex"` (handled internally)
 - Automatic cleanup when `ClearModuleTargets()` is called
 - Uses ABXRLib's storage system for reliability and sync capabilities
+- Module data comes directly from authentication response for accuracy
 
 #### Best Practices
 
@@ -722,6 +735,43 @@ else
 - **UI state management**: Show online/offline status indicators  
 - **Error prevention**: Check connection before making API calls
 - **Feature gating**: Enable/disable features that require server communication
+
+#### Accessing Learner Data
+
+After authentication completes, you can access comprehensive learner data and preferences:
+
+```cpp
+// Get learner data and preferences
+Dictionary<string, object> learnerData = Abxr.GetLearnerData();
+if (learnerData != null)
+{
+    var userName = learnerData["name"]?.ToString();
+    var audioPreference = learnerData["audioPreference"]?.ToString();
+    
+    Debug.Log($"Welcome back, {userName}!");
+    SetAudioLevel(audioPreference);
+}
+
+// Check connection status before accessing data
+if (Abxr.ConnectionActive())
+{
+    CustomizeExperience(Abxr.GetLearnerData());
+}
+```
+
+**Returns:** Dictionary containing learner data from the authentication response, or null if not authenticated
+
+**Available Data (when provided by authentication response):**
+- **User Preferences**: `audioPreference`, `speedPreference`, `textPreference`
+- **User Information**: `name`, `email`, `id`, `user_id`
+- **Custom Fields**: Any additional data provided in the userData object
+
+**Use Cases:**
+- **Personalization**: Customize audio levels, playback speed, and text size based on user preferences
+- **Accessibility**: Apply user-specific accessibility settings automatically
+- **User Experience**: Greet users by name and show personalized content
+- **Analytics**: Track usage patterns based on user preferences
+- **Adaptive Content**: Adjust content difficulty or presentation based on user data
 
 ### Headset Removal
 To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.
@@ -903,6 +953,184 @@ Abxr.Track("puzzle_solving"); // Duration automatically included
 | **Open Source** | ❌ | ✅ |
 
 **Migration:** Simply replace `Mixpanel.Track` → `Abxr.Track` throughout your codebase.
+
+### Cognitive3D Compatibility
+
+The ABXRLib SDK provides full compatibility with Cognitive3D SDK, making migration simple and straightforward for event tracking. You can replace your existing Cognitive3D tracking calls with minimal code changes while gaining access to ABXR's advanced XR analytics capabilities and LMS integrations.
+
+> **Note:** This compatibility guide covers event tracking only. Spatial analytics features of Cognitive3D are not covered as they have different architectures.
+
+#### Why Migrate from Cognitive3D?
+
+- **LMS Integration**: Native LMS platform support with SCORM/xAPI compatibility
+- **Advanced Analytics**: Purpose-built dashboards for learning and training outcomes
+- **Enterprise Features**: Session management, cross-device continuity, and AI-powered insights
+- **Open Source**: No vendor lock-in, deploy to any backend service
+- **Structured Events**: Rich event wrappers for assessments, objectives, and interactions
+
+#### Migration Overview
+
+| **Cognitive3D SDK**                          | **Equivalent in AbxrLib SDK**                                                |
+| -------------------------------------------- | ---------------------------------------------------------------------------- |
+| `new CustomEvent("event_name").Send()`       | `new Abxr.CustomEvent("event_name").Send()` or `Abxr.Event("event_name")`    |
+| `Cognitive3D.StartEvent("assessment")`       | `Abxr.StartEvent("assessment")` or `Abxr.EventAssessmentStart("assessment")` |
+| `Cognitive3D.EndEvent("assessment", result)` | `Abxr.EndEvent("assessment", result)` or `Abxr.EventAssessmentComplete(...)` |
+| `Cognitive3D.SendEvent("event", props)`      | `Abxr.SendEvent("event", props)` or `Abxr.EventObjectiveComplete(...)`       |
+| `Cognitive3D.SetSessionProperty(key, val)`   | `Abxr.SetSessionProperty(key, val)` or `Abxr.Register(key, val)`             |
+| `Cognitive3D.Log("message")`                 | `Abxr.Log("message")` or `Abxr.LogInfo("message")`                           |
+
+#### Migration Steps
+
+**Step 1: Namespace Updates**
+```cpp
+// Option 1: Update using statements
+// Before: using Cognitive3D;
+// After:   (remove - use Abxr static methods)
+
+// Option 2: String replacement approach
+// Replace "Cognitive3D." with "Abxr." throughout your codebase for compatibility methods
+```
+
+**Step 2: Event Tracking Migration**
+
+```cpp
+///// CUSTOM EVENTS /////
+
+// Before (Cognitive3D):
+new Cognitive3D.CustomEvent("Pressed Space").Send();
+
+// After (ABXRLib) - Direct replacement:
+new Abxr.CustomEvent("Pressed Space").Send();
+
+// After (ABXRLib) - Recommended approach:
+Abxr.Event("Pressed Space");
+
+///// START/END EVENTS (Assessment Tracking) /////
+
+// Before (Cognitive3D):
+Cognitive3D.StartEvent("final_exam");
+Cognitive3D.EndEvent("final_exam", "pass", 95);
+
+// After (ABXRLib) - Direct replacement:
+Abxr.StartEvent("final_exam");
+Abxr.EndEvent("final_exam", "pass", 95);
+
+// After (ABXRLib) - Recommended approach:
+Abxr.EventAssessmentStart("final_exam");
+Abxr.EventAssessmentComplete("final_exam", 95, EventStatus.Pass);
+
+///// SEND EVENT (Objective Tracking) /////
+
+// Before (Cognitive3D):
+Cognitive3D.SendEvent("valve_opened", new Dictionary<string, object> {
+    {"result", "success"},
+    {"score", 100}
+});
+
+// After (ABXRLib) - Direct replacement:
+Abxr.SendEvent("valve_opened", new Dictionary<string, object> {
+    {"result", "success"},
+    {"score", 100}
+});
+
+// After (ABXRLib) - Recommended approach:
+Abxr.EventObjectiveComplete("valve_opened", 100, EventStatus.Complete);
+
+///// SESSION PROPERTIES /////
+
+// Before (Cognitive3D):
+Cognitive3D.SetSessionProperty("user_type", "technician");
+
+// After (ABXRLib) - Direct replacement:
+Abxr.SetSessionProperty("user_type", "technician");
+
+// After (ABXRLib) - Recommended approach:
+Abxr.Register("user_type", "technician");
+
+///// LOGGING /////
+
+// Before (Cognitive3D):
+Cognitive3D.Log("Assessment started");
+
+// After (ABXRLib):
+Abxr.Log("Assessment started"); // Defaults to "info" level
+// Or with specific levels:
+Abxr.Log("Assessment started", "info");
+Abxr.Log("Error occurred", "error");
+```
+
+#### Advanced Migration Features
+
+**Custom Event Properties:**
+```cpp
+// Cognitive3D approach:
+new Cognitive3D.CustomEvent("button_press")
+    .SetProperty("button_id", "submit")
+    .SetProperty("screen", "main_menu")
+    .Send();
+
+// ABXRLib equivalent:
+new Abxr.CustomEvent("button_press")
+    .SetProperty("button_id", "submit")
+    .SetProperty("screen", "main_menu")
+    .Send();
+
+// ABXRLib recommended:
+Abxr.Event("button_press", new Dictionary<string, string> {
+    {"button_id", "submit"},
+    {"screen", "main_menu"}
+});
+```
+
+**Result Conversion Logic:**
+
+The ABXRLib compatibility layer automatically converts common Cognitive3D result formats:
+
+```cpp
+// These Cognitive3D result values...
+"pass", "success", "complete", "true", "1" → EventStatus.Pass
+"fail", "error", "false", "0"              → EventStatus.Fail  
+"incomplete"                               → EventStatus.Incomplete
+"browse"                                   → EventStatus.Browsed
+// All others                              → EventStatus.Complete (default)
+```
+
+#### Key Advantages Over Cognitive3D
+
+| Feature | Cognitive3D | ABXRLib SDK |
+|---------|-------------|-----------|
+| **Basic Event Tracking** | ✅ | ✅ |
+| **Custom Properties** | ✅ | ✅ |
+| **Session Properties** | ✅ | ✅ (Enhanced with persistence) |
+| **LMS Integration** | ❌ | ✅ (SCORM, xAPI, major platforms) |
+| **Structured Learning Events** | ❌ | ✅ (Assessments, Objectives, Interactions) |
+| **Cross-Device Sessions** | ❌ | ✅ (Resume training across devices) |
+| **AI-Powered Insights** | ❌ | ✅ (Content optimization, learner analysis) |
+| **Open Source** | ❌ | ✅ |
+
+#### Migration Recommendations
+
+**For Quick Migration:**
+1. Use the direct compatibility methods (`Abxr.StartEvent`, `Abxr.EndEvent`, etc.)
+2. Perform string replacement: `"Cognitive3D."` → `"Abxr."`
+3. Test existing functionality
+
+**For Enhanced Features:**
+1. Replace `StartEvent`/`EndEvent` with `EventAssessmentStart`/`EventAssessmentComplete`
+2. Replace `SendEvent` with `EventObjectiveComplete` where appropriate
+3. Use structured `EventStatus` enum instead of string results
+4. Add `InteractionType` tracking for detailed user behavior analysis
+
+**Migration Path:**
+```cpp
+// Phase 1: Direct replacement (immediate compatibility)
+Abxr.StartEvent("training_module");        // Works immediately
+Abxr.EndEvent("training_module", "pass");  // Automatic conversion
+
+// Phase 2: Enhanced features (recommended)  
+Abxr.EventAssessmentStart("training_module");
+Abxr.EventAssessmentComplete("training_module", 92, EventStatus.Pass);
+```
 
 ## Support
 

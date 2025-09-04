@@ -32,12 +32,15 @@ public static class Abxr
 
 	public static Action onHeadsetPutOnNewSession;
 
-	// Module Target queue for sequential LMS multi-module applications
-	private static Queue<string> moduleTargetQueue = new Queue<string>();
-	private const string ModuleTargetQueueKey = "AbxrModuleTargetQueue";
+	// Module index for sequential LMS multi-module applications
+	private static int currentModuleIndex = 0;
+	private const string ModuleIndexKey = "AbxrModuleIndex";
 
 	// Internal list of authentication completion callbacks
 	private static readonly List<System.Action<AuthCompletedData>> authCompletedCallbacks = new();
+	
+	// Global storage for the latest authentication completion data
+	private static AuthCompletedData latestAuthCompletedData = null;
 	
 	// Connection status - tracks whether AbxrLib can communicate with the server
 	private static bool connectionActive = false;
@@ -144,26 +147,94 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Data structure for authentication completion information
+	/// Data structure for module information from authentication response
+	/// </summary>
+	[System.Serializable]
+	public class ModuleData
+	{
+		public string id;       // Module unique identifier
+		public string name;     // Module display name
+		public string target;   // Module target identifier
+		public int order;       // Module order/sequence
+
+		public ModuleData(string id, string name, string target, int order)
+		{
+			this.id = id;
+			this.name = name;
+			this.target = target;
+			this.order = order;
+		}
+	}
+
+	/// <summary>
+	/// Data structure for complete authentication response information
+	/// Contains the full authentication payload for JSON reconstruction and comprehensive access
 	/// </summary>
 	[System.Serializable]
 	public class AuthCompletedData
 	{
 		public bool success;             // Whether authentication was successful
-		public object userData;          // Additional user data from authentication response
+		public string token;             // Authentication token
+		public string secret;            // Authentication secret
+		public object userData;          // Complete user data object from authentication response
 		public object userId;            // User identifier
-		public string userEmail;         // User email address
-		public string moduleTarget;      // Target module from LMS (if applicable)
+		public string userEmail;         // User email address (extracted from userData.email)
+		public string appId;             // Application identifier
+		public List<ModuleData> modules; // List of available modules
+		public string moduleTarget;      // Target module from first module (backward compatibility)
 		public bool isReauthentication;  // Whether this was a reauthentication (vs initial auth)
 
-		public AuthCompletedData(bool success, object userData, object userId, string userEmail, string moduleTarget, bool isReauthentication)
+		public AuthCompletedData(bool success, string token, string secret, object userData, object userId, string userEmail, string appId, List<ModuleData> modules, string moduleTarget, bool isReauthentication)
 		{
 			this.success = success;
+			this.token = token;
+			this.secret = secret;
 			this.userData = userData;
 			this.userId = userId;
 			this.userEmail = userEmail;
+			this.appId = appId;
+			this.modules = modules ?? new List<ModuleData>();
 			this.moduleTarget = moduleTarget;
 			this.isReauthentication = isReauthentication;
+		}
+
+		/// <summary>
+		/// Reconstruct the original authentication response as a JSON string
+		/// Useful for debugging or passing complete auth data to other systems
+		/// </summary>
+		/// <returns>JSON representation of the authentication response</returns>
+		public string ToJsonString()
+		{
+			try
+			{
+				var authResponse = new Dictionary<string, object>
+				{
+					["token"] = token ?? "",
+					["secret"] = secret ?? "",
+					["userData"] = userData,
+					["userId"] = userId,
+					["appId"] = appId ?? ""
+				};
+
+				if (modules != null && modules.Count > 0)
+				{
+					var moduleArray = modules.Select(m => new Dictionary<string, object>
+					{
+						["id"] = m.id ?? "",
+						["name"] = m.name ?? "",
+						["target"] = m.target ?? "",
+						["order"] = m.order
+					}).ToArray();
+					authResponse["modules"] = moduleArray;
+				}
+
+				return JsonUtility.ToJson(authResponse, true);
+			}
+			catch (System.Exception ex)
+			{
+				LogError($"Failed to serialize AuthCompletedData to JSON: {ex.Message}");
+				return "{}";
+			}
 		}
 	}
 
@@ -240,6 +311,38 @@ public static class Abxr
 		meta ??= new Dictionary<string, string>();
 		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		LogBatcher.Add("critical", text, meta);
+	}
+
+	/// <summary>
+	/// General logging method with configurable level
+	/// </summary>
+	/// <param name="message">The log message</param>
+	/// <param name="level">Log level: "debug", "info", "warn", "error", or "critical" (defaults to "info")</param>
+	/// <param name="meta">Any additional information (optional)</param>
+	public static void Log(string message, string level = "info", Dictionary<string, string> meta = null)
+	{
+		switch (level.ToLower())
+		{
+			case "debug":
+				LogDebug(message, meta);
+				break;
+			case "info":
+				LogInfo(message, meta);
+				break;
+			case "warn":
+			case "warning":
+				LogWarn(message, meta);
+				break;
+			case "error":
+				LogError(message, meta);
+				break;
+			case "critical":
+				LogCritical(message, meta);
+				break;
+			default:
+				LogInfo(message, meta);
+				break;
+		}
 	}
 
 	/// <summary>
@@ -352,6 +455,21 @@ public static class Abxr
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
 	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
 	{
+		// Check if basic authentication is ready
+		if (!Authentication.Authenticated())
+		{
+			// Basic authentication not ready, defer all storage requests
+			return;
+		}
+		
+		// For user-scoped storage, we need a user to actually be logged in
+		// For device-scoped storage, app-level authentication should be sufficient
+		if (scope == StorageScope.user && GetUserId() == null)
+		{
+			// User-scoped storage requires a user to be logged in, defer this request
+			return;
+		}
+		
 		StorageBatcher.Add("state", entry, scope, policy);
 	}
 
@@ -364,6 +482,21 @@ public static class Abxr
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
 	public static void StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
 	{
+		// Check if basic authentication is ready
+		if (!Authentication.Authenticated())
+		{
+			// Basic authentication not ready, defer all storage requests
+			return;
+		}
+		
+		// For user-scoped storage, we need a user to actually be logged in
+		// For device-scoped storage, app-level authentication should be sufficient
+		if (scope == StorageScope.user && GetUserId() == null)
+		{
+			// User-scoped storage requires a user to be logged in, defer this request
+			return;
+		}
+		
 		StorageBatcher.Add(name, entry, scope, policy);
 	}
 
@@ -904,34 +1037,94 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Get the next module target from the queue for sequential module processing
-	/// Returns null when no more module targets are available
-	/// Each call removes the next module target from the queue and updates persistent storage
+	/// Get the complete authentication data from the most recent authentication completion
+	/// This allows you to access user data, email, module targets, and authentication status anytime
+	/// Returns null if no authentication has completed yet
 	/// </summary>
-	/// <returns>The next CurrentSessionData or null if queue is empty</returns>
-	public static CurrentSessionData GetModuleTarget()
+	/// <returns>AuthCompletedData containing all authentication information, or null if not authenticated</returns>
+	public static AuthCompletedData GetAuthCompletedData()
 	{
-		// Load queue from storage if empty (in case of app restart)
-		if (moduleTargetQueue.Count == 0)
-		{
-			LoadModuleTargetQueue();
-		}
+		return latestAuthCompletedData;
+	}
 
-		// Return null if no more module targets
-		if (moduleTargetQueue.Count == 0)
+	/// <summary>
+	/// Get the learner/user data from the most recent authentication completion
+	/// This is the userData object from the authentication response, containing user preferences and information
+	/// Returns null if no authentication has completed yet
+	/// </summary>
+	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
+	public static Dictionary<string, object> GetLearnerData()
+	{
+		return latestAuthCompletedData?.userData as Dictionary<string, object>;
+	}
+
+	/// <summary>
+	/// Get all available modules from the authentication response
+	/// Provides complete module information including id, name, target, and order
+	/// Returns empty list if no authentication has completed yet
+	/// </summary>
+	/// <returns>List of ModuleData objects with complete module information</returns>
+	public static List<ModuleData> GetAvailableModules()
+	{
+		return latestAuthCompletedData?.modules ?? new List<ModuleData>();
+	}
+
+	/// <summary>
+	/// Get the current module in the sequence without advancing to the next one
+	/// Useful for checking what module the learner should be on without consuming it
+	/// Returns null if no modules are available or all modules have been completed
+	/// </summary>
+	/// <returns>ModuleData for the current module, or null if none available</returns>
+	public static ModuleData GetCurrentModule()
+	{
+		if (latestAuthCompletedData?.modules == null || latestAuthCompletedData.modules.Count == 0)
 		{
 			return null;
 		}
 
-		// Pop the next module target from the queue
-		var nextModuleTargetId = moduleTargetQueue.Dequeue();
+		LoadModuleIndex();
+
+		if (currentModuleIndex >= latestAuthCompletedData.modules.Count)
+		{
+			return null;
+		}
+
+		return latestAuthCompletedData.modules[currentModuleIndex];
+	}
+
+	/// <summary>
+	/// Get the next module target from the available modules for sequential module processing
+	/// Returns null when no more module targets are available
+	/// Each call moves to the next module in the sequence and updates persistent storage
+	/// </summary>
+	/// <returns>The next CurrentSessionData with complete module information, or null if no more modules</returns>
+	public static CurrentSessionData GetModuleTarget()
+	{
+		// Check if we have authentication data and modules
+		if (latestAuthCompletedData?.modules == null || latestAuthCompletedData.modules.Count == 0)
+		{
+			return null;
+		}
+
+		// Load current index from storage if needed
+		LoadModuleIndex();
+
+		// Return null if we've gone through all modules
+		if (currentModuleIndex >= latestAuthCompletedData.modules.Count)
+		{
+			return null;
+		}
+
+		// Get the next module
+		var nextModule = latestAuthCompletedData.modules[currentModuleIndex];
 		
-		// Update persistent storage with remaining queue
-		SaveModuleTargetQueue();
+		// Move to next module and save progress
+		currentModuleIndex++;
+		SaveModuleIndex();
 		
-		// Create CurrentSessionData with current session data
+		// Create CurrentSessionData with complete module information
 		return new CurrentSessionData(
-			nextModuleTargetId,
+			nextModule.target,
 			GetUserData(),
 			GetUserId(),
 			GetUserEmail()
@@ -939,31 +1132,17 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Initialize the module targets from authentication response
+	/// Initialize module processing from authentication response
 	/// Internal method - called by authentication system when authentication completes
+	/// Resets the module index to start from the beginning
 	/// </summary>
-	/// <param name="moduleTargets">List of module target identifiers from auth response</param>
+	/// <param name="moduleTargets">List of module target identifiers from auth response (legacy parameter)</param>
 	internal static void SetModuleTargets(List<string> moduleTargets)
 	{
-		if (moduleTargets == null || moduleTargets.Count == 0)
-		{
-			return;
-		}
-
-		// Clear existing queue
-		moduleTargetQueue.Clear();
-
-		// Add each module target ID to the queue
-		foreach (var moduleTargetId in moduleTargets)
-		{
-			if (!string.IsNullOrEmpty(moduleTargetId))
-			{
-				moduleTargetQueue.Enqueue(moduleTargetId);
-			}
-		}
-
-		// Save to persistent storage
-		SaveModuleTargetQueue();
+		// Reset module index to start from the beginning
+		// Note: moduleTargets parameter is now legacy - actual modules come from latestAuthCompletedData
+		currentModuleIndex = 0;
+		SaveModuleIndex();
 	}
 
 	/// <summary>
@@ -972,73 +1151,71 @@ public static class Abxr
 	/// <returns>Number of module targets remaining</returns>
 	public static int GetModuleTargetCount()
 	{
-		if (moduleTargetQueue.Count == 0)
+		if (latestAuthCompletedData?.modules == null)
 		{
-			LoadModuleTargetQueue();
+			return 0;
 		}
-		return moduleTargetQueue.Count;
+
+		LoadModuleIndex();
+		int remaining = latestAuthCompletedData.modules.Count - currentModuleIndex;
+		return Math.Max(0, remaining);
 	}
 
 	/// <summary>
-	/// Clear all module targets and storage
+	/// Clear module progress and reset to beginning
 	/// </summary>
 	public static void ClearModuleTargets()
 	{
-		moduleTargetQueue.Clear();
-		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, ModuleTargetQueueKey));
+		currentModuleIndex = 0;
+		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, ModuleIndexKey));
 	}
 
-	private static void SaveModuleTargetQueue()
+	private static void SaveModuleIndex()
 	{
 		try
 		{
-			var moduleTargetList = moduleTargetQueue.ToArray();
+			// Module tracking uses user scope for LMS integrations - requires user to be logged in
+			// The StorageSetEntry function will handle the authentication checks and defer until user auth is ready
 			var serializedData = new Dictionary<string, string>
 			{
-				["moduleTargets"] = string.Join(",", moduleTargetList)
+				["moduleIndex"] = currentModuleIndex.ToString()
 			};
 
-			StorageSetEntry(ModuleTargetQueueKey, serializedData, StorageScope.user, StoragePolicy.keepLatest);
+			StorageSetEntry(ModuleIndexKey, serializedData, StorageScope.user, StoragePolicy.keepLatest);
 		}
 		catch (System.Exception ex)
 		{
-			LogError($"Failed to save module target queue: {ex.Message}");
+			LogError($"Failed to save module index: {ex.Message}");
 		}
 	}
 
-	private static void LoadModuleTargetQueue()
+	private static void LoadModuleIndex()
 	{
 		try
 		{
-			CoroutineRunner.Instance.StartCoroutine(LoadModuleTargetQueueCoroutine());
+			CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
 		}
 		catch (System.Exception ex)
 		{
-			LogError($"Failed to load module target queue: {ex.Message}");
+			LogError($"Failed to load module index: {ex.Message}");
 		}
 	}
 
-	private static IEnumerator LoadModuleTargetQueueCoroutine()
+	private static IEnumerator LoadModuleIndexCoroutine()
 	{
-		yield return StorageGetEntry(ModuleTargetQueueKey, StorageScope.user, result =>
+		yield return StorageGetEntry(ModuleIndexKey, StorageScope.user, result =>
 		{
 			if (result != null && result.Count > 0)
 			{
 				var data = result[0]; // Get the first (and should be only) entry
-				if (data.ContainsKey("moduleTargets"))
+				if (data.ContainsKey("moduleIndex"))
 				{
-					moduleTargetQueue.Clear();
-					
-					var moduleTargetsString = data["moduleTargets"];
-					if (!string.IsNullOrEmpty(moduleTargetsString))
+					var moduleIndexString = data["moduleIndex"];
+					if (!string.IsNullOrEmpty(moduleIndexString))
 					{
-						var moduleTargets = moduleTargetsString.Split(',');
-						foreach (var moduleTarget in moduleTargets)
+						if (int.TryParse(moduleIndexString, out int savedIndex))
 						{
-							if (!string.IsNullOrEmpty(moduleTarget.Trim()))
-							{
-								moduleTargetQueue.Enqueue(moduleTarget.Trim());
-							}
+							currentModuleIndex = savedIndex;
 						}
 					}
 				}
@@ -1100,33 +1277,48 @@ public static class Abxr
 		
 		string firstModuleTarget = null;
 		
-		// Handle module targets if provided and authentication was successful
-		if (success && moduleTargets != null && moduleTargets.Count > 0)
+		// Create authentication data first to have access to complete modules
+		var moduleDataList = ConvertToModuleDataList(Authentication.GetModules());
+		
+		// Handle module targets if available and authentication was successful
+		if (success && moduleDataList != null && moduleDataList.Count > 0)
 		{
 			// Take the first module target for immediate use in OnAuthCompleted
-			firstModuleTarget = moduleTargets[0];
+			firstModuleTarget = moduleDataList[0].target;
 			
-			// Queue the remaining module targets for GetModuleTarget() calls
-			if (moduleTargets.Count > 1)
-			{
-				var remainingTargets = moduleTargets.GetRange(1, moduleTargets.Count - 1);
-				SetModuleTargets(remainingTargets);
-			}
+			// Set up module index for GetModuleTarget() calls
+			// If we have modules, start from index 1 since first module is used immediately
+			currentModuleIndex = moduleDataList.Count > 1 ? 1 : moduleDataList.Count;
+			SaveModuleIndex();
 		}
+		else
+		{
+			// No modules available, reset index
+			currentModuleIndex = 0;
+			SaveModuleIndex();
+		}
+
+		// Create authentication data and store it globally (regardless of whether there are callbacks)
+		var authData = new AuthCompletedData(
+			success,
+			Authentication.GetToken(),
+			Authentication.GetSecret(),
+			GetUserData(),
+			GetUserId(),
+			GetUserEmail(),
+			Authentication.GetAppId(),
+			moduleDataList,
+			firstModuleTarget, // First module target from the provided list, or null
+			isReauthentication
+		);
+		
+		// Store the authentication data globally for later access
+		latestAuthCompletedData = authData;
 
 		if (authCompletedCallbacks.Count == 0)
 		{
 			return;
 		}
-
-		var authData = new AuthCompletedData(
-			success,
-			GetUserData(),
-			GetUserId(),
-			GetUserEmail(),
-			firstModuleTarget, // First module target from the provided list, or null
-			isReauthentication
-		);
 
 		for (int i = 0; i < authCompletedCallbacks.Count; i++)
 		{
@@ -1141,6 +1333,253 @@ public static class Abxr
 		}
 	}
 
+	/// <summary>
+	/// Convert raw module dictionaries to typed ModuleData objects
+	/// Internal helper method for processing authentication response modules
+	/// Modules are automatically sorted by their order field
+	/// </summary>
+	/// <param name="rawModules">Raw module data from authentication response</param>
+	/// <returns>List of typed ModuleData objects sorted by order</returns>
+	private static List<ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
+	{
+		var moduleDataList = new List<ModuleData>();
+		if (rawModules == null) return moduleDataList;
+
+		try
+		{
+			var tempList = new List<ModuleData>();
+			
+			foreach (var rawModule in rawModules)
+			{
+				var id = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
+				var name = rawModule.ContainsKey("name") ? rawModule["name"]?.ToString() : "";
+				var target = rawModule.ContainsKey("target") ? rawModule["target"]?.ToString() : "";
+				var order = 0;
+				
+				if (rawModule.ContainsKey("order") && rawModule["order"] != null)
+				{
+					int.TryParse(rawModule["order"].ToString(), out order);
+				}
+
+				tempList.Add(new ModuleData(id, name, target, order));
+			}
+
+			// Sort modules by order field
+			moduleDataList = tempList.OrderBy(m => m.order).ToList();
+		}
+		catch (System.Exception ex)
+		{
+			LogError($"Failed to convert module data: {ex.Message}");
+		}
+
+		return moduleDataList;
+	}
+
+	#endregion
+
+	#region Cognitive3D Compatibility Methods
+	/// <summary>
+	/// Cognitive3D compatibility class for custom events
+	/// This class provides compatibility with Cognitive3D SDK for easier migration
+	/// Usage: new Cognitive3D.CustomEvent("event_name").Send() instead of Cognitive3D SDK calls
+	/// </summary>
+	public class CustomEvent
+	{
+		private readonly string eventName;
+		private Dictionary<string, string> properties;
+
+		public CustomEvent(string name)
+		{
+			eventName = name;
+			properties = new Dictionary<string, string>();
+		}
+
+		/// <summary>
+		/// Set a property for this custom event
+		/// </summary>
+		/// <param name="key">Property key</param>
+		/// <param name="value">Property value</param>
+		/// <returns>This CustomEvent instance for method chaining</returns>
+		public CustomEvent SetProperty(string key, object value)
+		{
+			properties[key] = value?.ToString() ?? string.Empty;
+			return this;
+		}
+
+		/// <summary>
+		/// Send the custom event to AbxrLib
+		/// </summary>
+		public void Send()
+		{
+			var meta = new Dictionary<string, string>(properties)
+			{
+				["Cognitive3DMethod"] = "CustomEvent"
+			};
+			Event(eventName, meta);
+		}
+	}
+
+	/// <summary>
+	/// Start an event (maps to EventAssessmentStart for Cognitive3D compatibility)
+	/// </summary>
+	/// <param name="eventName">Name of the event to start</param>
+	/// <param name="properties">Optional properties for the event</param>
+	public static void StartEvent(string eventName, Dictionary<string, object> properties = null)
+	{
+		var meta = new Dictionary<string, string>
+		{
+			["Cognitive3DMethod"] = "StartEvent"
+		};
+
+		if (properties != null)
+		{
+			foreach (var kvp in properties)
+			{
+				meta[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+			}
+		}
+
+		EventAssessmentStart(eventName, meta);
+	}
+
+	/// <summary>
+	/// End an event (maps to EventAssessmentComplete for Cognitive3D compatibility)
+	/// Attempts to convert Cognitive3D result formats to AbxrLib EventStatus
+	/// </summary>
+	/// <param name="eventName">Name of the event to end</param>
+	/// <param name="result">Event result (will attempt conversion to EventStatus)</param>
+	/// <param name="score">Optional score (defaults to 100)</param>
+	/// <param name="properties">Optional properties for the event</param>
+	public static void EndEvent(string eventName, object result = null, int score = 100, Dictionary<string, object> properties = null)
+	{
+		var meta = new Dictionary<string, string>
+		{
+			["Cognitive3DMethod"] = "EndEvent"
+		};
+
+		if (properties != null)
+		{
+			foreach (var kvp in properties)
+			{
+				meta[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
+			}
+		}
+
+		// Convert result to EventStatus with best guess logic
+		EventStatus status = EventStatus.Complete;
+		if (result != null)
+		{
+			string resultStr = result.ToString().ToLower();
+			if (resultStr.Contains("pass") || resultStr.Contains("success") || resultStr.Contains("complete") || resultStr == "true" || resultStr == "1")
+			{
+				status = EventStatus.Pass;
+			}
+			else if (resultStr.Contains("fail") || resultStr.Contains("error") || resultStr == "false" || resultStr == "0")
+			{
+				status = EventStatus.Fail;
+			}
+			else if (resultStr.Contains("incomplete"))
+			{
+				status = EventStatus.Incomplete;
+			}
+			else if (resultStr.Contains("browse"))
+			{
+				status = EventStatus.Browsed;
+			}
+		}
+
+		EventAssessmentComplete(eventName, score, status, meta);
+	}
+
+	/// <summary>
+	/// Send an event (maps to EventObjectiveComplete for Cognitive3D compatibility)
+	/// </summary>
+	/// <param name="eventName">Name of the event</param>
+	/// <param name="properties">Event properties</param>
+	public static void SendEvent(string eventName, Dictionary<string, object> properties = null)
+	{
+		var meta = new Dictionary<string, string>
+		{
+			["Cognitive3DMethod"] = "SendEvent"
+		};
+
+		int score = 100;
+		EventStatus status = EventStatus.Complete;
+
+		if (properties != null)
+		{
+			foreach (var kvp in properties)
+			{
+				string key = kvp.Key.ToLower();
+				string value = kvp.Value?.ToString() ?? string.Empty;
+				
+				// Extract score if provided
+				if (key == "score" && int.TryParse(value, out int parsedScore))
+				{
+					score = parsedScore;
+				}
+				// Extract status/result if provided
+				else if (key == "result" || key == "status" || key == "success")
+				{
+					if (value.ToLower().Contains("pass") || value.ToLower().Contains("success") || value == "true" || value == "1")
+					{
+						status = EventStatus.Pass;
+					}
+					else if (value.ToLower().Contains("fail") || value.ToLower().Contains("error") || value == "false" || value == "0")
+					{
+						status = EventStatus.Fail;
+					}
+					else if (value.ToLower().Contains("incomplete"))
+					{
+						status = EventStatus.Incomplete;
+					}
+				}
+
+				meta[kvp.Key] = value;
+			}
+		}
+
+		EventObjectiveComplete(eventName, score, status, meta);
+	}
+
+	/// <summary>
+	/// Set session property (maps to Register for Cognitive3D compatibility)
+	/// </summary>
+	/// <param name="key">Property key</param>
+	/// <param name="value">Property value</param>
+	public static void SetSessionProperty(string key, object value)
+	{
+		Register(key, value?.ToString() ?? string.Empty);
+	}
+
+	/// <summary>
+	/// Set participant property (stub for Cognitive3D compatibility - not implemented)
+	/// This method exists for string replacement compatibility but does not store data
+	/// Use AbxrLib's authentication system and GetLearnerData() instead
+	/// </summary>
+	/// <param name="key">Property key (ignored)</param>
+	/// <param name="value">Property value (ignored)</param>
+	[System.Obsolete("SetParticipantProperty is not implemented. Use AbxrLib's authentication system and GetLearnerData() instead.")]
+	public static void SetParticipantProperty(string key, object value)
+	{
+		// Intentionally empty stub for compatibility
+		LogWarn($"SetParticipantProperty called but not implemented. Key: {key}, Value: {value}. Use AbxrLib authentication system instead.");
+	}
+
+	/// <summary>
+	/// Get participant property (maps to GetLearnerData for Cognitive3D compatibility)
+	/// </summary>
+	/// <param name="key">Property key to retrieve</param>
+	/// <returns>Property value if found, null otherwise</returns>
+	public static object GetParticipantProperty(string key)
+	{
+		var learnerData = GetLearnerData();
+		if (learnerData != null && learnerData.ContainsKey(key))
+		{
+			return learnerData[key];
+		}
+		return null;
+	}
 	#endregion
 
 	#region Mixpanel Compatibility Methods
