@@ -101,6 +101,15 @@ public static class Abxr
 		Browsed
 	}
 
+	public enum LogLevel
+	{
+		Debug,
+		Info,
+		Warn,
+		Error,
+		Critical
+	}
+
 	public enum InteractionType
 	{
 		Null,
@@ -317,26 +326,25 @@ public static class Abxr
 	/// General logging method with configurable level
 	/// </summary>
 	/// <param name="message">The log message</param>
-	/// <param name="level">Log level: "debug", "info", "warn", "error", or "critical" (defaults to "info")</param>
+	/// <param name="level">Log level (defaults to LogLevel.Info)</param>
 	/// <param name="meta">Any additional information (optional)</param>
-	public static void Log(string message, string level = "info", Dictionary<string, string> meta = null)
+	public static void Log(string message, LogLevel level = LogLevel.Info, Dictionary<string, string> meta = null)
 	{
-		switch (level.ToLower())
+		switch (level)
 		{
-			case "debug":
+			case LogLevel.Debug:
 				LogDebug(message, meta);
 				break;
-			case "info":
+			case LogLevel.Info:
 				LogInfo(message, meta);
 				break;
-			case "warn":
-			case "warning":
+			case LogLevel.Warn:
 				LogWarn(message, meta);
 				break;
-			case "error":
+			case LogLevel.Error:
 				LogError(message, meta);
 				break;
-			case "critical":
+			case LogLevel.Critical:
 				LogCritical(message, meta);
 				break;
 			default:

@@ -272,10 +272,12 @@ The Log Methods provide straightforward logging functionality, similar to syslog
 
 ```cpp
 //C# Event Method Signatures
-public void Abxr.Log(LogLevel level, string message)
+public void Abxr.Log(string message, LogLevel level = LogLevel.Info)
 
 // Example usage
-Abxr.Log("Info", "Module started");
+Abxr.Log("Module started"); // Defaults to LogLevel.Info
+Abxr.Log("Module started", LogLevel.Info);
+Abxr.Log("Debug information", LogLevel.Debug);
 ```
 
 Use standard or severity-specific logging:
@@ -1053,10 +1055,10 @@ Abxr.Register("user_type", "technician");
 Cognitive3D.Log("Assessment started");
 
 // After (ABXRLib):
-Abxr.Log("Assessment started"); // Defaults to "info" level
+Abxr.Log("Assessment started"); // Defaults to LogLevel.Info
 // Or with specific levels:
-Abxr.Log("Assessment started", "info");
-Abxr.Log("Error occurred", "error");
+Abxr.Log("Assessment started", LogLevel.Info);
+Abxr.Log("Error occurred", LogLevel.Error);
 ```
 
 #### Advanced Migration Features
