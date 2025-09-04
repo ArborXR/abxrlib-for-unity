@@ -455,6 +455,21 @@ public static class Abxr
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
 	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
 	{
+		// Check if basic authentication is ready
+		if (!Authentication.Authenticated())
+		{
+			// Basic authentication not ready, defer all storage requests
+			return;
+		}
+		
+		// For user-scoped storage, we need a user to actually be logged in
+		// For device-scoped storage, app-level authentication should be sufficient
+		if (scope == StorageScope.user && GetUserId() == null)
+		{
+			// User-scoped storage requires a user to be logged in, defer this request
+			return;
+		}
+		
 		StorageBatcher.Add("state", entry, scope, policy);
 	}
 
@@ -467,6 +482,21 @@ public static class Abxr
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
 	public static void StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
 	{
+		// Check if basic authentication is ready
+		if (!Authentication.Authenticated())
+		{
+			// Basic authentication not ready, defer all storage requests
+			return;
+		}
+		
+		// For user-scoped storage, we need a user to actually be logged in
+		// For device-scoped storage, app-level authentication should be sufficient
+		if (scope == StorageScope.user && GetUserId() == null)
+		{
+			// User-scoped storage requires a user to be logged in, defer this request
+			return;
+		}
+		
 		StorageBatcher.Add(name, entry, scope, policy);
 	}
 
@@ -1144,6 +1174,8 @@ public static class Abxr
 	{
 		try
 		{
+			// Module tracking uses user scope for LMS integrations - requires user to be logged in
+			// The StorageSetEntry function will handle the authentication checks and defer until user auth is ready
 			var serializedData = new Dictionary<string, string>
 			{
 				["moduleIndex"] = currentModuleIndex.ToString()
