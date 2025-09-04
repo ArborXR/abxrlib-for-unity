@@ -71,6 +71,31 @@ public static class Abxr
 		}
 	}
 
+	/// <summary>
+	/// Simple dictionary wrapper for AbxrLib metadata
+	/// Provides easy way to create Dictionary<string, string> without requiring using statements
+	/// Usage: new Abxr.Dict { ["key"] = "value" } or new Abxr.Dict().Add("key", "value")
+	/// Automatically works with all AbxrLib methods that accept Dictionary<string, string>
+	/// </summary>
+	public class Dict : Dictionary<string, string>
+	{
+		public Dict() : base() { }
+		
+		public Dict(Dictionary<string, string> dictionary) : base(dictionary) { }
+		
+		/// <summary>
+		/// Fluent API for adding key-value pairs
+		/// </summary>
+		/// <param name="key">The key to add</param>
+		/// <param name="value">The value to add</param>
+		/// <returns>This Dict instance for method chaining</returns>
+		public Dict With(string key, string value)
+		{
+			this[key] = value;
+			return this;
+		}
+	}
+
 	public enum ResultOptions // Only here for backwards compatibility
 	{
 		Null,

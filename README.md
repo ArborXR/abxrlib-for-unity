@@ -128,22 +128,28 @@ public void Abxr.Event(string name, Dictionary<string, string> meta = null, Vect
 // Example Usage - Basic Event
 Abxr.Event("button_pressed");
 
-// Example Usage - Event with Metadata
-Abxr.Event("item_collected", new Dictionary<string, string> {
+// Example Usage - Event with Metadata (using Abxr.Dict - no using statements required!)
+Abxr.Event("item_collected", new Abxr.Dict {
     {"item_type", "coin"},
     {"item_value", "100"}
 });
 
 // Example Usage - Event with Metadata and Location
 Abxr.Event("player_teleported", 
-    new Dictionary<string, string> {{"destination", "spawn_point"}},
+    new Abxr.Dict {{"destination", "spawn_point"}},
     new Vector3(1.5f, 0.0f, -3.2f)
 );
+
+// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
+Abxr.Event("item_collected", new Dictionary<string, string> {
+    {"item_type", "coin"},
+    {"item_value", "100"}
+});
 ```
 
 **Parameters:**
 - `name` (string): The name of the event. Use snake_case for better analytics processing.
-- `meta` (Dictionary<string, string>): Optional. Additional key-value pairs describing the event.
+- `meta` (Dictionary<string, string> or Abxr.Dict): Optional. Additional key-value pairs describing the event. Use `Abxr.Dict` to avoid requiring using statements.
 - `location_data` (Vector3): Optional. The (x, y, z) coordinates of the event in 3D space.
 
 Logs a named event with optional metadata and spatial context. Timestamps and origin (`user` or `system`) are automatically appended.
@@ -211,7 +217,7 @@ Abxr.EventCritical("safety_violation");
 - `result` (Interactions): The result for the interaction is based on the InteractionType.
 - `result_details` (string): Optional. Additional details about the result. For interactions, this can be a single character or a string. For example: "a", "b", "c" or "correct", "incorrect".
 - `type` (InteractionType): Optional. The type of interaction for this event.
-- `meta` (Dictionary<string, string>): Optional. Additional key-value pairs describing the event.
+- `meta` (Dictionary<string, string> or Abxr.Dict): Optional. Additional key-value pairs describing the event. Use `Abxr.Dict` to avoid requiring using statements.
 
 **Note:** All complete events automatically calculate duration if a corresponding start event was logged.
 
@@ -292,7 +298,13 @@ public static void Abxr.LogCritical(string text, Dictionary<string, string> meta
 // Example usage
 Abxr.LogError("Critical error in assessment phase");
 
-// With metadata
+// With metadata (using Abxr.Dict - no using statements required!)
+Abxr.LogDebug("User interaction", new Abxr.Dict {
+    {"action", "button_click"},
+    {"screen", "main_menu"}
+});
+
+// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
 Abxr.LogDebug("User interaction", new Dictionary<string, string> {
     {"action", "button_click"},
     {"screen", "main_menu"}
@@ -312,7 +324,11 @@ public static IEnumerator Abxr.StorageGetEntry(string name, StorageScope scope, 
 public static IEnumerator Abxr.StorageGetDefaultEntry(StorageScope scope, Action<string> callback);
 public static void Abxr.StorageRemoveEntry(string name, StorageScope scope);
 
-// Save progress data
+// Save progress data (using Abxr.Dict - no using statements required!)
+Abxr.StorageSetEntry("state", new Abxr.Dict{{"progress", "75%"}}, StorageScope.user);
+Abxr.StorageSetDefaultEntry(new Abxr.Dict{{"progress", "75%"}}, StorageScope.user);
+
+// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
 Abxr.StorageSetEntry("state", new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
 Abxr.StorageSetDefaultEntry(new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
 
@@ -333,7 +349,7 @@ Abxr.StorageRemoveMultipleEntries(StorageScope.user); // Clear all entries (use 
 
 **Parameters:**
 - `name` (string): The identifier for this storage entry.
-- `entry` (Dictionary<string, string>): The key-value pairs to store.
+- `entry` (Dictionary<string, string> or Abxr.Dict): The key-value pairs to store. Use `Abxr.Dict` to avoid requiring using statements.
 - `scope` (StorageScope): Store/retrieve from 'device' or 'user' storage.
 - `policy` (StoragePolicy): How data should be stored - 'keepLatest' or 'appendHistory' (defaults to 'keepLatest').
 - `callback` (Action): Callback function for retrieval operations.
@@ -350,7 +366,12 @@ public static void Abxr.TelemetryEntry(string name, Dictionary<string, string> m
 // Manual telemetry activation (when auto-telemetry is disabled)
 Abxr.TrackAutoTelemetry();
 
-// Custom telemetry logging
+// Custom telemetry logging (using Abxr.Dict - no using statements required!)
+Abxr.TelemetryEntry("headset_position", new Abxr.Dict { 
+    {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
+});
+
+// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
 Abxr.TelemetryEntry("headset_position", new Dictionary<string, string> { 
     {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
 });
@@ -358,7 +379,7 @@ Abxr.TelemetryEntry("headset_position", new Dictionary<string, string> {
 
 **Parameters:**
 - `name` (string): The type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level").
-- `meta` (Dictionary<string, string>): Key-value pairs of telemetry measurements.
+- `meta` (Dictionary<string, string> or Abxr.Dict): Key-value pairs of telemetry measurements. Use `Abxr.Dict` to avoid requiring using statements.
 
 ---
 ### AI Integration
@@ -397,19 +418,62 @@ public static void Abxr.PollUser(string question, PollType pollType);
 Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
 ```
 
+### Abxr.Dict - Easy Metadata Creation
+
+**NEW:** The ABXRLib SDK now includes `Abxr.Dict` - a wrapper class that makes creating metadata dictionaries simple without requiring `using System.Collections.Generic;` statements:
+
+```cpp
+// Simple creation (no using statements needed!)
+var meta = new Abxr.Dict
+{
+    ["level"] = "5",
+    ["score"] = "1250"
+};
+
+// Fluent API for method chaining
+var meta = new Abxr.Dict()
+    .With("level", "5")
+    .With("score", "1250")
+    .With("completed", "true");
+
+// Works with all AbxrLib methods
+Abxr.Event("level_complete", new Abxr.Dict { ["time"] = "45.2" });
+Abxr.LogInfo("Player action", new Abxr.Dict { ["action"] = "jump" });
+Abxr.StorageSetEntry("progress", new Abxr.Dict { ["level"] = "3" }, StorageScope.user);
+```
+
+**Key Benefits:**
+- ✅ **No using statements required** - Works immediately without imports
+- ✅ **Backwards compatible** - Seamlessly integrates with existing Dictionary parameters  
+- ✅ **Multiple usage patterns** - Collection initializer, fluent API, or traditional approaches
+- ✅ **Automatic compatibility** - Inherits from Dictionary<string, string> for seamless integration
+
 ### Metadata Formats
 
 The ABXRLib SDK supports multiple flexible metadata formats. All formats are automatically converted to `Dictionary<string, string>`:
 
 ```cpp
-// 1. Native C# Dictionary (most efficient)
+// 1. Abxr.Dict (Recommended - no using statements required!)
+Abxr.Event("user_action", new Abxr.Dict
+{
+    ["action"] = "click",
+    ["userId"] = "12345"
+});
+
+// 2. Abxr.Dict with fluent API
+Abxr.Event("purchase_complete", new Abxr.Dict()
+    .With("amount", "29.99")
+    .With("currency", "USD")
+    .With("plan", "Premium"));
+
+// 3. Native C# Dictionary (requires using System.Collections.Generic;)
 Abxr.Event("user_action", new Dictionary<string, string>
 {
     ["action"] = "click",
     ["userId"] = "12345"
 });
 
-// 2. Mixpanel-style Dictionary (auto-converts objects)
+// 4. Mixpanel-style Dictionary (auto-converts objects)
 Abxr.Track("assessment_complete", new Dictionary<string, object>
 {
     ["score"] = 95,           // → "95"
@@ -417,24 +481,32 @@ Abxr.Track("assessment_complete", new Dictionary<string, object>
     ["timestamp"] = DateTime.UtcNow  // → ISO string
 });
 
-// 3. Abxr.Value class (Mixpanel compatibility)
+// 5. Abxr.Value class (Mixpanel compatibility)
 var props = new Abxr.Value();
 props["plan"] = "Premium";
 props["amount"] = 29.99;
 Abxr.Track("purchase_completed", props);
 
-// 4. No metadata
+// 6. No metadata
 Abxr.Event("app_started");
 
-// 5. With Unity Vector3 position data
+// 7. With Unity Vector3 position data
 Abxr.Event("player_teleported", transform.position, 
-    new Dictionary<string, string> { ["destination"] = "spawn_point" });
+    new Abxr.Dict { ["destination"] = "spawn_point" });
 ```
 
 #### JSON Arrays in Metadata
 
 ** Use pre-serialized JSON strings:**
 ```cpp
+// Using Abxr.Dict (recommended - no using statements required!)
+var meta = new Abxr.Dict
+{
+    ["items"] = "[\"sword\", \"shield\", \"potion\"]",
+    ["scores"] = "[95, 87, 92, 88]"
+};
+
+// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
 var meta = new Dictionary<string, string>
 {
     ["items"] = "[\"sword\", \"shield\", \"potion\"]",
@@ -456,8 +528,10 @@ public static string ToJsonArray<T>(this T[] array) =>
         : "[" + string.Join(", ", array) + "]";
 ```
 
-**Key Takeaway:** Always serialize arrays to JSON strings before passing to ABXRLib SDK methods.
-**Key Takeaway:** All event and log methods support these flexible metadata formats
+**Key Takeaways:** 
+- **Use `Abxr.Dict` for simplicity** - No using statements required, clean syntax
+- Always serialize arrays to JSON strings before passing to ABXRLib SDK methods
+- All event and log methods support these flexible metadata formats
 
 ### Automatic Data Collection
 
@@ -477,8 +551,8 @@ Super properties are automatically merged into **every** event's metadata. Event
 Abxr.Register("app_version", "1.2.3");
 Abxr.Register("user_type", "premium");
 
-// Every event automatically includes super properties
-Abxr.Event("level_complete", new Dictionary<string, string> {
+// Every event automatically includes super properties (using Abxr.Dict)
+Abxr.Event("level_complete", new Abxr.Dict {
     {"level", "3"}, 
     {"user_type", "trial"}  // This overrides the super property
 });
@@ -1077,7 +1151,13 @@ new Abxr.CustomEvent("button_press")
     .SetProperty("screen", "main_menu")
     .Send();
 
-// ABXRLib recommended:
+// ABXRLib recommended (using Abxr.Dict - no using statements required!):
+Abxr.Event("button_press", new Abxr.Dict {
+    {"button_id", "submit"},
+    {"screen", "main_menu"}
+});
+
+// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
 Abxr.Event("button_press", new Dictionary<string, string> {
     {"button_id", "submit"},
     {"screen", "main_menu"}
