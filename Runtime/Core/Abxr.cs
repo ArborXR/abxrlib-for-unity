@@ -288,15 +288,40 @@ public static class Abxr
 	public static bool ConnectionActive() => connectionActive;
 
 	/// <summary>
+	/// General logging method with configurable level - main logging function
+	/// </summary>
+	/// <param name="message">The log message</param>
+	/// <param name="level">Log level (defaults to LogLevel.Info)</param>
+	/// <param name="meta">Any additional information (optional)</param>
+	public static void Log(string message, LogLevel level = LogLevel.Info, Dictionary<string, string> meta = null)
+	{
+		meta ??= new Dictionary<string, string>();
+		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		
+		// Add super properties to all logs
+		meta = MergeSuperProperties(meta);
+		
+		string logLevel = level switch
+		{
+			LogLevel.Debug => "debug",
+			LogLevel.Info => "info",
+			LogLevel.Warn => "warn",
+			LogLevel.Error => "error",
+			LogLevel.Critical => "critical",
+			_ => "info" // Default case
+		};
+		
+		LogBatcher.Add(logLevel, message, meta);
+	}
+
+	/// <summary>
 	/// Add log information at the 'Debug' level
 	/// </summary>
 	/// <param name="text">The log text</param>
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogDebug(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("debug", text, meta);
+		Log(text, LogLevel.Debug, meta);
 	}
 
 	/// <summary>
@@ -306,9 +331,7 @@ public static class Abxr
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogInfo(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("info", text, meta);
+		Log(text, LogLevel.Info, meta);
 	}
 
 	/// <summary>
@@ -318,9 +341,7 @@ public static class Abxr
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogWarn(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("warn", text, meta);
+		Log(text, LogLevel.Warn, meta);
 	}
 
 	/// <summary>
@@ -330,9 +351,7 @@ public static class Abxr
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogError(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("error", text, meta);
+		Log(text, LogLevel.Error, meta);
 	}
 
 	/// <summary>
@@ -342,40 +361,7 @@ public static class Abxr
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogCritical(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("critical", text, meta);
-	}
-
-	/// <summary>
-	/// General logging method with configurable level
-	/// </summary>
-	/// <param name="message">The log message</param>
-	/// <param name="level">Log level (defaults to LogLevel.Info)</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void Log(string message, LogLevel level = LogLevel.Info, Dictionary<string, string> meta = null)
-	{
-		switch (level)
-		{
-			case LogLevel.Debug:
-				LogDebug(message, meta);
-				break;
-			case LogLevel.Info:
-				LogInfo(message, meta);
-				break;
-			case LogLevel.Warn:
-				LogWarn(message, meta);
-				break;
-			case LogLevel.Error:
-				LogError(message, meta);
-				break;
-			case LogLevel.Critical:
-				LogCritical(message, meta);
-				break;
-			default:
-				LogInfo(message, meta);
-				break;
-		}
+		Log(text, LogLevel.Critical, meta);
 	}
 
 	/// <summary>
@@ -390,14 +376,7 @@ public static class Abxr
 		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
 		// Add super properties to all events
-		foreach (var superProperty in SuperProperties)
-		{
-			// Super properties don't overwrite event-specific properties
-			if (!meta.ContainsKey(superProperty.Key))
-			{
-				meta[superProperty.Key] = superProperty.Value;
-			}
-		}
+		meta = MergeSuperProperties(meta);
 		
 		// Add duration if this was a timed event (StartTimedEvent functionality)
 		AddDuration(TimedEventStartTimes, name, meta);
@@ -446,6 +425,10 @@ public static class Abxr
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		
+		// Add super properties to all telemetry entries
+		meta = MergeSuperProperties(meta);
+		
 		TelemetryBatcher.Add(name, meta);
 	}
 
@@ -702,6 +685,29 @@ public static class Abxr
 	{
 		public string key;
 		public string value;
+	}
+
+	/// <summary>
+	/// Private helper function to merge super properties into metadata
+	/// Ensures data-specific properties take precedence over super properties
+	/// </summary>
+	/// <param name="meta">The metadata dictionary to merge super properties into</param>
+	/// <returns>The metadata dictionary with super properties merged</returns>
+	private static Dictionary<string, string> MergeSuperProperties(Dictionary<string, string> meta)
+	{
+		meta ??= new Dictionary<string, string>();
+		
+		// Add super properties to metadata
+		foreach (var superProperty in SuperProperties)
+		{
+			// Super properties don't overwrite data-specific properties
+			if (!meta.ContainsKey(superProperty.Key))
+			{
+				meta[superProperty.Key] = superProperty.Value;
+			}
+		}
+		
+		return meta;
 	}
 
 	// Event wrapper functions
