@@ -562,6 +562,7 @@ Abxr.Event("level_complete", new Abxr.Dict {
 Abxr.LogInfo("Player action", new Abxr.Dict { {"action", "jump"} });
 // Result includes: app_version=1.2.3, user_type=premium, action=jump, sceneName=CurrentScene
 
+Abxr.TelemetryEntry("frame_rate", new Abxr.Dict { {"fps", "60"} });
 // Result includes: app_version=1.2.3, user_type=premium, fps=60, sceneName=CurrentScene
 ```
 

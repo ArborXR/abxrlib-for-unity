@@ -712,19 +712,42 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Private helper function to merge super properties into metadata
-	/// Ensures data-specific properties take precedence over super properties
+	/// Private helper function to merge super properties and module info into metadata
+	/// Ensures data-specific properties take precedence over super properties and module info
 	/// </summary>
 	/// <param name="meta">The metadata dictionary to merge super properties into</param>
-	/// <returns>The metadata dictionary with super properties merged</returns>
+	/// <returns>The metadata dictionary with super properties and module info merged</returns>
 	private static Dictionary<string, string> MergeSuperProperties(Dictionary<string, string> meta)
 	{
 		meta ??= new Dictionary<string, string>();
 		
+		// Add current module information if available
+		var currentModule = GetCurrentModule();
+		if (currentModule != null)
+		{
+			// Only add module info if not already present (data-specific properties take precedence)
+			if (!meta.ContainsKey("module") && !string.IsNullOrEmpty(currentModule.target))
+			{
+				meta["module"] = currentModule.target;
+			}
+			if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModule.name))
+			{
+				meta["module_name"] = currentModule.name;
+			}
+			if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModule.id))
+			{
+				meta["module_id"] = currentModule.id;
+			}
+			if (!meta.ContainsKey("module_order"))
+			{
+				meta["module_order"] = currentModule.order.ToString();
+			}
+		}
+		
 		// Add super properties to metadata
 		foreach (var superProperty in SuperProperties)
 		{
-			// Super properties don't overwrite data-specific properties
+			// Super properties don't overwrite data-specific properties or module info
 			if (!meta.ContainsKey(superProperty.Key))
 			{
 				meta[superProperty.Key] = superProperty.Value;
