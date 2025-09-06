@@ -583,6 +583,18 @@ public static class Abxr
 	/// <param name="value">Property value</param>
 	public static void Register(string key, string value)
 	{
+		if (IsReservedSuperPropertyKey(key))
+		{
+			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			Debug.LogWarning(errorMessage);
+			LogInfo(errorMessage, new Dictionary<string, string> { 
+				{ "attempted_key", key }, 
+				{ "attempted_value", value },
+				{ "error_type", "reserved_super_property_key" }
+			});
+			return;
+		}
+
 		SuperProperties[key] = value;
 		SaveSuperProperties();
 	}
@@ -595,6 +607,18 @@ public static class Abxr
 	/// <param name="value">Property value</param>
 	public static void RegisterOnce(string key, string value)
 	{
+		if (IsReservedSuperPropertyKey(key))
+		{
+			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			Debug.LogWarning(errorMessage);
+			LogInfo(errorMessage, new Dictionary<string, string> { 
+				{ "attempted_key", key }, 
+				{ "attempted_value", value },
+				{ "error_type", "reserved_super_property_key" }
+			});
+			return;
+		}
+
 		if (!SuperProperties.ContainsKey(key))
 		{
 			SuperProperties[key] = value;
@@ -708,6 +732,17 @@ public static class Abxr
 		}
 		
 		return meta;
+	}
+
+	/// <summary>
+	/// Private helper to check if a super property key is reserved for module data
+	/// Reserved keys: module, module_name, module_id, module_order
+	/// </summary>
+	/// <param name="key">The key to validate</param>
+	/// <returns>True if the key is reserved, false otherwise</returns>
+	private static bool IsReservedSuperPropertyKey(string key)
+	{
+		return key == "module" || key == "module_name" || key == "module_id" || key == "module_order";
 	}
 
 	// Event wrapper functions
