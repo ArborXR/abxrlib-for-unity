@@ -45,6 +45,10 @@ public static class Abxr
 	// Connection status - tracks whether AbxrLib can communicate with the server
 	private static bool connectionActive = false;
 
+	// Queue for events that need to wait for authentication completion
+	private static readonly List<QueuedEvent> queuedEvents = new();
+	private static bool isAuthenticated = false;
+
 	/// <summary>
 	/// Mixpanel compatibility class for property values
 	/// This class provides compatibility with Mixpanel Unity SDK for easier migration
@@ -177,6 +181,46 @@ public static class Abxr
 			this.userData = userData;
 			this.userId = userId;
 			this.userEmail = userEmail;
+		}
+	}
+
+	/// <summary>
+	/// Event types for queuing system
+	/// </summary>
+	private enum QueuedEventType
+	{
+		AssessmentStart,
+		AssessmentComplete,
+		ObjectiveStart,
+		ObjectiveComplete,
+		InteractionStart,
+		InteractionComplete
+	}
+
+	/// <summary>
+	/// Internal class for queuing events until authentication is complete
+	/// </summary>
+	private class QueuedEvent
+	{
+		public QueuedEventType eventType;
+		public string eventName;
+		public Dictionary<string, string> meta;
+		
+		// Additional parameters for different event types
+		public int? score;
+		public EventStatus? status;
+		public InteractionType? interactionType;
+		public string response;
+
+		public QueuedEvent(QueuedEventType type, string name, Dictionary<string, string> meta, int? score = null, EventStatus? status = null, InteractionType? interactionType = null, string response = null)
+		{
+			this.eventType = type;
+			this.eventName = name;
+			this.meta = meta;
+			this.score = score;
+			this.status = status;
+			this.interactionType = interactionType;
+			this.response = response;
 		}
 	}
 
@@ -774,6 +818,7 @@ public static class Abxr
 	/// Start tracking an assessment - essential for LMS integration and analytics
 	/// Assessments track overall learner performance across multiple objectives and interactions
 	/// Think of this as the learner's score for a specific course or curriculum
+	/// This method will wait for authentication to complete before processing the event
 	/// </summary>
 	/// <param name="assessmentName">Name of the assessment to start</param>
 	/// <param name="meta">Optional metadata with assessment details</param>
@@ -783,6 +828,16 @@ public static class Abxr
 		meta["type"] = "assessment";
 		meta["verb"] = "started";
 		AssessmentStartTimes[assessmentName] = DateTime.UtcNow;
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Assessment Start '{assessmentName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.AssessmentStart, assessmentName, meta));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(assessmentName, meta);
 	}
 	
@@ -804,6 +859,16 @@ public static class Abxr
 		meta["score"] = score.ToString();
 		meta["status"] = status.ToString();
 		AddDuration(AssessmentStartTimes, assessmentName, meta);
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Assessment Complete '{assessmentName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.AssessmentComplete, assessmentName, meta, score, status));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(assessmentName, meta);
 		CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
 	}
@@ -820,6 +885,16 @@ public static class Abxr
 		meta["type"] = "objective";
 		meta["verb"] = "started";
 		ObjectiveStartTimes[objectiveName] = DateTime.UtcNow;
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Objective Start '{objectiveName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.ObjectiveStart, objectiveName, meta));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(objectiveName, meta);
 	}
 	
@@ -841,6 +916,16 @@ public static class Abxr
 		meta["score"] = score.ToString();
 		meta["status"] = status.ToString();
 		AddDuration(ObjectiveStartTimes, objectiveName, meta);
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Objective Complete '{objectiveName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.ObjectiveComplete, objectiveName, meta, score, status));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(objectiveName, meta);
 	}
 
@@ -856,6 +941,16 @@ public static class Abxr
 		meta["type"] = "interaction";
 		meta["verb"] = "started";
 		InteractionStartTimes[interactionName] = DateTime.UtcNow;
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Interaction Start '{interactionName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.InteractionStart, interactionName, meta));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(interactionName, meta);
 	}
 	
@@ -877,6 +972,16 @@ public static class Abxr
 		meta["interaction"] = interactionType.ToString();
 		if (!string.IsNullOrEmpty(response)) meta["response"] = response;
 		AddDuration(InteractionStartTimes, interactionName, meta);
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Interaction Complete '{interactionName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.InteractionComplete, interactionName, meta, null, null, interactionType, response));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(interactionName, meta);
 	}
 
@@ -1372,6 +1477,9 @@ public static class Abxr
 		// Update connection status based on authentication success
 		connectionActive = success;
 		
+		// Update authentication status
+		isAuthenticated = success;
+		
 		string firstModuleTarget = null;
 		
 		// Create authentication data first to have access to complete modules
@@ -1411,6 +1519,13 @@ public static class Abxr
 		
 		// Store the authentication data globally for later access
 		latestAuthCompletedData = authData;
+
+		// Process any queued events if authentication was successful
+		if (success && queuedEvents.Count > 0)
+		{
+			Debug.Log($"AbxrLib - Processing {queuedEvents.Count} queued events");
+			ProcessQueuedEvents();
+		}
 
 		if (authCompletedCallbacks.Count == 0)
 		{
@@ -1470,6 +1585,52 @@ public static class Abxr
 		}
 
 		return moduleDataList;
+	}
+
+	/// <summary>
+	/// Process all queued events after authentication completes
+	/// </summary>
+	private static void ProcessQueuedEvents()
+	{
+		foreach (var queuedEvent in queuedEvents)
+		{
+			try
+			{
+				switch (queuedEvent.eventType)
+				{
+					case QueuedEventType.AssessmentStart:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+					
+					case QueuedEventType.AssessmentComplete:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
+						break;
+					
+					case QueuedEventType.ObjectiveStart:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+					
+					case QueuedEventType.ObjectiveComplete:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+					
+					case QueuedEventType.InteractionStart:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+					
+					case QueuedEventType.InteractionComplete:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+				}
+			}
+			catch (System.Exception ex)
+			{
+				LogError($"Error processing queued event {queuedEvent.eventType} '{queuedEvent.eventName}': {ex.Message}");
+			}
+		}
+		
+		queuedEvents.Clear();
 	}
 
 	#endregion

@@ -77,7 +77,16 @@ namespace AbxrLib.Runtime.Authentication
                 yield return GetConfiguration();
                 if (!string.IsNullOrEmpty(_authMechanism?.prompt))
                 {
+                    Debug.Log("AbxrLib - Additional user authentication required (PIN/credentials)");
                     yield return KeyboardAuthenticate();
+                    // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
+                }
+                else
+                {
+                    Debug.Log("AbxrLib - Authentication fully completed");
+                    // No additional auth needed - notify completion now
+                    List<string> moduleTargets = ExtractModuleTargets(Authentication.GetModules());
+                    Abxr.NotifyAuthCompleted(true, false, moduleTargets);
                 }
             }
         }
@@ -212,6 +221,12 @@ namespace AbxrLib.Runtime.Authentication
                 {
                     KeyboardHandler.Destroy();
                     _failedAuthAttempts = 0;
+                    Debug.Log("AbxrLib - Final authentication successful");
+                    
+                    // Notify completion for keyboard authentication success
+                    List<string> moduleTargets = ExtractModuleTargets(Authentication.GetModules());
+                    Abxr.NotifyAuthCompleted(true, false, moduleTargets);
+                    
                     yield break;
                 }
 
@@ -280,7 +295,6 @@ namespace AbxrLib.Runtime.Authentication
             yield return request.SendWebRequest();
             if (request.result == UnityWebRequest.Result.Success)
             {
-                Debug.Log("AbxrLib - Authenticated successfully");
                 AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(request.downloadHandler.text);
                 _authToken = postResponse.Token;
                 _apiSecret = postResponse.Secret;
@@ -295,8 +309,8 @@ namespace AbxrLib.Runtime.Authentication
                 // Extract module targets for notification
                 List<string> moduleTargets = ExtractModuleTargets(postResponse.Modules);
                 
-                // Notify authentication completion with complete auth response data
-                Abxr.NotifyAuthCompleted(true, false, moduleTargets);
+                // Log initial success - but don't notify completion yet since additional auth may be required
+                Debug.Log("AbxrLib - API connection established");
             }
             else
             {
