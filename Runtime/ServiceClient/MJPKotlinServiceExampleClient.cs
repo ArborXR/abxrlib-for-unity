@@ -2,16 +2,18 @@
 using System;
 using System.Threading.Tasks;
 using UnityEngine;
+using static Abxr.Runtime.ServiceClient.ArborServiceClient;
 
 namespace Abxr.Runtime.MJPKotlinServiceExampleClient
 {
+	// This is the core mechanism for the ServiceWrapper below for calling bound methods in the service.
 	public static class AndroidJavaObjectExt
 	{
 		public static T CallResult<T>(this AndroidJavaObject native, string methodName, params object[] args) =>
 			native.Call<AndroidJavaObject>(methodName, args) is var result
 			&& result.Call<bool>("isOk")
 				? result.Call<T>("getValue")
-				: throw new SdkException(result.Call<string>("getError"));
+				: throw new MjpSdkException(result.Call<string>("getError"));	// Not a specific bound method... part of the framework supplied by result type.
 	}
 
 	/// <summary>Allows interacting with the SDK service.</summary>
@@ -22,9 +24,9 @@ namespace Abxr.Runtime.MJPKotlinServiceExampleClient
 	public class MJPKotlinServiceExampleClient : MonoBehaviour
 	{
 		private const string PackageName = "com.example.mjpkotlinserviceexample";
-		private AndroidJavaObject?			_mjpsdk;
+		private AndroidJavaObject?				_mjpsdk;
 		private MJPNativeConnectionCallback?	_nativeCallback;
-		public static MjpSdkServiceWrapper?	ServiceWrapper;
+		public static MjpSdkServiceWrapper?		MjpServiceWrapper;
 
 		// Whenever we delay via Task.Delay, there is no guarantee that our current thread would be already attached to Android JNI,
 		// so we must reattached the current thread to AndroidJNI right after Task.Delay to ensure we don't run into threading issues.
@@ -43,7 +45,7 @@ namespace Abxr.Runtime.MJPKotlinServiceExampleClient
 			}
 		}
 
-		public static bool IsConnected() => ServiceWrapper != null;
+		public static bool IsConnected() => MjpServiceWrapper != null;
 
 		private void Connect()
 		{
@@ -68,7 +70,7 @@ namespace Abxr.Runtime.MJPKotlinServiceExampleClient
 
 		public sealed class MjpSdkServiceWrapper
 		{
-			private readonly AndroidJavaObject _native;
+			private readonly AndroidJavaObject _native;	// MJP:  Somehow this knows it is an AndroidJavaObjectExt despite AndroidJavaObjectExt not inheriting from AndroidObject.
 
 			public MjpSdkServiceWrapper(AndroidJavaObject native) => _native = native;
 
@@ -77,6 +79,45 @@ namespace Abxr.Runtime.MJPKotlinServiceExampleClient
 
 			public void StopPlayback() => _native.CallResult<string>("stopPlayback");
 			public string WhatTimeIsIt() => _native.CallResult<string>("whatTimeIsIt");
+		}
+
+		private async Task NotifyWhenInitializedAsync(AndroidJavaObject? nativeObj)
+		{
+			// If the application gets loaded before the XRDM client, the XRDM client may not have time to be initialized.
+			// To avoid this timing issue, we should wait until XRDM client is initialized to fire the event of OnConnected.
+			var delay = 500;
+			var delayMultiplier = 1.5f;
+			var maximumAttempts = 7;
+
+#pragma warning disable CA2000 // Dispose objects before losing scope
+#pragma warning disable CS8604 // Possible null reference argument.
+			// nativeObj shouldn't be null, and if it is null, something really bad must have happened already.
+			var serviceWrapper = new MjpSdkServiceWrapper(nativeObj);
+#pragma warning restore CS8604 // Possible null reference argument.
+#pragma warning restore CA2000 // Dispose objects before losing scope
+//			try
+//			{
+//				for (var attempt = 0; attempt < maximumAttempts; attempt++)
+//				{
+//					if (serviceWrapper.GetIsInitialized())
+//					{
+//						MjpServiceWrapper = serviceWrapper;
+//						return;
+//					}
+//					await DelayAndReattachThreadToJNI(delay);
+//					_ = AndroidJNI.AttachCurrentThread();
+//					delay = (int)Math.Floor(delay * delayMultiplier);
+//				}
+//#pragma warning disable CA1031
+
+//			}
+//			catch
+//			{
+//				await DelayAndReattachThreadToJNI(delay);
+//				_ = AndroidJNI.AttachCurrentThread();
+//				MjpServiceWrapper = serviceWrapper;
+//			}
+#pragma warning restore CA1031
 		}
 
 		private sealed class MJPNativeConnectionCallback : AndroidJavaProxy
