@@ -118,7 +118,7 @@ namespace AbxrLib.Runtime.Storage
 			yield return request.SendWebRequest();
 			if (request.result == UnityWebRequest.Result.Success)
 			{
-				Debug.LogWarning("AbxrLib - Storage GET succeeded");
+				Debug.Log("AbxrLib - Storage GET succeeded");
 				PayloadWrapper payload = JsonConvert.DeserializeObject<PayloadWrapper>(request.downloadHandler.text);
 				callback?.Invoke(payload.data.Count > 0 ? payload.data[0].data : null);
 			}

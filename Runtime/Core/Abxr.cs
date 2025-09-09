@@ -45,6 +45,14 @@ public static class Abxr
 	// Connection status - tracks whether AbxrLib can communicate with the server
 	private static bool connectionActive = false;
 
+	// Queue for events that need to wait for authentication completion
+	private static readonly List<QueuedEvent> queuedEvents = new();
+	private static bool isAuthenticated = false;
+
+	// Module index loading state to prevent repeated storage calls
+	private static bool moduleIndexLoaded = false;
+	private static bool moduleIndexLoading = false;
+
 	/// <summary>
 	/// Mixpanel compatibility class for property values
 	/// This class provides compatibility with Mixpanel Unity SDK for easier migration
@@ -181,6 +189,46 @@ public static class Abxr
 	}
 
 	/// <summary>
+	/// Event types for queuing system
+	/// </summary>
+	private enum QueuedEventType
+	{
+		AssessmentStart,
+		AssessmentComplete,
+		ObjectiveStart,
+		ObjectiveComplete,
+		InteractionStart,
+		InteractionComplete
+	}
+
+	/// <summary>
+	/// Internal class for queuing events until authentication is complete
+	/// </summary>
+	private class QueuedEvent
+	{
+		public QueuedEventType eventType;
+		public string eventName;
+		public Dictionary<string, string> meta;
+		
+		// Additional parameters for different event types
+		public int? score;
+		public EventStatus? status;
+		public InteractionType? interactionType;
+		public string response;
+
+		public QueuedEvent(QueuedEventType type, string name, Dictionary<string, string> meta, int? score = null, EventStatus? status = null, InteractionType? interactionType = null, string response = null)
+		{
+			this.eventType = type;
+			this.eventName = name;
+			this.meta = meta;
+			this.score = score;
+			this.status = status;
+			this.interactionType = interactionType;
+			this.response = response;
+		}
+	}
+
+	/// <summary>
 	/// Data structure for module information from authentication response
 	/// </summary>
 	[System.Serializable]
@@ -215,10 +263,10 @@ public static class Abxr
 		public string userEmail;         // User email address (extracted from userData.email)
 		public string appId;             // Application identifier
 		public List<ModuleData> modules; // List of available modules
-		public string moduleTarget;      // Target module from first module (backward compatibility)
+		public int moduleCount;          // Total number of modules available (use GetModuleTarget() to iterate through them)
 		public bool isReauthentication;  // Whether this was a reauthentication (vs initial auth)
 
-		public AuthCompletedData(bool success, string token, string secret, object userData, object userId, string userEmail, string appId, List<ModuleData> modules, string moduleTarget, bool isReauthentication)
+		public AuthCompletedData(bool success, string token, string secret, object userData, object userId, string userEmail, string appId, List<ModuleData> modules, bool isReauthentication)
 		{
 			this.success = success;
 			this.token = token;
@@ -228,7 +276,7 @@ public static class Abxr
 			this.userEmail = userEmail;
 			this.appId = appId;
 			this.modules = modules ?? new List<ModuleData>();
-			this.moduleTarget = moduleTarget;
+			this.moduleCount = modules?.Count ?? 0;
 			this.isReauthentication = isReauthentication;
 		}
 
@@ -288,15 +336,40 @@ public static class Abxr
 	public static bool ConnectionActive() => connectionActive;
 
 	/// <summary>
+	/// General logging method with configurable level - main logging function
+	/// </summary>
+	/// <param name="message">The log message</param>
+	/// <param name="level">Log level (defaults to LogLevel.Info)</param>
+	/// <param name="meta">Any additional information (optional)</param>
+	public static void Log(string message, LogLevel level = LogLevel.Info, Dictionary<string, string> meta = null)
+	{
+		meta ??= new Dictionary<string, string>();
+		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		
+		// Add super properties to all logs
+		meta = MergeSuperProperties(meta);
+		
+		string logLevel = level switch
+		{
+			LogLevel.Debug => "debug",
+			LogLevel.Info => "info",
+			LogLevel.Warn => "warn",
+			LogLevel.Error => "error",
+			LogLevel.Critical => "critical",
+			_ => "info" // Default case
+		};
+		
+		LogBatcher.Add(logLevel, message, meta);
+	}
+
+	/// <summary>
 	/// Add log information at the 'Debug' level
 	/// </summary>
 	/// <param name="text">The log text</param>
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogDebug(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("debug", text, meta);
+		Log(text, LogLevel.Debug, meta);
 	}
 
 	/// <summary>
@@ -306,9 +379,7 @@ public static class Abxr
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogInfo(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("info", text, meta);
+		Log(text, LogLevel.Info, meta);
 	}
 
 	/// <summary>
@@ -318,9 +389,7 @@ public static class Abxr
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogWarn(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("warn", text, meta);
+		Log(text, LogLevel.Warn, meta);
 	}
 
 	/// <summary>
@@ -330,9 +399,7 @@ public static class Abxr
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogError(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("error", text, meta);
+		Log(text, LogLevel.Error, meta);
 	}
 
 	/// <summary>
@@ -342,40 +409,7 @@ public static class Abxr
 	/// <param name="meta">Any additional information (optional)</param>
 	public static void LogCritical(string text, Dictionary<string, string> meta = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		LogBatcher.Add("critical", text, meta);
-	}
-
-	/// <summary>
-	/// General logging method with configurable level
-	/// </summary>
-	/// <param name="message">The log message</param>
-	/// <param name="level">Log level (defaults to LogLevel.Info)</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void Log(string message, LogLevel level = LogLevel.Info, Dictionary<string, string> meta = null)
-	{
-		switch (level)
-		{
-			case LogLevel.Debug:
-				LogDebug(message, meta);
-				break;
-			case LogLevel.Info:
-				LogInfo(message, meta);
-				break;
-			case LogLevel.Warn:
-				LogWarn(message, meta);
-				break;
-			case LogLevel.Error:
-				LogError(message, meta);
-				break;
-			case LogLevel.Critical:
-				LogCritical(message, meta);
-				break;
-			default:
-				LogInfo(message, meta);
-				break;
-		}
+		Log(text, LogLevel.Critical, meta);
 	}
 
 	/// <summary>
@@ -390,14 +424,7 @@ public static class Abxr
 		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
 		// Add super properties to all events
-		foreach (var superProperty in SuperProperties)
-		{
-			// Super properties don't overwrite event-specific properties
-			if (!meta.ContainsKey(superProperty.Key))
-			{
-				meta[superProperty.Key] = superProperty.Value;
-			}
-		}
+		meta = MergeSuperProperties(meta);
 		
 		// Add duration if this was a timed event (StartTimedEvent functionality)
 		AddDuration(TimedEventStartTimes, name, meta);
@@ -442,11 +469,23 @@ public static class Abxr
 	/// </summary>
 	/// <param name="name">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
 	/// <param name="meta">Key-value pairs of telemetry measurements</param>
-	public static void TelemetryEntry(string name, Dictionary<string, string> meta)
+	public static void Telemetry(string name, Dictionary<string, string> meta)
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		
+		// Add super properties to all telemetry entries
+		meta = MergeSuperProperties(meta);
+		
 		TelemetryBatcher.Add(name, meta);
+	}
+
+	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
+	// This method exists purely for backward compatibility with older code that used TelemetryEntry()
+	// It simply wraps the new Telemetry() method. Keep this undocumented in README files.
+	public static void TelemetryEntry(string name, Dictionary<string, string> meta)
+	{
+		Telemetry(name, meta);
 	}
 
 	/// <summary>
@@ -600,6 +639,18 @@ public static class Abxr
 	/// <param name="value">Property value</param>
 	public static void Register(string key, string value)
 	{
+		if (IsReservedSuperPropertyKey(key))
+		{
+			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			Debug.LogWarning(errorMessage);
+			LogInfo(errorMessage, new Dictionary<string, string> { 
+				{ "attempted_key", key }, 
+				{ "attempted_value", value },
+				{ "error_type", "reserved_super_property_key" }
+			});
+			return;
+		}
+
 		SuperProperties[key] = value;
 		SaveSuperProperties();
 	}
@@ -612,6 +663,18 @@ public static class Abxr
 	/// <param name="value">Property value</param>
 	public static void RegisterOnce(string key, string value)
 	{
+		if (IsReservedSuperPropertyKey(key))
+		{
+			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			Debug.LogWarning(errorMessage);
+			LogInfo(errorMessage, new Dictionary<string, string> { 
+				{ "attempted_key", key }, 
+				{ "attempted_value", value },
+				{ "error_type", "reserved_super_property_key" }
+			});
+			return;
+		}
+
 		if (!SuperProperties.ContainsKey(key))
 		{
 			SuperProperties[key] = value;
@@ -704,12 +767,79 @@ public static class Abxr
 		public string value;
 	}
 
+	/// <summary>
+	/// Private helper function to merge super properties and module info into metadata
+	/// Ensures data-specific properties take precedence over super properties and module info
+	/// </summary>
+	/// <param name="meta">The metadata dictionary to merge super properties into</param>
+	/// <returns>The metadata dictionary with super properties and module info merged</returns>
+	private static Dictionary<string, string> MergeSuperProperties(Dictionary<string, string> meta)
+	{
+		meta ??= new Dictionary<string, string>();
+		
+		// Add current module information if available
+		var currentSession = GetModuleTargetWithoutAdvance();
+		if (currentSession != null)
+		{
+			// Only add module info if not already present (data-specific properties take precedence)
+			if (!meta.ContainsKey("module") && !string.IsNullOrEmpty(currentSession.moduleTarget))
+			{
+				meta["module"] = currentSession.moduleTarget;
+			}
+			// For additional module metadata, we need to get it from the modules list
+			if (latestAuthCompletedData?.modules != null && latestAuthCompletedData.modules.Count > 0)
+			{
+				LoadModuleIndex();
+				if (currentModuleIndex < latestAuthCompletedData.modules.Count)
+				{
+					var currentModule = latestAuthCompletedData.modules[currentModuleIndex];
+					if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModule.name))
+					{
+						meta["module_name"] = currentModule.name;
+					}
+					if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModule.id))
+					{
+						meta["module_id"] = currentModule.id;
+					}
+					if (!meta.ContainsKey("module_order"))
+					{
+						meta["module_order"] = currentModule.order.ToString();
+					}
+				}
+			}
+		}
+		
+		// Add super properties to metadata
+		foreach (var superProperty in SuperProperties)
+		{
+			// Super properties don't overwrite data-specific properties or module info
+			if (!meta.ContainsKey(superProperty.Key))
+			{
+				meta[superProperty.Key] = superProperty.Value;
+			}
+		}
+		
+		return meta;
+	}
+
+	/// <summary>
+	/// Private helper to check if a super property key is reserved for module data
+	/// Reserved keys: module, module_name, module_id, module_order
+	/// </summary>
+	/// <param name="key">The key to validate</param>
+	/// <returns>True if the key is reserved, false otherwise</returns>
+	private static bool IsReservedSuperPropertyKey(string key)
+	{
+		return key == "module" || key == "module_name" || key == "module_id" || key == "module_order";
+	}
+
 	// Event wrapper functions
 	
 	/// <summary>
 	/// Start tracking an assessment - essential for LMS integration and analytics
 	/// Assessments track overall learner performance across multiple objectives and interactions
 	/// Think of this as the learner's score for a specific course or curriculum
+	/// This method will wait for authentication to complete before processing the event
 	/// </summary>
 	/// <param name="assessmentName">Name of the assessment to start</param>
 	/// <param name="meta">Optional metadata with assessment details</param>
@@ -719,6 +849,16 @@ public static class Abxr
 		meta["type"] = "assessment";
 		meta["verb"] = "started";
 		AssessmentStartTimes[assessmentName] = DateTime.UtcNow;
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Assessment Start '{assessmentName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.AssessmentStart, assessmentName, meta));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(assessmentName, meta);
 	}
 	
@@ -740,6 +880,16 @@ public static class Abxr
 		meta["score"] = score.ToString();
 		meta["status"] = status.ToString();
 		AddDuration(AssessmentStartTimes, assessmentName, meta);
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Assessment Complete '{assessmentName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.AssessmentComplete, assessmentName, meta, score, status));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(assessmentName, meta);
 		CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
 	}
@@ -756,6 +906,16 @@ public static class Abxr
 		meta["type"] = "objective";
 		meta["verb"] = "started";
 		ObjectiveStartTimes[objectiveName] = DateTime.UtcNow;
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Objective Start '{objectiveName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.ObjectiveStart, objectiveName, meta));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(objectiveName, meta);
 	}
 	
@@ -777,6 +937,16 @@ public static class Abxr
 		meta["score"] = score.ToString();
 		meta["status"] = status.ToString();
 		AddDuration(ObjectiveStartTimes, objectiveName, meta);
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Objective Complete '{objectiveName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.ObjectiveComplete, objectiveName, meta, score, status));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(objectiveName, meta);
 	}
 
@@ -792,6 +962,16 @@ public static class Abxr
 		meta["type"] = "interaction";
 		meta["verb"] = "started";
 		InteractionStartTimes[interactionName] = DateTime.UtcNow;
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Interaction Start '{interactionName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.InteractionStart, interactionName, meta));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(interactionName, meta);
 	}
 	
@@ -813,6 +993,16 @@ public static class Abxr
 		meta["interaction"] = interactionType.ToString();
 		if (!string.IsNullOrEmpty(response)) meta["response"] = response;
 		AddDuration(InteractionStartTimes, interactionName, meta);
+
+		// If authentication is not complete, queue this event
+		if (!isAuthenticated)
+		{
+			Debug.Log($"AbxrLib - Interaction Complete '{interactionName}' queued until authentication completes");
+			queuedEvents.Add(new QueuedEvent(QueuedEventType.InteractionComplete, interactionName, meta, null, null, interactionType, response));
+			return;
+		}
+
+		// Authentication is complete, process immediately
 		Event(interactionName, meta);
 	}
 
@@ -1097,18 +1287,18 @@ public static class Abxr
 	/// Returns empty list if no authentication has completed yet
 	/// </summary>
 	/// <returns>List of ModuleData objects with complete module information</returns>
-	public static List<ModuleData> GetAvailableModules()
+	public static List<ModuleData> GetModuleTargetList()
 	{
 		return latestAuthCompletedData?.modules ?? new List<ModuleData>();
 	}
 
 	/// <summary>
-	/// Get the current module in the sequence without advancing to the next one
-	/// Useful for checking what module the learner should be on without consuming it
-	/// Returns null if no modules are available or all modules have been completed
+	/// Get the current module target again without advancing to the next one
+	/// Useful for checking what module you're currently on without consuming it
+	/// Returns the same CurrentSessionData structure as GetModuleTarget() but doesn't advance the index
 	/// </summary>
-	/// <returns>ModuleData for the current module, or null if none available</returns>
-	public static ModuleData GetCurrentModule()
+	/// <returns>CurrentSessionData for the current module, or null if none available</returns>
+	public static CurrentSessionData GetModuleTargetWithoutAdvance()
 	{
 		if (latestAuthCompletedData?.modules == null || latestAuthCompletedData.modules.Count == 0)
 		{
@@ -1122,7 +1312,15 @@ public static class Abxr
 			return null;
 		}
 
-		return latestAuthCompletedData.modules[currentModuleIndex];
+		var currentModule = latestAuthCompletedData.modules[currentModuleIndex];
+		
+		// Return CurrentSessionData structure (same as GetModuleTarget but without advancing index)
+		return new CurrentSessionData(
+			currentModule.target,
+			GetUserData(),
+			GetUserId(),
+			GetUserEmail()
+		);
 	}
 
 	/// <summary>
@@ -1133,35 +1331,19 @@ public static class Abxr
 	/// <returns>The next CurrentSessionData with complete module information, or null if no more modules</returns>
 	public static CurrentSessionData GetModuleTarget()
 	{
-		// Check if we have authentication data and modules
-		if (latestAuthCompletedData?.modules == null || latestAuthCompletedData.modules.Count == 0)
+		// Get current module data without advancing
+		var currentSessionData = GetModuleTargetWithoutAdvance();
+		if (currentSessionData == null)
 		{
 			return null;
 		}
 
-		// Load current index from storage if needed
+		// Advance to next module
 		LoadModuleIndex();
-
-		// Return null if we've gone through all modules
-		if (currentModuleIndex >= latestAuthCompletedData.modules.Count)
-		{
-			return null;
-		}
-
-		// Get the next module
-		var nextModule = latestAuthCompletedData.modules[currentModuleIndex];
-		
-		// Move to next module and save progress
 		currentModuleIndex++;
 		SaveModuleIndex();
-		
-		// Create CurrentSessionData with complete module information
-		return new CurrentSessionData(
-			nextModule.target,
-			GetUserData(),
-			GetUserId(),
-			GetUserEmail()
-		);
+
+		return currentSessionData;
 	}
 
 	/// <summary>
@@ -1200,7 +1382,52 @@ public static class Abxr
 	public static void ClearModuleTargets()
 	{
 		currentModuleIndex = 0;
+		// Reset cache since we're clearing the module state
+		moduleIndexLoaded = false;
+		moduleIndexLoading = false;
 		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, ModuleIndexKey));
+	}
+
+	/// <summary>
+	/// Extract module targets from authentication response data (similar to WebXR version)
+	/// Helper method to extract sorted module targets from raw auth response
+	/// Note: This method is intended for internal use by the authentication system
+	/// </summary>
+	/// <param name="modules">Raw module data from authentication response</param>
+	/// <returns>Array of module target strings sorted by order</returns>
+	public static string[] ExtractModuleTargetsFromAuthData(List<Dictionary<string, object>> modules)
+	{
+		var moduleTargets = new List<string>();
+		
+		if (modules == null || modules.Count == 0) return moduleTargets.ToArray();
+
+		try
+		{
+			// Sort modules by order field (similar to ExtractModuleTargets in Authentication.cs)
+			var sortedModules = modules.OrderBy(m => {
+				if (m.ContainsKey("order") && m["order"] != null)
+				{
+					int.TryParse(m["order"].ToString(), out int order);
+					return order;
+				}
+				return 0;
+			}).ToList();
+			
+			// Extract targets in correct order
+			foreach (var module in sortedModules)
+			{
+				if (module.ContainsKey("target") && module["target"] != null)
+				{
+					moduleTargets.Add(module["target"].ToString());
+				}
+			}
+		}
+		catch (System.Exception ex)
+		{
+			LogError($"Failed to extract module targets: {ex.Message}");
+		}
+
+		return moduleTargets.ToArray();
 	}
 
 	private static void SaveModuleIndex()
@@ -1215,6 +1442,9 @@ public static class Abxr
 			};
 
 			StorageSetEntry(ModuleIndexKey, serializedData, StorageScope.user, StoragePolicy.keepLatest);
+			
+			// Reset cache since we've updated the stored index
+			moduleIndexLoaded = false;
 		}
 		catch (System.Exception ex)
 		{
@@ -1224,12 +1454,20 @@ public static class Abxr
 
 	private static void LoadModuleIndex()
 	{
+		// Don't load if already loaded or currently loading
+		if (moduleIndexLoaded || moduleIndexLoading)
+		{
+			return;
+		}
+
 		try
 		{
+			moduleIndexLoading = true;
 			CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
 		}
 		catch (System.Exception ex)
 		{
+			moduleIndexLoading = false;
 			LogError($"Failed to load module index: {ex.Message}");
 		}
 	}
@@ -1253,6 +1491,10 @@ public static class Abxr
 					}
 				}
 			}
+			
+			// Mark loading as complete
+			moduleIndexLoaded = true;
+			moduleIndexLoading = false;
 		});
 	}
 
@@ -1308,28 +1550,20 @@ public static class Abxr
 		// Update connection status based on authentication success
 		connectionActive = success;
 		
-		string firstModuleTarget = null;
+		// Update authentication status
+		isAuthenticated = success;
+		
+		// Reset module index cache for new authentication
+		moduleIndexLoaded = false;
+		moduleIndexLoading = false;
 		
 		// Create authentication data first to have access to complete modules
 		var moduleDataList = ConvertToModuleDataList(Authentication.GetModules());
 		
-		// Handle module targets if available and authentication was successful
-		if (success && moduleDataList != null && moduleDataList.Count > 0)
-		{
-			// Take the first module target for immediate use in OnAuthCompleted
-			firstModuleTarget = moduleDataList[0].target;
-			
-			// Set up module index for GetModuleTarget() calls
-			// If we have modules, start from index 1 since first module is used immediately
-			currentModuleIndex = moduleDataList.Count > 1 ? 1 : moduleDataList.Count;
-			SaveModuleIndex();
-		}
-		else
-		{
-			// No modules available, reset index
-			currentModuleIndex = 0;
-			SaveModuleIndex();
-		}
+		// Set up module index for GetModuleTarget() calls
+		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
+		currentModuleIndex = 0;
+		SaveModuleIndex();
 
 		// Create authentication data and store it globally (regardless of whether there are callbacks)
 		var authData = new AuthCompletedData(
@@ -1341,12 +1575,18 @@ public static class Abxr
 			GetUserEmail(),
 			Authentication.GetAppId(),
 			moduleDataList,
-			firstModuleTarget, // First module target from the provided list, or null
 			isReauthentication
 		);
 		
 		// Store the authentication data globally for later access
 		latestAuthCompletedData = authData;
+
+		// Process any queued events if authentication was successful
+		if (success && queuedEvents.Count > 0)
+		{
+			Debug.Log($"AbxrLib - Processing {queuedEvents.Count} queued events");
+			ProcessQueuedEvents();
+		}
 
 		if (authCompletedCallbacks.Count == 0)
 		{
@@ -1406,6 +1646,52 @@ public static class Abxr
 		}
 
 		return moduleDataList;
+	}
+
+	/// <summary>
+	/// Process all queued events after authentication completes
+	/// </summary>
+	private static void ProcessQueuedEvents()
+	{
+		foreach (var queuedEvent in queuedEvents)
+		{
+			try
+			{
+				switch (queuedEvent.eventType)
+				{
+					case QueuedEventType.AssessmentStart:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+					
+					case QueuedEventType.AssessmentComplete:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
+						break;
+					
+					case QueuedEventType.ObjectiveStart:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+					
+					case QueuedEventType.ObjectiveComplete:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+					
+					case QueuedEventType.InteractionStart:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+					
+					case QueuedEventType.InteractionComplete:
+						Event(queuedEvent.eventName, queuedEvent.meta);
+						break;
+				}
+			}
+			catch (System.Exception ex)
+			{
+				LogError($"Error processing queued event {queuedEvent.eventType} '{queuedEvent.eventName}': {ex.Message}");
+			}
+		}
+		
+		queuedEvents.Clear();
 	}
 
 	#endregion
