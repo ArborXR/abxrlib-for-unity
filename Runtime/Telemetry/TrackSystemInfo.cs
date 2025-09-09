@@ -46,7 +46,7 @@ namespace AbxrLib.Runtime.Telemetry
                 ["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%",
                 ["Status"] = SystemInfo.batteryStatus.ToString()
             };
-            Abxr.TelemetryEntry("Battery", batteryData);
+            Abxr.Telemetry("Battery", batteryData);
         
             var memoryData = new Dictionary<string, string>
             {
@@ -54,7 +54,7 @@ namespace AbxrLib.Runtime.Telemetry
                 ["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB",
                 ["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB"
             };
-            Abxr.TelemetryEntry("Memory", memoryData);
+            Abxr.Telemetry("Memory", memoryData);
         }
     
         private static void CheckFrameRate()
@@ -71,7 +71,7 @@ namespace AbxrLib.Runtime.Telemetry
             {
                 ["Per Second"] = frameRate.ToString(CultureInfo.InvariantCulture)
             };
-            Abxr.TelemetryEntry("Frame Rate", telemetryData);
+            Abxr.Telemetry("Frame Rate", telemetryData);
             _lastFrameCount = Time.frameCount;
             _lastTime = Time.time;
         }

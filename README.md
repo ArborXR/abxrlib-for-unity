@@ -361,18 +361,18 @@ The Telemetry Methods provide comprehensive tracking of the XR environment. By d
 
 ```cpp
 //C# Method Signatures
-public static void Abxr.TelemetryEntry(string name, Dictionary<string, string> meta);
+public static void Abxr.Telemetry(string name, Dictionary<string, string> meta);
 
 // Manual telemetry activation (when auto-telemetry is disabled)
 Abxr.TrackAutoTelemetry();
 
 // Custom telemetry logging (using Abxr.Dict - no using statements required!)
-Abxr.TelemetryEntry("headset_position", new Abxr.Dict { 
+Abxr.Telemetry("headset_position", new Abxr.Dict { 
     {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
 });
 
 // Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.TelemetryEntry("headset_position", new Dictionary<string, string> { 
+Abxr.Telemetry("headset_position", new Dictionary<string, string> { 
     {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
 });
 ```
@@ -562,7 +562,7 @@ Abxr.Event("level_complete", new Abxr.Dict {
 Abxr.LogInfo("Player action", new Abxr.Dict { {"action", "jump"} });
 // Result includes: app_version=1.2.3, user_type=premium, action=jump, sceneName=CurrentScene
 
-Abxr.TelemetryEntry("frame_rate", new Abxr.Dict { {"fps", "60"} });
+Abxr.Telemetry("frame_rate", new Abxr.Dict { {"fps", "60"} });
 // Result includes: app_version=1.2.3, user_type=premium, fps=60, sceneName=CurrentScene
 ```
 
@@ -645,14 +645,14 @@ You can manage module progress and access rich module data:
 ```cpp
 // Check remaining modules and preview current
 int remaining = Abxr.GetModuleTargetCount();
-ModuleData currentModule = Abxr.GetCurrentModule();
-if (currentModule != null)
+CurrentSessionData nextModule = Abxr.GetModuleTarget();
+if (nextModule != null)
 {
-    Debug.Log($"Next: {currentModule.name} ({remaining} remaining)");
+    Debug.Log($"Next: {nextModule.moduleTarget} ({remaining} remaining)");
 }
 
 // Get all available modules
-var allModules = Abxr.GetAvailableModules();
+var allModules = Abxr.GetModuleTargetList();
 Debug.Log($"Total modules: {allModules.Count}");
 
 // Reset progress or access learner data
@@ -696,7 +696,7 @@ CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads progress from s
 #### Best Practices
 
 1. **Set up auth callback early**: Subscribe to `OnAuthCompleted` before authentication starts
-2. **Handle first module**: Process the first module target from `authData.moduleTarget` 
+2. **Handle module count**: Check `authData.moduleCount` and use `GetModuleTarget()` to get the next module to process
 3. **Use GetModuleTarget() sequentially**: Call after completing each module to get the next one
 4. **Validate modules**: Check if requested module exists before navigation
 5. **Progress tracking**: Use assessment events to track module completion
@@ -739,9 +739,13 @@ Abxr.OnAuthCompleted((authData) =>
         else
             InitializeUserInterface();
         
-        // Navigate to module if specified
-        if (!string.IsNullOrEmpty(authData.moduleTarget))
-            NavigateToModule(authData.moduleTarget);
+        // Handle modules if available  
+        if (authData.moduleCount > 0)
+        {
+            CurrentSessionData moduleData = Abxr.GetModuleTarget();
+            if (moduleData != null)
+                NavigateToModule(moduleData.moduleTarget);
+        }
     }
 });
 
@@ -761,7 +765,7 @@ public class AuthCompletedData
     public object userData;          // Additional user data from authentication response
     public object userId;            // User identifier
     public string userEmail;         // User email address
-    public string moduleTarget;      // Target module from LMS (if applicable)
+    public int moduleCount;          // Number of available modules
     public bool isReauthentication;  // Whether this was a reauthentication (vs initial auth)
 }
 ```
