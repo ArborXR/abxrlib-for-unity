@@ -49,6 +49,10 @@ public static class Abxr
 	private static readonly List<QueuedEvent> queuedEvents = new();
 	private static bool isAuthenticated = false;
 
+	// Module index loading state to prevent repeated storage calls
+	private static bool moduleIndexLoaded = false;
+	private static bool moduleIndexLoading = false;
+
 	/// <summary>
 	/// Mixpanel compatibility class for property values
 	/// This class provides compatibility with Mixpanel Unity SDK for easier migration
@@ -1370,6 +1374,9 @@ public static class Abxr
 	public static void ClearModuleTargets()
 	{
 		currentModuleIndex = 0;
+		// Reset cache since we're clearing the module state
+		moduleIndexLoaded = false;
+		moduleIndexLoading = false;
 		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, ModuleIndexKey));
 	}
 
@@ -1427,6 +1434,9 @@ public static class Abxr
 			};
 
 			StorageSetEntry(ModuleIndexKey, serializedData, StorageScope.user, StoragePolicy.keepLatest);
+			
+			// Reset cache since we've updated the stored index
+			moduleIndexLoaded = false;
 		}
 		catch (System.Exception ex)
 		{
@@ -1436,12 +1446,20 @@ public static class Abxr
 
 	private static void LoadModuleIndex()
 	{
+		// Don't load if already loaded or currently loading
+		if (moduleIndexLoaded || moduleIndexLoading)
+		{
+			return;
+		}
+
 		try
 		{
+			moduleIndexLoading = true;
 			CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
 		}
 		catch (System.Exception ex)
 		{
+			moduleIndexLoading = false;
 			LogError($"Failed to load module index: {ex.Message}");
 		}
 	}
@@ -1465,6 +1483,10 @@ public static class Abxr
 					}
 				}
 			}
+			
+			// Mark loading as complete
+			moduleIndexLoaded = true;
+			moduleIndexLoading = false;
 		});
 	}
 
@@ -1522,6 +1544,10 @@ public static class Abxr
 		
 		// Update authentication status
 		isAuthenticated = success;
+		
+		// Reset module index cache for new authentication
+		moduleIndexLoaded = false;
+		moduleIndexLoading = false;
 		
 		// Create authentication data first to have access to complete modules
 		var moduleDataList = ConvertToModuleDataList(Authentication.GetModules());
