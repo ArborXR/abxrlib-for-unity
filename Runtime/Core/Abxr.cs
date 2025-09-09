@@ -480,6 +480,14 @@ public static class Abxr
 		TelemetryBatcher.Add(name, meta);
 	}
 
+	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
+	// This method exists purely for backward compatibility with older code that used TelemetryEntry()
+	// It simply wraps the new Telemetry() method. Keep this undocumented in README files.
+	public static void TelemetryEntry(string name, Dictionary<string, string> meta)
+	{
+		Telemetry(name, meta);
+	}
+
 	/// <summary>
 	/// Get the session data with the default name 'state'
 	/// Call this as follows:
