@@ -44,6 +44,7 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<StorageBatcher>("StorageBatcher");
             ObjectAttacher.Attach<TelemetryBatcher>("TelemetryBatcher");
             ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
+            ObjectAttacher.Attach<ApplicationQuitHandler>("ApplicationQuitHandler");
 #if UNITY_ANDROID && !UNITY_EDITOR
             ObjectAttacher.Attach<HeadsetDetector>("HeadsetDetector");
             if (Configuration.Instance.headsetTracking)

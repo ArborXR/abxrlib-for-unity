@@ -47,6 +47,9 @@ namespace AbxrLib.Runtime.Authentication
         private const string DeviceIdKey = "abxrlib_device_id";
 
         private static bool _keyboardAuthSuccess;
+        
+        // Auth handoff for external launcher apps
+        private static bool _authHandoffCompleted = false;
 
         public static bool Authenticated() => DateTime.UtcNow <= _tokenExpiry;
     
@@ -71,6 +74,13 @@ namespace AbxrLib.Runtime.Authentication
 
         public static IEnumerator Authenticate()
         {
+            // Check for auth handoff first before doing normal authentication
+            yield return CheckAuthHandoff();
+            if (_authHandoffCompleted)
+            {
+                yield break; // Auth handoff handled everything, we're done
+            }
+            
             yield return AuthRequest();
             if (!string.IsNullOrEmpty(_authToken))
             {
@@ -105,6 +115,9 @@ namespace AbxrLib.Runtime.Authentication
             _userEmailCache = null;
             _authResponseAppId = null;
             _authResponseModules = null;
+            
+            // Reset auth handoff state
+            _authHandoffCompleted = false;
         
             CoroutineRunner.Instance.StartCoroutine(Authenticate());
         }
@@ -530,6 +543,113 @@ namespace AbxrLib.Runtime.Authentication
             return moduleTargets;
         }
 
+        /// <summary>
+        /// Check for authentication handoff from external launcher apps
+        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params
+        /// </summary>
+        private static IEnumerator CheckAuthHandoff()
+        {
+            string handoffJson = "";
+            
+            // Check command line arguments first
+            handoffJson = Utils.GetCommandLineArg("auth_handoff");
+            
+            // If not found, check Android intent parameters
+            if (string.IsNullOrEmpty(handoffJson))
+            {
+                handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
+            }
+            
+            // If not found, check WebGL query parameters (for consistency)
+            if (string.IsNullOrEmpty(handoffJson))
+            {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                handoffJson = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
+#endif
+            }
+            
+            if (!string.IsNullOrEmpty(handoffJson))
+            {
+                yield return ProcessAuthHandoff(handoffJson);
+            }
+            
+            yield return null;
+        }
+
+        /// <summary>
+        /// Process authentication handoff JSON data and set up authentication state
+        /// </summary>
+        private static IEnumerator ProcessAuthHandoff(string handoffJson)
+        {
+            bool success = false;
+            
+            try
+            {
+                Debug.Log("AbxrLib - Processing authentication handoff from external launcher");
+                
+                // Parse the handoff JSON
+                var handoffData = JsonConvert.DeserializeObject<AuthHandoffData>(handoffJson);
+                
+                if (handoffData?.success != true)
+                {
+                    Debug.LogWarning("AbxrLib - Authentication handoff indicates failure, falling back to normal auth");
+                    yield break;
+                }
+                
+                // Set authentication state from handoff data
+                _authToken = handoffData.token;
+                _apiSecret = handoffData.secret;
+                _authResponseAppId = handoffData.appId;
+                
+                // Cache user data from handoff
+                _userDataCache = handoffData.userData as Dictionary<string, object>;
+                _userIdCache = handoffData.userId;
+                _userEmailCache = handoffData.userEmail;
+                _authResponseModules = new List<Dictionary<string, object>>();
+                
+                // Convert modules if provided
+                if (handoffData.modules != null)
+                {
+                    foreach (var module in handoffData.modules)
+                    {
+                        var moduleDict = new Dictionary<string, object>
+                        {
+                            ["id"] = module.id ?? "",
+                            ["name"] = module.name ?? "",
+                            ["target"] = module.target ?? "",
+                            ["order"] = module.order
+                        };
+                        _authResponseModules.Add(moduleDict);
+                    }
+                }
+                
+                // Set token expiry to far in the future since we're trusting the handoff
+                _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                
+                // Mark handoff as completed
+                _authHandoffCompleted = true;
+                
+                Debug.Log($"AbxrLib - Authentication handoff successful. User: {_userIdCache}, Modules: {_authResponseModules?.Count ?? 0}");
+                
+                // Extract module targets and notify completion
+                List<string> moduleTargets = ExtractModuleTargets(_authResponseModules);
+                Abxr.NotifyAuthCompleted(true, handoffData.isReauthentication, moduleTargets);
+                
+                success = true;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib - Failed to process authentication handoff: {ex.Message}");
+                _authHandoffCompleted = false;
+            }
+            
+            // Yield outside of try-catch block
+            if (success)
+            {
+                yield return null;
+            }
+        }
+
         private static void CacheUserDataFromJwt(Dictionary<string, object> decodedJwt)
         {
             try
@@ -637,6 +757,42 @@ namespace AbxrLib.Runtime.Authentication
         {
             None,
             ArborXR
+        }
+
+        /// <summary>
+        /// Data structure for authentication handoff JSON from external launcher apps
+        /// </summary>
+        [Preserve]
+        private class AuthHandoffData
+        {
+            public bool success;
+            public string token;
+            public string secret;
+            public object userData;
+            public object userId;
+            public string userEmail;
+            public string appId;
+            public List<AuthHandoffModule> modules;
+            public int moduleCount;
+            public bool isReauthentication;
+
+            [Preserve]
+            public AuthHandoffData() { }
+        }
+
+        /// <summary>
+        /// Module data structure for authentication handoff
+        /// </summary>
+        [Preserve]
+        private class AuthHandoffModule
+        {
+            public string id;
+            public string name;
+            public string target;
+            public int order;
+
+            [Preserve]
+            public AuthHandoffModule() { }
         }
     }
 }
