@@ -581,6 +581,8 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         private static IEnumerator ProcessAuthHandoff(string handoffJson)
         {
+            bool success = false;
+            
             try
             {
                 Debug.Log("AbxrLib - Processing authentication handoff from external launcher");
@@ -633,12 +635,18 @@ namespace AbxrLib.Runtime.Authentication
                 List<string> moduleTargets = ExtractModuleTargets(_authResponseModules);
                 Abxr.NotifyAuthCompleted(true, handoffData.isReauthentication, moduleTargets);
                 
-                yield return null;
+                success = true;
             }
             catch (System.Exception ex)
             {
                 Debug.LogError($"AbxrLib - Failed to process authentication handoff: {ex.Message}");
                 _authHandoffCompleted = false;
+            }
+            
+            // Yield outside of try-catch block
+            if (success)
+            {
+                yield return null;
             }
         }
 
