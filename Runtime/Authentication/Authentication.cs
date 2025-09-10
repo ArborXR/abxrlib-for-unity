@@ -42,6 +42,7 @@ namespace AbxrLib.Runtime.Authentication
         
         // Complete authentication response data
         private static string _authResponseAppId;
+        private static string _authResponsePackageName;
         private static List<Dictionary<string, object>> _authResponseModules;
     
         private const string DeviceIdKey = "abxrlib_device_id";
@@ -114,6 +115,7 @@ namespace AbxrLib.Runtime.Authentication
             _userIdCache = null;
             _userEmailCache = null;
             _authResponseAppId = null;
+            _authResponsePackageName = null;
             _authResponseModules = null;
             
             // Reset auth handoff state
@@ -336,6 +338,7 @@ namespace AbxrLib.Runtime.Authentication
                 _userIdCache = null;
                 _userEmailCache = null;
                 _authResponseAppId = null;
+            _authResponsePackageName = null;
                 _authResponseModules = null;
                 
                 // Notify authentication failure
@@ -439,6 +442,11 @@ namespace AbxrLib.Runtime.Authentication
             return _authResponseAppId;
         }
 
+        public static string GetPackageName()
+        {
+            return _authResponsePackageName;
+        }
+
         public static List<Dictionary<string, object>> GetModules()
         {
             return _authResponseModules;
@@ -488,8 +496,9 @@ namespace AbxrLib.Runtime.Authentication
                     }
                 }
 
-                // Cache appId and modules from auth response
+                // Cache appId, packageName and modules from auth response
                 _authResponseAppId = authResponse.AppId;
+                _authResponsePackageName = authResponse.PackageName;
                 _authResponseModules = authResponse.Modules ?? new List<Dictionary<string, object>>();
             }
             catch (System.Exception ex)
@@ -499,6 +508,7 @@ namespace AbxrLib.Runtime.Authentication
                 _userIdCache = null;
                 _userEmailCache = null;
                 _authResponseAppId = null;
+                _authResponsePackageName = null;
                 _authResponseModules = null;
             }
         }
@@ -600,6 +610,7 @@ namespace AbxrLib.Runtime.Authentication
                 _authToken = handoffData.token;
                 _apiSecret = handoffData.secret;
                 _authResponseAppId = handoffData.appId;
+                _authResponsePackageName = handoffData.packageName;
                 
                 // Cache user data from handoff
                 _userDataCache = handoffData.userData as Dictionary<string, object>;
@@ -747,6 +758,7 @@ namespace AbxrLib.Runtime.Authentication
             public Dictionary<string, object> UserData;
             public object UserId;
             public string AppId;
+            public string PackageName;
             public List<Dictionary<string, object>> Modules;
 
             [Preserve]
@@ -772,6 +784,7 @@ namespace AbxrLib.Runtime.Authentication
             public object userId;
             public string userEmail;
             public string appId;
+            public string packageName;
             public List<AuthHandoffModule> modules;
             public int moduleCount;
             public bool isReauthentication;

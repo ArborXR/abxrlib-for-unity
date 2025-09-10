@@ -262,11 +262,12 @@ public static class Abxr
 		public object userId;            // User identifier
 		public string userEmail;         // User email address (extracted from userData.email)
 		public string appId;             // Application identifier
+		public string packageName;       // Package name identifier
 		public List<ModuleData> modules; // List of available modules
 		public int moduleCount;          // Total number of modules available (use GetModuleTarget() to iterate through them)
 		public bool isReauthentication;  // Whether this was a reauthentication (vs initial auth)
 
-		public AuthCompletedData(bool success, string token, string secret, object userData, object userId, string userEmail, string appId, List<ModuleData> modules, bool isReauthentication)
+		public AuthCompletedData(bool success, string token, string secret, object userData, object userId, string userEmail, string appId, string packageName, List<ModuleData> modules, bool isReauthentication)
 		{
 			this.success = success;
 			this.token = token;
@@ -275,6 +276,7 @@ public static class Abxr
 			this.userId = userId;
 			this.userEmail = userEmail;
 			this.appId = appId;
+			this.packageName = packageName;
 			this.modules = modules ?? new List<ModuleData>();
 			this.moduleCount = modules?.Count ?? 0;
 			this.isReauthentication = isReauthentication;
@@ -295,7 +297,8 @@ public static class Abxr
 					["secret"] = secret ?? "",
 					["userData"] = userData,
 					["userId"] = userId,
-					["appId"] = appId ?? ""
+					["appId"] = appId ?? "",
+					["packageName"] = packageName ?? ""
 				};
 
 				if (modules != null && modules.Count > 0)
@@ -1574,6 +1577,7 @@ public static class Abxr
 			GetUserId(),
 			GetUserEmail(),
 			Authentication.GetAppId(),
+			Authentication.GetPackageName(),
 			moduleDataList,
 			isReauthentication
 		);
