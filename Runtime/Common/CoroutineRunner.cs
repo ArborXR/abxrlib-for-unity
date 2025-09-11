@@ -12,10 +12,15 @@ namespace AbxrLib.Runtime.Common
         private static readonly object _lock = new object();
         private static System.Threading.Timer _backupTimer;
         private static int _currentInstanceIndex = 0;
+        private static int _mainThreadId;
 
         // Backup timer actions that run independent of Unity's Update cycle
         private static readonly Queue<System.Action> _backupActions = new Queue<System.Action>();
         private static readonly object _actionLock = new object();
+        
+        // Main thread action queue for executing Unity API calls safely
+        private static readonly Queue<System.Action> _mainThreadActions = new Queue<System.Action>();
+        private static readonly object _mainThreadLock = new object();
 
         public static CoroutineRunner Instance
         {
@@ -52,6 +57,12 @@ namespace AbxrLib.Runtime.Common
             var runner = go.AddComponent<CoroutineRunner>();
             _instances.Add(runner);
             
+            // Store main thread ID on first instance creation
+            if (_mainThreadId == 0)
+            {
+                _mainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
+            }
+            
             // Start backup timer on first instance creation
             if (_backupTimer == null)
             {
@@ -78,22 +89,37 @@ namespace AbxrLib.Runtime.Common
         {
             try
             {
+                // Check if we're on the main thread
+                bool isMainThread = System.Threading.Thread.CurrentThread.ManagedThreadId == _mainThreadId;
+                
                 lock (_actionLock)
                 {
                     while (_backupActions.Count > 0)
                     {
                         var action = _backupActions.Dequeue();
-                        try
+                        
+                        if (isMainThread)
                         {
-                            // Execute on main thread when possible
-                            if (Instance != null)
+                            // Safe to call Unity APIs directly
+                            try
                             {
-                                Instance.StartCoroutine(ExecuteActionCoroutine(action));
+                                if (Instance != null)
+                                {
+                                    Instance.StartCoroutine(ExecuteActionCoroutine(action));
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogWarning($"AbxrLib - Backup action failed: {ex.Message}");
                             }
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            Debug.LogWarning($"AbxrLib - Backup action failed: {ex.Message}");
+                            // Queue for main thread execution
+                            lock (_mainThreadLock)
+                            {
+                                _mainThreadActions.Enqueue(action);
+                            }
                         }
                     }
                 }
@@ -129,6 +155,26 @@ namespace AbxrLib.Runtime.Common
                 {
                     Debug.LogWarning("AbxrLib - All CoroutineRunner instances failed, creating new ones");
                     CreateNewInstance();
+                }
+            }
+        }
+
+        private void Update()
+        {
+            // Process main thread actions queue
+            lock (_mainThreadLock)
+            {
+                while (_mainThreadActions.Count > 0)
+                {
+                    var action = _mainThreadActions.Dequeue();
+                    try
+                    {
+                        StartCoroutine(ExecuteActionCoroutine(action));
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogWarning($"AbxrLib - Main thread action failed: {ex.Message}");
+                    }
                 }
             }
         }
