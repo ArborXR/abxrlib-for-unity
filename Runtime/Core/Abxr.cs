@@ -9,6 +9,7 @@ using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Events;
 using AbxrLib.Runtime.Logs;
 using AbxrLib.Runtime.ServiceClient;
+using AbxrLib.Runtime.ServiceClient.MJPKotlinExample;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
 using AbxrLib.Runtime.UI.ExitPoll;
@@ -1230,6 +1231,11 @@ public static class Abxr
 	/// <returns>The device fingerprint.</returns>
 	public static string GetFingerprint() =>
 		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
+
+	/// <summary>Gets the current time from the MJP Kotlin service.</summary>
+	/// <returns>The current time as a string, or empty string if service is not connected.</returns>
+	public static string WhatTimeIsIt() =>
+		MJPKotlinServiceExampleClient.IsConnected() ? MJPKotlinServiceExampleClient.MjpServiceWrapper?.WhatTimeIsIt() : "";
 
 	#region Module Target and User Data Methods
 

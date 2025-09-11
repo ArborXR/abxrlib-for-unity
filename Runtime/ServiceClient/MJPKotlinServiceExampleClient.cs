@@ -3,7 +3,7 @@ using System;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace Abxr.Runtime.MJPKotlinServiceExampleClient
+namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 {
 	// This is the core mechanism for the ServiceWrapper below for calling bound methods in the service.
 	public static class AndroidJavaObjectExt
