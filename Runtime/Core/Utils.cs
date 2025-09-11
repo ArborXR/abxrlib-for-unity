@@ -100,7 +100,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogError("AbxrLib - Failed to get local IP address: " + ex.Message);
+                Debug.LogError("AbxrLib: Failed to get local IP address: " + ex.Message);
             }
 
             return "0.0.0.0";
@@ -197,7 +197,7 @@ namespace AbxrLib.Runtime.Core
         }
         catch (System.Exception ex)
         {
-            Debug.LogWarning($"AbxrLib - Failed to get Android intent parameter '{key}': {ex.Message}");
+            Debug.LogWarning($"AbxrLib: Failed to get Android intent parameter '{key}': {ex.Message}");
         }
 #endif
         return "";

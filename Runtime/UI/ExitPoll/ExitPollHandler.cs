@@ -47,7 +47,7 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
             if (!_ratingPrefab)
             {
-                Debug.LogError("AbxrLib - Failed to load exit poll prefab");
+                Debug.LogError("AbxrLib: Failed to load exit poll prefab");
             }
         }
 

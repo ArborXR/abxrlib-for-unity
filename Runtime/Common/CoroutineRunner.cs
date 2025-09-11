@@ -110,7 +110,7 @@ namespace AbxrLib.Runtime.Common
                             }
                             catch (Exception ex)
                             {
-                                Debug.LogWarning($"AbxrLib - Backup action failed: {ex.Message}");
+                                Debug.LogWarning($"AbxrLib: Backup action failed: {ex.Message}");
                             }
                         }
                         else
@@ -126,7 +126,7 @@ namespace AbxrLib.Runtime.Common
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib - Backup timer execution failed: {ex.Message}");
+                Debug.LogError($"AbxrLib: Backup timer execution failed: {ex.Message}");
             }
         }
 
@@ -138,7 +138,7 @@ namespace AbxrLib.Runtime.Common
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib - Action execution failed: {ex.Message}");
+                Debug.LogError($"AbxrLib: Action execution failed: {ex.Message}");
             }
             yield return null;
         }
@@ -153,7 +153,7 @@ namespace AbxrLib.Runtime.Common
                 _instances.RemoveAll(instance => instance == null);
                 if (_instances.Count == 0)
                 {
-                    Debug.LogWarning("AbxrLib - All CoroutineRunner instances failed, creating new ones");
+                    Debug.LogWarning("AbxrLib: All CoroutineRunner instances failed, creating new ones");
                     CreateNewInstance();
                 }
             }
@@ -173,7 +173,7 @@ namespace AbxrLib.Runtime.Common
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogWarning($"AbxrLib - Main thread action failed: {ex.Message}");
+                        Debug.LogWarning($"AbxrLib: Main thread action failed: {ex.Message}");
                     }
                 }
             }
@@ -184,7 +184,7 @@ namespace AbxrLib.Runtime.Common
             lock (_lock)
             {
                 _instances.Remove(this);
-                Debug.Log($"AbxrLib - CoroutineRunner destroyed, {_instances.Count} remaining");
+                Debug.Log($"AbxrLib: CoroutineRunner destroyed, {_instances.Count} remaining");
             }
         }
 
@@ -199,7 +199,7 @@ namespace AbxrLib.Runtime.Common
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"AbxrLib - Primary coroutine start failed: {ex.Message}, trying fallback");
+                Debug.LogWarning($"AbxrLib: Primary coroutine start failed: {ex.Message}, trying fallback");
                 
                 // Try other instances
                 lock (_lock)
@@ -228,7 +228,7 @@ namespace AbxrLib.Runtime.Common
                     }
                     catch (Exception backupEx)
                     {
-                        Debug.LogError($"AbxrLib - All coroutine execution attempts failed: {backupEx.Message}");
+                        Debug.LogError($"AbxrLib: All coroutine execution attempts failed: {backupEx.Message}");
                     }
                 });
                 

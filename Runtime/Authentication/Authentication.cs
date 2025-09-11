@@ -88,13 +88,13 @@ namespace AbxrLib.Runtime.Authentication
                 yield return GetConfiguration();
                 if (!string.IsNullOrEmpty(_authMechanism?.prompt))
                 {
-                    Debug.Log("AbxrLib - Additional user authentication required (PIN/credentials)");
+                    Debug.Log("AbxrLib: Additional user authentication required (PIN/credentials)");
                     yield return KeyboardAuthenticate();
                     // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
                 }
                 else
                 {
-                    Debug.Log("AbxrLib - Authentication fully completed");
+                    Debug.Log("AbxrLib: Authentication fully completed");
                     // No additional auth needed - notify completion now
                     List<string> moduleTargets = ExtractModuleTargets(Authentication.GetModules());
                     Abxr.NotifyAuthCompleted(true, false, moduleTargets);
@@ -163,7 +163,7 @@ namespace AbxrLib.Runtime.Authentication
             }
             catch (Exception e)
             {
-                Debug.LogError($"AbxrLib - {e.Message}");
+                Debug.LogError($"AbxrLib: {e.Message}");
             }
             // Note: _userId will be properly set from JWT token during authentication
         }
@@ -201,7 +201,7 @@ namespace AbxrLib.Runtime.Authentication
             const string appIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
             if (string.IsNullOrEmpty(_appId) || !Regex.IsMatch(_appId, appIdPattern))
             {
-                Debug.LogError("AbxrLib - Invalid Application ID. Cannot authenticate.");
+                Debug.LogError("AbxrLib: Invalid Application ID. Cannot authenticate.");
                 return false;
             }
         
@@ -211,14 +211,14 @@ namespace AbxrLib.Runtime.Authentication
                 const string orgIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
                 if (!Regex.IsMatch(_orgId, orgIdPattern))
                 {
-                    Debug.LogError("AbxrLib - Invalid Organization ID. Cannot authenticate.");
+                    Debug.LogError("AbxrLib: Invalid Organization ID. Cannot authenticate.");
                     return false;
                 }
             }
         
             // if (string.IsNullOrEmpty(_authSecret))
             // {
-            //     Debug.LogError("AbxrLib - Missing Auth Secret. Cannot authenticate.");
+            //     Debug.LogError("AbxrLib: Missing Auth Secret. Cannot authenticate.");
             //     return false;
             // }
 
@@ -236,7 +236,7 @@ namespace AbxrLib.Runtime.Authentication
                 {
                     KeyboardHandler.Destroy();
                     _failedAuthAttempts = 0;
-                    Debug.Log("AbxrLib - Final authentication successful");
+                    Debug.Log("AbxrLib: Final authentication successful");
                     
                     // Notify completion for keyboard authentication success
                     List<string> moduleTargets = ExtractModuleTargets(Authentication.GetModules());
@@ -325,12 +325,12 @@ namespace AbxrLib.Runtime.Authentication
                 List<string> moduleTargets = ExtractModuleTargets(postResponse.Modules);
                 
                 // Log initial success - but don't notify completion yet since additional auth may be required
-                Debug.Log("AbxrLib - API connection established");
+                Debug.Log("AbxrLib: API connection established");
             }
             else
             {
                 string error = $"{request.error} - {request.downloadHandler.text}";
-                Debug.LogError($"AbxrLib - Authentication failed : {error}");
+                Debug.LogError($"AbxrLib: Authentication failed : {error}");
                 _sessionId = null;
                 
                 // Clear cached user data on failure
@@ -363,7 +363,7 @@ namespace AbxrLib.Runtime.Authentication
             }
             else
             {
-                Debug.LogWarning($"AbxrLib - GetConfiguration failed: {request.error} - {request.downloadHandler.text}");
+                Debug.LogWarning($"AbxrLib: GetConfiguration failed: {request.error} - {request.downloadHandler.text}");
             }
         }
     
@@ -503,7 +503,7 @@ namespace AbxrLib.Runtime.Authentication
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib - Failed to cache auth response data: {ex.Message}");
+                Debug.LogError($"AbxrLib: Failed to cache auth response data: {ex.Message}");
                 _userDataCache = null;
                 _userIdCache = null;
                 _userEmailCache = null;
@@ -547,7 +547,7 @@ namespace AbxrLib.Runtime.Authentication
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib - Failed to extract module targets: {ex.Message}");
+                Debug.LogError($"AbxrLib: Failed to extract module targets: {ex.Message}");
             }
 
             return moduleTargets;
@@ -596,7 +596,7 @@ namespace AbxrLib.Runtime.Authentication
             
             try
             {
-                Debug.Log("AbxrLib - Processing authentication handoff from external launcher");
+                Debug.Log("AbxrLib: Processing authentication handoff from external launcher");
                 
                 // Parse the handoff JSON
                 AuthHandoffData handoffData = null;
@@ -606,13 +606,13 @@ namespace AbxrLib.Runtime.Authentication
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"AbxrLib - Failed to parse handoff JSON: {ex.Message}");
+                    Debug.LogError($"AbxrLib: Failed to parse handoff JSON: {ex.Message}");
                     yield break;
                 }
                 
                 if (handoffData?.success != true)
                 {
-                    Debug.LogWarning($"AbxrLib - Authentication handoff indicates failure (handoffData null: {handoffData == null}, success: {handoffData?.success}), falling back to normal auth");
+                    Debug.LogWarning($"AbxrLib: Authentication handoff indicates failure (handoffData null: {handoffData == null}, success: {handoffData?.success}), falling back to normal auth");
                     yield break;
                 }
                 
@@ -650,7 +650,7 @@ namespace AbxrLib.Runtime.Authentication
                 // Mark handoff as completed
                 _authHandoffCompleted = true;
                 
-                Debug.Log($"AbxrLib - Authentication handoff successful. Modules: {_authResponseModules?.Count ?? 0}");
+                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModules?.Count ?? 0}");
                 
                 // Extract module targets and notify completion
                 List<string> moduleTargets = ExtractModuleTargets(_authResponseModules);
@@ -660,7 +660,7 @@ namespace AbxrLib.Runtime.Authentication
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib - Failed to process authentication handoff: {ex.Message}");
+                Debug.LogError($"AbxrLib: Failed to process authentication handoff: {ex.Message}");
                 _authHandoffCompleted = false;
             }
             
@@ -696,7 +696,7 @@ namespace AbxrLib.Runtime.Authentication
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib - Failed to cache user data from JWT: {ex.Message}");
+                Debug.LogError($"AbxrLib: Failed to cache user data from JWT: {ex.Message}");
                 _userDataCache = null;
                 _userIdCache = null;
                 _userEmailCache = null;

@@ -81,11 +81,11 @@ namespace AbxrLib.Runtime.Telemetry
 			yield return request.SendWebRequest();
 			if (request.result == UnityWebRequest.Result.Success)
 			{
-				Debug.Log("AbxrLib - Telemetry POST Request successful");
+				Debug.Log("AbxrLib: Telemetry POST Request successful");
 			}
 			else
 			{
-				Debug.LogError($"AbxrLib - Telemetry POST Request failed : {request.error} - {request.downloadHandler.text}");
+				Debug.LogError($"AbxrLib: Telemetry POST Request failed : {request.error} - {request.downloadHandler.text}");
 				_timer = Configuration.Instance.sendRetryIntervalSeconds;
 				lock (Lock)
 				{

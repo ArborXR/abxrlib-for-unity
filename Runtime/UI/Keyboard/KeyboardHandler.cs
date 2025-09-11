@@ -70,7 +70,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
             if (!_keyboardPrefab)
             {
-                Debug.LogError("AbxrLib - Failed to load keyboard prefab");
+                Debug.LogError("AbxrLib: Failed to load keyboard prefab");
             }
         }
     

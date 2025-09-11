@@ -107,11 +107,11 @@ namespace AbxrLib.Runtime.Events
 			yield return request.SendWebRequest();
 			if (request.result == UnityWebRequest.Result.Success)
 			{
-				Debug.Log("AbxrLib - Event POST Request successful");
+				Debug.Log("AbxrLib: Event POST Request successful");
 			}
 			else
 			{
-				Debug.LogError($"AbxrLib - Event POST Request failed : {request.error} - {request.downloadHandler.text}");
+				Debug.LogError($"AbxrLib: Event POST Request failed : {request.error} - {request.downloadHandler.text}");
 				_timer = Configuration.Instance.sendRetryIntervalSeconds;
 				lock (Lock)
 				{

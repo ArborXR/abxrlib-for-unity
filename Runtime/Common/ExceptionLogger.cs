@@ -44,7 +44,7 @@ namespace AbxrLib.Runtime.Common
             }
             catch (Exception e)
             {
-                Debug.LogError($"Failed to log to Android: {e.Message}");
+                Debug.LogError($"AbxrLib: Failed to log to Android: {e.Message}");
             }
         }
     }
