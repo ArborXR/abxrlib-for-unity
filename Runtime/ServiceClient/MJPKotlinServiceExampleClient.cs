@@ -79,6 +79,12 @@ namespace Abxr.Runtime.MJPKotlinServiceExampleClient
 
 			public void StopPlayback() => _native.CallResult<string>("stopPlayback");
 			public string WhatTimeIsIt() => _native.CallResult<string>("whatTimeIsIt");
+			public bool GetIsInitialized()
+			{
+				//var value = _native.CallResult<string>("getIsInitialized");
+				//return !string.IsNullOrWhiteSpace(value) && Convert.ToBoolean(value);
+				return true;
+			}
 		}
 
 		private async Task NotifyWhenInitializedAsync(AndroidJavaObject? nativeObj)
@@ -95,28 +101,28 @@ namespace Abxr.Runtime.MJPKotlinServiceExampleClient
 			var serviceWrapper = new MjpSdkServiceWrapper(nativeObj);
 #pragma warning restore CS8604 // Possible null reference argument.
 #pragma warning restore CA2000 // Dispose objects before losing scope
-//			try
-//			{
-//				for (var attempt = 0; attempt < maximumAttempts; attempt++)
-//				{
-//					if (serviceWrapper.GetIsInitialized())
-//					{
-//						MjpServiceWrapper = serviceWrapper;
-//						return;
-//					}
-//					await DelayAndReattachThreadToJNI(delay);
-//					_ = AndroidJNI.AttachCurrentThread();
-//					delay = (int)Math.Floor(delay * delayMultiplier);
-//				}
-//#pragma warning disable CA1031
+			try
+			{
+				for (var attempt = 0; attempt < maximumAttempts; attempt++)
+				{
+					if (serviceWrapper.GetIsInitialized())
+					{
+						MjpServiceWrapper = serviceWrapper;
+						return;
+					}
+					await DelayAndReattachThreadToJNI(delay);
+					_ = AndroidJNI.AttachCurrentThread();
+					delay = (int)Math.Floor(delay * delayMultiplier);
+				}
+#pragma warning disable CA1031
 
-//			}
-//			catch
-//			{
-//				await DelayAndReattachThreadToJNI(delay);
-//				_ = AndroidJNI.AttachCurrentThread();
-//				MjpServiceWrapper = serviceWrapper;
-//			}
+			}
+			catch
+			{
+				await DelayAndReattachThreadToJNI(delay);
+				_ = AndroidJNI.AttachCurrentThread();
+				MjpServiceWrapper = serviceWrapper;
+			}
 #pragma warning restore CA1031
 		}
 
