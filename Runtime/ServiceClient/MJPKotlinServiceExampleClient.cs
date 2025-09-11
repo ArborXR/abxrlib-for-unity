@@ -2,7 +2,6 @@
 using System;
 using System.Threading.Tasks;
 using UnityEngine;
-using static Abxr.Runtime.ServiceClient.ArborServiceClient;
 
 namespace Abxr.Runtime.MJPKotlinServiceExampleClient
 {
