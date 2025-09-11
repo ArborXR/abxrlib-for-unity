@@ -1234,8 +1234,47 @@ public static class Abxr
 
 	/// <summary>Gets the current time from the MJP Kotlin service.</summary>
 	/// <returns>The current time as a string, or empty string if service is not connected.</returns>
-	public static string WhatTimeIsIt() =>
-		MJPKotlinServiceExampleClient.IsConnected() ? MJPKotlinServiceExampleClient.MjpServiceWrapper?.WhatTimeIsIt() : "";
+	public static string WhatTimeIsIt()
+	{
+		Debug.Log("[Abxr] WhatTimeIsIt() called");
+		
+		// First check if there's even an instance of the service client in the scene
+		var instance = MJPKotlinServiceExampleClient.FindInstance();
+		if (instance == null)
+		{
+			Debug.LogWarning("[Abxr] No MJPKotlinServiceExampleClient instance found in scene! You need to add it to a GameObject.");
+			return "";
+		}
+		
+		bool isConnected = MJPKotlinServiceExampleClient.IsConnected();
+		Debug.Log($"[Abxr] MJPKotlinServiceExampleClient.IsConnected() = {isConnected}");
+		
+		if (!isConnected)
+		{
+			Debug.Log("[Abxr] Service not connected, returning empty string");
+			return "";
+		}
+		
+		if (MJPKotlinServiceExampleClient.MjpServiceWrapper == null)
+		{
+			Debug.LogWarning("[Abxr] IsConnected() returned true but MjpServiceWrapper is null!");
+			return "";
+		}
+		
+		try
+		{
+			Debug.Log("[Abxr] Calling MjpServiceWrapper.WhatTimeIsIt()");
+			string result = MJPKotlinServiceExampleClient.MjpServiceWrapper.WhatTimeIsIt();
+			Debug.Log($"[Abxr] WhatTimeIsIt() result: '{result}'");
+			return result;
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError($"[Abxr] Error in WhatTimeIsIt(): {ex.Message}");
+			Debug.LogError($"[Abxr] Stack trace: {ex.StackTrace}");
+			return "";
+		}
+	}
 
 	#region Module Target and User Data Methods
 
