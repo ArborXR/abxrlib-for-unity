@@ -40,6 +40,7 @@ namespace AbxrLib.Runtime.Core
         /// <summary>
         /// Automatically complete all running Assessments, Objectives, and Interactions
         /// Uses Incomplete status to indicate the events were terminated due to application quit
+        /// Processing order: Interactions → Objectives → Assessments (hierarchical order)
         /// </summary>
         private void CloseRunningEvents()
         {
@@ -50,39 +51,7 @@ namespace AbxrLib.Runtime.Core
 
             int totalClosed = 0;
 
-            // Close running Assessments
-            if (assessmentStartTimes != null && assessmentStartTimes.Count > 0)
-            {
-                var assessmentNames = new List<string>(assessmentStartTimes.Keys);
-                foreach (string assessmentName in assessmentNames)
-                {
-                    Abxr.EventAssessmentComplete(assessmentName, 0, Abxr.EventStatus.Incomplete, 
-                        new Dictionary<string, string> 
-                        { 
-                            ["quit_reason"] = "application_quit",
-                            ["auto_closed"] = "true"
-                        });
-                    totalClosed++;
-                }
-            }
-
-            // Close running Objectives
-            if (objectiveStartTimes != null && objectiveStartTimes.Count > 0)
-            {
-                var objectiveNames = new List<string>(objectiveStartTimes.Keys);
-                foreach (string objectiveName in objectiveNames)
-                {
-                    Abxr.EventObjectiveComplete(objectiveName, 0, Abxr.EventStatus.Incomplete,
-                        new Dictionary<string, string> 
-                        { 
-                            ["quit_reason"] = "application_quit",
-                            ["auto_closed"] = "true"
-                        });
-                    totalClosed++;
-                }
-            }
-
-            // Close running Interactions
+            // Close running Interactions first (lowest level)
             if (interactionStartTimes != null && interactionStartTimes.Count > 0)
             {
                 var interactionNames = new List<string>(interactionStartTimes.Keys);
@@ -98,9 +67,45 @@ namespace AbxrLib.Runtime.Core
                 }
             }
 
+            // Close running Objectives second (middle level)
+            if (objectiveStartTimes != null && objectiveStartTimes.Count > 0)
+            {
+                var objectiveNames = new List<string>(objectiveStartTimes.Keys);
+                foreach (string objectiveName in objectiveNames)
+                {
+                    Abxr.EventObjectiveComplete(objectiveName, 0, Abxr.EventStatus.Incomplete,
+                        new Dictionary<string, string> 
+                        { 
+                            ["quit_reason"] = "application_quit",
+                            ["auto_closed"] = "true"
+                        });
+                    totalClosed++;
+                }
+            }
+
+            // Close running Assessments last (highest level)
+            if (assessmentStartTimes != null && assessmentStartTimes.Count > 0)
+            {
+                var assessmentNames = new List<string>(assessmentStartTimes.Keys);
+                foreach (string assessmentName in assessmentNames)
+                {
+                    Abxr.EventAssessmentComplete(assessmentName, 0, Abxr.EventStatus.Incomplete, 
+                        new Dictionary<string, string> 
+                        { 
+                            ["quit_reason"] = "application_quit",
+                            ["auto_closed"] = "true"
+                        });
+                    totalClosed++;
+                }
+            }
+
             if (totalClosed > 0)
             {
                 Debug.Log($"AbxrLib - Automatically closed {totalClosed} running events due to application quit");
+                
+                // Force immediate send of all events with maximum redundancy for VR reliability
+                AbxrLib.Runtime.Events.EventBatcher.ForceImmediateSend();
+                
                 // Log the cleanup activity
                 Abxr.Log($"Application quit handler closed {totalClosed} running events", Abxr.LogLevel.Info, 
                     new Dictionary<string, string> 
@@ -108,6 +113,9 @@ namespace AbxrLib.Runtime.Core
                         ["events_closed"] = totalClosed.ToString(),
                         ["quit_handler"] = "automatic"
                     });
+                    
+                // Also force send logs
+                AbxrLib.Runtime.Events.EventBatcher.ForceImmediateSend();
             }
         }
 
