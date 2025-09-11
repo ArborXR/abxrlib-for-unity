@@ -561,13 +561,14 @@ namespace AbxrLib.Runtime.Authentication
         {
             string handoffJson = "";
             
-            // Check command line arguments first
-            handoffJson = Utils.GetCommandLineArg("auth_handoff");
-            
-            // If not found, check Android intent parameters
+            // Check Android intent parameters first
+            handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
+
+            // If not found, check command line arguments
             if (string.IsNullOrEmpty(handoffJson))
             {
-                handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
+            handoffJson = Utils.GetCommandLineArg("auth_handoff");
+            
             }
             
             // If not found, check WebGL query parameters (for consistency)
@@ -598,11 +599,20 @@ namespace AbxrLib.Runtime.Authentication
                 Debug.Log("AbxrLib - Processing authentication handoff from external launcher");
                 
                 // Parse the handoff JSON
-                var handoffData = JsonConvert.DeserializeObject<AuthHandoffData>(handoffJson);
+                AuthHandoffData handoffData = null;
+                try 
+                {
+                    handoffData = JsonConvert.DeserializeObject<AuthHandoffData>(handoffJson);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib - Failed to parse handoff JSON: {ex.Message}");
+                    yield break;
+                }
                 
                 if (handoffData?.success != true)
                 {
-                    Debug.LogWarning("AbxrLib - Authentication handoff indicates failure, falling back to normal auth");
+                    Debug.LogWarning($"AbxrLib - Authentication handoff indicates failure (handoffData null: {handoffData == null}, success: {handoffData?.success}), falling back to normal auth");
                     yield break;
                 }
                 
@@ -640,7 +650,7 @@ namespace AbxrLib.Runtime.Authentication
                 // Mark handoff as completed
                 _authHandoffCompleted = true;
                 
-                Debug.Log($"AbxrLib - Authentication handoff successful. User: {_userIdCache}, Modules: {_authResponseModules?.Count ?? 0}");
+                Debug.Log($"AbxrLib - Authentication handoff successful. Modules: {_authResponseModules?.Count ?? 0}");
                 
                 // Extract module targets and notify completion
                 List<string> moduleTargets = ExtractModuleTargets(_authResponseModules);
