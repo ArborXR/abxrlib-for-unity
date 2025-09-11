@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Globalization;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Core;
 using UnityEngine;
 
-namespace Abxr.Runtime.Telemetry
+namespace AbxrLib.Runtime.Telemetry
 {
     [DefaultExecutionOrder(100)] // Doesn't matter when this one runs
     [AddComponentMenu("Analytics for XR/Track Object")]
@@ -32,7 +32,7 @@ namespace Abxr.Runtime.Telemetry
                 ["y"] = transform.position.y.ToString(CultureInfo.InvariantCulture),
                 ["z"] = transform.position.z.ToString(CultureInfo.InvariantCulture)
             };
-            Core.Abxr.TelemetryEntry(name + " Position", positionDict);
+            Abxr.Telemetry(name + " Position", positionDict);
         }
     }
 }

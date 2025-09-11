@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using Abxr.Runtime.Common;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Core;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Abxr.Runtime.Events
+namespace AbxrLib.Runtime.Events
 {
 	public class EventBatcher : MonoBehaviour
 	{
@@ -18,19 +18,39 @@ namespace Abxr.Runtime.Events
 		private static float _timer;
 		private static float _lastCallTime;
 		private const float MaxCallFrequencySeconds = 1f;
-	
+		private static float _healthCheckTimer;
+		
 		private void Start()
 		{
 			_uri = new Uri(new Uri(Configuration.Instance.restUrl), UrlPath);
 			_timer = Configuration.Instance.sendNextBatchWaitSeconds;
+			_healthCheckTimer = 30f; // Initialize health check timer
 		}
-	
+
 		private void Update()
 		{
 			_timer -= Time.deltaTime;
-			if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
+			_healthCheckTimer -= Time.deltaTime;
+			
+			// Periodic health check of CoroutineRunner system
+			if (_healthCheckTimer <= 0)
+			{
+				_healthCheckTimer = 30f; // Check every 30 seconds
+				CoroutineRunner.HealthCheck();
+			}
+			
+			if (_timer <= 0) 
+			{
+				// Use safe coroutine start with redundancy
+				CoroutineRunner.SafeStartCoroutine(Send());
+				
+				// Also schedule backup action in case Update() cycle gets interrupted
+				CoroutineRunner.ScheduleBackupAction(() => {
+					CoroutineRunner.SafeStartCoroutine(Send());
+				});
+			}
 		}
-	
+		
 		public static void Add(string name, Dictionary<string, string> meta)
 		{
 			long eventTime = Utils.GetUnityTime();
@@ -47,6 +67,12 @@ namespace Abxr.Runtime.Events
 				if (Payloads.Count >= Configuration.Instance.eventsPerSendAttempt)
 				{
 					_timer = 0; // Send on the next update
+					
+					// Also trigger immediate send with backup redundancy
+					CoroutineRunner.SafeStartCoroutine(Send());
+					CoroutineRunner.ScheduleBackupAction(() => {
+						CoroutineRunner.SafeStartCoroutine(Send());
+					});
 				}
 			}
 		}
@@ -92,6 +118,25 @@ namespace Abxr.Runtime.Events
 					Payloads.InsertRange(0, eventsToSend);
 				}
 			}
+		}
+
+		/// <summary>
+		/// Force immediate send of all pending events with maximum redundancy
+		/// Useful for critical events like assessments/objectives completion on VR headsets
+		/// </summary>
+		public static void ForceImmediateSend()
+		{
+			// Multiple attempts to ensure delivery
+			CoroutineRunner.SafeStartCoroutine(Send());
+			CoroutineRunner.ScheduleBackupAction(() => {
+				CoroutineRunner.SafeStartCoroutine(Send());
+			});
+			
+			// Additional backup after short delay
+			CoroutineRunner.ScheduleBackupAction(() => {
+				System.Threading.Thread.Sleep(1000); // Wait 1 second
+				CoroutineRunner.SafeStartCoroutine(Send());
+			});
 		}
 
 		private class Payload

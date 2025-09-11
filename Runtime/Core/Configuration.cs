@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-namespace Abxr.Runtime.Core
+namespace AbxrLib.Runtime.Core
 {
     public class Configuration : ScriptableObject
     {

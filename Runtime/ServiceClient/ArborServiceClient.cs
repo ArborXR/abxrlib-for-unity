@@ -3,7 +3,7 @@ using System;
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace Abxr.Runtime.ServiceClient
+namespace AbxrLib.Runtime.ServiceClient
 {
     public static class AndroidJavaObjectExt
     {

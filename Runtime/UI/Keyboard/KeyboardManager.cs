@@ -2,7 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Abxr.Runtime.UI.Keyboard
+namespace AbxrLib.Runtime.UI.Keyboard
 {
     public class KeyboardManager : MonoBehaviour
     {

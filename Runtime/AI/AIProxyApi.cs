@@ -2,12 +2,12 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Core;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Abxr.Runtime
+namespace AbxrLib.Runtime.AI
 {
     public class AIProxyApi : MonoBehaviour
     {

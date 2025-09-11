@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using Abxr.Runtime.Common;
-using Abxr.Runtime.Core;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Core;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace Abxr.Runtime.Storage
+namespace AbxrLib.Runtime.Storage
 {
 	public class StorageBatcher : MonoBehaviour
 	{
@@ -31,7 +31,7 @@ namespace Abxr.Runtime.Storage
 			if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
 		}
 	
-		public static void Add(string name, Dictionary<string, string> entry, Core.Abxr.StorageScope scope, Core.Abxr.StoragePolicy policy)
+		public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
 		{
 			long storageTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(storageTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
@@ -100,7 +100,7 @@ namespace Abxr.Runtime.Storage
 			}
 		}
 
-		public static IEnumerator Get(string name, Core.Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
+		public static IEnumerator Get(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
 		{
 			if (!Authentication.Authentication.Authenticated()) yield break;
 		
@@ -118,7 +118,7 @@ namespace Abxr.Runtime.Storage
 			yield return request.SendWebRequest();
 			if (request.result == UnityWebRequest.Result.Success)
 			{
-				Debug.LogWarning("AbxrLib - Storage GET succeeded");
+				Debug.Log("AbxrLib - Storage GET succeeded");
 				PayloadWrapper payload = JsonConvert.DeserializeObject<PayloadWrapper>(request.downloadHandler.text);
 				callback?.Invoke(payload.data.Count > 0 ? payload.data[0].data : null);
 			}
@@ -129,7 +129,7 @@ namespace Abxr.Runtime.Storage
 			}
 		}
 
-		public static IEnumerator Delete(Core.Abxr.StorageScope scope, string name = "")
+		public static IEnumerator Delete(Abxr.StorageScope scope, string name = "")
 		{
 			if (!Authentication.Authentication.Authenticated()) yield break;
 		
