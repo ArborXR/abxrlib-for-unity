@@ -27,6 +27,22 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		private MJPNativeConnectionCallback?	_nativeCallback;
 		public static MjpSdkServiceWrapper?		MjpServiceWrapper;
 
+		// Constructor logging
+		public MJPKotlinServiceExampleClient()
+		{
+			Debug.Log("[MJPKotlinServiceExampleClient] Constructor called - MJPKotlinServiceExampleClient instance created");
+		}
+
+		private void Awake()
+		{
+			Debug.Log($"[MJPKotlinServiceExampleClient] Awake() called on GameObject: {gameObject.name}");
+		}
+
+		private void Start()
+		{
+			Debug.Log($"[MJPKotlinServiceExampleClient] Start() called on GameObject: {gameObject.name}");
+		}
+
 		// Whenever we delay via Task.Delay, there is no guarantee that our current thread would be already attached to Android JNI,
 		// so we must reattached the current thread to AndroidJNI right after Task.Delay to ensure we don't run into threading issues.
 		private static Task DelayAndReattachThreadToJNI(int delay) => Task.Delay(delay).ContinueWith(_ => AndroidJNI.AttachCurrentThread());

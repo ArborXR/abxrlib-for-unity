@@ -26,6 +26,22 @@ namespace AbxrLib.Runtime.ServiceClient
         private NativeConnectionCallback? _nativeCallback;
         public static SdkServiceWrapper? ServiceWrapper;
 
+        // Constructor logging
+        public ArborServiceClient()
+        {
+            Debug.Log("[XRDMServiceExampleClient] Constructor called - ArborServiceClient instance created");
+        }
+
+        private void Awake()
+        {
+            Debug.Log($"[XRDMServiceExampleClient] Awake() called on GameObject: {gameObject.name}");
+        }
+
+        private void Start()
+        {
+            Debug.Log($"[XRDMServiceExampleClient] Start() called on GameObject: {gameObject.name}");
+        }
+
         // Whenever we delay via Task.Delay, there is no guarantee that our current thread would be already attached to Android JNI,
         // so we must reattached the current thread to AndroidJNI right after Task.Delay to ensure we don't run into threading issues.
         private static Task DelayAndReattachThreadToJNI(int delay) => Task.Delay(delay).ContinueWith(_ => AndroidJNI.AttachCurrentThread());
@@ -48,6 +64,17 @@ namespace AbxrLib.Runtime.ServiceClient
 			bool isConnected = ServiceWrapper != null;
 			Debug.Log($"[XRDMServiceExampleClient] IsConnected() = {isConnected}");
 			return isConnected;
+		}
+
+		public static ArborServiceClient? FindInstance()
+		{
+			var instance = FindObjectOfType<ArborServiceClient>();
+			Debug.Log($"[XRDMServiceExampleClient] FindInstance() - found instance: {(instance != null ? "YES" : "NO")}");
+			if (instance != null)
+			{
+				Debug.Log($"[XRDMServiceExampleClient] Instance found on GameObject: {instance.gameObject.name}, enabled: {instance.enabled}");
+			}
+			return instance;
 		}
 
 		private void Connect()
@@ -74,6 +101,7 @@ namespace AbxrLib.Runtime.ServiceClient
 			Debug.Log("[XRDMServiceExampleClient] OnDisable() called - cleaning up");
 			_sdk?.Dispose();
             _sdk = null;
+            ServiceWrapper = null;
         }
 
         protected void OnEnable()
@@ -174,7 +202,7 @@ namespace AbxrLib.Runtime.ServiceClient
 					Debug.Log($"[XRDMServiceExampleClient] Initialization attempt {attempt + 1}/{maximumAttempts}");
 					if (serviceWrapper.GetIsInitialized())
 					{
-						Debug.Log("[XRDMServiceExampleClient] Service is initialized! Setting MjpServiceWrapper.");
+						Debug.Log("[XRDMServiceExampleClient] Service is initialized! Setting ServiceWrapper.");
 						ServiceWrapper = serviceWrapper;
 						return;
 					}
@@ -192,7 +220,7 @@ namespace AbxrLib.Runtime.ServiceClient
 				Debug.LogError($"[XRDMServiceExampleClient] Stack trace: {ex.StackTrace}");
 				await DelayAndReattachThreadToJNI(delay);
 				_ = AndroidJNI.AttachCurrentThread();
-				Debug.Log("[XRDMServiceExampleClient] Setting MjpServiceWrapper despite exception (fallback)");
+				Debug.Log("[XRDMServiceExampleClient] Setting ServiceWrapper despite exception (fallback)");
 				ServiceWrapper = serviceWrapper;
 			}
 #pragma warning restore CA1031

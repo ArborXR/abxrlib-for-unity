@@ -4,6 +4,7 @@ using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Events;
 using AbxrLib.Runtime.Logs;
 using AbxrLib.Runtime.ServiceClient;
+using AbxrLib.Runtime.ServiceClient.MJPKotlinExample;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
 using AbxrLib.Runtime.UI.ExitPoll;
@@ -31,8 +32,11 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<CoroutineRunner>("CoroutineRunner");
             ObjectAttacher.Attach<DeviceModel>("DeviceModel");
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
+
 #if UNITY_ANDROID && !UNITY_EDITOR
+            Debug.Log("[Initialize] Running on Android device - creating service clients");
             ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
+            ObjectAttacher.Attach<MJPKotlinServiceExampleClient>("MJPKotlinServiceExampleClient");
 #endif
             ObjectAttacher.Attach<Authentication.Authentication>("Authentication");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
@@ -58,9 +62,12 @@ namespace AbxrLib.Runtime.Core
     {
         public static T Attach<T>(string name) where T : MonoBehaviour
         {
+            Debug.Log($"[ObjectAttacher] Creating GameObject '{name}' with component {typeof(T).Name}");
             var go = new GameObject(name);
             DontDestroyOnLoad(go);
-            return go.AddComponent<T>();
+            var component = go.AddComponent<T>();
+            Debug.Log($"[ObjectAttacher] Successfully created '{name}' - GameObject: {go.name}, Component enabled: {component.enabled}");
+            return component;
         }
     }
 }
