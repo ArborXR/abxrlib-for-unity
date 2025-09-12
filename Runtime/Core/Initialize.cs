@@ -29,9 +29,6 @@ namespace AbxrLib.Runtime.Core
             }
             
             ObjectAttacher.Attach<CoroutineRunner>("CoroutineRunner");
-#if UNITY_ANDROID && !UNITY_EDITOR
-            ObjectAttacher.Attach<ExceptionLogger>("ExceptionLogger");
-#endif
             ObjectAttacher.Attach<DeviceModel>("DeviceModel");
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
 #if UNITY_ANDROID && !UNITY_EDITOR
