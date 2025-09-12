@@ -2,7 +2,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class KeyboardKey : MonoBehaviour
+namespace AbxrLib.Runtime.UI.Keyboard
+{
+    public class KeyboardKey : MonoBehaviour
     {
         public string character;
         public string shiftCharacter;
@@ -78,3 +80,4 @@ public class KeyboardKey : MonoBehaviour
             }
         }
     }
+}

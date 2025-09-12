@@ -1,19 +1,32 @@
 using UnityEngine;
 
-public class CoroutineRunner : MonoBehaviour
+namespace AbxrLib.Runtime.Common
 {
-    private static CoroutineRunner _instance;
-
-    public static CoroutineRunner Instance
+    public class CoroutineRunner : MonoBehaviour
     {
-        get
+        private static CoroutineRunner _instance;
+
+        public static CoroutineRunner Instance => _instance;
+
+        private void Awake()
         {
-            if (_instance != null) return _instance;
-            
-            var go = new GameObject("CoroutineRunner");
-            DontDestroyOnLoad(go);
-            _instance = go.AddComponent<CoroutineRunner>();
-            return _instance;
+            if (_instance == null)
+            {
+                _instance = this;
+            }
+            else if (_instance != this)
+            {
+                // Prevent duplicates
+                Destroy(gameObject);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_instance == this)
+            {
+                _instance = null;
+            }
         }
     }
 }

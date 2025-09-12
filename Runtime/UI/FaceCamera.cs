@@ -1,35 +1,26 @@
 using UnityEngine;
 
-public class FaceCamera : MonoBehaviour
+namespace AbxrLib.Runtime.UI
 {
-    [Tooltip("How far in front of the camera the panel should float")]
-    public float distanceFromCamera = 1.5f;
-
-    [Tooltip("Vertical offset from the camera's eye height (in meters)")]
-    public float verticalOffset = 0;
-
-    private void Start()
+    public class FaceCamera : MonoBehaviour
     {
-        var cam = Camera.main.transform;
-        if (!cam) return;
+        [Tooltip("How far in front of the camera the panel should float")]
+        public float distanceFromCamera = 1.5f;
+
+        [Tooltip("Vertical offset from the camera's eye height (in meters)")]
+        public float verticalOffset = 0;
+
+        private void LateUpdate()
+        {
+            var cam = Camera.main.transform;
+            if (!cam) return;
         
-        Vector3 targetPos = cam.position + cam.forward * distanceFromCamera + Vector3.up * verticalOffset;
-        transform.position = targetPos;
+            Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
+            Vector3 newPos = new Vector3(targetPos.x, 1.1f + verticalOffset, targetPos.z);
+            transform.position = newPos;
 
-        // face the camera
-        transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
-    }
-
-    private void LateUpdate()
-    {
-        var cam = Camera.main.transform;
-        if (!cam) return;
-        
-        Vector3 targetPos = cam.position + cam.forward * distanceFromCamera + Vector3.up * verticalOffset;
-        Vector3 newPos = new Vector3(targetPos.x, transform.position.y, targetPos.z);
-        transform.position = newPos;
-
-        // face the camera
-        transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
+            // face the camera
+            transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
+        }
     }
 }

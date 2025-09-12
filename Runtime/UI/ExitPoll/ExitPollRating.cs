@@ -1,20 +1,23 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 
-public class ExitPollRating : MonoBehaviour
+namespace AbxrLib.Runtime.UI.ExitPoll
 {
-    public Button oneRatingButton;
-    public Button twoRatingButton;
-    public Button threeRatingButton;
-    public Button fourRatingButton;
-    public Button fiveRatingButton;
-    
-    private void Start()
+    public class ExitPollRating : MonoBehaviour
     {
-        oneRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("1"));
-        twoRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("2"));
-        threeRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("3"));
-        fourRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("4"));
-        fiveRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("5"));
+        public Button oneRatingButton;
+        public Button twoRatingButton;
+        public Button threeRatingButton;
+        public Button fourRatingButton;
+        public Button fiveRatingButton;
+    
+        private void Start()
+        {
+            oneRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("1"));
+            twoRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("2"));
+            threeRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("3"));
+            fourRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("4"));
+            fiveRatingButton.onClick.AddListener(() => ExitPollHandler.OnButtonClicked("5"));
+        }
     }
 }

@@ -1,70 +1,74 @@
 using System.Collections.Generic;
+using AbxrLib.Runtime.UI.ExitPoll;
 using UnityEngine;
 using UnityEngine.XR;
 
-public class HeadsetDetector : MonoBehaviour
+namespace AbxrLib.Runtime.Common
 {
-    private const float CheckIntervalSeconds = 1f;
-    private const string NewSessionString = "No, I need to log in as someone else.";
-    private const string ContinueSessionString = "Yes, I’d like to continue the current session.";
-    
-    private bool sensorStatus = true;
-    private float lastCheckTime;
-
-    private void Update()
+    public class HeadsetDetector : MonoBehaviour
     {
-        // Check at intervals to avoid excessive calls
-        if (Time.time - lastCheckTime >= CheckIntervalSeconds)
+        private const float CheckIntervalSeconds = 1f;
+        private const string NewSessionString = "No, I need to log in as someone else.";
+        private const string ContinueSessionString = "Yes, I’d like to continue the current session.";
+    
+        private bool sensorStatus = true;
+        private float lastCheckTime;
+
+        private void Update()
         {
-            bool currentStatus = CheckProximitySensor();
-            if (sensorStatus && !currentStatus)
+            // Check at intervals to avoid excessive calls
+            if (Time.time - lastCheckTime >= CheckIntervalSeconds)
             {
-                OnHeadsetRemovedDetected();
-            }
-            else if (!sensorStatus && currentStatus)
-            {
-                OnHeadsetPutOnDetected();
-            }
+                bool currentStatus = CheckProximitySensor();
+                if (sensorStatus && !currentStatus)
+                {
+                    OnHeadsetRemovedDetected();
+                }
+                else if (!sensorStatus && currentStatus)
+                {
+                    OnHeadsetPutOnDetected();
+                }
             
-            sensorStatus = currentStatus;
-            lastCheckTime = Time.time;
-        }
-    }
-    
-    private static bool CheckProximitySensor()
-    {
-        InputDevice headset = InputDevices.GetDeviceAtXRNode(XRNode.Head);
-        if (headset.isValid)
-        {
-            if (headset.TryGetFeatureValue(CommonUsages.userPresence, out bool userPresent))
-            {
-                return userPresent;
+                sensorStatus = currentStatus;
+                lastCheckTime = Time.time;
             }
         }
-        
-        // Fallback: assume headset is on if no proximity data
-        return true;
-    }
     
-    private static void OnHeadsetRemovedDetected() { }
-    
-    private static void OnHeadsetPutOnDetected()
-    {
-        // Don't bother asking if they aren't acting on this event
-        if (Abxr.onHeadsetPutOnNewSession == null) return;
-        
-        Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
-            ExitPollHandler.PollType.MultipleChoice,
-            new List<string>{ContinueSessionString, NewSessionString},
-            NewSessionCheck);
-    }
-
-    private static void NewSessionCheck(string response)
-    {
-        if (response == NewSessionString)
+        private static bool CheckProximitySensor()
         {
-            Authentication.ReAuthenticate();
-            Abxr.onHeadsetPutOnNewSession?.Invoke();
+            InputDevice headset = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+            if (headset.isValid)
+            {
+                if (headset.TryGetFeatureValue(CommonUsages.userPresence, out bool userPresent))
+                {
+                    return userPresent;
+                }
+            }
+        
+            // Fallback: assume headset is on if no proximity data
+            return true;
+        }
+    
+        private static void OnHeadsetRemovedDetected() { }
+    
+        private static void OnHeadsetPutOnDetected()
+        {
+            // Don't bother asking if they aren't acting on this event
+            if (Abxr.onHeadsetPutOnNewSession == null) return;
+        
+            Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
+                ExitPollHandler.PollType.MultipleChoice,
+                new List<string>{ContinueSessionString, NewSessionString},
+                NewSessionCheck);
+        }
+
+        private static void NewSessionCheck(string response)
+        {
+            if (response == NewSessionString)
+            {
+                Authentication.Authentication.ReAuthenticate();
+                Abxr.onHeadsetPutOnNewSession?.Invoke();
+            }
         }
     }
 }
