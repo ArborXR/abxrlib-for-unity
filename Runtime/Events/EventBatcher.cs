@@ -57,7 +57,7 @@ namespace AbxrLib.Runtime.Events
 	
 		_lastCallTime = Time.time;
 		_timer = Configuration.Instance.sendNextBatchWaitSeconds; // reset timer
-		if (!Authentication.Authentication.Authenticated()) yield break;
+		if (!Authentication.Authentication.FullyAuthenticated()) yield break;
 		lock (Lock)
 		{
 			if (Payloads.Count == 0) yield break;

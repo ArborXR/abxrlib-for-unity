@@ -47,13 +47,15 @@ namespace AbxrLib.Runtime.Authentication
     
         private const string DeviceIdKey = "abxrlib_device_id";
 
-        private static bool _keyboardAuthSuccess;
+        private static bool? _keyboardAuthSuccess;
         
         // Auth handoff for external launcher apps
         private static bool _authHandoffCompleted = false;
 
         public static bool Authenticated() => DateTime.UtcNow <= _tokenExpiry;
-    
+
+        public static bool FullyAuthenticated() => Authenticated() && _keyboardAuthSuccess == true;
+
         private void Start()
         {
             GetConfigData();
@@ -96,8 +98,9 @@ namespace AbxrLib.Runtime.Authentication
                 {
                     Debug.Log("AbxrLib: Authentication fully completed");
                     // No additional auth needed - notify completion now
-                    List<string> moduleTargets = ExtractModuleTargets(Authentication.GetModules());
+                    List<string> moduleTargets = ExtractModuleTargets(GetModules());
                     Abxr.NotifyAuthCompleted(true, false, moduleTargets);
+                    _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
                 }
             }
         }
@@ -109,6 +112,7 @@ namespace AbxrLib.Runtime.Authentication
             _authMechanism = null;
             _authToken = null;
             _tokenExpiry = DateTime.MinValue;
+            _keyboardAuthSuccess = null;
             
             // Clear cached user data
             _userDataCache = null;
@@ -227,19 +231,20 @@ namespace AbxrLib.Runtime.Authentication
 
         public static IEnumerator KeyboardAuthenticate(string keyboardInput = null)
         {
+            _keyboardAuthSuccess = false;
             if (keyboardInput != null)
             {
                 string originalPrompt = _authMechanism.prompt;
                 _authMechanism.prompt = keyboardInput;
                 yield return AuthRequest();
-                if (_keyboardAuthSuccess)
+                if (_keyboardAuthSuccess == true)
                 {
                     KeyboardHandler.Destroy();
                     _failedAuthAttempts = 0;
                     Debug.Log("AbxrLib: Final authentication successful");
                     
                     // Notify completion for keyboard authentication success
-                    List<string> moduleTargets = ExtractModuleTargets(Authentication.GetModules());
+                    List<string> moduleTargets = ExtractModuleTargets(GetModules());
                     Abxr.NotifyAuthCompleted(true, false, moduleTargets);
                     
                     yield break;
@@ -276,7 +281,6 @@ namespace AbxrLib.Runtime.Authentication
 
         private static IEnumerator AuthRequest()
         {
-            _keyboardAuthSuccess = false;
             if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
             var data = new AuthPayload
@@ -318,8 +322,8 @@ namespace AbxrLib.Runtime.Authentication
                 
                 // Cache complete authentication response data
                 CacheAuthResponseData(postResponse, decodedJwt);
-                
-                _keyboardAuthSuccess = true;
+
+                if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
                 
                 // Extract module targets for notification
                 List<string> moduleTargets = ExtractModuleTargets(postResponse.Modules);
@@ -338,7 +342,7 @@ namespace AbxrLib.Runtime.Authentication
                 _userIdCache = null;
                 _userEmailCache = null;
                 _authResponseAppId = null;
-            _authResponsePackageName = null;
+                _authResponsePackageName = null;
                 _authResponseModules = null;
                 
                 // Notify authentication failure
@@ -567,8 +571,7 @@ namespace AbxrLib.Runtime.Authentication
             // If not found, check command line arguments
             if (string.IsNullOrEmpty(handoffJson))
             {
-            handoffJson = Utils.GetCommandLineArg("auth_handoff");
-            
+                handoffJson = Utils.GetCommandLineArg("auth_handoff");
             }
             
             // If not found, check WebGL query parameters (for consistency)
@@ -655,6 +658,7 @@ namespace AbxrLib.Runtime.Authentication
                 // Extract module targets and notify completion
                 List<string> moduleTargets = ExtractModuleTargets(_authResponseModules);
                 Abxr.NotifyAuthCompleted(true, handoffData.isReauthentication, moduleTargets);
+                _keyboardAuthSuccess = true;
                 
                 success = true;
             }
