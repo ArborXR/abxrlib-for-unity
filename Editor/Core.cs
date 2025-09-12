@@ -69,7 +69,7 @@ namespace AbxrLib.Editor
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
             
-                Debug.Log($"ArborXR configuration has been migrated to {NEW_CONFIG_NAME}");
+                Debug.Log($"AbxrLib: ArborXR configuration has been migrated to {NEW_CONFIG_NAME}");
             }
         }
     }

@@ -87,11 +87,11 @@ namespace AbxrLib.Runtime.Storage
 			yield return request.SendWebRequest();
 			if (request.result == UnityWebRequest.Result.Success)
 			{
-				Debug.Log("AbxrLib - Storage POST Request successful");
+				Debug.Log("AbxrLib: Storage POST Request successful");
 			}
 			else
 			{
-				Debug.LogError($"AbxrLib - Storage POST Request failed : {request.error} - {request.downloadHandler.text}");
+				Debug.LogError($"AbxrLib: Storage POST Request failed : {request.error} - {request.downloadHandler.text}");
 				_timer = Configuration.Instance.sendRetryIntervalSeconds;
 				lock (Lock)
 				{
@@ -118,13 +118,13 @@ namespace AbxrLib.Runtime.Storage
 			yield return request.SendWebRequest();
 			if (request.result == UnityWebRequest.Result.Success)
 			{
-				Debug.Log("AbxrLib - Storage GET succeeded");
+				Debug.Log("AbxrLib: Storage GET succeeded");
 				PayloadWrapper payload = JsonConvert.DeserializeObject<PayloadWrapper>(request.downloadHandler.text);
 				callback?.Invoke(payload.data.Count > 0 ? payload.data[0].data : null);
 			}
 			else
 			{
-				Debug.LogWarning($"AbxrLib - Storage GET failed: {request.error} - {request.downloadHandler.text}");
+				Debug.LogWarning($"AbxrLib: Storage GET failed: {request.error} - {request.downloadHandler.text}");
 				callback?.Invoke(null);
 			}
 		}
@@ -147,11 +147,11 @@ namespace AbxrLib.Runtime.Storage
 			yield return request.SendWebRequest();
 			if (request.result == UnityWebRequest.Result.Success)
 			{
-				Debug.Log("AbxrLib - Storage DELETE succeeded");
+				Debug.Log("AbxrLib: Storage DELETE succeeded");
 			}
 			else
 			{
-				Debug.LogWarning($"AbxrLib - Storage DELETE failed: {request.error} - {request.downloadHandler.text}");
+				Debug.LogWarning($"AbxrLib: Storage DELETE failed: {request.error} - {request.downloadHandler.text}");
 			}
 		}
 	

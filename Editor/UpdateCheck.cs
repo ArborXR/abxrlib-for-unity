@@ -32,7 +32,7 @@ namespace AbxrLib.Editor
         
             if (string.IsNullOrEmpty(currentVersion))
             {
-                Debug.LogError("Failed to get current package version.");
+                Debug.LogError("AbxrLib: Failed to get current package version.");
                 return;
             }
 
@@ -81,9 +81,9 @@ namespace AbxrLib.Editor
                 if (addRequest.IsCompleted)
                 {
                     if (addRequest.Status == StatusCode.Success)
-                        Debug.Log("Package updated successfully");
+                        Debug.Log("AbxrLib: Package updated successfully");
                     else if (addRequest.Status >= StatusCode.Failure)
-                        Debug.LogError($"Package update failed: {addRequest.Error.message}");
+                        Debug.LogError($"AbxrLib: Package update failed: {addRequest.Error.message}");
 
                     EditorApplication.update -= ProgressUpdate;
                 }
@@ -109,11 +109,11 @@ namespace AbxrLib.Editor
                     }
                 }
             
-                Debug.LogWarning($"Package {PackageName} not found.");
+                Debug.LogWarning($"AbxrLib: Package {PackageName} not found.");
             }
             else if (listRequest.Status >= StatusCode.Failure)
             {
-                Debug.LogError(listRequest.Error.message);
+                Debug.LogError($"AbxrLib: {listRequest.Error.message}");
             }
 
             return "";
@@ -133,15 +133,15 @@ namespace AbxrLib.Editor
                 {
                     string jsonResponse = response.Content.ReadAsStringAsync().Result;
                     var releaseInfo = JsonUtility.FromJson<GitHubRelease>(jsonResponse);
-                    Debug.Log("Latest release version: " + releaseInfo.tag_name);
+                    Debug.Log("AbxrLib: Latest release version: " + releaseInfo.tag_name);
                     return releaseInfo.tag_name.Replace("v", "");
                 }
 
-                Debug.LogError("Error: " + response.ReasonPhrase);
+                Debug.LogError("AbxrLib: Error: " + response.ReasonPhrase);
             }
             catch (Exception ex)
             {
-                Debug.LogError("Exception occurred: " + ex.Message);
+                Debug.LogError("AbxrLib: Exception occurred: " + ex.Message);
             }
 
             return "";

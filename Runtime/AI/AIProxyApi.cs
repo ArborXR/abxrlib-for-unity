@@ -44,11 +44,11 @@ namespace AbxrLib.Runtime.AI
             {
                 PastMessages.Add(prompt);
                 callback?.Invoke(request.downloadHandler.text);
-                Debug.Log("AbxrLib - AI POST Request successful");
+                Debug.Log("AbxrLib: AI POST Request successful");
             }
             else
             {
-                Debug.LogError($"AbxrLib - AI POST Request failed : {request.error}");
+                Debug.LogError($"AbxrLib: AI POST Request failed : {request.error}");
                 callback?.Invoke(null);
                 //TODO retry logic
             }

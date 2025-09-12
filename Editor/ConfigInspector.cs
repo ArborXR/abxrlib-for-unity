@@ -62,6 +62,13 @@ namespace AbxrLib.Editor
             config.disableAutomaticTelemetry = EditorGUILayout.Toggle("Disable Automatic Telemetry", config.disableAutomaticTelemetry);
             config.disableSceneEvents = EditorGUILayout.Toggle("Disable Scene Events", config.disableSceneEvents);
 
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Authentication Prefabs", EditorStyles.boldLabel);
+            config.KeyboardPrefab = (GameObject)EditorGUILayout.ObjectField("Keyboard Prefab", config.KeyboardPrefab, typeof(GameObject));
+            config.PinPrefab = (GameObject)EditorGUILayout.ObjectField("Pin Prefab", config.PinPrefab, typeof(GameObject));
+            config.PanelPrefab = (GameObject)EditorGUILayout.ObjectField("Panel Prefab", config.PanelPrefab, typeof(GameObject));
+
+
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
                 config.positionTrackingPeriodSeconds = 1f;

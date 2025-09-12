@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Events;
+using AbxrLib.Runtime.Logs;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Core
@@ -11,7 +14,7 @@ namespace AbxrLib.Runtime.Core
     {
         private void OnApplicationQuit()
         {
-            Debug.Log("AbxrLib - Application quitting, automatically closing running events");
+            Debug.Log("AbxrLib: Application quitting, automatically closing running events");
             CloseRunningEvents();
         }
 
@@ -20,7 +23,7 @@ namespace AbxrLib.Runtime.Core
             // On mobile platforms, OnApplicationPause(true) is often called instead of OnApplicationQuit
             if (pauseStatus)
             {
-                Debug.Log("AbxrLib - Application paused, automatically closing running events");
+                Debug.Log("AbxrLib: Application paused, automatically closing running events");
                 CloseRunningEvents();
             }
         }
@@ -30,7 +33,7 @@ namespace AbxrLib.Runtime.Core
             // Additional safety net for platforms where focus loss might indicate app termination
             if (!hasFocus)
             {
-                Debug.Log("AbxrLib - Application lost focus, checking for running events");
+                Debug.Log("AbxrLib: Application lost focus, checking for running events");
                 // Note: We don't automatically close on focus loss as this can happen during normal use
                 // This is just for logging/debugging purposes
                 LogRunningEvents();
@@ -101,10 +104,10 @@ namespace AbxrLib.Runtime.Core
 
             if (totalClosed > 0)
             {
-                Debug.Log($"AbxrLib - Automatically closed {totalClosed} running events due to application quit");
+                Debug.Log($"AbxrLib: Automatically closed {totalClosed} running events due to application quit");
                 
                 // Force immediate send of all events with maximum redundancy for VR reliability
-                AbxrLib.Runtime.Events.EventBatcher.ForceImmediateSend();
+                CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
                 
                 // Log the cleanup activity
                 Abxr.Log($"Application quit handler closed {totalClosed} running events", Abxr.LogLevel.Info, 
@@ -115,7 +118,7 @@ namespace AbxrLib.Runtime.Core
                     });
                     
                 // Also force send logs
-                AbxrLib.Runtime.Events.EventBatcher.ForceImmediateSend();
+                CoroutineRunner.Instance.StartCoroutine(LogBatcher.Send());
             }
         }
 
@@ -136,7 +139,7 @@ namespace AbxrLib.Runtime.Core
 
             if (totalRunning > 0)
             {
-                Debug.Log($"AbxrLib - Currently {totalRunning} events running (Assessments: {assessmentStartTimes?.Count ?? 0}, Objectives: {objectiveStartTimes?.Count ?? 0}, Interactions: {interactionStartTimes?.Count ?? 0})");
+                Debug.Log($"AbxrLib: Currently {totalRunning} events running (Assessments: {assessmentStartTimes?.Count ?? 0}, Objectives: {objectiveStartTimes?.Count ?? 0}, Interactions: {interactionStartTimes?.Count ?? 0})");
             }
         }
 
@@ -160,12 +163,12 @@ namespace AbxrLib.Runtime.Core
                 }
                 else
                 {
-                    Debug.LogWarning($"AbxrLib - Could not find field {fieldName} in Abxr class");
+                    Debug.LogWarning($"AbxrLib: Could not find field {fieldName} in Abxr class");
                 }
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib - Error accessing field {fieldName}: {ex.Message}");
+                Debug.LogError($"AbxrLib: Error accessing field {fieldName}: {ex.Message}");
             }
             
             return null;
