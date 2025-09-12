@@ -207,19 +207,11 @@ namespace AbxrLib.Runtime.Core
 
         public static void SendAllData()
         {
-            // Use safe coroutine starts with redundancy for all batcher types
-            CoroutineRunner.SafeStartCoroutine(EventBatcher.Send());
-            CoroutineRunner.SafeStartCoroutine(TelemetryBatcher.Send());
-            CoroutineRunner.SafeStartCoroutine(LogBatcher.Send());
-            CoroutineRunner.SafeStartCoroutine(StorageBatcher.Send());
-            
-            // Schedule backup actions in case main thread is interrupted
-            CoroutineRunner.ScheduleBackupAction(() => {
-                CoroutineRunner.SafeStartCoroutine(EventBatcher.Send());
-                CoroutineRunner.SafeStartCoroutine(TelemetryBatcher.Send());
-                CoroutineRunner.SafeStartCoroutine(LogBatcher.Send());
-                CoroutineRunner.SafeStartCoroutine(StorageBatcher.Send());
-            });
+            // Send all pending data from all batcher types
+            CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
+            CoroutineRunner.Instance.StartCoroutine(TelemetryBatcher.Send());
+            CoroutineRunner.Instance.StartCoroutine(LogBatcher.Send());
+            CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
         }
     }
 }

@@ -1231,50 +1231,6 @@ public static class Abxr
 	public static string GetFingerprint() =>
 		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
 
-	/// <summary>Gets the current time from the MJP Kotlin service.</summary>
-	/// <returns>The current time as a string, or empty string if service is not connected.</returns>
-	public static string WhatTimeIsIt()
-	{
-		Debug.Log("AbxrLib: WhatTimeIsIt() called");
-		
-		// First check if there's even an instance of the service client in the scene
-		var instance = MJPKotlinServiceExampleClient.FindInstance();
-		if (instance == null)
-		{
-			Debug.LogWarning("AbxrLib: No MJPKotlinServiceExampleClient instance found in scene! You need to add it to a GameObject.");
-			return "";
-		}
-		
-		bool isConnected = MJPKotlinServiceExampleClient.IsConnected();
-		Debug.Log($"AbxrLib: MJPKotlinServiceExampleClient.IsConnected() = {isConnected}");
-		
-		if (!isConnected)
-		{
-			Debug.Log("AbxrLib: Service not connected, returning empty string");
-			return "";
-		}
-		
-		if (MJPKotlinServiceExampleClient.MjpServiceWrapper == null)
-		{
-			Debug.LogWarning("AbxrLib: IsConnected() returned true but MjpServiceWrapper is null!");
-			return "";
-		}
-		
-		try
-		{
-			Debug.Log("AbxrLib: Calling MjpServiceWrapper.WhatTimeIsIt()");
-			string result = MJPKotlinServiceExampleClient.MjpServiceWrapper.WhatTimeIsIt();
-			Debug.Log($"AbxrLib: WhatTimeIsIt() result: '{result}'");
-			return result;
-		}
-		catch (Exception ex)
-		{
-			Debug.LogError($"AbxrLib: Error in WhatTimeIsIt(): {ex.Message}");
-			Debug.LogError($"AbxrLib: Stack trace: {ex.StackTrace}");
-			return "";
-		}
-	}
-
 	#region Module Target and User Data Methods
 
 
