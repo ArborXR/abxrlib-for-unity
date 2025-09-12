@@ -51,7 +51,7 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 			return isConnected;
 		}
 
-		public static MJPKotlinServiceExampleClient FindInstance()
+		public static MJPKotlinServiceExampleClient? FindInstance()
 		{
 			var instance = FindObjectOfType<MJPKotlinServiceExampleClient>();
 			Debug.Log($"[MJPKotlinServiceExampleClient] FindInstance() - found instance: {(instance != null ? "YES" : "NO")}");

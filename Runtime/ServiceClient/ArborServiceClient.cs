@@ -43,27 +43,54 @@ namespace AbxrLib.Runtime.ServiceClient
             }
         }
 
-        public static bool IsConnected() => ServiceWrapper != null;
+		public static bool IsConnected()
+		{
+			bool isConnected = ServiceWrapper != null;
+			Debug.Log($"[XRDMServiceExampleClient] IsConnected() = {isConnected}");
+			return isConnected;
+		}
 
-        private void Connect()
+		private void Connect()
         {
-            using var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-            using var currentActivity = unityPlayerClass.GetStatic<AndroidJavaObject>("currentActivity");
-            _nativeCallback = new NativeConnectionCallback(this);
-            Sdk.Call("connect", currentActivity, _nativeCallback);
+			Debug.Log("[XRDMServiceExampleClient] Attempting to connect to service");
+			try
+			{
+				using var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+				using var currentActivity = unityPlayerClass.GetStatic<AndroidJavaObject>("currentActivity");
+				_nativeCallback = new NativeConnectionCallback(this);
+				Debug.Log("[XRDMServiceExampleClient] Calling Sdk.connect() method");
+				Sdk.Call("connect", currentActivity, _nativeCallback);
+				Debug.Log("[XRDMServiceExampleClient] Sdk.connect() method called successfully");
+			}
+			catch (Exception ex)
+			{
+				Debug.LogError($"[XRDMServiceExampleClient] Error in Connect(): {ex.Message}");
+				Debug.LogError($"[XRDMServiceExampleClient] Stack trace: {ex.StackTrace}");
+			}
         }
     
         protected void OnDisable()
         {
-            _sdk?.Dispose();
+			Debug.Log("[XRDMServiceExampleClient] OnDisable() called - cleaning up");
+			_sdk?.Dispose();
             _sdk = null;
         }
 
         protected void OnEnable()
         {
-            // Instantiates our `Sdk.java`.
-            _sdk = new AndroidJavaObject($"{PackageName}.Sdk");
-            Connect();
+			Debug.Log($"[XRDMServiceExampleClient] OnEnable() called - attempting to create SDK for package: {PackageName}");
+			try
+			{
+				// Instantiates our `Sdk.java`.
+				_sdk = new AndroidJavaObject($"{PackageName}.Sdk");
+				Debug.Log("[XRDMServiceExampleClient] SDK object created successfully");
+				Connect();
+			}
+			catch (Exception ex)
+			{
+				Debug.LogError($"[XRDMServiceExampleClient] Error in OnEnable(): {ex.Message}");
+				Debug.LogError($"[XRDMServiceExampleClient] Stack trace: {ex.StackTrace}");
+			}
         }
 
         public sealed class SdkServiceWrapper
@@ -121,40 +148,53 @@ namespace AbxrLib.Runtime.ServiceClient
 
         private async Task NotifyWhenInitializedAsync(AndroidJavaObject? nativeObj)
         {
-            // If the application gets loaded before the XRDM client, the XRDM client may not have time to be initialized.
-            // To avoid this timing issue, we should wait until XRDM client is initialized to fire the event of OnConnected.
-            var delay = 500;
-            var delayMultiplier = 1.5f;
-            var maximumAttempts = 7;
+			Debug.Log("[XRDMServiceExampleClient] NotifyWhenInitializedAsync started");
+			// If the application gets loaded before the XRDM client, the XRDM client may not have time to be initialized.
+			// To avoid this timing issue, we should wait until XRDM client is initialized to fire the event of OnConnected.
+			var delay = 500;
+			var delayMultiplier = 1.5f;
+			var maximumAttempts = 7;
 
 #pragma warning disable CA2000 // Dispose objects before losing scope
 #pragma warning disable CS8604 // Possible null reference argument.
-            // nativeObj shouldn't be null, and if it is null, something really bad must have happened already.
-            var serviceWrapper = new SdkServiceWrapper(nativeObj);
+			// nativeObj shouldn't be null, and if it is null, something really bad must have happened already.
+			if (nativeObj == null)
+			{
+				Debug.LogError("[XRDMServiceExampleClient] nativeObj is null in NotifyWhenInitializedAsync!");
+				return;
+			}
+			var serviceWrapper = new SdkServiceWrapper(nativeObj);
+			Debug.Log("[XRDMServiceExampleClient] Service wrapper created, checking initialization...");
 #pragma warning restore CS8604 // Possible null reference argument.
 #pragma warning restore CA2000 // Dispose objects before losing scope
-            try
-            {
-                for (var attempt = 0; attempt < maximumAttempts; attempt++)
-                {
-                    if (serviceWrapper.GetIsInitialized())
-                    {
-                        ServiceWrapper = serviceWrapper;
-                        return;
-                    }
-                    await DelayAndReattachThreadToJNI(delay);
-                    _ = AndroidJNI.AttachCurrentThread();
-                    delay = (int)Math.Floor(delay * delayMultiplier);
-                }
+			try
+			{
+				for (var attempt = 0; attempt < maximumAttempts; attempt++)
+				{
+					Debug.Log($"[XRDMServiceExampleClient] Initialization attempt {attempt + 1}/{maximumAttempts}");
+					if (serviceWrapper.GetIsInitialized())
+					{
+						Debug.Log("[XRDMServiceExampleClient] Service is initialized! Setting MjpServiceWrapper.");
+						ServiceWrapper = serviceWrapper;
+						return;
+					}
+					Debug.Log($"[XRDMServiceExampleClient] Service not yet initialized, waiting {delay}ms...");
+					await DelayAndReattachThreadToJNI(delay);
+					_ = AndroidJNI.AttachCurrentThread();
+					delay = (int)Math.Floor(delay * delayMultiplier);
+				}
+				Debug.LogWarning("[XRDMServiceExampleClient] Maximum initialization attempts reached, service may not be ready");
 #pragma warning disable CA1031
-
-            }
-            catch
-            {
-                await DelayAndReattachThreadToJNI(delay);
-                _ = AndroidJNI.AttachCurrentThread();
-                ServiceWrapper = serviceWrapper;
-            }
+			}
+			catch (Exception ex)
+			{
+				Debug.LogError($"[XRDMServiceExampleClient] Exception in NotifyWhenInitializedAsync: {ex.Message}");
+				Debug.LogError($"[XRDMServiceExampleClient] Stack trace: {ex.StackTrace}");
+				await DelayAndReattachThreadToJNI(delay);
+				_ = AndroidJNI.AttachCurrentThread();
+				Debug.Log("[XRDMServiceExampleClient] Setting MjpServiceWrapper despite exception (fallback)");
+				ServiceWrapper = serviceWrapper;
+			}
 #pragma warning restore CA1031
         }
 
@@ -171,14 +211,16 @@ namespace AbxrLib.Runtime.ServiceClient
             // https://github.com/Unity-Technologies/UnityCsReference/blob/61f92bd79ae862c4465d35270f9d1d57befd1761/Modules/AndroidJNI/AndroidJava.cs#L124-L139
             public override AndroidJavaObject? Invoke(string methodName, AndroidJavaObject[] javaArgs)
             {
-                if (methodName == "onConnected")
-                {
-                    _ = _sdkBehavior.NotifyWhenInitializedAsync(javaArgs[0]);
-                    // `onConnected` is a `void` method.
-                    return null;
-                }
+				Debug.Log($"[XRDMServiceExampleClient] Connection callback invoked: {methodName}");
+				if (methodName == "onConnected")
+				{
+					Debug.Log("[XRDMServiceExampleClient] onConnected callback triggered - starting initialization");
+					_ = _sdkBehavior.NotifyWhenInitializedAsync(javaArgs[0]);
+					// `onConnected` is a `void` method.
+					return null;
+				}
 
-                return base.Invoke(methodName, javaArgs);
+				return base.Invoke(methodName, javaArgs);
             }
         }
     }
