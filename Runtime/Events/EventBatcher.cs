@@ -94,15 +94,6 @@ namespace AbxrLib.Runtime.Events
 		}
 	}
 
-	/// <summary>
-	/// Force immediate send of all pending events
-	/// Useful for critical events like assessments/objectives completion
-	/// </summary>
-	public static void ForceImmediateSend()
-	{
-		CoroutineRunner.Instance.StartCoroutine(Send());
-	}
-
 	private class Payload
 	{
 		public string preciseTimestamp;

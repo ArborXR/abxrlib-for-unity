@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Events;
+using AbxrLib.Runtime.Logs;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Core
@@ -104,7 +107,7 @@ namespace AbxrLib.Runtime.Core
                 Debug.Log($"AbxrLib: Automatically closed {totalClosed} running events due to application quit");
                 
                 // Force immediate send of all events with maximum redundancy for VR reliability
-                AbxrLib.Runtime.Events.EventBatcher.ForceImmediateSend();
+                CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
                 
                 // Log the cleanup activity
                 Abxr.Log($"Application quit handler closed {totalClosed} running events", Abxr.LogLevel.Info, 
@@ -115,7 +118,7 @@ namespace AbxrLib.Runtime.Core
                     });
                     
                 // Also force send logs
-                AbxrLib.Runtime.Events.EventBatcher.ForceImmediateSend();
+                CoroutineRunner.Instance.StartCoroutine(LogBatcher.Send());
             }
         }
 
