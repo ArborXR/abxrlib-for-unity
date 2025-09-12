@@ -167,7 +167,7 @@ public static class Abxr
 	/// <summary>
 	/// Data structure for module target information from LMS integration
 	/// </summary>
-	[System.Serializable]
+	[Serializable]
 	public class CurrentSessionData
 	{
 		public string moduleTarget;     // The target module identifier from LMS
@@ -208,7 +208,7 @@ public static class Abxr
 	/// Data structure for complete authentication response information
 	/// Contains the full authentication payload for JSON reconstruction and comprehensive access
 	/// </summary>
-	[System.Serializable]
+	[Serializable]
 	public class AuthCompletedData
 	{
 		public bool success;             // Whether authentication was successful
@@ -713,13 +713,13 @@ public static class Abxr
 		}
 	}
 
-	[System.Serializable]
+	[Serializable]
 	private class SerializableDictionary
 	{
 		public SerializableKeyValuePair[] items;
 	}
 
-	[System.Serializable]
+	[Serializable]
 	private class SerializableKeyValuePair
 	{
 		public string key;
@@ -1286,48 +1286,6 @@ public static class Abxr
 		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, ModuleIndexKey));
 	}
 
-	/// <summary>
-	/// Extract module targets from authentication response data (similar to WebXR version)
-	/// Helper method to extract sorted module targets from raw auth response
-	/// Note: This method is intended for internal use by the authentication system
-	/// </summary>
-	/// <param name="modules">Raw module data from authentication response</param>
-	/// <returns>Array of module target strings sorted by order</returns>
-	public static string[] ExtractModuleTargetsFromAuthData(List<Dictionary<string, object>> modules)
-	{
-		var moduleTargets = new List<string>();
-		
-		if (modules == null || modules.Count == 0) return moduleTargets.ToArray();
-
-		try
-		{
-			// Sort modules by order field (similar to ExtractModuleTargets in Authentication.cs)
-			var sortedModules = modules.OrderBy(m => {
-				if (m.ContainsKey("order") && m["order"] != null)
-				{
-					int.TryParse(m["order"].ToString(), out int order);
-					return order;
-				}
-				return 0;
-			}).ToList();
-			
-			// Extract targets in correct order
-			foreach (var module in sortedModules)
-			{
-				if (module.ContainsKey("target") && module["target"] != null)
-				{
-					moduleTargets.Add(module["target"].ToString());
-				}
-			}
-		}
-		catch (Exception ex)
-		{
-			LogError($"Failed to extract module targets: {ex.Message}");
-		}
-
-		return moduleTargets.ToArray();
-	}
-
 	private static void SaveModuleIndex()
 	{
 		try
@@ -1344,7 +1302,7 @@ public static class Abxr
 			// Reset cache since we've updated the stored index
 			moduleIndexLoaded = false;
 		}
-		catch (System.Exception ex)
+		catch (Exception ex)
 		{
 			LogError($"Failed to save module index: {ex.Message}");
 		}
@@ -1363,7 +1321,7 @@ public static class Abxr
 			moduleIndexLoading = true;
 			CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
 		}
-		catch (System.Exception ex)
+		catch (Exception ex)
 		{
 			moduleIndexLoading = false;
 			LogError($"Failed to load module index: {ex.Message}");
