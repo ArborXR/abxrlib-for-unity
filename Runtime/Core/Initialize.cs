@@ -27,7 +27,8 @@ namespace AbxrLib.Runtime.Core
             {
                 Debug.LogError("AbxrLib: Incompatible Newtonsoft.Json version loaded.");
             }
-        
+            
+            ObjectAttacher.Attach<CoroutineRunner>("CoroutineRunner");
 #if UNITY_ANDROID && !UNITY_EDITOR
             ObjectAttacher.Attach<ExceptionLogger>("ExceptionLogger");
 #endif
