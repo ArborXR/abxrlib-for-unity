@@ -31,13 +31,13 @@ public static class Abxr
 	}
 
 	public static Action onHeadsetPutOnNewSession;
+		
+	// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
+	public static Action<bool, string> onAuthCompleted;
 
 	// Module index for sequential LMS multi-module applications
 	private static int currentModuleIndex = 0;
 	private const string ModuleIndexKey = "AbxrModuleIndex";
-
-	// Internal list of authentication completion callbacks
-	private static readonly List<Action<AuthCompletedData>> authCompletedCallbacks = new();
 	
 	// Global storage for the latest authentication completion data
 	private static AuthCompletedData latestAuthCompletedData = null;
@@ -1017,10 +1017,6 @@ public static class Abxr
 	private static IEnumerator ReAuthenticateCoroutine()
 	{
 		yield return Authentication.Authenticate();
-		
-		// Need to call NotifyAuthCompleted with isReauthentication=true 
-		// (Authentication.Authenticate() calls it with false)
-		NotifyAuthCompleted(connectionActive, true);
 	}
 
 	/// <summary>
@@ -1355,46 +1351,6 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Subscribe to authentication completion events for post-auth initialization
-	/// Perfect for initializing UI components, loading user data, or showing welcome messages
-	/// Callbacks are triggered via NotifyAuthCompleted() when authentication completes
-	/// </summary>
-	/// <param name="callback">Function to call when authentication completes successfully</param>
-	public static void OnAuthCompleted(Action<AuthCompletedData> callback)
-	{
-		if (callback == null)
-		{
-			LogError("Authentication callback cannot be null");
-			return;
-		}
-
-		authCompletedCallbacks.Add(callback);
-		
-		// Note: Callbacks are triggered only via NotifyAuthCompleted() to ensure consistent data
-		// No immediate callback - wait for proper authentication completion notification
-	}
-
-	/// <summary>
-	/// Remove a specific authentication completion callback
-	/// </summary>
-	/// <param name="callback">The callback function to remove</param>
-	public static void RemoveAuthCompletedCallback(Action<AuthCompletedData> callback)
-	{
-		if (callback != null)
-		{
-			authCompletedCallbacks.Remove(callback);
-		}
-	}
-
-	/// <summary>
-	/// Clear all authentication completion callbacks
-	/// </summary>
-	public static void ClearAuthCompletedCallbacks()
-	{
-		authCompletedCallbacks.Clear();
-	}
-
-	/// <summary>
 	/// Trigger authentication completion callback
 	/// Internal method - called by authentication system when authentication completes
 	/// </summary>
@@ -1434,18 +1390,6 @@ public static class Abxr
 		
 		// Store the authentication data globally for later access
 		latestAuthCompletedData = authData;
-
-		foreach (var callback in authCompletedCallbacks)
-		{
-			try
-			{
-				callback.Invoke(authData);
-			}
-			catch (Exception ex)
-			{
-				LogError($"Error in authentication completion callback: {ex.Message}");
-			}
-		}
 	}
 
 	/// <summary>

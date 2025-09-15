@@ -695,7 +695,7 @@ CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads progress from s
 
 #### Best Practices
 
-1. **Set up auth callback early**: Subscribe to `OnAuthCompleted` before authentication starts
+1. **Subscribe to onAuthCompleted**: Subscribe to `onAuthCompleted` before authentication starts
 2. **Handle module count**: Check `authData.moduleCount` and use `GetModuleTarget()` to get the next module to process
 3. **Use GetModuleTarget() sequentially**: Call after completing each module to get the next one
 4. **Validate modules**: Check if requested module exists before navigation
@@ -721,53 +721,12 @@ public class CurrentSessionData
 
 The ABXRLib SDK provides comprehensive authentication completion callbacks that deliver detailed user and module information. This enables rich post-authentication workflows including automatic module navigation and personalized user experiences.
 
-#### Authentication Completion Callback
+#### Authentication Completion Event
 
-Subscribe to authentication events to receive user information and module targets:
-
+If you would like to have logic to correspond to authentication completion, you can subscrit to this event.
 ```cpp
-// Basic authentication callback
-Abxr.OnAuthCompleted((authData) =>
-{
-    if (authData.success)
-    {
-        Debug.Log($"Welcome {authData.userEmail}!");
-        
-        // Handle initial vs reauthentication
-        if (authData.isReauthentication)
-            RefreshUserData();
-        else
-            InitializeUserInterface();
-        
-        // Handle modules if available  
-        if (authData.moduleCount > 0)
-        {
-            CurrentSessionData moduleData = Abxr.GetModuleTarget();
-            if (moduleData != null)
-                NavigateToModule(moduleData.moduleTarget);
-        }
-    }
-});
-
-// Callback management
-Abxr.RemoveAuthCompletedCallback(authCallback);  // Remove specific callback
-Abxr.ClearAuthCompletedCallbacks();              // Clear all callbacks
-```
-
-#### Authentication Data Structure
-
-The callback provides an `AuthCompletedData` object with comprehensive authentication information:
-
-```cpp
-public class AuthCompletedData
-{
-    public bool success;             // Whether authentication was successful
-    public object userData;          // Additional user data from authentication response
-    public object userId;            // User identifier
-    public string userEmail;         // User email address
-    public int moduleCount;          // Number of available modules
-    public bool isReauthentication;  // Whether this was a reauthentication (vs initial auth)
-}
+// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
+public static Action<bool, string> onAuthCompleted;
 ```
 
 #### Use Cases
@@ -905,7 +864,7 @@ Abxr.ReAuthenticate();
 - Refreshing expired credentials
 - Debugging authentication issues
 
-**Note:** All session management methods work asynchronously and will trigger the `onAuthCompleted` callback when authentication completes, allowing you to respond to success or failure states.
+**Note:** All session management methods work asynchronously and will trigger the `onAuthCompleted` event when authentication completes, allowing you to respond to success or failure states.
 
 ### Debug Window
 The Debug Window is a little bonus feature from the AbxrLib developers.

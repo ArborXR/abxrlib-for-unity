@@ -100,6 +100,7 @@ namespace AbxrLib.Runtime.Authentication
                     // No additional auth needed - notify completion now
                     List<string> moduleTargets = ExtractModuleTargets(GetModules());
                     Abxr.NotifyAuthCompleted(true, false, moduleTargets);
+                    Abxr.onAuthCompleted?.Invoke(true, "");
                     _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
                 }
             }
@@ -246,6 +247,7 @@ namespace AbxrLib.Runtime.Authentication
                     // Notify completion for keyboard authentication success
                     List<string> moduleTargets = ExtractModuleTargets(GetModules());
                     Abxr.NotifyAuthCompleted(true, false, moduleTargets);
+                    Abxr.onAuthCompleted?.Invoke(true, "");
                     
                     yield break;
                 }
@@ -347,6 +349,7 @@ namespace AbxrLib.Runtime.Authentication
                 
                 // Notify authentication failure
                 Abxr.NotifyAuthCompleted(false, false);
+                Abxr.onAuthCompleted?.Invoke(false, error);
             }
         }
 
@@ -658,6 +661,7 @@ namespace AbxrLib.Runtime.Authentication
                 // Extract module targets and notify completion
                 List<string> moduleTargets = ExtractModuleTargets(_authResponseModules);
                 Abxr.NotifyAuthCompleted(true, handoffData.isReauthentication, moduleTargets);
+                Abxr.onAuthCompleted?.Invoke(true, "");
                 _keyboardAuthSuccess = true;
                 
                 success = true;
@@ -698,7 +702,7 @@ namespace AbxrLib.Runtime.Authentication
                 // Cache the entire JWT payload as user data
                 _userDataCache = new Dictionary<string, object>(decodedJwt);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: Failed to cache user data from JWT: {ex.Message}");
                 _userDataCache = null;
