@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Common;
@@ -43,7 +44,7 @@ namespace AbxrLib.Runtime.Authentication
         // Complete authentication response data
         private static string _authResponseAppId;
         private static string _authResponsePackageName;
-        private static List<Dictionary<string, object>> _authResponseModules;
+        private static List<Abxr.ModuleData> _authResponseModuleData;
     
         private const string DeviceIdKey = "abxrlib_device_id";
 
@@ -98,8 +99,7 @@ namespace AbxrLib.Runtime.Authentication
                 {
                     Debug.Log("AbxrLib: Authentication fully completed");
                     // No additional auth needed - notify completion now
-                    List<string> moduleTargets = ExtractModuleTargets(GetModules());
-                    Abxr.NotifyAuthCompleted(true, false, moduleTargets);
+                    Abxr.NotifyAuthCompleted(true);
                     Abxr.onAuthCompleted?.Invoke(true, "");
                     _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
                 }
@@ -121,7 +121,7 @@ namespace AbxrLib.Runtime.Authentication
             _userEmailCache = null;
             _authResponseAppId = null;
             _authResponsePackageName = null;
-            _authResponseModules = null;
+            _authResponseModuleData = null;
             
             // Reset auth handoff state
             _authHandoffCompleted = false;
@@ -245,8 +245,7 @@ namespace AbxrLib.Runtime.Authentication
                     Debug.Log("AbxrLib: Final authentication successful");
                     
                     // Notify completion for keyboard authentication success
-                    List<string> moduleTargets = ExtractModuleTargets(GetModules());
-                    Abxr.NotifyAuthCompleted(true, false, moduleTargets);
+                    Abxr.NotifyAuthCompleted(true);
                     Abxr.onAuthCompleted?.Invoke(true, "");
                     
                     yield break;
@@ -327,9 +326,6 @@ namespace AbxrLib.Runtime.Authentication
 
                 if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
                 
-                // Extract module targets for notification
-                List<string> moduleTargets = ExtractModuleTargets(postResponse.Modules);
-                
                 // Log initial success - but don't notify completion yet since additional auth may be required
                 Debug.Log("AbxrLib: API connection established");
             }
@@ -345,10 +341,10 @@ namespace AbxrLib.Runtime.Authentication
                 _userEmailCache = null;
                 _authResponseAppId = null;
                 _authResponsePackageName = null;
-                _authResponseModules = null;
+                _authResponseModuleData = null;
                 
                 // Notify authentication failure
-                Abxr.NotifyAuthCompleted(false, false);
+                Abxr.NotifyAuthCompleted(false);
                 Abxr.onAuthCompleted?.Invoke(false, error);
             }
         }
@@ -454,9 +450,9 @@ namespace AbxrLib.Runtime.Authentication
             return _authResponsePackageName;
         }
 
-        public static List<Dictionary<string, object>> GetModules()
+        public static List<Abxr.ModuleData> GetModuleData()
         {
-            return _authResponseModules;
+            return _authResponseModuleData;
         }
 
         private static void CacheAuthResponseData(AuthResponse authResponse, Dictionary<string, object> decodedJwt)
@@ -506,9 +502,9 @@ namespace AbxrLib.Runtime.Authentication
                 // Cache appId, packageName and modules from auth response
                 _authResponseAppId = authResponse.AppId;
                 _authResponsePackageName = authResponse.PackageName;
-                _authResponseModules = authResponse.Modules ?? new List<Dictionary<string, object>>();
+                _authResponseModuleData = Utils.ConvertToModuleDataList(authResponse.Modules);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: Failed to cache auth response data: {ex.Message}");
                 _userDataCache = null;
@@ -516,48 +512,8 @@ namespace AbxrLib.Runtime.Authentication
                 _userEmailCache = null;
                 _authResponseAppId = null;
                 _authResponsePackageName = null;
-                _authResponseModules = null;
+                _authResponseModuleData = null;
             }
-        }
-
-        private static List<string> ExtractModuleTargets(List<Dictionary<string, object>> modules)
-        {
-            var moduleTargets = new List<string>();
-            if (modules == null) return moduleTargets;
-
-            try
-            {
-                // Create a list of modules with their order for sorting
-                var modulesWithOrder = new List<(Dictionary<string, object> module, int order)>();
-                
-                foreach (var module in modules)
-                {
-                    int order = 0;
-                    if (module.ContainsKey("order") && module["order"] != null)
-                    {
-                        int.TryParse(module["order"].ToString(), out order);
-                    }
-                    modulesWithOrder.Add((module, order));
-                }
-
-                // Sort modules by order field
-                modulesWithOrder.Sort((a, b) => a.order.CompareTo(b.order));
-
-                // Extract targets in correct order
-                foreach (var (module, _) in modulesWithOrder)
-                {
-                    if (module.ContainsKey("target") && module["target"] != null)
-                    {
-                        moduleTargets.Add(module["target"].ToString());
-                    }
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to extract module targets: {ex.Message}");
-            }
-
-            return moduleTargets;
         }
 
         /// <summary>
@@ -632,11 +588,12 @@ namespace AbxrLib.Runtime.Authentication
                 _userDataCache = handoffData.userData as Dictionary<string, object>;
                 _userIdCache = handoffData.userId;
                 _userEmailCache = handoffData.userEmail;
-                _authResponseModules = new List<Dictionary<string, object>>();
+                _authResponseModuleData = new List<Abxr.ModuleData>();
                 
                 // Convert modules if provided
                 if (handoffData.modules != null)
                 {
+                    var responseModules = new List<Dictionary<string, object>>();
                     foreach (var module in handoffData.modules)
                     {
                         var moduleDict = new Dictionary<string, object>
@@ -646,8 +603,10 @@ namespace AbxrLib.Runtime.Authentication
                             ["target"] = module.target ?? "",
                             ["order"] = module.order
                         };
-                        _authResponseModules.Add(moduleDict);
+                        responseModules.Add(moduleDict);
                     }
+
+                    _authResponseModuleData = Utils.ConvertToModuleDataList(responseModules);
                 }
                 
                 // Set token expiry to far in the future since we're trusting the handoff
@@ -656,17 +615,15 @@ namespace AbxrLib.Runtime.Authentication
                 // Mark handoff as completed
                 _authHandoffCompleted = true;
                 
-                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModules?.Count ?? 0}");
+                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModuleData?.Count ?? 0}");
                 
-                // Extract module targets and notify completion
-                List<string> moduleTargets = ExtractModuleTargets(_authResponseModules);
-                Abxr.NotifyAuthCompleted(true, handoffData.isReauthentication, moduleTargets);
+                Abxr.NotifyAuthCompleted(true);
                 Abxr.onAuthCompleted?.Invoke(true, "");
                 _keyboardAuthSuccess = true;
                 
                 success = true;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: Failed to process authentication handoff: {ex.Message}");
                 _authHandoffCompleted = false;

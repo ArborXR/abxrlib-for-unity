@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -133,75 +134,75 @@ namespace AbxrLib.Runtime.Core
             return builder.ToString();
         }
     
-    public static string GetQueryParam(string key, string url)
-    {
-        var question = url.IndexOf('?');
-        if (question < 0) return "";
-        var query = url.Substring(question + 1);
-        foreach (var pair in query.Split('&'))
+        public static string GetQueryParam(string key, string url)
         {
-            var kv = pair.Split('=');
-            if (kv.Length == 2 && Uri.UnescapeDataString(kv[0]) == key)
+            var question = url.IndexOf('?');
+            if (question < 0) return "";
+            var query = url.Substring(question + 1);
+            foreach (var pair in query.Split('&'))
             {
-                return Uri.UnescapeDataString(kv[1]);
+                var kv = pair.Split('=');
+                if (kv.Length == 2 && Uri.UnescapeDataString(kv[0]) == key)
+                {
+                    return Uri.UnescapeDataString(kv[1]);
+                }
             }
+            return "";
         }
-        return "";
-    }
 
-    /// <summary>
-    /// Get command line argument value by key
-    /// Searches through Unity's command line arguments for key=value pairs
-    /// </summary>
-    /// <param name="key">The argument key to search for</param>
-    /// <returns>The argument value if found, empty string otherwise</returns>
-    public static string GetCommandLineArg(string key)
-    {
-        string[] args = System.Environment.GetCommandLineArgs();
-        for (int i = 0; i < args.Length; i++)
+        /// <summary>
+        /// Get command line argument value by key
+        /// Searches through Unity's command line arguments for key=value pairs
+        /// </summary>
+        /// <param name="key">The argument key to search for</param>
+        /// <returns>The argument value if found, empty string otherwise</returns>
+        public static string GetCommandLineArg(string key)
         {
-            if (args[i].StartsWith(key + "="))
+            string[] args = System.Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length; i++)
             {
-                return args[i].Substring(key.Length + 1);
+                if (args[i].StartsWith(key + "="))
+                {
+                    return args[i].Substring(key.Length + 1);
+                }
+                // Also check for space-separated arguments (--key value or -key value)
+                if ((args[i] == "--" + key || args[i] == "-" + key) && i + 1 < args.Length)
+                {
+                    return args[i + 1];
+                }
             }
-            // Also check for space-separated arguments (--key value or -key value)
-            if ((args[i] == "--" + key || args[i] == "-" + key) && i + 1 < args.Length)
-            {
-                return args[i + 1];
-            }
+            return "";
         }
-        return "";
-    }
 
-    /// <summary>
-    /// Get Android intent parameter value by key
-    /// Uses Unity's Android activity to retrieve intent extras
-    /// </summary>
-    /// <param name="key">The intent parameter key to search for</param>
-    /// <returns>The intent parameter value if found, empty string otherwise</returns>
-    public static string GetAndroidIntentParam(string key)
-    {
-#if UNITY_ANDROID && !UNITY_EDITOR
-        try
+        /// <summary>
+        /// Get Android intent parameter value by key
+        /// Uses Unity's Android activity to retrieve intent extras
+        /// </summary>
+        /// <param name="key">The intent parameter key to search for</param>
+        /// <returns>The intent parameter value if found, empty string otherwise</returns>
+        public static string GetAndroidIntentParam(string key)
         {
-            using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-            using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-            using var intent = activity.Call<AndroidJavaObject>("getIntent");
-            
-            // Check if the intent has the specified extra
-            bool hasExtra = intent.Call<bool>("hasExtra", key);
-            if (hasExtra)
+    #if UNITY_ANDROID && !UNITY_EDITOR
+            try
             {
-                return intent.Call<string>("getStringExtra", key);
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                using var intent = activity.Call<AndroidJavaObject>("getIntent");
+                
+                // Check if the intent has the specified extra
+                bool hasExtra = intent.Call<bool>("hasExtra", key);
+                if (hasExtra)
+                {
+                    return intent.Call<string>("getStringExtra", key);
+                }
             }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"AbxrLib: Failed to get Android intent parameter '{key}': {ex.Message}");
+            }
+    #endif
+            return "";
         }
-        catch (System.Exception ex)
-        {
-            Debug.LogWarning($"AbxrLib: Failed to get Android intent parameter '{key}': {ex.Message}");
-        }
-#endif
-        return "";
-    }
     
         public static long GetUnityTime() => (long)(Time.time * 1000f) + Initialize.StartTimeMs;
 
@@ -212,6 +213,48 @@ namespace AbxrLib.Runtime.Core
             CoroutineRunner.Instance.StartCoroutine(TelemetryBatcher.Send());
             CoroutineRunner.Instance.StartCoroutine(LogBatcher.Send());
             CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
+        }
+        
+        /// <summary>
+        /// Convert raw module dictionaries to typed ModuleData objects
+        /// Internal helper method for processing authentication response modules
+        /// Modules are automatically sorted by their order field
+        /// </summary>
+        /// <param name="rawModules">Raw module data from authentication response</param>
+        /// <returns>List of typed ModuleData objects sorted by order</returns>
+        public static List<Abxr.ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
+        {
+            var moduleDataList = new List<Abxr.ModuleData>();
+            if (rawModules == null) return moduleDataList;
+
+            try
+            {
+                var tempList = new List<Abxr.ModuleData>();
+			
+                foreach (var rawModule in rawModules)
+                {
+                    var id = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
+                    var name = rawModule.ContainsKey("name") ? rawModule["name"]?.ToString() : "";
+                    var target = rawModule.ContainsKey("target") ? rawModule["target"]?.ToString() : "";
+                    var order = 0;
+				
+                    if (rawModule.ContainsKey("order") && rawModule["order"] != null)
+                    {
+                        int.TryParse(rawModule["order"].ToString(), out order);
+                    }
+
+                    tempList.Add(new Abxr.ModuleData(id, name, target, order));
+                }
+
+                // Sort modules by order field
+                moduleDataList = tempList.OrderBy(m => m.order).ToList();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"Failed to convert module data: {ex.Message}");
+            }
+
+            return moduleDataList;
         }
     }
 }

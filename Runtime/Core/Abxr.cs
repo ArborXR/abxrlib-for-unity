@@ -39,9 +39,6 @@ public static class Abxr
 	private static int currentModuleIndex = 0;
 	private const string ModuleIndexKey = "AbxrModuleIndex";
 	
-	// Global storage for the latest authentication completion data
-	private static AuthCompletedData latestAuthCompletedData = null;
-	
 	// Connection status - tracks whether AbxrLib can communicate with the server
 	private static bool connectionActive = false;
 
@@ -746,12 +743,12 @@ public static class Abxr
 				meta["module"] = currentSession.moduleTarget;
 			}
 			// For additional module metadata, we need to get it from the modules list
-			if (latestAuthCompletedData?.modules != null && latestAuthCompletedData.modules.Count > 0)
+			if (Authentication.GetModuleData() != null && Authentication.GetModuleData().Count > 0)
 			{
 				LoadModuleIndex();
-				if (currentModuleIndex < latestAuthCompletedData.modules.Count)
+				if (currentModuleIndex < Authentication.GetModuleData().Count)
 				{
-					var currentModule = latestAuthCompletedData.modules[currentModuleIndex];
+					ModuleData currentModule = Authentication.GetModuleData()[currentModuleIndex];
 					if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModule.name))
 					{
 						meta["module_name"] = currentModule.name;
@@ -1130,39 +1127,19 @@ public static class Abxr
 	/// Get additional user data from authentication response
 	/// </summary>
 	/// <returns>User data object, or null if not available</returns>
-	public static object GetUserData()
-	{
-		return Authentication.GetUserData();
-	}
+	public static object GetUserData() => Authentication.GetUserData();
 
 	/// <summary>
 	/// Get the user ID from authentication response
 	/// </summary>
 	/// <returns>User ID object, or null if not available</returns>
-	public static object GetUserId()
-	{
-		return Authentication.GetUserId();
-	}
+	public static object GetUserId() => Authentication.GetUserId();
 
 	/// <summary>
 	/// Get the user email from authentication response
 	/// </summary>
 	/// <returns>User email string, or null if not available</returns>
-	public static string GetUserEmail()
-	{
-		return Authentication.GetUserEmail();
-	}
-
-	/// <summary>
-	/// Get the complete authentication data from the most recent authentication completion
-	/// This allows you to access user data, email, module targets, and authentication status anytime
-	/// Returns null if no authentication has completed yet
-	/// </summary>
-	/// <returns>AuthCompletedData containing all authentication information, or null if not authenticated</returns>
-	public static AuthCompletedData GetAuthCompletedData()
-	{
-		return latestAuthCompletedData;
-	}
+	public static string GetUserEmail() => Authentication.GetUserEmail();
 
 	/// <summary>
 	/// Get the learner/user data from the most recent authentication completion
@@ -1170,10 +1147,7 @@ public static class Abxr
 	/// Returns null if no authentication has completed yet
 	/// </summary>
 	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
-	public static Dictionary<string, object> GetLearnerData()
-	{
-		return latestAuthCompletedData?.userData as Dictionary<string, object>;
-	}
+	public static Dictionary<string, object> GetLearnerData() => Authentication.GetUserData();
 
 	/// <summary>
 	/// Get all available modules from the authentication response
@@ -1181,10 +1155,7 @@ public static class Abxr
 	/// Returns empty list if no authentication has completed yet
 	/// </summary>
 	/// <returns>List of ModuleData objects with complete module information</returns>
-	public static List<ModuleData> GetModuleTargetList()
-	{
-		return latestAuthCompletedData?.modules ?? new List<ModuleData>();
-	}
+	public static List<ModuleData> GetModuleTargetList() => Authentication.GetModuleData();
 
 	/// <summary>
 	/// Get the current module target again without advancing to the next one
@@ -1194,19 +1165,19 @@ public static class Abxr
 	/// <returns>CurrentSessionData for the current module, or null if none available</returns>
 	public static CurrentSessionData GetModuleTargetWithoutAdvance()
 	{
-		if (latestAuthCompletedData?.modules == null || latestAuthCompletedData.modules.Count == 0)
+		if (Authentication.GetModuleData() == null || Authentication.GetModuleData().Count == 0)
 		{
 			return null;
 		}
 
 		LoadModuleIndex();
 
-		if (currentModuleIndex >= latestAuthCompletedData.modules.Count)
+		if (currentModuleIndex >= Authentication.GetModuleData().Count)
 		{
 			return null;
 		}
 
-		var currentModule = latestAuthCompletedData.modules[currentModuleIndex];
+		var currentModule = Authentication.GetModuleData()[currentModuleIndex];
 		
 		// Return CurrentSessionData structure (same as GetModuleTarget but without advancing index)
 		return new CurrentSessionData(
@@ -1241,32 +1212,15 @@ public static class Abxr
 	}
 
 	/// <summary>
-	/// Initialize module processing from authentication response
-	/// Internal method - called by authentication system when authentication completes
-	/// Resets the module index to start from the beginning
-	/// </summary>
-	/// <param name="moduleTargets">List of module target identifiers from auth response (legacy parameter)</param>
-	internal static void SetModuleTargets(List<string> moduleTargets)
-	{
-		// Reset module index to start from the beginning
-		// Note: moduleTargets parameter is now legacy - actual modules come from latestAuthCompletedData
-		currentModuleIndex = 0;
-		SaveModuleIndex();
-	}
-
-	/// <summary>
 	/// Get the current number of module targets remaining
 	/// </summary>
 	/// <returns>Number of module targets remaining</returns>
 	public static int GetModuleTargetCount()
 	{
-		if (latestAuthCompletedData?.modules == null)
-		{
-			return 0;
-		}
+		if (Authentication.GetModuleData() == null) return 0;
 
 		LoadModuleIndex();
-		int remaining = latestAuthCompletedData.modules.Count - currentModuleIndex;
+		int remaining = Authentication.GetModuleData().Count - currentModuleIndex;
 		return Math.Max(0, remaining);
 	}
 
@@ -1355,9 +1309,7 @@ public static class Abxr
 	/// Internal method - called by authentication system when authentication completes
 	/// </summary>
 	/// <param name="success">Whether authentication was successful</param>
-	/// <param name="isReauthentication">Whether this was a reauthentication vs initial auth</param>
-	/// <param name="moduleTargets">Optional list of module targets from authentication response</param>
-	internal static void NotifyAuthCompleted(bool success, bool isReauthentication = false, List<string> moduleTargets = null)
+	internal static void NotifyAuthCompleted(bool success)
 	{
 		// Update connection status based on authentication success
 		connectionActive = success;
@@ -1366,72 +1318,10 @@ public static class Abxr
 		moduleIndexLoaded = false;
 		moduleIndexLoading = false;
 		
-		// Create authentication data first to have access to complete modules
-		var moduleDataList = ConvertToModuleDataList(Authentication.GetModules());
-		
 		// Set up module index for GetModuleTarget() calls
 		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
 		currentModuleIndex = 0;
 		SaveModuleIndex();
-
-		// Create authentication data and store it globally (regardless of whether there are callbacks)
-		var authData = new AuthCompletedData(
-			success,
-			Authentication.GetToken(),
-			Authentication.GetSecret(),
-			GetUserData(),
-			GetUserId(),
-			GetUserEmail(),
-			Authentication.GetAppId(),
-			Authentication.GetPackageName(),
-			moduleDataList,
-			isReauthentication
-		);
-		
-		// Store the authentication data globally for later access
-		latestAuthCompletedData = authData;
-	}
-
-	/// <summary>
-	/// Convert raw module dictionaries to typed ModuleData objects
-	/// Internal helper method for processing authentication response modules
-	/// Modules are automatically sorted by their order field
-	/// </summary>
-	/// <param name="rawModules">Raw module data from authentication response</param>
-	/// <returns>List of typed ModuleData objects sorted by order</returns>
-	private static List<ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
-	{
-		var moduleDataList = new List<ModuleData>();
-		if (rawModules == null) return moduleDataList;
-
-		try
-		{
-			var tempList = new List<ModuleData>();
-			
-			foreach (var rawModule in rawModules)
-			{
-				var id = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
-				var name = rawModule.ContainsKey("name") ? rawModule["name"]?.ToString() : "";
-				var target = rawModule.ContainsKey("target") ? rawModule["target"]?.ToString() : "";
-				var order = 0;
-				
-				if (rawModule.ContainsKey("order") && rawModule["order"] != null)
-				{
-					int.TryParse(rawModule["order"].ToString(), out order);
-				}
-
-				tempList.Add(new ModuleData(id, name, target, order));
-			}
-
-			// Sort modules by order field
-			moduleDataList = tempList.OrderBy(m => m.order).ToList();
-		}
-		catch (Exception ex)
-		{
-			LogError($"Failed to convert module data: {ex.Message}");
-		}
-
-		return moduleDataList;
 	}
 
 	#endregion
