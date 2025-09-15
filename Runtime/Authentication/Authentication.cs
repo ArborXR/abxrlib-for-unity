@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Common;
@@ -42,8 +41,6 @@ namespace AbxrLib.Runtime.Authentication
         private static object _userIdCache;
         
         // Complete authentication response data
-        private static string _authResponseAppId;
-        private static string _authResponsePackageName;
         private static List<Abxr.ModuleData> _authResponseModuleData;
     
         private const string DeviceIdKey = "abxrlib_device_id";
@@ -119,8 +116,6 @@ namespace AbxrLib.Runtime.Authentication
             _userDataCache = null;
             _userIdCache = null;
             _userEmailCache = null;
-            _authResponseAppId = null;
-            _authResponsePackageName = null;
             _authResponseModuleData = null;
             
             // Reset auth handoff state
@@ -339,8 +334,6 @@ namespace AbxrLib.Runtime.Authentication
                 _userDataCache = null;
                 _userIdCache = null;
                 _userEmailCache = null;
-                _authResponseAppId = null;
-                _authResponsePackageName = null;
                 _authResponseModuleData = null;
                 
                 // Notify authentication failure
@@ -415,45 +408,13 @@ namespace AbxrLib.Runtime.Authentication
         }
 
         // User data access methods
-        public static Dictionary<string, object> GetUserData()
-        {
-            return _userDataCache;
-        }
+        public static Dictionary<string, object> GetUserData() => _userDataCache;
 
-        public static object GetUserId()
-        {
-            return _userIdCache;
-        }
+        public static object GetUserId() => _userIdCache;
 
-        public static string GetUserEmail()
-        {
-            return _userEmailCache;
-        }
+        public static string GetUserEmail() => _userEmailCache;
 
-        internal static string GetToken()
-        {
-            return _authToken;
-        }
-
-        internal static string GetSecret()
-        {
-            return _apiSecret;
-        }
-
-        public static string GetAppId()
-        {
-            return _authResponseAppId;
-        }
-
-        public static string GetPackageName()
-        {
-            return _authResponsePackageName;
-        }
-
-        public static List<Abxr.ModuleData> GetModuleData()
-        {
-            return _authResponseModuleData;
-        }
+        public static List<Abxr.ModuleData> GetModuleData() => _authResponseModuleData;
 
         private static void CacheAuthResponseData(AuthResponse authResponse, Dictionary<string, object> decodedJwt)
         {
@@ -500,8 +461,6 @@ namespace AbxrLib.Runtime.Authentication
                 }
 
                 // Cache appId, packageName and modules from auth response
-                _authResponseAppId = authResponse.AppId;
-                _authResponsePackageName = authResponse.PackageName;
                 _authResponseModuleData = Utils.ConvertToModuleDataList(authResponse.Modules);
             }
             catch (Exception ex)
@@ -510,8 +469,6 @@ namespace AbxrLib.Runtime.Authentication
                 _userDataCache = null;
                 _userIdCache = null;
                 _userEmailCache = null;
-                _authResponseAppId = null;
-                _authResponsePackageName = null;
                 _authResponseModuleData = null;
             }
         }
@@ -522,10 +479,8 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         private static IEnumerator CheckAuthHandoff()
         {
-            string handoffJson = "";
-            
             // Check Android intent parameters first
-            handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
+            string handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
 
             // If not found, check command line arguments
             if (string.IsNullOrEmpty(handoffJson))
@@ -581,8 +536,6 @@ namespace AbxrLib.Runtime.Authentication
                 // Set authentication state from handoff data
                 _authToken = handoffData.token;
                 _apiSecret = handoffData.secret;
-                _authResponseAppId = handoffData.appId;
-                _authResponsePackageName = handoffData.packageName;
                 
                 // Cache user data from handoff
                 _userDataCache = handoffData.userData as Dictionary<string, object>;
@@ -633,38 +586,6 @@ namespace AbxrLib.Runtime.Authentication
             if (success)
             {
                 yield return null;
-            }
-        }
-
-        private static void CacheUserDataFromJwt(Dictionary<string, object> decodedJwt)
-        {
-            try
-            {
-                // Extract user ID from JWT (typically 'sub' claim)
-                if (decodedJwt.ContainsKey("sub"))
-                {
-                    _userIdCache = decodedJwt["sub"];
-                }
-                else if (decodedJwt.ContainsKey("userId"))
-                {
-                    _userIdCache = decodedJwt["userId"];
-                }
-
-                // Extract user email from JWT
-                if (decodedJwt.ContainsKey("email"))
-                {
-                    _userEmailCache = decodedJwt["email"]?.ToString();
-                }
-
-                // Cache the entire JWT payload as user data
-                _userDataCache = new Dictionary<string, object>(decodedJwt);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to cache user data from JWT: {ex.Message}");
-                _userDataCache = null;
-                _userIdCache = null;
-                _userEmailCache = null;
             }
         }
     
