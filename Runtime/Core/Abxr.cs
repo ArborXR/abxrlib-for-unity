@@ -1234,7 +1234,8 @@ public static class Abxr
 	/// Internal method - called by authentication system when authentication completes
 	/// </summary>
 	/// <param name="success">Whether authentication was successful</param>
-	internal static void NotifyAuthCompleted(bool success)
+	/// <param name="error">Optional error message</param>
+	internal static void NotifyAuthCompleted(bool success, string error = null)
 	{
 		// Update connection status based on authentication success
 		connectionActive = success;
@@ -1247,6 +1248,7 @@ public static class Abxr
 		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
 		currentModuleIndex = 0;
 		SaveModuleIndex();
+		onAuthCompleted?.Invoke(success, error);
 	}
 
 	#endregion
