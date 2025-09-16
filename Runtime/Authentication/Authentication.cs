@@ -38,6 +38,9 @@ namespace AbxrLib.Runtime.Authentication
         private static AuthResponse _responseData;
         public static AuthResponse GetAuthResponse() => _responseData;
         
+        private static AuthHandoffData _authHandoffData;
+        public static AuthHandoffData GetAuthHandoffData() => _authHandoffData;
+        
         // Complete authentication response data
         private static List<Abxr.ModuleData> _authResponseModuleData;
     
@@ -506,6 +509,7 @@ namespace AbxrLib.Runtime.Authentication
                 _keyboardAuthSuccess = true;
                 
                 success = true;
+                _authHandoffData = handoffData;
             }
             catch (Exception ex)
             {
@@ -602,7 +606,7 @@ namespace AbxrLib.Runtime.Authentication
         /// Data structure for authentication handoff JSON from external launcher apps
         /// </summary>
         [Preserve]
-        private class AuthHandoffData
+        public class AuthHandoffData
         {
             public bool success;
             public string token;
@@ -624,7 +628,7 @@ namespace AbxrLib.Runtime.Authentication
         /// Module data structure for authentication handoff
         /// </summary>
         [Preserve]
-        private class AuthHandoffModule
+        public class AuthHandoffModule
         {
             public string id;
             public string name;

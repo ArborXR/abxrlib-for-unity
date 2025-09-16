@@ -170,12 +170,14 @@ public static partial class Abxr
 		public string moduleTarget;     // The target module identifier from LMS
 		public object userData;         // Additional user data from authentication
 		public object userId;           // User identifier
+		public string userEmail;
 
-		public CurrentSessionData(string moduleTarget, object userData, object userId)
+		public CurrentSessionData(string moduleTarget, object userData, object userId, string userEmail = null)
 		{
 			this.moduleTarget = moduleTarget;
 			this.userData = userData;
 			this.userId = userId;
+			this.userEmail = userEmail;
 		}
 	}
 
@@ -1087,7 +1089,8 @@ public static partial class Abxr
 		return new CurrentSessionData(
 			currentModule.target,
 			GetUserData(),
-			Authentication.GetAuthResponse().UserId
+			Authentication.GetAuthResponse().UserId,
+			Authentication.GetAuthHandoffData().userEmail
 		);
 	}
 
