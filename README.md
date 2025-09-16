@@ -695,7 +695,7 @@ CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads progress from s
 
 #### Best Practices
 
-1. **Subscribe to onAuthCompleted**: Subscribe to `onAuthCompleted` before authentication starts
+1. **Subscribe to OnAuthCompleted**: Subscribe to `OnAuthCompleted` before authentication starts
 2. **Handle module count**: Check `authData.moduleCount` and use `GetModuleTarget()` to get the next module to process
 3. **Use GetModuleTarget() sequentially**: Call after completing each module to get the next one
 4. **Validate modules**: Check if requested module exists before navigation
@@ -822,7 +822,7 @@ if (Abxr.ConnectionActive())
 ### Headset Removal
 To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.
 ```cpp
-public static Action onHeadsetPutOnNewSession;
+public static Action OnHeadsetPutOnNewSession;
 ```
 If the developer would like to have logic to correspond to these events, that would be done by subscribing to these events.
 
@@ -864,7 +864,7 @@ Abxr.ReAuthenticate();
 - Refreshing expired credentials
 - Debugging authentication issues
 
-**Note:** All session management methods work asynchronously and will trigger the `onAuthCompleted` event when authentication completes, allowing you to respond to success or failure states.
+**Note:** All session management methods work asynchronously and will trigger the `OnAuthCompleted` event when authentication completes, allowing you to respond to success or failure states.
 
 ### Debug Window
 The Debug Window is a little bonus feature from the AbxrLib developers.

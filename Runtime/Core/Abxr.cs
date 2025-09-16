@@ -30,10 +30,10 @@ public static partial class Abxr
 		LoadSuperProperties();
 	}
 
-	public static Action onHeadsetPutOnNewSession;
+	public static Action OnHeadsetPutOnNewSession;
 		
 	// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
-	public static Action<bool, string> onAuthCompleted;
+	public static Action<bool, string> OnAuthCompleted;
 
 	// Module index for sequential LMS multi-module applications
 	private static int currentModuleIndex = 0;
@@ -1247,7 +1247,7 @@ public static partial class Abxr
 		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
 		currentModuleIndex = 0;
 		SaveModuleIndex();
-		onAuthCompleted?.Invoke(success, error);
+		OnAuthCompleted?.Invoke(success, error);
 	}
 	#endregion
 }
