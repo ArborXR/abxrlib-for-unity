@@ -170,14 +170,12 @@ public static partial class Abxr
 		public string moduleTarget;     // The target module identifier from LMS
 		public object userData;         // Additional user data from authentication
 		public object userId;           // User identifier
-		public string userEmail;        // User email address
 
-		public CurrentSessionData(string moduleTarget, object userData, object userId, string userEmail)
+		public CurrentSessionData(string moduleTarget, object userData, object userId)
 		{
 			this.moduleTarget = moduleTarget;
 			this.userData = userData;
 			this.userId = userId;
-			this.userEmail = userEmail;
 		}
 	}
 
@@ -417,7 +415,7 @@ public static partial class Abxr
 		
 		// For user-scoped storage, we need a user to actually be logged in
 		// For device-scoped storage, app-level authentication should be sufficient
-		if (scope == StorageScope.user && GetUserId() == null)
+		if (scope == StorageScope.user && Authentication.GetAuthResponse().UserId == null)
 		{
 			// User-scoped storage requires a user to be logged in, defer this request
 			return;
@@ -444,7 +442,7 @@ public static partial class Abxr
 		
 		// For user-scoped storage, we need a user to actually be logged in
 		// For device-scoped storage, app-level authentication should be sufficient
-		if (scope == StorageScope.user && GetUserId() == null)
+		if (scope == StorageScope.user && Authentication.GetAuthResponse().UserId == null)
 		{
 			// User-scoped storage requires a user to be logged in, defer this request
 			return;
@@ -1048,30 +1046,12 @@ public static partial class Abxr
 	#region Module Target and User Data Methods
 
 	/// <summary>
-	/// Get additional user data from authentication response
-	/// </summary>
-	/// <returns>User data object, or null if not available</returns>
-	public static object GetUserData() => Authentication.GetUserData();
-
-	/// <summary>
-	/// Get the user ID from authentication response
-	/// </summary>
-	/// <returns>User ID object, or null if not available</returns>
-	public static object GetUserId() => Authentication.GetUserId();
-
-	/// <summary>
-	/// Get the user email from authentication response
-	/// </summary>
-	/// <returns>User email string, or null if not available</returns>
-	public static string GetUserEmail() => Authentication.GetUserEmail();
-
-	/// <summary>
 	/// Get the learner/user data from the most recent authentication completion
 	/// This is the userData object from the authentication response, containing user preferences and information
 	/// Returns null if no authentication has completed yet
 	/// </summary>
 	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
-	public static Dictionary<string, object> GetLearnerData() => Authentication.GetUserData();
+	public static Dictionary<string, object> GetUserData() => Authentication.GetAuthResponse().UserData;
 
 	/// <summary>
 	/// Get all available modules from the authentication response
@@ -1107,8 +1087,7 @@ public static partial class Abxr
 		return new CurrentSessionData(
 			currentModule.target,
 			GetUserData(),
-			GetUserId(),
-			GetUserEmail()
+			Authentication.GetAuthResponse().UserId
 		);
 	}
 

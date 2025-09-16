@@ -198,7 +198,7 @@ public static partial class Abxr
 	/// <returns>Property value if found, null otherwise</returns>
 	public static object GetParticipantProperty(string key)
 	{
-		var learnerData = GetLearnerData();
+		var learnerData = GetUserData();
 		if (learnerData != null && learnerData.ContainsKey(key))
 		{
 			return learnerData[key];

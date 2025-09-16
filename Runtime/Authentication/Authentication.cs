@@ -35,10 +35,8 @@ namespace AbxrLib.Runtime.Authentication
         private static AuthMechanism _authMechanism;
         private static DateTime _tokenExpiry = DateTime.MinValue;
         
-        // User data from authentication response
-        private static Dictionary<string, object> _userDataCache;
-        private static string _userEmailCache;
-        private static object _userIdCache;
+        private static AuthResponse _responseData;
+        public static AuthResponse GetAuthResponse() => _responseData;
         
         // Complete authentication response data
         private static List<Abxr.ModuleData> _authResponseModuleData;
@@ -112,9 +110,7 @@ namespace AbxrLib.Runtime.Authentication
             _keyboardAuthSuccess = null;
             
             // Clear cached user data
-            _userDataCache = null;
-            _userIdCache = null;
-            _userEmailCache = null;
+            _responseData = null;
             _authResponseModuleData = null;
             
             // Reset auth handoff state
@@ -314,8 +310,8 @@ namespace AbxrLib.Runtime.Authentication
                 Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                 _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
                 
-                // Cache complete authentication response data
-                CacheAuthResponseData(postResponse, decodedJwt);
+                _responseData = postResponse;
+                _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
 
                 if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
                 
@@ -329,9 +325,7 @@ namespace AbxrLib.Runtime.Authentication
                 _sessionId = null;
                 
                 // Clear cached user data on failure
-                _userDataCache = null;
-                _userIdCache = null;
-                _userEmailCache = null;
+                _responseData = null;
                 _authResponseModuleData = null;
                 
                 // Notify authentication failure
@@ -404,71 +398,7 @@ namespace AbxrLib.Runtime.Authentication
             if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) Configuration.Instance.retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
         }
 
-        // User data access methods
-        public static Dictionary<string, object> GetUserData() => _userDataCache;
-
-        public static object GetUserId() => _userIdCache;
-
-        public static string GetUserEmail() => _userEmailCache;
-
         public static List<Abxr.ModuleData> GetModuleData() => _authResponseModuleData;
-
-        private static void CacheAuthResponseData(AuthResponse authResponse, Dictionary<string, object> decodedJwt)
-        {
-            try
-            {
-                // Cache data from auth response (if available)
-                if (authResponse.UserData != null)
-                {
-                    _userDataCache = authResponse.UserData;
-                    
-                    // Extract user email from userData if available
-                    if (authResponse.UserData.ContainsKey("email"))
-                    {
-                        _userEmailCache = authResponse.UserData["email"]?.ToString();
-                    }
-                }
-                else
-                {
-                    // Fallback to JWT data if no userData in response
-                    _userDataCache = new Dictionary<string, object>(decodedJwt);
-                    
-                    if (decodedJwt.ContainsKey("email"))
-                    {
-                        _userEmailCache = decodedJwt["email"]?.ToString();
-                    }
-                }
-
-                // Cache user ID from auth response or fallback to JWT
-                if (authResponse.UserId != null)
-                {
-                    _userIdCache = authResponse.UserId;
-                }
-                else
-                {
-                    // Extract user ID from JWT (typically 'sub' claim)
-                    if (decodedJwt.ContainsKey("sub"))
-                    {
-                        _userIdCache = decodedJwt["sub"];
-                    }
-                    else if (decodedJwt.ContainsKey("userId"))
-                    {
-                        _userIdCache = decodedJwt["userId"];
-                    }
-                }
-
-                // Cache appId, packageName and modules from auth response
-                _authResponseModuleData = Utils.ConvertToModuleDataList(authResponse.Modules);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to cache auth response data: {ex.Message}");
-                _userDataCache = null;
-                _userIdCache = null;
-                _userEmailCache = null;
-                _authResponseModuleData = null;
-            }
-        }
 
         /// <summary>
         /// Check for authentication handoff from external launcher apps
@@ -535,9 +465,14 @@ namespace AbxrLib.Runtime.Authentication
                 _apiSecret = handoffData.secret;
                 
                 // Cache user data from handoff
-                _userDataCache = handoffData.userData as Dictionary<string, object>;
-                _userIdCache = handoffData.userId;
-                _userEmailCache = handoffData.userEmail;
+                _responseData = new AuthResponse
+                {
+                    Token = _authToken,
+                    Secret = _apiSecret,
+                    UserId = handoffData.userId,
+                    AppId = handoffData.appId,
+                    PackageName = handoffData.packageName
+                };
                 _authResponseModuleData = new List<Abxr.ModuleData>();
                 
                 // Convert modules if provided
@@ -643,7 +578,7 @@ namespace AbxrLib.Runtime.Authentication
         }
 
         [Preserve]
-        private class AuthResponse
+        public class AuthResponse
         {
             public string Token;
             public string Secret;
