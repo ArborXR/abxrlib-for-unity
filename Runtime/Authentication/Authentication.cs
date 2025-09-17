@@ -20,7 +20,6 @@ namespace AbxrLib.Runtime.Authentication
         private static string _orgId;
         private static string _deviceId;
         private static string _authSecret;
-        private static string _userId;
         private static string _appId;
         private static Partner _partner = Partner.None;
         private static string _deviceModel;
@@ -163,7 +162,6 @@ namespace AbxrLib.Runtime.Authentication
             {
                 Debug.LogError($"AbxrLib: {e.Message}");
             }
-            // Note: _userId will be properly set from JWT token during authentication
         }
 #if UNITY_WEBGL && !UNITY_EDITOR
         private static void GetQueryData()
@@ -282,7 +280,6 @@ namespace AbxrLib.Runtime.Authentication
                 orgId = _orgId,
                 authSecret = _authSecret,
                 deviceId = _deviceId,
-                userId = _userId,
                 tags = _deviceTags,
                 sessionId = _sessionId,
                 partner = _partner.ToString().ToLower(),
