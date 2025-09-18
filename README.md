@@ -609,9 +609,59 @@ Abxr.EventAssessmentComplete("final_exam", 95, EventStatus.Pass); // Automatical
 
 The **Module Target** feature enables developers to create single applications with multiple modules, where each module can be its own assignment in an LMS. When a learner enters from the LMS for a specific module, the application can automatically direct the user to that module within the application. Individual grades and results are then tracked for that specific assignment in the LMS.
 
-#### Getting Module Target Information
+#### Automatic Module Execution (Recommended)
 
-You can also process module targets sequentially:
+The easiest way to handle modules is using `ExecuteModuleSequence()`, which automatically finds and calls methods in your class based on module names:
+
+```cpp
+// Subscribe to authentication completion
+Abxr.OnAuthCompleted += OnAuthenticationCompleted;
+
+private void OnAuthenticationCompleted(bool success, string error)
+{
+    if (success)
+    {
+        // Automatically execute all module functions in sequence
+        int executedCount = Abxr.ExecuteModuleSequence(this, "Module_");
+        Debug.Log($"Executed {executedCount} modules");
+    }
+}
+
+// Create methods with pattern: {prefix}{moduleTarget}
+// Module names with hyphens/spaces are automatically converted to underscores
+private void Module_training_1()
+{
+    Debug.Log("Starting traiing #1");
+    // Your module logic here
+}
+
+private void Module_training_2()
+{
+    Debug.Log("Starting traiing #2");
+    // Your module logic here
+}
+```
+
+**Method Signature:**
+```cpp
+public static int ExecuteModuleSequence(object targetObject, string functionPrefix = "", string functionPostfix = "")
+```
+
+**Parameters:**
+- `targetObject`: The object instance to search for module methods (usually `this`)
+- `functionPrefix`: Prefix for function names (default: empty string)
+- `functionPostfix`: Suffix for function names (default: empty string)
+
+**Features:**
+- **Automatic Method Discovery**: Uses reflection to find methods matching the pattern
+- **Character Sanitization**: Converts hyphens and spaces to underscores for valid C# method names
+- **Error Handling**: Continues to next module if a method isn't found or throws an exception
+- **Return Count**: Returns the number of successfully executed modules
+- **Flexible Naming**: Supports any prefix/postfix combination
+
+#### Manual Module Processing
+
+For more control, you can manually process modules:
 
 ```cpp
 // Get the next module target from available modules
@@ -631,77 +681,38 @@ else
 // Check remaining module count
 int remaining = Abxr.GetModuleTargetCount();
 Debug.Log($"Modules remaining: {remaining}");
-
-// Get current user information
-var userId = Abxr.GetUserId();
-var userData = Abxr.GetUserData();
-string userEmail = Abxr.GetUserEmail();
 ```
 
-#### Module Target Management
-
-You can manage module progress and access rich module data:
+#### Module Management
 
 ```cpp
-// Check remaining modules and preview current
-int remaining = Abxr.GetModuleTargetCount();
-CurrentSessionData nextModule = Abxr.GetModuleTarget();
-if (nextModule != null)
-{
-    Debug.Log($"Next: {nextModule.moduleTarget} ({remaining} remaining)");
-}
-
 // Get all available modules
 var allModules = Abxr.GetModuleTargetList();
 Debug.Log($"Total modules: {allModules.Count}");
 
-// Reset progress or access learner data
+// Reset progress
 Abxr.ClearModuleTargets();
-var learnerData = Abxr.GetLearnerData();
-```
 
-**Use Cases:**
-- **Reset state**: Reset module progress when starting a new experience
-- **Error recovery**: Clear module progress and restart from beginning
-- **Testing**: Reset module sequence during development
-- **Session management**: Clean up between different users
-- **Rich module data**: Access complete module information including names, IDs, and ordering
+// Get current user information
+var userData = Abxr.GetUserData();
+```
 
 #### Persistence and Recovery
 
 Module progress is automatically persisted across app sessions and device restarts:
 
-```cpp
-// Module data is automatically retrieved from authentication response
-// Module progress is automatically saved when advancing through modules
-
-// When app restarts or crashes, module progress is automatically restored
-CurrentSessionData nextTarget = Abxr.GetModuleTarget(); // Loads progress from storage if needed
-```
-
-**Automatic Recovery Features:**
 - **Session Persistence**: Module progress survives app crashes and restarts
 - **Lazy Loading**: Progress is automatically loaded from storage when first accessed
 - **Error Resilience**: Failed storage operations are logged but don't crash the application
 - **Cross-Session Continuity**: Users can continue multi-module experiences across sessions
-- **Rich Data Access**: Complete module information available from authentication response
-
-**Storage Details:**
-- Module progress is stored in user-scoped storage (not device-scoped)
-- Storage key: `"AbxrModuleIndex"` (handled internally)
-- Automatic cleanup when `ClearModuleTargets()` is called
-- Uses ABXRLib's storage system for reliability and sync capabilities
-- Module data comes directly from authentication response for accuracy
 
 #### Best Practices
 
-1. **Subscribe to OnAuthCompleted**: Subscribe to `OnAuthCompleted` before authentication starts
-2. **Handle module count**: Check `authData.moduleCount` and use `GetModuleTarget()` to get the next module to process
-3. **Use GetModuleTarget() sequentially**: Call after completing each module to get the next one
-4. **Validate modules**: Check if requested module exists before navigation
-5. **Progress tracking**: Use assessment events to track module completion
-6. **Error handling**: Handle cases where navigation fails or module is invalid
-7. **Check completion**: Use `GetModuleTarget()` returning null to detect when all modules are done
+1. **Use ExecuteModuleSequence()**: Simplest approach for most use cases
+2. **Subscribe to OnAuthCompleted**: Subscribe before authentication starts
+3. **Method Naming**: Use consistent naming patterns for your module methods
+4. **Error Handling**: Handle cases where modules don't exist or fail
+5. **Progress Tracking**: Use assessment events to track module completion
 
 #### Data Structures
 
