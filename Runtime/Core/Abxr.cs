@@ -308,7 +308,10 @@ public static partial class Abxr
 		meta = MergeSuperProperties(meta);
 		
 		// Add duration if this was a timed event (StartTimedEvent functionality)
-		AddDuration(TimedEventStartTimes, name, meta);
+		if (TimedEventStartTimes.ContainsKey(name) && !meta.ContainsKey("duration"))
+		{
+			AddDuration(TimedEventStartTimes, name, meta);
+		}
 		
 		EventBatcher.Add(name, meta);
 		if (sendTelemetry)
