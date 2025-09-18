@@ -1144,6 +1144,58 @@ public static partial class Abxr
 		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, ModuleIndexKey));
 	}
 
+	/// <summary>
+	/// Execute module functions in sequence by calling methods on the specified target object.
+	/// Looks for methods with the pattern: {functionPrefix}{moduleTarget} in the target object's class.
+	/// </summary>
+	/// <param name="targetObject">The object instance to search for module methods</param>
+	/// <param name="functionPrefix">Prefix for the function names (default: "Module_")</param>
+	/// <returns>Number of modules successfully executed</returns>
+	public static int ExecuteModuleSequence(object targetObject, string functionPrefix = "", string functionPostfix = "")
+	{
+		if (targetObject == null)
+		{
+			Debug.LogError("AbxrLib - ExecuteModuleSequence: targetObject cannot be null");
+			return 0;
+		}
+
+		int executedCount = 0;
+		var nextModule = GetModuleTarget();
+		
+		while (nextModule != null)
+		{
+			var methodName = $"{functionPrefix}{nextModule.moduleTarget}{functionPostfix}";
+			methodName = methodName.Replace('-', '_');
+			methodName = methodName.Replace(' ', '_');
+			
+			Debug.Log($"AbxrLib - Starting module: {nextModule.moduleTarget} using function: {methodName}");
+			
+			var method = targetObject.GetType().GetMethod(methodName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+			
+			if (method != null)
+			{
+				try
+				{
+					method.Invoke(targetObject, null);
+					executedCount++;
+				}
+				catch (Exception ex)
+				{
+					Debug.LogError($"AbxrLib - Error executing module function {methodName}: {ex.Message}");
+				}
+			}
+			else
+			{
+				Debug.Log($"AbxrLib - No function found: {methodName}, trying next module.");
+			}
+			
+			nextModule = GetModuleTarget();
+		}
+		
+		Debug.Log($"AbxrLib - Module sequence completed. {executedCount} modules executed.");
+		return executedCount;
+	}
+
 	private static void SaveModuleIndex()
 	{
 		try
