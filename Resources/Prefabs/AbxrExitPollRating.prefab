@@ -85,10 +85,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 217942327995107393}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: adb30198aa32dd140b5750692dd48104, type: 3}
+  m_Script: {fileID: 11500000, guid: 7434d126d65a44c07a9eb516e3307e49, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Nobi.UiRoundedCorners::Nobi.UiRoundedCorners.ImageWithRoundedCorners
-  radius: 2.4
+  radius: 2.3
   image: {fileID: 6262251606031054544}
 --- !u!1 &5190411672067609064
 GameObject:
@@ -207,10 +207,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 5190411672067609064}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: adb30198aa32dd140b5750692dd48104, type: 3}
+  m_Script: {fileID: 11500000, guid: 7434d126d65a44c07a9eb516e3307e49, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Nobi.UiRoundedCorners::Nobi.UiRoundedCorners.ImageWithRoundedCorners
-  radius: 2
+  radius: 1.6
   image: {fileID: 5880673792873115502}
 --- !u!1 &6166950621211028194
 GameObject:
@@ -298,7 +298,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 1
+  m_PresetInfoIsWorld: 0
 --- !u!114 &-1254853392002778101
 MonoBehaviour:
   m_ObjectHideFlags: 0
