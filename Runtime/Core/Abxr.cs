@@ -1092,8 +1092,7 @@ public static partial class Abxr
 		return new CurrentSessionData(
 			currentModule.target,
 			GetUserData(),
-			Authentication.GetAuthResponse().UserId,
-			Authentication.GetAuthHandoffData().userEmail
+			Authentication.GetAuthResponse().UserId
 		);
 	}
 
