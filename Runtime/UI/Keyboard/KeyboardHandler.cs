@@ -1,4 +1,5 @@
-﻿using System;
+﻿using System.Linq;
+using System;
 using System.Collections;
 using AbxrLib.Runtime.Common;
 using TMPro;
@@ -28,7 +29,17 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private static bool _processingSubmit;
 
         private static TextMeshProUGUI _prompt;
-    
+       
+        private void Start()
+        {
+            _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard" + RigDetector.PrefabSuffix());
+            _pinPadPrefab = Resources.Load<GameObject>("Prefabs/AbxrPinPad" + RigDetector.PrefabSuffix());
+            _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
+            if (!_keyboardPrefab)
+            {
+                Debug.LogError("AbxrLib - Failed to load keyboard prefab");
+            }
+        }
     
         public static void Destroy()
         {
@@ -40,6 +51,11 @@ namespace AbxrLib.Runtime.UI.Keyboard
             if (_panelInstance)
             {
                 Destroy(_panelInstance);
+            }
+
+            if (_pinPadInstance)
+            {
+                Destroy(_pinPadInstance);
             }
         
             OnKeyboardDestroyed?.Invoke();
@@ -55,24 +71,26 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _processingSubmit = false;
             if (_panelInstance) return;
         
-            if (keyboardType == KeyboardType.PinPad) _keyboardInstance = Instantiate(_pinPadPrefab);
-            else if (keyboardType == KeyboardType.FullKeyboard) _keyboardInstance = Instantiate(_keyboardPrefab);
+            if (keyboardType == KeyboardType.PinPad)
+            {
+                _pinPadInstance = Instantiate(_pinPadPrefab);
+                _prompt = _pinPadInstance.GetComponentsInChildren<TextMeshProUGUI>()
+                    .FirstOrDefault(t => t.name == "DynamicMessage");
+                
+            }
+            else if (keyboardType == KeyboardType.FullKeyboard)
+            {
+                _keyboardInstance = Instantiate(_keyboardPrefab);
+                _panelInstance = Instantiate(_panelPrefab);
+                _prompt = _panelInstance.GetComponentsInChildren<TextMeshProUGUI>()
+                    .FirstOrDefault(t => t.name == "DynamicMessage");
+            }
         
-            _panelInstance = Instantiate(_panelPrefab);
-            _prompt = _panelInstance.GetComponentInChildren<TextMeshProUGUI>();
+            
             OnKeyboardCreated?.Invoke();
         }
     
-        private void Start()
-        {
-            _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard" + RigDetector.PrefabSuffix());
-            _pinPadPrefab = Resources.Load<GameObject>("Prefabs/AbxrPinPad" + RigDetector.PrefabSuffix());
-            _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
-            if (!_keyboardPrefab)
-            {
-                Debug.LogError("AbxrLib: Failed to load keyboard prefab");
-            }
-        }
+      
     
         public static IEnumerator ProcessingVisual()
         {
