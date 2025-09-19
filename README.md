@@ -748,50 +748,37 @@ public static Action<bool, string> onAuthCompleted;
 - **Session management**: Handle reauthentication vs initial authentication differently
 - **Error handling**: Respond appropriately to authentication failures
 
-#### Connection Status Check
+#### Getting Notified When Ready
 
-You can check if AbxrLib has an active connection to the server at any time:
+The recommended way to know when AbxrLib is ready to send data is to use the authentication completion callback:
 
 ```cpp
-//C# Method Signature
-public static bool Abxr.ConnectionActive()
+// Subscribe to authentication completion - the recommended approach
+Abxr.OnAuthCompleted += OnAuthenticationCompleted;
 
-// Example usage
-// Check app-level connection status  
-if (Abxr.ConnectionActive())
+private void OnAuthenticationCompleted(bool success, string error)
 {
-    Debug.Log("AbxrLib is connected and ready to send data");
-    Abxr.Event("app_ready");
-}
-else
-{
-    Debug.Log("Connection not active - waiting for authentication");
-    Abxr.OnAuthCompleted((authData) => {
-        if (authData.success) {
-            Debug.Log("Connection established successfully!");
-        }
-    });
-}
-
-// Conditional feature access
-if (Abxr.ConnectionActive())
-{
-    ShowConnectedFeatures();
-    SendTelemetryData();
-}
-else
-{
-    UseOfflineMode();
+    if (success)
+    {
+        Debug.Log("Authentication successful - AbxrLib is ready!");       
+        // Start your application flow
+        StartGameFlow();
+    }
+    else
+    {
+        Debug.LogError($"Authentication failed: {error}. Working in offline mode");
+        StartGameFlow();
+    }
 }
 ```
 
-**Returns:** Boolean indicating if the library has an active connection and can communicate with the server (app-level authentication status)
+**Why OnAuthCompleted is better:**
+- **Event-driven**: No need to poll or check status repeatedly
+- **Immediate notification**: Called as soon as authentication completes
+- **Error handling**: Provides specific error information when authentication fails
+- **Clean architecture**: Separates authentication logic from application logic
 
-**Use Cases:**
-- **Conditional logic**: Only send events/logs when connection is active
-- **UI state management**: Show online/offline status indicators  
-- **Error prevention**: Check connection before making API calls
-- **Feature gating**: Enable/disable features that require server communication
+**Note:** `Abxr.ConnectionActive()` is still available for advanced use cases, but `OnAuthCompleted` is the recommended approach for most developers.
 
 #### Accessing Learner Data
 
