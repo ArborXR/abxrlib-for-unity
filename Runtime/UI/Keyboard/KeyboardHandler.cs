@@ -91,6 +91,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     
                 _prompt = _panelInstance.GetComponentsInChildren<TextMeshProUGUI>()
                     .FirstOrDefault(t => t.name == "DynamicMessage");
+                
+                // Center the panel below the keyboard
+                CenterPanelBelowKeyboard();
             }
         
             
@@ -109,6 +112,42 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 _prompt.text = currentText.Length > ProcessingText.Length + 10 ? ProcessingText : $":{_prompt.text}:";
                 yield return new WaitForSeconds(0.5f); // Wait before running again
             }
+        }
+
+        private static void CenterPanelBelowKeyboard()
+        {
+            if (_keyboardInstance == null || _panelInstance == null) return;
+
+            // Get the RectTransform components
+            RectTransform keyboardRect = _keyboardInstance.GetComponent<RectTransform>();
+            RectTransform panelRect = _panelInstance.GetComponentInChildren<RectTransform>();
+
+            if (keyboardRect == null || panelRect == null) return;
+
+            // Get the canvas to work with screen dimensions
+            Canvas canvas = keyboardRect.GetComponentInParent<Canvas>();
+            if (canvas == null) return;
+
+            // Get canvas size
+            RectTransform canvasRect = canvas.GetComponent<RectTransform>();
+            Vector2 canvasSize = canvasRect.sizeDelta;
+
+            // Get keyboard's current position
+            float keyboardX = keyboardRect.anchoredPosition.x;
+            float keyboardY = keyboardRect.anchoredPosition.y;
+
+            // Position panel above the keyboard with proper spacing
+            float spacing = 2f; // Fixed spacing in design units for consistent behavior across devices
+            float panelY = keyboardY + spacing;
+
+            // Add horizontal offset to align panel's visual center with keyboard's visual center
+            // Use fixed pixel offset instead of percentage for consistent behavior across devices
+            float panelX = keyboardX - 10f; // 10 design units to the right (adjust as needed)
+
+            // Set panel anchors to match keyboard's anchor system
+            panelRect.anchorMin = keyboardRect.anchorMin;
+            panelRect.anchorMax = keyboardRect.anchorMax;
+            panelRect.anchoredPosition = new Vector2(panelX, panelY);
         }
     }
 }
