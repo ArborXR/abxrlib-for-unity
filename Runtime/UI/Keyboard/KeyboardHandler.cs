@@ -73,15 +73,21 @@ namespace AbxrLib.Runtime.UI.Keyboard
         
             if (keyboardType == KeyboardType.PinPad)
             {
-                _pinPadInstance = Instantiate(_pinPadPrefab);
+               if (_pinPadInstance != null) return;
+                _pinPadInstance = Instantiate(_pinPadPrefab); 
+                
                 _prompt = _pinPadInstance.GetComponentsInChildren<TextMeshProUGUI>()
                     .FirstOrDefault(t => t.name == "DynamicMessage");
                 
             }
             else if (keyboardType == KeyboardType.FullKeyboard)
             {
+                if( _keyboardInstance) return;
                 _keyboardInstance = Instantiate(_keyboardPrefab);
+                
+                if(_panelInstance) return;
                 _panelInstance = Instantiate(_panelPrefab);
+                    
                 _prompt = _panelInstance.GetComponentsInChildren<TextMeshProUGUI>()
                     .FirstOrDefault(t => t.name == "DynamicMessage");
             }
