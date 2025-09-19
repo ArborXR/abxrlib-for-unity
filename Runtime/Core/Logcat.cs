@@ -4,7 +4,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 
-public static class Logcat
+namespace AbxrLib.Runtime.Core
+{
+    public static class Logcat
 {
     private static void Log(string logLevel, string msg, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
@@ -50,4 +52,5 @@ public static class Logcat
 #endif
         Logcat.Log ("e", msg, lineNumber, memberName, filePath);
     }
+}
 }

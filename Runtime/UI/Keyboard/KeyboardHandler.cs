@@ -143,6 +143,12 @@ namespace AbxrLib.Runtime.UI.Keyboard
             // Add horizontal offset to align panel's visual center with keyboard's visual center
             // Use fixed pixel offset instead of percentage for consistent behavior across devices
             float panelX = keyboardX - 10f; // 10 design units to the right (adjust as needed)
+            
+            // Apply additional left offset for Unity editor player (not VR)
+            if (Application.isEditor && RigDetector.PrefabSuffix() == "_Default")
+            {
+                panelX -= -8f; // Move 20f to the right for Unity editor player
+            }
 
             // Set panel anchors to match keyboard's anchor system
             panelRect.anchorMin = keyboardRect.anchorMin;

@@ -1147,6 +1147,10 @@ public static partial class Abxr
 	/// <summary>
 	/// Execute module functions in sequence by calling methods on the specified target object.
 	/// Looks for methods with the pattern: {functionPrefix}{moduleTarget} in the target object's class.
+	/// 
+	/// If there are subscribers to OnModuleTargetDeepLink event, it will use deep link handling.
+	/// Otherwise, it will use traditional module methods. This allows developers to choose between
+	/// deep link handling or traditional module methods, but not both.
 	/// </summary>
 	/// <param name="targetObject">The object instance to search for module methods</param>
 	/// <param name="functionPrefix">Prefix for the function names (default: "Module_")</param>
@@ -1170,23 +1174,41 @@ public static partial class Abxr
 			
 			Debug.Log($"AbxrLib - Starting module: {nextModule.moduleTarget} using function: {methodName}");
 			
-			var method = targetObject.GetType().GetMethod(methodName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-			
-			if (method != null)
+			// Use deep link handling if subscribed, otherwise use traditional method lookup
+			if (OnModuleTargetDeepLink != null)
 			{
 				try
 				{
-					method.Invoke(targetObject, null);
+					Debug.Log($"AbxrLib - Triggering deep link event for module: {nextModule.moduleTarget}");
+					OnModuleTargetDeepLink.Invoke(nextModule.moduleTarget);
+					Debug.Log($"AbxrLib - Module {nextModule.moduleTarget} executed via deep link event");
 					executedCount++;
 				}
 				catch (Exception ex)
 				{
-					Debug.LogError($"AbxrLib - Error executing module function {methodName}: {ex.Message}");
+					Debug.LogError($"AbxrLib - Error executing deep link event for module {nextModule.moduleTarget}: {ex.Message}");
 				}
 			}
 			else
 			{
-				Debug.Log($"AbxrLib - No function found: {methodName}, trying next module.");
+				var method = targetObject.GetType().GetMethod(methodName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+				
+				if (method != null)
+				{
+					try
+					{
+						method.Invoke(targetObject, null);
+						executedCount++;
+					}
+					catch (Exception ex)
+					{
+						Debug.LogError($"AbxrLib - Error executing module function {methodName}: {ex.Message}");
+					}
+				}
+				else
+				{
+					Debug.Log($"AbxrLib - No function found: {methodName}, trying next module.");
+				}
 			}
 			
 			nextModule = GetModuleTarget();
@@ -1286,4 +1308,10 @@ public static partial class Abxr
 		OnAuthCompleted?.Invoke(success, error);
 	}
 	#endregion
+
+	/// <summary>
+	/// Event that gets triggered when a moduleTarget should be handled as a deep link.
+	/// Subscribe to this event to handle moduleTargets with your existing deep link handler.
+	/// </summary>
+	public static event System.Action<string> OnModuleTargetDeepLink;
 }
