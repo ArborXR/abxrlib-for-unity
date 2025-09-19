@@ -35,8 +35,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -2.87, y: 1.169}
-  m_SizeDelta: {x: 13.182, y: -1.872}
+  m_AnchoredPosition: {x: -1.065, y: 1.11}
+  m_SizeDelta: {x: 13.313, y: -1.755}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8142407110145818649
 CanvasRenderer:
@@ -88,7 +88,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7434d126d65a44c07a9eb516e3307e49, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Nobi.UiRoundedCorners::Nobi.UiRoundedCorners.ImageWithRoundedCorners
-  radius: 0.6
+  radius: 1
   image: {fileID: 5383210888586356111}
 --- !u!1 &580272132967702838
 GameObject:
@@ -287,7 +287,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.18039216, g: 0.21960786, b: 0.2509804, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -344,7 +344,7 @@ MonoBehaviour:
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
-  m_TargetGraphic: {fileID: 8105751103759535164}
+  m_TargetGraphic: {fileID: 2245562695882168521}
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
@@ -609,7 +609,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: -2.9, y: 1.125}
+  m_AnchoredPosition: {x: -1.1, y: 1.125}
   m_SizeDelta: {x: 12.099, y: -3.04}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &4771439632830352958
@@ -688,7 +688,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7434d126d65a44c07a9eb516e3307e49, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Nobi.UiRoundedCorners::Nobi.UiRoundedCorners.ImageWithRoundedCorners
-  radius: 0.5
+  radius: 0.71
   image: {fileID: 978111592713592873}
 --- !u!1 &1603059432742305307
 GameObject:
@@ -952,7 +952,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.18039216, g: 0.21960786, b: 0.2509804, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1009,7 +1009,7 @@ MonoBehaviour:
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
-  m_TargetGraphic: {fileID: 8105751103759535164}
+  m_TargetGraphic: {fileID: 5348804951994581652}
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
@@ -1064,7 +1064,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 30.45, y: -11.013}
+  m_AnchoredPosition: {x: 32.300003, y: -11.013}
   m_SizeDelta: {x: 9.387, y: 12.381}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &4427535503952290102
@@ -1105,6 +1105,7 @@ GameObject:
   - component: {fileID: 1639435298702017065}
   - component: {fileID: 5158738927559242036}
   - component: {fileID: 7493263064005321298}
+  - component: {fileID: 1831166747842071881}
   m_Layer: 5
   m_Name: SpaceButton
   m_TagString: Untagged
@@ -1153,14 +1154,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.18039216, g: 0.21960786, b: 0.2509804, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: 0}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1210,10 +1211,24 @@ MonoBehaviour:
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
-  m_TargetGraphic: {fileID: 8105751103759535164}
+  m_TargetGraphic: {fileID: 5158738927559242036}
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &1831166747842071881
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2183381448802343484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7434d126d65a44c07a9eb516e3307e49, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Nobi.UiRoundedCorners::Nobi.UiRoundedCorners.ImageWithRoundedCorners
+  radius: 0.4
+  image: {fileID: 5158738927559242036}
 --- !u!1 &2491713084037542120
 GameObject:
   m_ObjectHideFlags: 0
@@ -1250,7 +1265,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 13.68, y: -2.67}
+  m_AnchoredPosition: {x: 15.500001, y: -2.67}
   m_SizeDelta: {x: 43.254, y: 3}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &218262267243387800
@@ -1812,6 +1827,7 @@ GameObject:
   - component: {fileID: 1755575177451976692}
   - component: {fileID: 5196642097716447972}
   - component: {fileID: 280759534655850960}
+  - component: {fileID: 2256381955281583131}
   m_Layer: 5
   m_Name: DeleteButton
   m_TagString: Untagged
@@ -1860,14 +1876,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.18039216, g: 0.21960786, b: 0.2509804, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: 0}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -1917,10 +1933,24 @@ MonoBehaviour:
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
-  m_TargetGraphic: {fileID: 8105751103759535164}
+  m_TargetGraphic: {fileID: 5196642097716447972}
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &2256381955281583131
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4910061245533988698}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7434d126d65a44c07a9eb516e3307e49, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Nobi.UiRoundedCorners::Nobi.UiRoundedCorners.ImageWithRoundedCorners
+  radius: 0.4
+  image: {fileID: 5196642097716447972}
 --- !u!1 &5011206017115823253
 GameObject:
   m_ObjectHideFlags: 0
@@ -1955,7 +1985,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -8.95, y: 0}
+  m_AnchoredPosition: {x: -7.1, y: 0}
   m_SizeDelta: {x: 3000, y: 3000}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &3744344154972733044
@@ -2296,6 +2326,7 @@ GameObject:
   - component: {fileID: 2761609696599500627}
   - component: {fileID: 2989528247272887775}
   - component: {fileID: 3996242664046744773}
+  - component: {fileID: 1321536691393772457}
   m_Layer: 5
   m_Name: SubmitButton
   m_TagString: Untagged
@@ -2344,14 +2375,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.18039216, g: 0.21960786, b: 0.2509804, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+  m_Sprite: {fileID: 0}
   m_Type: 1
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -2401,10 +2432,24 @@ MonoBehaviour:
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
-  m_TargetGraphic: {fileID: 8105751103759535164}
+  m_TargetGraphic: {fileID: 2989528247272887775}
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &1321536691393772457
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7592991238087115633}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7434d126d65a44c07a9eb516e3307e49, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Nobi.UiRoundedCorners::Nobi.UiRoundedCorners.ImageWithRoundedCorners
+  radius: 0.4
+  image: {fileID: 2989528247272887775}
 --- !u!1 &7994663293096523517
 GameObject:
   m_ObjectHideFlags: 0
@@ -2518,7 +2563,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 10, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -0.045, y: 0}
+  m_AnchoredPosition: {x: -0.02, y: 0}
   m_SizeDelta: {x: 33, y: 21}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!223 &3386192496128228587
@@ -5226,17 +5271,6 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 4134876018333934119, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
   m_PrefabInstance: {fileID: 5269051559551053342}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &8105751103759535164 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 4134876018333934114, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
-  m_PrefabInstance: {fileID: 5269051559551053342}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1001 &5308947721335696854
 PrefabInstance:
   m_ObjectHideFlags: 0
