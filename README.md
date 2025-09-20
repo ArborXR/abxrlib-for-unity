@@ -128,7 +128,7 @@ public void Abxr.Event(string name, Dictionary<string, string> meta = null, Vect
 // Example Usage - Basic Event
 Abxr.Event("button_pressed");
 
-// Example Usage - Event with Metadata (using Abxr.Dict - no using statements required!)
+// Example Usage - Event with Metadata
 Abxr.Event("item_collected", new Abxr.Dict {
     {"item_type", "coin"},
     {"item_value", "100"}
@@ -139,12 +139,6 @@ Abxr.Event("player_teleported",
     new Abxr.Dict {{"destination", "spawn_point"}},
     new Vector3(1.5f, 0.0f, -3.2f)
 );
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.Event("item_collected", new Dictionary<string, string> {
-    {"item_type", "coin"},
-    {"item_value", "100"}
-});
 ```
 
 **Parameters:**
@@ -298,14 +292,8 @@ public static void Abxr.LogCritical(string text, Dictionary<string, string> meta
 // Example usage
 Abxr.LogError("Critical error in assessment phase");
 
-// With metadata (using Abxr.Dict - no using statements required!)
+// With metadata
 Abxr.LogDebug("User interaction", new Abxr.Dict {
-    {"action", "button_click"},
-    {"screen", "main_menu"}
-});
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.LogDebug("User interaction", new Dictionary<string, string> {
     {"action", "button_click"},
     {"screen", "main_menu"}
 });
@@ -324,13 +312,9 @@ public static IEnumerator Abxr.StorageGetEntry(string name, StorageScope scope, 
 public static IEnumerator Abxr.StorageGetDefaultEntry(StorageScope scope, Action<string> callback);
 public static void Abxr.StorageRemoveEntry(string name, StorageScope scope);
 
-// Save progress data (using Abxr.Dict - no using statements required!)
+// Save progress data
 Abxr.StorageSetEntry("state", new Abxr.Dict{{"progress", "75%"}}, StorageScope.user);
 Abxr.StorageSetDefaultEntry(new Abxr.Dict{{"progress", "75%"}}, StorageScope.user);
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.StorageSetEntry("state", new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
-Abxr.StorageSetDefaultEntry(new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
 
 // Retrieve progress data (requires coroutine)
 StartCoroutine(Abxr.StorageGetEntry("state", StorageScope.user, result => {
@@ -366,13 +350,8 @@ public static void Abxr.Telemetry(string name, Dictionary<string, string> meta);
 // Manual telemetry activation (when auto-telemetry is disabled)
 Abxr.TrackAutoTelemetry();
 
-// Custom telemetry logging (using Abxr.Dict - no using statements required!)
+// Custom telemetry logging
 Abxr.Telemetry("headset_position", new Abxr.Dict { 
-    {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
-});
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.Telemetry("headset_position", new Dictionary<string, string> { 
     {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
 });
 ```
@@ -453,7 +432,7 @@ Abxr.StorageSetEntry("progress", new Abxr.Dict { ["level"] = "3" }, StorageScope
 The ABXRLib SDK supports multiple flexible metadata formats. All formats are automatically converted to `Dictionary<string, string>`:
 
 ```cpp
-// 1. Abxr.Dict (Recommended - no using statements required!)
+// 1. Abxr.Dict (Recommended)
 Abxr.Event("user_action", new Abxr.Dict
 {
     ["action"] = "click",
@@ -466,14 +445,7 @@ Abxr.Event("purchase_complete", new Abxr.Dict()
     .With("currency", "USD")
     .With("plan", "Premium"));
 
-// 3. Native C# Dictionary (requires using System.Collections.Generic;)
-Abxr.Event("user_action", new Dictionary<string, string>
-{
-    ["action"] = "click",
-    ["userId"] = "12345"
-});
-
-// 4. Mixpanel-style Dictionary (auto-converts objects)
+// 3. Mixpanel-style Dictionary (auto-converts objects)
 Abxr.Track("assessment_complete", new Dictionary<string, object>
 {
     ["score"] = 95,           // → "95"
@@ -481,16 +453,16 @@ Abxr.Track("assessment_complete", new Dictionary<string, object>
     ["timestamp"] = DateTime.UtcNow  // → ISO string
 });
 
-// 5. Abxr.Value class (Mixpanel compatibility)
+// 4. Abxr.Value class (Mixpanel compatibility)
 var props = new Abxr.Value();
 props["plan"] = "Premium";
 props["amount"] = 29.99;
 Abxr.Track("purchase_completed", props);
 
-// 6. No metadata
+// 5. No metadata
 Abxr.Event("app_started");
 
-// 7. With Unity Vector3 position data
+// 6. With Unity Vector3 position data
 Abxr.Event("player_teleported", transform.position, 
     new Abxr.Dict { ["destination"] = "spawn_point" });
 ```
@@ -499,15 +471,7 @@ Abxr.Event("player_teleported", transform.position,
 
 ** Use pre-serialized JSON strings:**
 ```cpp
-// Using Abxr.Dict (recommended - no using statements required!)
 var meta = new Abxr.Dict
-{
-    ["items"] = "[\"sword\", \"shield\", \"potion\"]",
-    ["scores"] = "[95, 87, 92, 88]"
-};
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-var meta = new Dictionary<string, string>
 {
     ["items"] = "[\"sword\", \"shield\", \"potion\"]",
     ["scores"] = "[95, 87, 92, 88]"
@@ -551,7 +515,7 @@ Super properties are automatically merged into **every** event, log, and telemet
 Abxr.Register("app_version", "1.2.3");
 Abxr.Register("user_type", "premium");
 
-// Every event automatically includes super properties (using Abxr.Dict)
+// Every event automatically includes super properties
 Abxr.Event("level_complete", new Abxr.Dict {
     {"level", "3"}, 
     {"user_type", "trial"}  // This overrides the super property
@@ -814,49 +778,13 @@ else
 - **Error prevention**: Check connection before making API calls
 - **Feature gating**: Enable/disable features that require server communication
 
-#### Accessing Learner Data
-
-After authentication completes, you can access comprehensive learner data and preferences:
-
-```cpp
-// Get learner data and preferences
-Dictionary<string, object> learnerData = Abxr.GetLearnerData();
-if (learnerData != null)
-{
-    var userName = learnerData["name"]?.ToString();
-    var audioPreference = learnerData["audioPreference"]?.ToString();
-    
-    Debug.Log($"Welcome back, {userName}!");
-    SetAudioLevel(audioPreference);
-}
-
-// Check connection status before accessing data
-if (Abxr.ConnectionActive())
-{
-    CustomizeExperience(Abxr.GetLearnerData());
-}
-```
-
-**Returns:** Dictionary containing learner data from the authentication response, or null if not authenticated
-
-**Available Data (when provided by authentication response):**
-- **User Preferences**: `audioPreference`, `speedPreference`, `textPreference`
-- **User Information**: `name`, `email`, `id`, `user_id`
-- **Custom Fields**: Any additional data provided in the userData object
-
-**Use Cases:**
-- **Personalization**: Customize audio levels, playback speed, and text size based on user preferences
-- **Accessibility**: Apply user-specific accessibility settings automatically
-- **User Experience**: Greet users by name and show personalized content
-- **Analytics**: Track usage patterns based on user preferences
-- **Adaptive Content**: Adjust content difficulty or presentation based on user data
 
 ### Headset Removal
-To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.
+To improve session fidelity and reduce user spoofing or unintended headset sharing, the SDK triggers a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user, this will trigger an event that you can subscribe to:
+
 ```cpp
 public static Action OnHeadsetPutOnNewSession;
 ```
-If the developer would like to have logic to correspond to these events, that would be done by subscribing to these events.
 
 ### Session Management
 
@@ -1153,14 +1081,8 @@ new Abxr.CustomEvent("button_press")
     .SetProperty("screen", "main_menu")
     .Send();
 
-// ABXRLib recommended (using Abxr.Dict - no using statements required!):
+// ABXRLib recommended:
 Abxr.Event("button_press", new Abxr.Dict {
-    {"button_id", "submit"},
-    {"screen", "main_menu"}
-});
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.Event("button_press", new Dictionary<string, string> {
     {"button_id", "submit"},
     {"screen", "main_menu"}
 });
