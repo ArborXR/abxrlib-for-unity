@@ -121,9 +121,9 @@ For information on implementing your own backend service or using other compatib
 ### Events
 ```cpp
 //C# Event Method Signatures
-public void Abxr.Event(string name);
-public void Abxr.Event(string name, Dictionary<string, string> meta = null);
-public void Abxr.Event(string name, Dictionary<string, string> meta = null, Vector3 location_data = null);
+public static void Abxr.Event(string name);
+public static void Abxr.Event(string name, Dictionary<string, string> meta = null, bool sendTelemetry = true);
+public static void Abxr.Event(string name, Vector3 position, Dictionary<string, string> meta = null);
 
 // Example Usage - Basic Event
 Abxr.Event("button_pressed");
@@ -271,8 +271,8 @@ Perfect for user attributes, app state, and device information that should be in
 The Log Methods provide straightforward logging functionality, similar to syslogs. These functions are available to developers by default, even across enterprise users, allowing for consistent and accessible logging across different deployment scenarios.
 
 ```cpp
-//C# Event Method Signatures
-public void Abxr.Log(string message, LogLevel level = LogLevel.Info)
+//C# Method Signatures
+public static void Abxr.Log(string message, LogLevel level = LogLevel.Info, Dictionary<string, string> meta = null)
 
 // Example usage
 Abxr.Log("Module started"); // Defaults to LogLevel.Info
@@ -306,10 +306,10 @@ The Storage API enables developers to store and retrieve learner/player progress
 
 ```cpp
 //C# Method Signatures
-public static void Abxr.StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest);
-public static void Abxr.StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest);
-public static IEnumerator Abxr.StorageGetEntry(string name, StorageScope scope, Action<string> callback);
-public static IEnumerator Abxr.StorageGetDefaultEntry(StorageScope scope, Action<string> callback);
+public static void Abxr.StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest);
+public static void Abxr.StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest);
+public static IEnumerator Abxr.StorageGetEntry(string name, StorageScope scope, Action<List<Dictionary<string, string>>> callback);
+public static IEnumerator Abxr.StorageGetDefaultEntry(StorageScope scope, Action<List<Dictionary<string, string>>> callback);
 public static void Abxr.StorageRemoveEntry(string name, StorageScope scope);
 
 // Save progress data
@@ -391,10 +391,10 @@ Deliver questionnaires to users to gather feedback.
 public enum PollType { Thumbs, Rating, MultipleChoice }
 
 //C# Method Signatures
-public static void Abxr.PollUser(string question, PollType pollType);
+public static void Abxr.PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null);
 
 // Poll types: Thumbs, Rating (1-5), MultipleChoice (2-8 options)
-Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
+Abxr.PollUser("How would you rate this training experience?", ExitPollHandler.PollType.Rating);
 ```
 
 ### Abxr.Dict - Easy Metadata Creation
@@ -719,10 +719,10 @@ The ABXRLib SDK provides comprehensive authentication completion callbacks that 
 
 #### Authentication Completion Event
 
-If you would like to have logic to correspond to authentication completion, you can subscrit to this event.
+If you would like to have logic to correspond to authentication completion, you can subscribe to this event.
 ```cpp
 // 'true' for success and 'false' for failure (string argument will contain the error message on failure)
-public static Action<bool, string> onAuthCompleted;
+public static Action<bool, string> OnAuthCompleted;
 ```
 
 #### Use Cases
