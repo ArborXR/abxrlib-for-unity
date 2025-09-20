@@ -609,55 +609,74 @@ Abxr.EventAssessmentComplete("final_exam", 95, EventStatus.Pass); // Automatical
 
 The **Module Target** feature enables developers to create single applications with multiple modules, where each module can be its own assignment in an LMS. When a learner enters from the LMS for a specific module, the application can automatically direct the user to that module within the application. Individual grades and results are then tracked for that specific assignment in the LMS.
 
-#### Automatic Module Execution (Recommended)
+#### Event-Based Module Handling (Recommended)
 
-The easiest way to handle modules is using `ExecuteModuleSequence()`, which automatically finds and calls methods in your class based on module names:
+The recommended way to handle modules is using the `OnModuleTarget` event, which gives you full control over how to handle each module target. This event works perfectly with existing Android deep link handlers - you can use the same routing logic for both external deep links and LMS module targets:
 
 ```cpp
 // Subscribe to authentication completion
 Abxr.OnAuthCompleted += OnAuthenticationCompleted;
 
+// Subscribe to module target events
+Abxr.OnModuleTarget += HandleModuleOrDeepLinkTarget;
+
 private void OnAuthenticationCompleted(bool success, string error)
 {
     if (success)
     {
-        // Automatically execute all module functions in sequence
-        int executedCount = Abxr.ExecuteModuleSequence(this, "Module_");
+        // Execute all available modules in sequence
+        int executedCount = Abxr.ExecuteModuleSequence();
         Debug.Log($"Executed {executedCount} modules");
     }
 }
 
-// Create methods with pattern: {prefix}{moduleTarget}
-// Module names with hyphens/spaces are automatically converted to underscores
-private void Module_training_1()
+// This method can handle BOTH external Android deep links AND module targets
+private void HandleModuleOrDeepLinkTarget(string moduleTarget)
 {
-    Debug.Log("Starting traiing #1");
-    // Your module logic here
+    Debug.Log($"Handling module target: {moduleTarget}");
+    
+    // Your existing deep link routing logic works here too
+    switch (moduleTarget)
+    {
+        case "safety-training":
+            LoadScene("SafetyTrainingScene");
+            break;
+        case "equipment-check":
+            LoadScene("EquipmentCheckScene");
+            break;
+        default:
+            Debug.LogWarning($"Unknown module target: {moduleTarget}");
+            LoadScene("MainMenuScene");
+            break;
+    }
 }
 
-private void Module_training_2()
+// Your existing Android deep link handler can call the same method
+private void OnDeepLinkReceived(string deepLink)
 {
-    Debug.Log("Starting traiing #2");
-    // Your module logic here
+    string target = ExtractTargetFromUrl(deepLink); // "myapp://safety-training" -> "safety-training"
+    HandleModuleOrDeepLinkTarget(target);
+}
+
+// Don't forget to unsubscribe in OnDestroy()
+private void OnDestroy()
+{
+    Abxr.OnModuleTarget -= HandleModuleOrDeepLinkTarget;
 }
 ```
 
 **Method Signature:**
 ```cpp
-public static int ExecuteModuleSequence(object targetObject, string functionPrefix = "", string functionPostfix = "")
+public static int ExecuteModuleSequence()
 ```
 
-**Parameters:**
-- `targetObject`: The object instance to search for module methods (usually `this`)
-- `functionPrefix`: Prefix for function names (default: empty string)
-- `functionPostfix`: Suffix for function names (default: empty string)
-
 **Features:**
-- **Automatic Method Discovery**: Uses reflection to find methods matching the pattern
-- **Character Sanitization**: Converts hyphens and spaces to underscores for valid C# method names
-- **Error Handling**: Continues to next module if a method isn't found or throws an exception
+- **Event-Driven**: Uses the `OnModuleTarget` event for maximum flexibility
+- **Developer Control**: You decide how to handle each module target
+- **Deep Link Integration**: Perfect for connecting to existing deep link handlers
+- **Unified Handling**: One method handles both external deep links and LMS module targets
+- **Error Handling**: Continues to next module if an event handler throws an exception
 - **Return Count**: Returns the number of successfully executed modules
-- **Flexible Naming**: Supports any prefix/postfix combination
 
 #### Manual Module Processing
 
@@ -697,6 +716,7 @@ Abxr.ClearModuleTargets();
 var userData = Abxr.GetUserData();
 ```
 
+
 #### Persistence and Recovery
 
 Module progress is automatically persisted across app sessions and device restarts:
@@ -708,11 +728,12 @@ Module progress is automatically persisted across app sessions and device restar
 
 #### Best Practices
 
-1. **Use ExecuteModuleSequence()**: Simplest approach for most use cases
+1. **Use OnModuleTarget Event**: Subscribe to `OnModuleTarget` for flexible module handling
 2. **Subscribe to OnAuthCompleted**: Subscribe before authentication starts
-3. **Method Naming**: Use consistent naming patterns for your module methods
+3. **Connect to Deep Links**: Use `OnModuleTarget` to connect to your existing deep link handling
 4. **Error Handling**: Handle cases where modules don't exist or fail
 5. **Progress Tracking**: Use assessment events to track module completion
+6. **Unsubscribe on Destroy**: Always unsubscribe from events in `OnDestroy()` to prevent memory leaks
 
 #### Data Structures
 
