@@ -10,7 +10,7 @@ namespace AbxrLib.Runtime.UI
         [Tooltip("Vertical offset from the camera's eye height (in meters)")]
         public float verticalOffset = 0;
 
-        private void LateUpdate()
+        private void Start()
         {
             var cam = Camera.main.transform;
             if (!cam) return;
@@ -22,5 +22,6 @@ namespace AbxrLib.Runtime.UI
             // face the camera
             transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
         }
+   
     }
 }

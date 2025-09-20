@@ -92,7 +92,7 @@ namespace AbxrLib.Runtime.Core
                 var assessmentNames = new List<string>(assessmentStartTimes.Keys);
                 foreach (string assessmentName in assessmentNames)
                 {
-                    Abxr.EventAssessmentComplete(assessmentName, 0, Abxr.EventStatus.Incomplete, 
+                    Abxr.EventAssessmentComplete(assessmentName, 0, Abxr.EventStatus.Fail, 
                         new Dictionary<string, string> 
                         { 
                             ["quit_reason"] = "application_quit",

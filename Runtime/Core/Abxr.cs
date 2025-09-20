@@ -1145,17 +1145,16 @@ public static partial class Abxr
 	}
 
 	/// <summary>
-	/// Execute module functions in sequence by calling methods on the specified target object.
-	/// Looks for methods with the pattern: {functionPrefix}{moduleTarget} in the target object's class.
+	/// Execute module sequence by triggering the OnModuleTarget event for each available module.
+	/// Developers should subscribe to OnModuleTarget to handle module targets with their own logic.
+	/// This approach gives developers full control over how to handle each module target.
 	/// </summary>
-	/// <param name="targetObject">The object instance to search for module methods</param>
-	/// <param name="functionPrefix">Prefix for the function names (default: "Module_")</param>
 	/// <returns>Number of modules successfully executed</returns>
-	public static int ExecuteModuleSequence(object targetObject, string functionPrefix = "", string functionPostfix = "")
+	public static int ExecuteModuleSequence()
 	{
-		if (targetObject == null)
+		if (OnModuleTarget == null)
 		{
-			Debug.LogError("AbxrLib - ExecuteModuleSequence: targetObject cannot be null");
+			Debug.LogWarning("AbxrLib - ExecuteModuleSequence: No subscribers to OnModuleTarget event. Subscribe to OnModuleTarget to handle module targets.");
 			return 0;
 		}
 
@@ -1164,29 +1163,17 @@ public static partial class Abxr
 		
 		while (nextModule != null)
 		{
-			var methodName = $"{functionPrefix}{nextModule.moduleTarget}{functionPostfix}";
-			methodName = methodName.Replace('-', '_');
-			methodName = methodName.Replace(' ', '_');
+			Debug.Log($"AbxrLib - Triggering OnModuleTarget event for module: {nextModule.moduleTarget}");
 			
-			Debug.Log($"AbxrLib - Starting module: {nextModule.moduleTarget} using function: {methodName}");
-			
-			var method = targetObject.GetType().GetMethod(methodName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
-			
-			if (method != null)
+			try
 			{
-				try
-				{
-					method.Invoke(targetObject, null);
-					executedCount++;
-				}
-				catch (Exception ex)
-				{
-					Debug.LogError($"AbxrLib - Error executing module function {methodName}: {ex.Message}");
-				}
+				OnModuleTarget.Invoke(nextModule.moduleTarget);
+				Debug.Log($"AbxrLib - Module {nextModule.moduleTarget} executed via OnModuleTarget event");
+				executedCount++;
 			}
-			else
+			catch (Exception ex)
 			{
-				Debug.Log($"AbxrLib - No function found: {methodName}, trying next module.");
+				Debug.LogError($"AbxrLib - Error executing OnModuleTarget event for module {nextModule.moduleTarget}: {ex.Message}");
 			}
 			
 			nextModule = GetModuleTarget();
@@ -1286,4 +1273,10 @@ public static partial class Abxr
 		OnAuthCompleted?.Invoke(success, error);
 	}
 	#endregion
+
+	/// <summary>
+	/// Event that gets triggered when a moduleTarget should be handled.
+	/// Subscribe to this event to handle moduleTargets with your own logic (e.g., deep link handling, scene navigation, etc.).
+	/// </summary>
+	public static event System.Action<string> OnModuleTarget;
 }
