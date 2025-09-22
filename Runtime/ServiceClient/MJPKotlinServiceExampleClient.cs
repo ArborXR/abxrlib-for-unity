@@ -1,10 +1,110 @@
-#nullable enable
+//#nullable enable
 using System;
 using System.Threading.Tasks;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 {
+#if true
+	public static class MjpKotlinServiceExampleServiceBridge
+	{
+		private const string		PackageName = "com.example.mjpkotlinserviceexample.unity.UnityServiceClient";
+		//private const string		PackageName = "com.example.mjpkotlinserviceexample";
+		static AndroidJavaObject	_client = null;
+
+		static AndroidJavaObject Activity => new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity");
+
+		/// <summary>
+		/// Init().
+		/// </summary>
+		public static void Init()
+		{
+			//using var clientClass = new AndroidJavaClass(PackageName);
+
+			Debug.Log($"[MJPKotlinServiceExampleClient] MjpKotlinServiceExampleServiceBridge.Init() gonna call on {PackageName}");
+			try
+			{
+				_client = new AndroidJavaObject(PackageName, Activity);
+				Debug.Log($"[MJPKotlinServiceExampleClient] MjpKotlinServiceExampleServiceBridge.Init() succeeded using PackageName {PackageName}");
+			}
+			catch (Exception e)
+			{
+				Debug.Log($"[MJPKotlinServiceExampleClient] MjpKotlinServiceExampleServiceBridge.Init() failed using PackageName {PackageName} exception message {e.Message}");
+			}
+		}
+		/// <summary>
+		/// Bind().
+		/// </summary>
+		/// <param name="explicitPackage"></param>
+		/// <returns></returns>
+		public static bool Bind(string explicitPackage = null)
+		{
+			return _client.Call<bool>("bind", null, explicitPackage); // listener null for brevity
+		}
+		/// <summary>
+		/// IsInitialized().
+		/// </summary>
+		/// <returns></returns>
+		public static bool IsInitialized()
+		{
+			return (_client != null);
+		}
+
+		public static void Unbind() => _client.Call("unbind");
+		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) => _client.Call<int>("basicTypes", anInt, aLong, aBoolean, aFloat, aDouble, aString);
+		public static bool PlaySampleOnLoop() => _client.Call<bool>("playSampleOnLoop");
+		public static bool StopPlayback() => _client.Call<bool>("stopPlayback");
+		public static string WhatTimeIsIt() => _client.Call<string>("whatTimeIsIt");
+		public static bool IsServiceBound() => _client.Call<bool>("isServiceBound");
+		public static bool IsServiceAvailable() => _client.Call<bool>("isServiceAvailable");
+	}
+
+
+	/// <summary>Allows interacting with the SDK service.</summary>
+	/// <remarks>
+	///   Only a single instance of this class should be used per app. The SDK is automatically initialized and shut
+	///   down whenever the instance of this class is enabled/disabled (respectively).
+	/// </remarks>
+	public class MJPKotlinServiceExampleClient : MonoBehaviour
+	{
+		private const string				PackageName = "com.example.mjpkotlinserviceexample";
+		//private AndroidJavaObject			_mjpsdk = null;
+		//private MJPNativeConnectionCallback	_nativeCallback = null;
+
+		// Constructor logging
+		public MJPKotlinServiceExampleClient()
+		{
+			Debug.Log("[MJPKotlinServiceExampleClient] Constructor called - MJPKotlinServiceExampleClient instance created");
+		}
+		public static string WhatTimeIsIt()
+		{
+			return MjpKotlinServiceExampleServiceBridge.WhatTimeIsIt();
+		}
+		private void Awake()
+		{
+			Debug.Log($"[MJPKotlinServiceExampleClient] Awake() called on GameObject: {gameObject.name}");
+		}
+		private void Start()
+		{
+			bool	bOk;
+
+			Debug.Log($"[MJPKotlinServiceExampleClient] Start() called on GameObject: {gameObject.name}");
+			MjpKotlinServiceExampleServiceBridge.Init();
+			bOk = MjpKotlinServiceExampleServiceBridge.Bind();
+			Debug.Log($"[MJPKotlinServiceExampleClient] Bind() result: {bOk}");
+			// ---
+			//_nativeCallback = new MJPNativeConnectionCallback();
+			// ---
+		}
+		private void OnDestroy()
+		{
+			MjpKotlinServiceExampleServiceBridge.Unbind();
+		}
+	}
+
+
+
+#else
 	// This is the core mechanism for the ServiceWrapper below for calling bound methods in the service.
 	public static class AndroidJavaObjectExt
 	{
@@ -111,7 +211,10 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 			try
 			{
 				// Instantiates our `Sdk.java`.
-				_mjpsdk = new AndroidJavaObject($"{PackageName}.Sdk");
+				//Debug.Log($"[MJPKotlinServiceExampleClient] about to attempt to create {PackageName}.Sdk");
+				//_mjpsdk = new AndroidJavaObject($"{PackageName}.Sdk");
+				Debug.Log($"[MJPKotlinServiceExampleClient] about to attempt to create {PackageName}.NewService");
+				_mjpsdk = new AndroidJavaObject($"{PackageName}.NewService");
 				Debug.Log("[MJPKotlinServiceExampleClient] SDK object created successfully");
 				Connect();
 			}
@@ -241,4 +344,5 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		{
 		}
 	}
+#endif
 }

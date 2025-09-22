@@ -1134,33 +1134,33 @@ public static class Abxr
 	{
 		Debug.Log("[Abxr] WhatTimeIsIt() called");
 		
-		// First check if there's even an instance of the service client in the scene
-		var instance = MJPKotlinServiceExampleClient.FindInstance();
-		if (instance == null)
-		{
-			Debug.LogWarning("[Abxr] No MJPKotlinServiceExampleClient instance found in scene! You need to add it to a GameObject.");
-			return "";
-		}
+		//// First check if there's even an instance of the service client in the scene
+		//var instance = MJPKotlinServiceExampleClient.FindInstance();
+		//if (instance == null)
+		//{
+		//	Debug.LogWarning("[Abxr] No MJPKotlinServiceExampleClient instance found in scene! You need to add it to a GameObject.");
+		//	return "";
+		//}
 		
-		bool isConnected = MJPKotlinServiceExampleClient.IsConnected();
-		Debug.Log($"[Abxr] MJPKotlinServiceExampleClient.IsConnected() = {isConnected}");
+		//bool isConnected = MJPKotlinServiceExampleClient.IsConnected();
+		//Debug.Log($"[Abxr] MJPKotlinServiceExampleClient.IsConnected() = {isConnected}");
 		
-		if (!isConnected)
-		{
-			Debug.Log("[Abxr] Service not connected, returning empty string");
-			return "";
-		}
+		//if (!isConnected)
+		//{
+		//	Debug.Log("[Abxr] Service not connected, returning empty string");
+		//	return "";
+		//}
 		
-		if (MJPKotlinServiceExampleClient.MjpServiceWrapper == null)
-		{
-			Debug.LogWarning("[Abxr] IsConnected() returned true but MjpServiceWrapper is null!");
-			return "";
-		}
+		//if (MJPKotlinServiceExampleClient.IsInitialized())
+		//{
+		//	Debug.LogWarning("[Abxr] IsConnected() returned true but MjpServiceWrapper is null!");
+		//	return "";
+		//}
 		
 		try
 		{
 			Debug.Log("[Abxr] Calling MjpServiceWrapper.WhatTimeIsIt()");
-			string result = MJPKotlinServiceExampleClient.MjpServiceWrapper.WhatTimeIsIt();
+			string result = MJPKotlinServiceExampleClient.WhatTimeIsIt();
 			Debug.Log($"[Abxr] WhatTimeIsIt() result: '{result}'");
 			return result;
 		}

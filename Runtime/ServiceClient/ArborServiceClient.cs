@@ -110,6 +110,7 @@ namespace AbxrLib.Runtime.ServiceClient
 			try
 			{
 				// Instantiates our `Sdk.java`.
+				Debug.Log($"[XRDMServiceExampleClient] about to attempt to create {PackageName}.Sdk");
 				_sdk = new AndroidJavaObject($"{PackageName}.Sdk");
 				Debug.Log("[XRDMServiceExampleClient] SDK object created successfully");
 				Connect();
