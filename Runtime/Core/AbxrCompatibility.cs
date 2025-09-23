@@ -283,5 +283,16 @@ public static partial class Abxr
 		
 		Event(eventName, stringProperties);
 	}
+
+	/// <summary>
+	/// Get a copy of all current super properties (Mixpanel compatibility)
+	/// This method provides compatibility with existing code that may call GetSuperProperties()
+	/// Internally calls the new GetSuperMetaData() method
+	/// </summary>
+	/// <returns>Dictionary containing all super properties</returns>
+	public static Dictionary<string, string> GetSuperProperties()
+	{
+		return GetSuperMetaData();
+	}
 	#endregion
 }

@@ -15,10 +15,16 @@
  * offering a comprehensive analytics and data collection system for Unity applications.
  */
 
+// System namespaces
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+
+// Unity namespaces
+using UnityEngine;
+
+// AbxrLib namespaces
 using AbxrLib.Runtime.AI;
 using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
@@ -30,7 +36,6 @@ using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
 using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
-using UnityEngine;
 
 /// <summary>
 /// Main API class for AbxrLib - Unity Analytics and Data Collection Library
@@ -68,60 +73,62 @@ using UnityEngine;
 /// </summary>
 public static partial class Abxr
 {
+	#region Private Fields and Constants
+
+	// Event start times for duration tracking
 	private static readonly Dictionary<string, DateTime> _timedEventStartTimes = new();
 	private static readonly Dictionary<string, DateTime> _assessmentStartTimes = new();
 	private static readonly Dictionary<string, DateTime> _objectiveStartTimes = new();
 	private static readonly Dictionary<string, DateTime> _interactionStartTimes = new();
 	private static readonly Dictionary<string, DateTime> _levelStartTimes = new();
-	private static readonly Dictionary<string, string> _superProperties = new();
-	private const string _superPropertiesKey = "AbxrSuperProperties";
 
-	static Abxr()
-	{
-		LoadSuperProperties();
-	}
+	// super metadata for metadata
+	private static readonly Dictionary<string, string> _superMetaData = new();
+	private const string _superMetaDataKey = "AbxrSuperMetaData";
 
-	public static Action OnHeadsetPutOnNewSession;
-		
-	// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
-	public static Action<bool, string> OnAuthCompleted;
+	// Connection status - tracks whether AbxrLib can communicate with the server
+	private static bool _connectionActive = false;
 
 	// Module index for sequential LMS multi-module applications
 	private static int _currentModuleIndex = 0;
 	private const string _moduleIndexKey = "AbxrModuleIndex";
 	
-	// Connection status - tracks whether AbxrLib can communicate with the server
-	private static bool _connectionActive = false;
-
 	// Module index loading state to prevent repeated storage calls
 	private static bool _moduleIndexLoaded = false;
 	private static bool _moduleIndexLoading = false;
+	#endregion
+
+	#region Constructor
+	static Abxr()
+	{
+		LoadSuperMetaData();
+	}
+	#endregion
+
+	#region Subscription Events
+	
+	/// <summary>
+	/// Event triggered when authentication completes
+	/// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
+	/// Subscribe to this event to handle authentication results
+	/// </summary>
+	public static Action<bool, string> OnAuthCompleted;
 
 	/// <summary>
-	/// Mixpanel compatibility class for property values
-	/// This class provides compatibility with Mixpanel Unity SDK for easier migration
-	/// Usage: new Abxr.Value() instead of global Value class
+	/// Event that gets triggered when a moduleTarget should be handled.
+	/// Subscribe to this event to handle moduleTargets with your own logic (e.g., deep link handling, scene navigation, etc.).
 	/// </summary>
-	public class Value : Dictionary<string, object>
-	{
-		public Value() : base() { }
-		
-		public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
-		
-		/// <summary>
-		/// Converts Value properties to Dictionary<string, string> for use with AbxrLib Event system
-		/// </summary>
-		/// <returns>Dictionary with all values converted to strings</returns>
-		public Dictionary<string, string> ToDictionary()
-		{
-		var stringDictionary = new Dictionary<string, string>();
-		foreach (var keyValuePair in this)
-		{
-			stringDictionary[keyValuePair.Key] = keyValuePair.Value?.ToString() ?? string.Empty;
-		}
-		return stringDictionary;
-		}
-	}
+	public static event System.Action<string> OnModuleTarget;
+
+	/// <summary>
+	/// Event triggered when a headset is put on, starting a new session
+	/// Subscribe to this event to handle new session initialization
+	/// </summary>
+	public static Action OnHeadsetPutOnNewSession;
+
+	#endregion
+
+	#region Global Classes and Functions
 
 	/// <summary>
 	/// Simple dictionary wrapper for AbxrLib metadata
@@ -148,16 +155,137 @@ public static partial class Abxr
 		}
 	}
 
-	public enum ResultOptions // Only here for backwards compatibility
+	/// <summary>
+	/// Mixpanel compatibility class for property values
+	/// This class provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Usage: new Abxr.Value() instead of global Value class
+	/// </summary>
+	public class Value : Dictionary<string, object>
 	{
-		Null,
-		Pass,
-		Fail,
-		Complete,
-		Incomplete,
-		Browsed
+		public Value() : base() { }
+		
+		public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
+		
+		/// <summary>
+		/// Converts Value metadata to Dictionary<string, string> for use with AbxrLib Event system
+		/// </summary>
+		/// <returns>Dictionary with all values converted to strings</returns>
+		public Dictionary<string, string> ToDictionary()
+		{
+		var stringDictionary = new Dictionary<string, string>();
+		foreach (var keyValuePair in this)
+		{
+			stringDictionary[keyValuePair.Key] = keyValuePair.Value?.ToString() ?? string.Empty;
+		}
+		return stringDictionary;
+		}
 	}
 
+	#endregion
+
+	#region Authentication Functions and Wrappers
+
+	/// <summary>
+	/// Check if AbxrLib has an active connection to the server and can send data
+	/// This indicates whether the library is configured and ready to communicate
+	/// </summary>
+	/// <returns>True if connection is active, false otherwise</returns>
+	public static bool ConnectionActive() => _connectionActive;
+
+	/// <summary>
+	/// Trigger authentication completion callback
+	/// Internal method - called by authentication system when authentication completes
+	/// </summary>
+	/// <param name="success">Whether authentication was successful</param>
+	/// <param name="error">Optional error message</param>
+	internal static void NotifyAuthCompleted(bool success, string error = null)
+	{
+		// Update connection status based on authentication success
+		_connectionActive = success;
+		
+		// Reset module index cache for new authentication
+		_moduleIndexLoaded = false;
+		_moduleIndexLoading = false;
+		
+		// Set up module index for GetModuleTarget() calls
+		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
+		_currentModuleIndex = 0;
+		SaveModuleIndex();
+		OnAuthCompleted?.Invoke(success, error);
+	}
+
+	/// <summary>
+	/// Get the learner/user data from the most recent authentication completion
+	/// This is the userData object from the authentication response, containing user preferences and information
+	/// Returns null if no authentication has completed yet
+	/// </summary>
+	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
+	public static Dictionary<string, object> GetUserData() => Authentication.GetAuthResponse().UserData;
+
+	/// <summary>
+	/// Trigger manual reauthentication with existing stored parameters
+	/// Primarily useful for testing authentication flows or recovering from auth issues
+	/// Resets authentication state and attempts to re-authenticate with stored credentials
+	/// </summary>
+	public static void ReAuthenticate()
+	{
+		CoroutineRunner.Instance.StartCoroutine(ReAuthenticateCoroutine());
+	}
+
+	private static IEnumerator ReAuthenticateCoroutine()
+	{
+		yield return Authentication.Authenticate();
+	}
+
+	/// <summary>
+	/// Start a new session with a fresh session identifier
+	/// Generates a new session ID and performs fresh authentication
+	/// Useful for starting new training experiences or resetting user context
+	/// </summary>
+	public static void StartNewSession()
+	{
+		Authentication.SetSessionId(Guid.NewGuid().ToString());
+		CoroutineRunner.Instance.StartCoroutine(StartNewSessionCoroutine());
+	}
+
+	private static IEnumerator StartNewSessionCoroutine()
+	{
+		yield return Authentication.Authenticate();
+		// Note: Authentication.Authenticate() already calls NotifyAuthCompleted() internally
+	}
+
+	/// <summary>
+	/// INTERNAL USE ONLY - Present virtual keyboard for authentication
+	/// This method should only be called by the authentication system during 
+	/// the authentication process: Authentication.Authenticate() -> KeyboardAuthenticate() -> PresentKeyboard()
+	/// Do not call this directly in application code - use the authentication callbacks instead
+	/// </summary>
+	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
+	{
+		if (keyboardType is "text" or null)
+		{
+			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+			KeyboardHandler.SetPrompt(promptText ?? "Please Enter Your Login");
+		}
+		else if (keyboardType == "assessmentPin")
+		{
+			KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+			KeyboardHandler.SetPrompt(promptText ?? "Enter your 6-digit PIN");
+		}
+		else if (keyboardType == "email")
+		{
+			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+			KeyboardHandler.SetPrompt(promptText != null ?
+				$"{promptText} (<u>username</u>@{emailDomain})" :
+				$"Enter your email username (<u>username</u>@{emailDomain})");
+		}
+	}
+
+	#endregion
+
+	#region Event Functions and Wrappers
+
+	// Data structures for result options and event status
 	public static EventStatus ToEventStatus(this ResultOptions options) => options switch // Only here for backwards compatibility
 	{
 		ResultOptions.Null => EventStatus.Complete,
@@ -178,13 +306,14 @@ public static partial class Abxr
 		Browsed
 	}
 
-	public enum LogLevel
+	public enum ResultOptions // Only here for backwards compatibility
 	{
-		Debug,
-		Info,
-		Warn,
-		Error,
-		Critical
+		Null,
+		Pass,
+		Fail,
+		Complete,
+		Incomplete,
+		Browsed
 	}
 
 	public enum InteractionType
@@ -200,150 +329,6 @@ public static partial class Abxr
 		Sequencing
 	}
 
-	public enum StoragePolicy
-	{
-		keepLatest,
-		appendHistory
-	}
-
-	public enum StorageScope
-	{
-		device,
-		user
-	}
-
-	/// <summary>
-	/// Data structure for module target information from LMS integration
-	/// </summary>
-	[Serializable]
-	public class CurrentSessionData
-	{
-		public string moduleTarget;     // The target module identifier from LMS
-		public object userData;         // Additional user data from authentication
-		public object userId;           // User identifier
-		public string userEmail;
-
-		public CurrentSessionData(string moduleTarget, object userData, object userId, string userEmail = null)
-		{
-			this.moduleTarget = moduleTarget;
-			this.userData = userData;
-			this.userId = userId;
-			this.userEmail = userEmail;
-		}
-	}
-
-	/// <summary>
-	/// Data structure for module information from authentication response
-	/// </summary>
-	[Serializable]
-	public class ModuleData
-	{
-		public string id;       // Module unique identifier
-		public string name;     // Module display name
-		public string target;   // Module target identifier
-		public int order;       // Module order/sequence
-
-		public ModuleData(string id, string name, string target, int order)
-		{
-			this.id = id;
-			this.name = name;
-			this.target = target;
-			this.order = order;
-		}
-	}
-
-	/// <summary>
-	/// Manual telemetry activation for disabled automatic telemetry
-	/// If you select 'Disable Automatic Telemetry' in the AbxrLib configuration,
-	/// you can manually start tracking system telemetry with this function call.
-	/// This captures headset/controller movements, performance metrics, and environmental data.
-	/// </summary>
-	public static void TrackAutoTelemetry() => TrackSystemInfo.StartTracking();
-
-	/// <summary>
-	/// Check if AbxrLib has an active connection to the server and can send data
-	/// This indicates whether the library is configured and ready to communicate
-	/// </summary>
-	/// <returns>True if connection is active, false otherwise</returns>
-	public static bool ConnectionActive() => _connectionActive;
-
-	/// <summary>
-	/// General logging method with configurable level - main logging function
-	/// </summary>
-	/// <param name="logMessage">The log message</param>
-	/// <param name="logLevel">Log level (defaults to LogLevel.Info)</param>
-	/// <param name="metadata">Any additional information (optional)</param>
-	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null)
-	{
-		metadata ??= new Dictionary<string, string>();
-		metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		
-		// Add super properties to all logs
-		metadata = MergeSuperProperties(metadata);
-		
-		string logLevelString = logLevel switch
-		{
-			LogLevel.Debug => "debug",
-			LogLevel.Info => "info",
-			LogLevel.Warn => "warn",
-			LogLevel.Error => "error",
-			LogLevel.Critical => "critical",
-			_ => "info" // Default case
-		};
-		
-		LogBatcher.Add(logLevelString, logMessage, metadata);
-	}
-
-	/// <summary>
-	/// Add log information at the 'Debug' level
-	/// </summary>
-	/// <param name="logText">The log text</param>
-	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogDebug(string logText, Dictionary<string, string> metadata = null)
-	{
-		Log(logText, LogLevel.Debug, metadata);
-	}
-
-	/// <summary>
-	/// Add log information at the 'Informational' level
-	/// </summary>
-	/// <param name="logText">The log text</param>
-	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogInfo(string logText, Dictionary<string, string> metadata = null)
-	{
-		Log(logText, LogLevel.Info, metadata);
-	}
-
-	/// <summary>
-	/// Add log information at the 'Warning' level
-	/// </summary>
-	/// <param name="logText">The log text</param>
-	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogWarn(string logText, Dictionary<string, string> metadata = null)
-	{
-		Log(logText, LogLevel.Warn, metadata);
-	}
-
-	/// <summary>
-	/// Add log information at the 'Error' level
-	/// </summary>
-	/// <param name="logText">The log text</param>
-	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogError(string logText, Dictionary<string, string> metadata = null)
-	{
-		Log(logText, LogLevel.Error, metadata);
-	}
-
-	/// <summary>
-	/// Add log information at the 'Critical' level
-	/// </summary>
-	/// <param name="logText">The log text</param>
-	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogCritical(string logText, Dictionary<string, string> metadata = null)
-	{
-		Log(logText, LogLevel.Critical, metadata);
-	}
-
 	/// <summary>
 	/// Add event information
 	/// </summary>
@@ -355,8 +340,8 @@ public static partial class Abxr
 		metadata ??= new Dictionary<string, string>();
 		metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
-		// Add super properties to all events
-		metadata = MergeSuperProperties(metadata);
+		// Add super metadata to all events
+		metadata = MergeSuperMetaData(metadata);
 		
 		// Add duration if this was a timed event (StartTimedEvent functionality)
 		if (_timedEventStartTimes.ContainsKey(eventName) && !metadata.ContainsKey("duration"))
@@ -387,6 +372,8 @@ public static partial class Abxr
 		Event(eventName, metadata);
 	}
 
+	// Event wrapper functions
+	
 	/// <summary>
 	/// Start timing an event
 	/// Call Event() later with the same event name to automatically include duration
@@ -398,384 +385,6 @@ public static partial class Abxr
 		_timedEventStartTimes[eventName] = DateTime.UtcNow;
 	}
 
-	/// <summary>
-	/// Send spatial, hardware, or system telemetry data for XR analytics
-	/// Captures headset/controller movements, performance metrics, and environmental data
-	/// </summary>
-	/// <param name="telemetryName">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
-	/// <param name="telemetryData">Key-value pairs of telemetry measurements</param>
-	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
-	{
-		telemetryData ??= new Dictionary<string, string>();
-		telemetryData["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		
-		// Add super properties to all telemetry entries
-		telemetryData = MergeSuperProperties(telemetryData);
-		
-		TelemetryBatcher.Add(telemetryName, telemetryData);
-	}
-
-	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
-	// This method exists purely for backward compatibility with older code that used TelemetryEntry()
-	// It simply wraps the new Telemetry() method. Keep this undocumented in README files.
-	public static void TelemetryEntry(string telemetryName, Dictionary<string, string> telemetryData)
-	{
-		Telemetry(telemetryName, telemetryData);
-	}
-
-	/// <summary>
-	/// Get the session data with the default name 'state'
-	/// Call this as follows:
-	/// StartCoroutine(StorageGetDefaultEntry(scope, result => {
-	///	    Debug.Log("Result: " + result);
-	/// }));
-	/// </summary>
-	/// <param name="scope">Get from 'device' or 'user'</param>
-	/// <param name="callback">Return value when finished</param>
-	/// <returns>All the session data stored under the default name 'state'</returns>
-	public static IEnumerator StorageGetDefaultEntry(StorageScope scope, Action<List<Dictionary<string, string>>> callback)
-	{
-		yield return StorageBatcher.Get("state", scope, callback);
-	}
-
-	/// <summary>
-	/// Get the session data with the given name
-	/// Call this as follows:
-	/// StartCoroutine(StorageGetDefaultEntry(scope, result => {
-	///	    Debug.Log("Result: " + result);
-	/// }));
-	/// </summary>
-	/// <param name="entryName">The name of the entry to retrieve</param>
-	/// <param name="scope">Get from 'device' or 'user'</param>
-	/// <param name="callback">Return value when finished</param>
-	/// <returns>All the session data stored under the given name</returns>
-	public static IEnumerator StorageGetEntry(string entryName, StorageScope scope, Action<List<Dictionary<string, string>>> callback)
-	{
-		yield return StorageBatcher.Get(entryName, scope, callback);
-	}
-
-	/// <summary>
-	/// Set the session data with the default name 'state'
-	/// </summary>
-	/// <param name="entry">The data to store</param>
-	/// <param name="scope">Store under 'device' or 'user'</param>
-	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
-	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
-	{
-		// Check if basic authentication is ready
-		if (!Authentication.Authenticated())
-		{
-			// Basic authentication not ready, defer all storage requests
-			return;
-		}
-		
-		// For user-scoped storage, we need a user to actually be logged in
-		// For device-scoped storage, app-level authentication should be sufficient
-		if (scope == StorageScope.user && Authentication.GetAuthResponse().UserId == null)
-		{
-			// User-scoped storage requires a user to be logged in, defer this request
-			return;
-		}
-		
-		StorageBatcher.Add("state", entry, scope, policy);
-	}
-
-	/// <summary>
-	/// Set the session data with the given name
-	/// </summary>
-	/// <param name="entryName">The name of the entry to store</param>
-	/// <param name="entryData">The data to store</param>
-	/// <param name="scope">Store under 'device' or 'user'</param>
-	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
-	public static void StorageSetEntry(string entryName, Dictionary<string, string> entryData, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
-	{
-		// Check if basic authentication is ready
-		if (!Authentication.Authenticated())
-		{
-			// Basic authentication not ready, defer all storage requests
-			return;
-		}
-		
-		// For user-scoped storage, we need a user to actually be logged in
-		// For device-scoped storage, app-level authentication should be sufficient
-		if (scope == StorageScope.user && Authentication.GetAuthResponse().UserId == null)
-		{
-			// User-scoped storage requires a user to be logged in, defer this request
-			return;
-		}
-		
-		StorageBatcher.Add(entryName, entryData, scope, policy);
-	}
-
-	/// <summary>
-	/// Remove the session data stored under the default name 'state'
-	/// </summary>
-	/// <param name="scope">Remove from 'device' or 'user' (defaults to 'user')</param>
-	public static void StorageRemoveDefaultEntry(StorageScope scope = StorageScope.user)
-	{
-		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(scope, "state"));
-	}
-
-	/// <summary>
-	/// Remove the session data stored under the given name
-	/// </summary>
-	/// <param name="entryName">The name of the entry to remove</param>
-	/// <param name="scope">Remove from 'device' or 'user' (defaults to 'user')</param>
-	public static void StorageRemoveEntry(string entryName, StorageScope scope = StorageScope.user)
-	{
-		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(scope, entryName));
-	}
-
-	/// <summary>
-	/// Remove all the session data stored on the device or for the current user
-	/// </summary>
-	/// <param name="scope">Remove all from 'device' or 'user' (defaults to 'user')</param>
-	public static void StorageRemoveMultipleEntries(StorageScope scope = StorageScope.user)
-	{
-		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(scope));
-	}
-
-	/// <summary>
-	/// Send a prompt to the LLM provider
-	/// StartCoroutine(AIProxy(prompt, llmProvider, result => {
-	///	    Debug.Log("Result: " + result);
-	/// }));
-	/// </summary>
-	/// <param name="prompt">The prompt to send</param>
-	/// <param name="llmProvider">The LLM being used</param>
-	/// <param name="callback">Return value when finished</param>
-	/// <returns>The string returned by the LLM</returns>
-	public static IEnumerator AIProxy(string prompt, string llmProvider, Action<string> callback)
-	{
-		yield return AIProxyApi.SendPrompt(prompt, llmProvider, null, callback);
-	}
-
-	///  <summary>
-	///  Send a prompt to the LLM provider
-	///  StartCoroutine(AIProxy(prompt, llmProvider, result => {
-	/// 	    Debug.Log("Result: " + result);
-	///  }));
-	///  </summary>
-	///  <param name="prompt">The prompt to send</param>
-	///  <param name="pastMessages">Previous messages sent to the LLM</param>
-	///  <param name="llmProvider">The LLM being used</param>
-	///  <param name="callback">Return value when finished</param>
-	///  <returns>The string returned by the LLM</returns>
-	public static IEnumerator AIProxy(string prompt, List<string> pastMessages, string llmProvider, Action<string> callback)
-	{
-		yield return AIProxyApi.SendPrompt(prompt, llmProvider, pastMessages, callback);
-	}
-
-	/// <summary>
-	/// Register a super property that will be automatically included in all events
-	/// Super properties persist across app sessions and are stored locally
-	/// </summary>
-	/// <param name="key">Property name</param>
-	/// <param name="value">Property value</param>
-	public static void Register(string key, string value)
-	{
-		if (IsReservedSuperPropertyKey(key))
-		{
-			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
-			Debug.LogWarning(errorMessage);
-			LogInfo(errorMessage, new Dictionary<string, string> { 
-				{ "attempted_key", key }, 
-				{ "attempted_value", value },
-				{ "error_type", "reserved_super_property_key" }
-			});
-			return;
-		}
-
-		_superProperties[key] = value;
-		SaveSuperProperties();
-	}
-
-	/// <summary>
-	/// Register a super property only if it doesn't already exist
-	/// Will not overwrite existing super properties with the same key
-	/// </summary>
-	/// <param name="key">Property name</param>
-	/// <param name="value">Property value</param>
-	public static void RegisterOnce(string key, string value)
-	{
-		if (IsReservedSuperPropertyKey(key))
-		{
-			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
-			Debug.LogWarning(errorMessage);
-			LogInfo(errorMessage, new Dictionary<string, string> { 
-				{ "attempted_key", key }, 
-				{ "attempted_value", value },
-				{ "error_type", "reserved_super_property_key" }
-			});
-			return;
-		}
-
-		if (!_superProperties.ContainsKey(key))
-		{
-			_superProperties[key] = value;
-			SaveSuperProperties();
-		}
-	}
-
-	/// <summary>
-	/// Remove a super property
-	/// </summary>
-	/// <param name="key">Property name to remove</param>
-	public static void Unregister(string key)
-	{
-		_superProperties.Remove(key);
-		SaveSuperProperties();
-	}
-
-	/// <summary>
-	/// Clear all super properties
-	/// Clears all superProperties from persistent storage (matches Mixpanel.Reset())
-	/// </summary>
-	public static void Reset()
-	{
-		_superProperties.Clear();
-		SaveSuperProperties();
-	}
-
-	/// <summary>
-	/// Get a copy of all current super properties
-	/// </summary>
-	/// <returns>Dictionary containing all super properties</returns>
-	public static Dictionary<string, string> GetSuperProperties()
-	{
-		return new Dictionary<string, string>(_superProperties);
-	}
-
-	private static void LoadSuperProperties()
-	{
-		string json = PlayerPrefs.GetString(_superPropertiesKey, "{}");
-		try
-		{
-		var serializableDictionary = JsonUtility.FromJson<SerializableDictionary>(json);
-		if (serializableDictionary?.items != null)
-		{
-			_superProperties.Clear();
-			foreach (var keyValueItem in serializableDictionary.items)
-			{
-				_superProperties[keyValueItem.key] = keyValueItem.value;
-			}
-		}
-		}
-		catch (Exception ex)
-		{
-			// Log error with consistent format and include stack trace for debugging
-			Debug.LogError($"AbxrLib: Failed to load super properties: {ex.Message}\n" +
-						  $"Exception Type: {ex.GetType().Name}\n" +
-						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-		}
-	}
-
-	private static void SaveSuperProperties()
-	{
-		try
-		{
-		var serializableDictionary = new SerializableDictionary
-		{
-			items = _superProperties.Select(keyValuePair => new SerializableKeyValuePair
-			{
-				key = keyValuePair.Key,
-				value = keyValuePair.Value
-			}).ToArray()
-		};
-		string json = JsonUtility.ToJson(serializableDictionary);
-			PlayerPrefs.SetString(_superPropertiesKey, json);
-			PlayerPrefs.Save();
-		}
-		catch (Exception ex)
-		{
-			// Log error with consistent format and include stack trace for debugging
-			Debug.LogError($"AbxrLib: Failed to save super properties: {ex.Message}\n" +
-						  $"Exception Type: {ex.GetType().Name}\n" +
-						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-		}
-	}
-
-	[Serializable]
-	private class SerializableDictionary
-	{
-		public SerializableKeyValuePair[] items;
-	}
-
-	[Serializable]
-	private class SerializableKeyValuePair
-	{
-		public string key;
-		public string value;
-	}
-
-	/// <summary>
-	/// Private helper function to merge super properties and module info into metadata
-	/// Ensures data-specific properties take precedence over super properties and module info
-	/// </summary>
-	/// <param name="meta">The metadata dictionary to merge super properties into</param>
-	/// <returns>The metadata dictionary with super properties and module info merged</returns>
-	private static Dictionary<string, string> MergeSuperProperties(Dictionary<string, string> meta)
-	{
-		meta ??= new Dictionary<string, string>();
-		
-		// Add current module information if available
-		var currentSessionData = GetModuleTargetWithoutAdvance();
-		if (currentSessionData != null)
-		{
-			// Only add module info if not already present (data-specific properties take precedence)
-			if (!meta.ContainsKey("module") && !string.IsNullOrEmpty(currentSessionData.moduleTarget))
-			{
-				meta["module"] = currentSessionData.moduleTarget;
-			}
-			// For additional module metadata, we need to get it from the modules list
-			if (Authentication.GetModuleData() != null && Authentication.GetModuleData().Count > 0)
-			{
-		LoadModuleIndex();
-		if (_currentModuleIndex < Authentication.GetModuleData().Count)
-		{
-			ModuleData currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
-					if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModuleData.name))
-					{
-						meta["module_name"] = currentModuleData.name;
-					}
-					if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModuleData.id))
-					{
-						meta["module_id"] = currentModuleData.id;
-					}
-					if (!meta.ContainsKey("module_order"))
-					{
-						meta["module_order"] = currentModuleData.order.ToString();
-					}
-				}
-			}
-		}
-		
-		// Add super properties to metadata
-		foreach (var superPropertyKeyValue in _superProperties)
-		{
-			// Super properties don't overwrite data-specific properties or module info
-			if (!meta.ContainsKey(superPropertyKeyValue.Key))
-			{
-				meta[superPropertyKeyValue.Key] = superPropertyKeyValue.Value;
-			}
-		}
-		
-		return meta;
-	}
-
-	/// <summary>
-	/// Private helper to check if a super property key is reserved for module data
-	/// Reserved keys: module, module_name, module_id, module_order
-	/// </summary>
-	/// <param name="key">The key to validate</param>
-	/// <returns>True if the key is reserved, false otherwise</returns>
-	private static bool IsReservedSuperPropertyKey(string key)
-	{
-		return key == "module" || key == "module_name" || key == "module_id" || key == "module_order";
-	}
-
-	// Event wrapper functions
-	
 	/// <summary>
 	/// Start tracking an assessment - essential for LMS integration and analytics
 	/// Assessments track overall learner performance across multiple objectives and interactions
@@ -932,32 +541,335 @@ public static partial class Abxr
 		Event(taggedName, meta);
 	}
 
+	// Event Duration Tracking
+	
 	/// <summary>
-	/// INTERNAL USE ONLY - Present virtual keyboard for authentication
-	/// This method should only be called by the authentication system during 
-	/// the authentication process: Authentication.Authenticate() -> KeyboardAuthenticate() -> PresentKeyboard()
-	/// Do not call this directly in application code - use the authentication callbacks instead
+	/// Gets a copy of the current assessment start times for application quit handling.
+	/// This method provides safe access to private timing data without using reflection.
 	/// </summary>
-	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
+	/// <returns>Copy of the assessment start times dictionary</returns>
+	internal static Dictionary<string, DateTime> GetAssessmentStartTimes()
 	{
-		if (keyboardType is "text" or null)
+		return new Dictionary<string, DateTime>(_assessmentStartTimes);
+	}
+	
+	/// <summary>
+	/// Gets a copy of the current objective start times for application quit handling.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	/// <returns>Copy of the objective start times dictionary</returns>
+	internal static Dictionary<string, DateTime> GetObjectiveStartTimes()
+	{
+		return new Dictionary<string, DateTime>(_objectiveStartTimes);
+	}
+	
+	/// <summary>
+	/// Gets a copy of the current interaction start times for application quit handling.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	/// <returns>Copy of the interaction start times dictionary</returns>
+	internal static Dictionary<string, DateTime> GetInteractionStartTimes()
+	{
+		return new Dictionary<string, DateTime>(_interactionStartTimes);
+	}
+	
+	/// <summary>
+	/// Gets a copy of the current level start times for application quit handling.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	/// <returns>Copy of the level start times dictionary</returns>
+	internal static Dictionary<string, DateTime> GetLevelStartTimes()
+	{
+		return new Dictionary<string, DateTime>(_levelStartTimes);
+	}
+	
+	/// <summary>
+	/// Clears all timing dictionaries. Used by application quit handler to clean up after processing.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	internal static void ClearAllStartTimes()
+	{
+		_assessmentStartTimes.Clear();
+		_objectiveStartTimes.Clear();
+		_interactionStartTimes.Clear();
+		_levelStartTimes.Clear();
+		_timedEventStartTimes.Clear();
+	}
+
+	private static void AddDuration(Dictionary<string, DateTime> startTimes, string name, Dictionary<string, string> meta)
+	{
+		meta ??= new Dictionary<string, string>();
+		if (startTimes.ContainsKey(name))
 		{
-			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
-			KeyboardHandler.SetPrompt(promptText ?? "Please Enter Your Login");
+			double duration = (DateTime.UtcNow - startTimes[name]).TotalSeconds; //TODO do we want seconds?
+			meta["duration"] = duration.ToString();
+			startTimes.Remove(name);
 		}
-		else if (keyboardType == "assessmentPin")
+		else
 		{
-			KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
-			KeyboardHandler.SetPrompt(promptText ?? "Enter your 6-digit PIN");
-		}
-		else if (keyboardType == "email")
-		{
-			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
-			KeyboardHandler.SetPrompt(promptText != null ?
-				$"{promptText} (<u>username</u>@{emailDomain})" :
-				$"Enter your email username (<u>username</u>@{emailDomain})");
+			meta["duration"] = "0";
 		}
 	}
+	
+	#endregion
+
+	#region Logging Functions and Wrappers
+
+	public enum LogLevel
+	{
+		Debug,
+		Info,
+		Warn,
+		Error,
+		Critical
+	}
+
+	/// <summary>
+	/// General logging method with configurable level - main logging function
+	/// </summary>
+	/// <param name="logMessage">The log message</param>
+	/// <param name="logLevel">Log level (defaults to LogLevel.Info)</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null)
+	{
+		metadata ??= new Dictionary<string, string>();
+		metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		
+		// Add super metadata to all logs
+		metadata = MergeSuperMetaData(metadata);
+		
+		string logLevelString = logLevel switch
+		{
+			LogLevel.Debug => "debug",
+			LogLevel.Info => "info",
+			LogLevel.Warn => "warn",
+			LogLevel.Error => "error",
+			LogLevel.Critical => "critical",
+			_ => "info" // Default case
+		};
+		
+		LogBatcher.Add(logLevelString, logMessage, metadata);
+	}
+
+	/// <summary>
+	/// Add log information at the 'Debug' level
+	/// </summary>
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogDebug(string logText, Dictionary<string, string> metadata = null)
+	{
+		Log(logText, LogLevel.Debug, metadata);
+	}
+
+	/// <summary>
+	/// Add log information at the 'Informational' level
+	/// </summary>
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogInfo(string logText, Dictionary<string, string> metadata = null)
+	{
+		Log(logText, LogLevel.Info, metadata);
+	}
+
+	/// <summary>
+	/// Add log information at the 'Warning' level
+	/// </summary>
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogWarn(string logText, Dictionary<string, string> metadata = null)
+	{
+		Log(logText, LogLevel.Warn, metadata);
+	}
+
+	/// <summary>
+	/// Add log information at the 'Error' level
+	/// </summary>
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogError(string logText, Dictionary<string, string> metadata = null)
+	{
+		Log(logText, LogLevel.Error, metadata);
+	}
+
+	/// <summary>
+	/// Add log information at the 'Critical' level
+	/// </summary>
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogCritical(string logText, Dictionary<string, string> metadata = null)
+	{
+		Log(logText, LogLevel.Critical, metadata);
+	}
+
+	#endregion
+
+	#region Telemetry
+
+	/// <summary>
+	/// Manual telemetry activation for disabled automatic telemetry
+	/// If you select 'Disable Automatic Telemetry' in the AbxrLib configuration,
+	/// you can manually start tracking system telemetry with this function call.
+	/// This captures headset/controller movements, performance metrics, and environmental data.
+	/// </summary>
+	public static void TrackAutoTelemetry() => TrackSystemInfo.StartTracking();
+
+	/// <summary>
+	/// Send spatial, hardware, or system telemetry data for XR analytics
+	/// Captures headset/controller movements, performance metrics, and environmental data
+	/// </summary>
+	/// <param name="telemetryName">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
+	/// <param name="telemetryData">Key-value pairs of telemetry measurements</param>
+	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
+	{
+		telemetryData ??= new Dictionary<string, string>();
+		telemetryData["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		
+		// Add super metadata to all telemetry entries
+		telemetryData = MergeSuperMetaData(telemetryData);
+		
+		TelemetryBatcher.Add(telemetryName, telemetryData);
+	}
+
+	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
+	// This method exists purely for backward compatibility with older code that used TelemetryEntry()
+	// It simply wraps the new Telemetry() method. Keep this undocumented in README files.
+	public static void TelemetryEntry(string telemetryName, Dictionary<string, string> telemetryData)
+	{
+		Telemetry(telemetryName, telemetryData);
+	}
+
+	#endregion
+
+	#region Storage
+
+	// Data structures for storage
+	public enum StoragePolicy
+	{
+		keepLatest,
+		appendHistory
+	}
+
+	public enum StorageScope
+	{
+		device,
+		user
+	}
+
+	/// <summary>
+	/// Get the session data with the default name 'state'
+	/// Call this as follows:
+	/// StartCoroutine(StorageGetDefaultEntry(scope, result => {
+	///	    Debug.Log("Result: " + result);
+	/// }));
+	/// </summary>
+	/// <param name="scope">Get from 'device' or 'user'</param>
+	/// <param name="callback">Return value when finished</param>
+	/// <returns>All the session data stored under the default name 'state'</returns>
+	public static IEnumerator StorageGetDefaultEntry(StorageScope scope, Action<List<Dictionary<string, string>>> callback)
+	{
+		yield return StorageBatcher.Get("state", scope, callback);
+	}
+
+	/// <summary>
+	/// Get the session data with the given name
+	/// Call this as follows:
+	/// StartCoroutine(StorageGetDefaultEntry(scope, result => {
+	///	    Debug.Log("Result: " + result);
+	/// }));
+	/// </summary>
+	/// <param name="entryName">The name of the entry to retrieve</param>
+	/// <param name="scope">Get from 'device' or 'user'</param>
+	/// <param name="callback">Return value when finished</param>
+	/// <returns>All the session data stored under the given name</returns>
+	public static IEnumerator StorageGetEntry(string entryName, StorageScope scope, Action<List<Dictionary<string, string>>> callback)
+	{
+		yield return StorageBatcher.Get(entryName, scope, callback);
+	}
+
+	/// <summary>
+	/// Set the session data with the default name 'state'
+	/// </summary>
+	/// <param name="entry">The data to store</param>
+	/// <param name="scope">Store under 'device' or 'user'</param>
+	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
+	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
+	{
+		// Check if basic authentication is ready
+		if (!Authentication.Authenticated())
+		{
+			// Basic authentication not ready, defer all storage requests
+			return;
+		}
+		
+		// For user-scoped storage, we need a user to actually be logged in
+		// For device-scoped storage, app-level authentication should be sufficient
+		if (scope == StorageScope.user && Authentication.GetAuthResponse().UserId == null)
+		{
+			// User-scoped storage requires a user to be logged in, defer this request
+			return;
+		}
+		
+		StorageBatcher.Add("state", entry, scope, policy);
+	}
+
+	/// <summary>
+	/// Set the session data with the given name
+	/// </summary>
+	/// <param name="entryName">The name of the entry to store</param>
+	/// <param name="entryData">The data to store</param>
+	/// <param name="scope">Store under 'device' or 'user'</param>
+	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
+	public static void StorageSetEntry(string entryName, Dictionary<string, string> entryData, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
+	{
+		// Check if basic authentication is ready
+		if (!Authentication.Authenticated())
+		{
+			// Basic authentication not ready, defer all storage requests
+			return;
+		}
+		
+		// For user-scoped storage, we need a user to actually be logged in
+		// For device-scoped storage, app-level authentication should be sufficient
+		if (scope == StorageScope.user && Authentication.GetAuthResponse().UserId == null)
+		{
+			// User-scoped storage requires a user to be logged in, defer this request
+			return;
+		}
+		
+		StorageBatcher.Add(entryName, entryData, scope, policy);
+	}
+
+	/// <summary>
+	/// Remove the session data stored under the default name 'state'
+	/// </summary>
+	/// <param name="scope">Remove from 'device' or 'user' (defaults to 'user')</param>
+	public static void StorageRemoveDefaultEntry(StorageScope scope = StorageScope.user)
+	{
+		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(scope, "state"));
+	}
+
+	/// <summary>
+	/// Remove the session data stored under the given name
+	/// </summary>
+	/// <param name="entryName">The name of the entry to remove</param>
+	/// <param name="scope">Remove from 'device' or 'user' (defaults to 'user')</param>
+	public static void StorageRemoveEntry(string entryName, StorageScope scope = StorageScope.user)
+	{
+		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(scope, entryName));
+	}
+
+	/// <summary>
+	/// Remove all the session data stored on the device or for the current user
+	/// </summary>
+	/// <param name="scope">Remove all from 'device' or 'user' (defaults to 'user')</param>
+	public static void StorageRemoveMultipleEntries(StorageScope scope = StorageScope.user)
+	{
+		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(scope));
+	}
+
+	#endregion
+
+	#region Exit Polls
 
 	/// <summary>
 	/// Get feedback from the user with a Poll
@@ -985,221 +897,298 @@ public static partial class Abxr
 
 		ExitPollHandler.AddPoll(prompt, pollType, responses, callback);
 	}
+	
+	#endregion
+
+	#region AI Proxy
 
 	/// <summary>
-	/// Trigger manual reauthentication with existing stored parameters
-	/// Primarily useful for testing authentication flows or recovering from auth issues
-	/// Resets authentication state and attempts to re-authenticate with stored credentials
+	/// Send a prompt to the LLM provider
+	/// StartCoroutine(AIProxy(prompt, llmProvider, result => {
+	///	    Debug.Log("Result: " + result);
+	/// }));
 	/// </summary>
-	public static void ReAuthenticate()
+	/// <param name="prompt">The prompt to send</param>
+	/// <param name="llmProvider">The LLM being used</param>
+	/// <param name="callback">Return value when finished</param>
+	/// <returns>The string returned by the LLM</returns>
+	public static IEnumerator AIProxy(string prompt, string llmProvider, Action<string> callback)
 	{
-		CoroutineRunner.Instance.StartCoroutine(ReAuthenticateCoroutine());
+		yield return AIProxyApi.SendPrompt(prompt, llmProvider, null, callback);
 	}
 
-	private static IEnumerator ReAuthenticateCoroutine()
+	///  <summary>
+	///  Send a prompt to the LLM provider
+	///  StartCoroutine(AIProxy(prompt, llmProvider, result => {
+	/// 	    Debug.Log("Result: " + result);
+	///  }));
+	///  </summary>
+	///  <param name="prompt">The prompt to send</param>
+	///  <param name="pastMessages">Previous messages sent to the LLM</param>
+	///  <param name="llmProvider">The LLM being used</param>
+	///  <param name="callback">Return value when finished</param>
+	///  <returns>The string returned by the LLM</returns>
+	public static IEnumerator AIProxy(string prompt, List<string> pastMessages, string llmProvider, Action<string> callback)
 	{
-		yield return Authentication.Authenticate();
+		yield return AIProxyApi.SendPrompt(prompt, llmProvider, pastMessages, callback);
+	}
+
+	#endregion
+
+	#region super metadata
+	/// <summary>
+	/// Register a super metadata property that will be automatically included in all events
+	/// super metadata persist across app sessions and are stored locally
+	/// </summary>
+	/// <param name="key">Property name</param>
+	/// <param name="value">Property value</param>
+	public static void Register(string key, string value)
+	{
+		if (IsReservedSuperPropertyKey(key))
+		{
+			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			Debug.LogWarning(errorMessage);
+			LogInfo(errorMessage, new Dictionary<string, string> { 
+				{ "attempted_key", key }, 
+				{ "attempted_value", value },
+				{ "error_type", "reserved_super_property_key" }
+			});
+			return;
+		}
+
+		_superMetaData[key] = value;
+		SaveSuperMetaData();
 	}
 
 	/// <summary>
-	/// Start a new session with a fresh session identifier
-	/// Generates a new session ID and performs fresh authentication
-	/// Useful for starting new training experiences or resetting user context
+	/// Register a super metadata property only if it doesn't already exist
+	/// Will not overwrite existing super metadata with the same key
 	/// </summary>
-	public static void StartNewSession()
+	/// <param name="key">Property name</param>
+	/// <param name="value">Property value</param>
+	public static void RegisterOnce(string key, string value)
 	{
-		Authentication.SetSessionId(Guid.NewGuid().ToString());
-		CoroutineRunner.Instance.StartCoroutine(StartNewSessionCoroutine());
+		if (IsReservedSuperPropertyKey(key))
+		{
+			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			Debug.LogWarning(errorMessage);
+			LogInfo(errorMessage, new Dictionary<string, string> { 
+				{ "attempted_key", key }, 
+				{ "attempted_value", value },
+				{ "error_type", "reserved_super_property_key" }
+			});
+			return;
+		}
+
+		if (!_superMetaData.ContainsKey(key))
+		{
+			_superMetaData[key] = value;
+			SaveSuperMetaData();
+		}
 	}
 
-	private static IEnumerator StartNewSessionCoroutine()
+	/// <summary>
+	/// Remove a super metadata property
+	/// </summary>
+	/// <param name="key">Property name to remove</param>
+	public static void Unregister(string key)
 	{
-		yield return Authentication.Authenticate();
-		// Note: Authentication.Authenticate() already calls NotifyAuthCompleted() internally
+		_superMetaData.Remove(key);
+		SaveSuperMetaData();
 	}
 
-	private static void AddDuration(Dictionary<string, DateTime> startTimes, string name, Dictionary<string, string> meta)
+	/// <summary>
+	/// Clear all super metadata
+	/// Clears all super metadata from persistent storage (matches Mixpanel.Reset())
+	/// </summary>
+	public static void Reset()
+	{
+		_superMetaData.Clear();
+		SaveSuperMetaData();
+	}
+
+	/// <summary>
+	/// Get a copy of all current super metadata
+	/// </summary>
+	/// <returns>Dictionary containing all super metadata</returns>
+	public static Dictionary<string, string> GetSuperMetaData()
+	{
+		return new Dictionary<string, string>(_superMetaData);
+	}
+
+	private static void LoadSuperMetaData()
+	{
+		string json = PlayerPrefs.GetString(_superMetaDataKey, "{}");
+		try
+		{
+		var serializableDictionary = JsonUtility.FromJson<SerializableDictionary>(json);
+		if (serializableDictionary?.items != null)
+		{
+			_superMetaData.Clear();
+			foreach (var keyValueItem in serializableDictionary.items)
+			{
+				_superMetaData[keyValueItem.key] = keyValueItem.value;
+			}
+		}
+		}
+		catch (Exception ex)
+		{
+			// Log error with consistent format and include stack trace for debugging
+			Debug.LogError($"AbxrLib: Failed to load super metadata: {ex.Message}\n" +
+						  $"Exception Type: {ex.GetType().Name}\n" +
+						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+		}
+	}
+
+	private static void SaveSuperMetaData()
+	{
+		try
+		{
+		var serializableDictionary = new SerializableDictionary
+		{
+			items = _superMetaData.Select(keyValuePair => new SerializableKeyValuePair
+			{
+				key = keyValuePair.Key,
+				value = keyValuePair.Value
+			}).ToArray()
+		};
+		string json = JsonUtility.ToJson(serializableDictionary);
+			PlayerPrefs.SetString(_superMetaDataKey, json);
+			PlayerPrefs.Save();
+		}
+		catch (Exception ex)
+		{
+			// Log error with consistent format and include stack trace for debugging
+			Debug.LogError($"AbxrLib: Failed to save super metadata: {ex.Message}\n" +
+						  $"Exception Type: {ex.GetType().Name}\n" +
+						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+		}
+	}
+
+	[Serializable]
+	private class SerializableDictionary
+	{
+		public SerializableKeyValuePair[] items;
+	}
+
+	[Serializable]
+	private class SerializableKeyValuePair
+	{
+		public string key;
+		public string value;
+	}
+
+	/// <summary>
+	/// Private helper function to merge super metadata and module info into metadata
+	/// Ensures data-specific metadata take precedence over super metadata and module info
+	/// </summary>
+	/// <param name="meta">The metadata dictionary to merge super metadata into</param>
+	/// <returns>The metadata dictionary with super metadata and module info merged</returns>
+	private static Dictionary<string, string> MergeSuperMetaData(Dictionary<string, string> meta)
 	{
 		meta ??= new Dictionary<string, string>();
-		if (startTimes.ContainsKey(name))
-		{
-			double duration = (DateTime.UtcNow - startTimes[name]).TotalSeconds; //TODO do we want seconds?
-			meta["duration"] = duration.ToString();
-			startTimes.Remove(name);
-		}
-		else
-		{
-			meta["duration"] = "0";
-		}
-	}
-
-	/// <summary>Gets the UUID assigned to device by ArborXR.</summary>
-	/// <returns>UUID is provided as a string.</returns>
-	public static string GetDeviceId() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetDeviceId() : "";
-
-	/// <summary>Gets the serial number assigned to device by OEM.</summary>
-	/// <returns>Serial number is provided as a string.</returns>
-	public static string GetDeviceSerial() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetDeviceSerial() : "";
-
-	/// <summary>Gets the title given to device by admin through the ArborXR Web Portal.</summary>
-	public static string GetDeviceTitle() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetDeviceTitle() : "";
-
-	/// <summary>Gets the tags added to device by admin through the ArborXR Web Portal.</summary>
-	/// <returns>
-	///   Tags are represented as a string array. Array will be empty if no tags are assigned to device.
-	/// </returns>
-	public static string[] GetDeviceTags() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetDeviceTags() : null;
-
-	/// <summary>
-	///   Gets the UUID of the organization where the device is assigned. Organizations are created in the
-	///   ArborXR Web Portal.
-	/// </summary>
-	/// <returns>UUID is provided as a string.</returns>
-	public static string GetOrgId() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetOrgId() : Configuration.Instance.orgID;
-
-	/// <summary>Gets the name assigned to organization by admin through the ArborXR Web Portal.</summary>
-	public static string GetOrgTitle() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetOrgTitle() : "";
-
-	/// <summary>Gets the identifier generated by ArborXR when admin assigns title to organization.</summary>
-	public static string GetOrgSlug() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetOrgSlug() : "";
-
-	/// <summary>Gets the physical MAC address assigned to device by OEM.</summary>
-	/// <returns>MAC address is provided as a string.</returns>
-	public static string GetMacAddressFixed() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetMacAddressFixed() : "";
-
-	/// <summary>Gets the randomized MAC address for the current WiFi connection.</summary>
-	/// <returns>MAC address is provided as a string.</returns>
-	public static string GetMacAddressRandom() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetMacAddressRandom() : "";
-
-	/// <summary>Gets whether the device is SSO authenticated.</summary>
-	/// <returns>Whether the device is SSO authenticated.</returns>
-	public static bool GetIsAuthenticated() =>
-		ArborServiceClient.IsConnected() && ArborServiceClient.ServiceWrapper != null && ArborServiceClient.ServiceWrapper.GetIsAuthenticated();
-
-	/// <summary>Gets SSO access token.</summary>
-	/// <returns>SSO access token.</returns>
-	public static string GetAccessToken() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetAccessToken() : "";
-
-	/// <summary>Gets SSO refresh token.</summary>
-	/// <returns>SSO refresh token.</returns>
-	public static string GetRefreshToken() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetRefreshToken() : "";
-
-	/// <summary>Gets SSO token remaining lifetime.</summary>
-	/// <returns>The remaining lifetime of the access token in seconds.</returns>
-	public static DateTime? GetExpiresDateUtc() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetExpiresDateUtc() : DateTime.MinValue;
-
-	// <summary>Gets the device fingerprint.</summary>
-	/// <returns>The device fingerprint.</returns>
-	public static string GetFingerprint() =>
-		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
-
-	#region Module Target and User Data Methods
-
-	/// <summary>
-	/// Get the learner/user data from the most recent authentication completion
-	/// This is the userData object from the authentication response, containing user preferences and information
-	/// Returns null if no authentication has completed yet
-	/// </summary>
-	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
-	public static Dictionary<string, object> GetUserData() => Authentication.GetAuthResponse().UserData;
-
-	/// <summary>
-	/// Get all available modules from the authentication response
-	/// Provides complete module information including id, name, target, and order
-	/// Returns empty list if no authentication has completed yet
-	/// </summary>
-	/// <returns>List of ModuleData objects with complete module information</returns>
-	public static List<ModuleData> GetModuleTargetList() => Authentication.GetModuleData();
-
-	/// <summary>
-	/// Get the current module target again without advancing to the next one
-	/// Useful for checking what module you're currently on without consuming it
-	/// Returns the same CurrentSessionData structure as GetModuleTarget() but doesn't advance the index
-	/// </summary>
-	/// <returns>CurrentSessionData for the current module, or null if none available</returns>
-	public static CurrentSessionData GetModuleTargetWithoutAdvance()
-	{
-		if (Authentication.GetModuleData() == null || Authentication.GetModuleData().Count == 0)
-		{
-			return null;
-		}
-
-		LoadModuleIndex();
-
-		if (_currentModuleIndex >= Authentication.GetModuleData().Count)
-		{
-			return null;
-		}
-
-		var currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
 		
-		// Return CurrentSessionData structure (same as GetModuleTarget but without advancing index)
-		return new CurrentSessionData(
-			currentModuleData.target,
-			GetUserData(),
-			Authentication.GetAuthResponse().UserId
-		);
-	}
-
-	/// <summary>
-	/// Get the next module target from the available modules for sequential module processing
-	/// Returns null when no more module targets are available
-	/// Each call moves to the next module in the sequence and updates persistent storage
-	/// </summary>
-	/// <returns>The next CurrentSessionData with complete module information, or null if no more modules</returns>
-	public static CurrentSessionData GetModuleTarget()
-	{
-		// Get current module data without advancing
+		// Add current module information if available
 		var currentSessionData = GetModuleTargetWithoutAdvance();
-		if (currentSessionData == null)
+		if (currentSessionData != null)
 		{
-			return null;
+			// Only add module info if not already present (data-specific metadata take precedence)
+			if (!meta.ContainsKey("module") && !string.IsNullOrEmpty(currentSessionData.moduleTarget))
+			{
+				meta["module"] = currentSessionData.moduleTarget;
+			}
+			// For additional module metadata, we need to get it from the modules list
+			if (Authentication.GetModuleData() != null && Authentication.GetModuleData().Count > 0)
+			{
+		LoadModuleIndex();
+		if (_currentModuleIndex < Authentication.GetModuleData().Count)
+		{
+			ModuleData currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
+					if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModuleData.name))
+					{
+						meta["module_name"] = currentModuleData.name;
+					}
+					if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModuleData.id))
+					{
+						meta["module_id"] = currentModuleData.id;
+					}
+					if (!meta.ContainsKey("module_order"))
+					{
+						meta["module_order"] = currentModuleData.order.ToString();
+					}
+				}
+			}
 		}
-
-		// Advance to next module
-		LoadModuleIndex();
-		_currentModuleIndex++;
-		SaveModuleIndex();
-
-		return currentSessionData;
+		
+		// Add super metadata to metadata
+		foreach (var superPropertyKeyValue in _superMetaData)
+		{
+			// super metadata don't overwrite data-specific metadata or module info
+			if (!meta.ContainsKey(superPropertyKeyValue.Key))
+			{
+				meta[superPropertyKeyValue.Key] = superPropertyKeyValue.Value;
+			}
+		}
+		
+		return meta;
 	}
 
 	/// <summary>
-	/// Get the current number of module targets remaining
+	/// Private helper to check if a super property key is reserved for module data
+	/// Reserved keys: module, module_name, module_id, module_order
 	/// </summary>
-	/// <returns>Number of module targets remaining</returns>
-	public static int GetModuleTargetCount()
+	/// <param name="key">The key to validate</param>
+	/// <returns>True if the key is reserved, false otherwise</returns>
+	private static bool IsReservedSuperPropertyKey(string key)
 	{
-		if (Authentication.GetModuleData() == null) return 0;
+		return key == "module" || key == "module_name" || key == "module_id" || key == "module_order";
+	}
+	#endregion
 
-		LoadModuleIndex();
-		int remainingModuleCount = Authentication.GetModuleData().Count - _currentModuleIndex;
-		return Math.Max(0, remainingModuleCount);
+	#region Module Management
+
+	// Data structures for module target and module information
+	/// <summary>
+	/// Data structure for module target information from LMS integration
+	/// </summary>
+	[Serializable]
+	public class CurrentSessionData
+	{
+		public string moduleTarget;     // The target module identifier from LMS
+		public object userData;         // Additional user data from authentication
+		public object userId;           // User identifier
+		public string userEmail;
+
+		public CurrentSessionData(string moduleTarget, object userData, object userId, string userEmail = null)
+		{
+			this.moduleTarget = moduleTarget;
+			this.userData = userData;
+			this.userId = userId;
+			this.userEmail = userEmail;
+		}
 	}
 
 	/// <summary>
-	/// Clear module progress and reset to beginning
+	/// Data structure for module information from authentication response
 	/// </summary>
-	public static void ClearModuleTargets()
+	[Serializable]
+	public class ModuleData
 	{
-		_currentModuleIndex = 0;
-		// Reset cache since we're clearing the module state
-		_moduleIndexLoaded = false;
-		_moduleIndexLoading = false;
-		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, _moduleIndexKey));
+		public string id;       // Module unique identifier
+		public string name;     // Module display name
+		public string target;   // Module target identifier
+		public int order;       // Module order/sequence
+
+		public ModuleData(string id, string name, string target, int order)
+		{
+			this.id = id;
+			this.name = name;
+			this.target = target;
+			this.order = order;
+		}
 	}
+
+
 
 	/// <summary>
 	/// Execute module sequence by triggering the OnModuleTarget event for each available module.
@@ -1241,6 +1230,92 @@ public static partial class Abxr
 		
 		Debug.Log($"AbxrLib - Module sequence completed. {executedModuleCount} modules executed.");
 		return executedModuleCount;
+	}
+
+	/// <summary>
+	/// Get the next module target from the available modules for sequential module processing
+	/// Returns null when no more module targets are available
+	/// Each call moves to the next module in the sequence and updates persistent storage
+	/// </summary>
+	/// <returns>The next CurrentSessionData with complete module information, or null if no more modules</returns>
+	public static CurrentSessionData GetModuleTarget()
+	{
+		// Get current module data without advancing
+		var currentSessionData = GetModuleTargetWithoutAdvance();
+		if (currentSessionData == null)
+		{
+			return null;
+		}
+
+		// Advance to next module
+		LoadModuleIndex();
+		_currentModuleIndex++;
+		SaveModuleIndex();
+
+		return currentSessionData;
+	}
+
+	/// <summary>
+	/// Get the current module target again without advancing to the next one
+	/// Useful for checking what module you're currently on without consuming it
+	/// Returns the same CurrentSessionData structure as GetModuleTarget() but doesn't advance the index
+	/// </summary>
+	/// <returns>CurrentSessionData for the current module, or null if none available</returns>
+	public static CurrentSessionData GetModuleTargetWithoutAdvance()
+	{
+		if (Authentication.GetModuleData() == null || Authentication.GetModuleData().Count == 0)
+		{
+			return null;
+		}
+
+		LoadModuleIndex();
+
+		if (_currentModuleIndex >= Authentication.GetModuleData().Count)
+		{
+			return null;
+		}
+
+		var currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
+		
+		// Return CurrentSessionData structure (same as GetModuleTarget but without advancing index)
+		return new CurrentSessionData(
+			currentModuleData.target,
+			GetUserData(),
+			Authentication.GetAuthResponse().UserId
+		);
+	}
+
+	/// <summary>
+	/// Get all available modules from the authentication response
+	/// Provides complete module information including id, name, target, and order
+	/// Returns empty list if no authentication has completed yet
+	/// </summary>
+	/// <returns>List of ModuleData objects with complete module information</returns>
+	public static List<ModuleData> GetModuleTargetList() => Authentication.GetModuleData();
+
+	/// <summary>
+	/// Get the current number of module targets remaining
+	/// </summary>
+	/// <returns>Number of module targets remaining</returns>
+	public static int GetModuleTargetCount()
+	{
+		if (Authentication.GetModuleData() == null) return 0;
+
+		LoadModuleIndex();
+		int remainingModuleCount = Authentication.GetModuleData().Count - _currentModuleIndex;
+		return Math.Max(0, remainingModuleCount);
+	}
+
+	/// <summary>
+	/// Clear module progress and reset to beginning
+	/// </summary>
+	public static void ClearModuleTargets()
+	{
+		_currentModuleIndex = 0;
+		// Reset cache since we're clearing the module state
+		_moduleIndexLoaded = false;
+		_moduleIndexLoading = false;
+		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, _moduleIndexKey));
 	}
 
 	private static void SaveModuleIndex()
@@ -1319,89 +1394,81 @@ public static partial class Abxr
 		});
 	}
 
-	/// <summary>
-	/// Trigger authentication completion callback
-	/// Internal method - called by authentication system when authentication completes
-	/// </summary>
-	/// <param name="success">Whether authentication was successful</param>
-	/// <param name="error">Optional error message</param>
-	internal static void NotifyAuthCompleted(bool success, string error = null)
-	{
-		// Update connection status based on authentication success
-		_connectionActive = success;
-		
-		// Reset module index cache for new authentication
-		_moduleIndexLoaded = false;
-		_moduleIndexLoading = false;
-		
-		// Set up module index for GetModuleTarget() calls
-		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
-		_currentModuleIndex = 0;
-		SaveModuleIndex();
-		OnAuthCompleted?.Invoke(success, error);
-	}
 	#endregion
 
-	/// <summary>
-	/// Event that gets triggered when a moduleTarget should be handled.
-	/// Subscribe to this event to handle moduleTargets with your own logic (e.g., deep link handling, scene navigation, etc.).
-	/// </summary>
-	public static event System.Action<string> OnModuleTarget;
+	#region XRDM Device ManagementInformation
+	/// <summary>Gets the UUID assigned to device by ArborXR.</summary>
+	/// <returns>UUID is provided as a string.</returns>
+	public static string GetDeviceId() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetDeviceId() : "";
 
-	#region Application Quit Handler Support
-	
+	/// <summary>Gets the serial number assigned to device by OEM.</summary>
+	/// <returns>Serial number is provided as a string.</returns>
+	public static string GetDeviceSerial() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetDeviceSerial() : "";
+
+	/// <summary>Gets the title given to device by admin through the ArborXR Web Portal.</summary>
+	public static string GetDeviceTitle() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetDeviceTitle() : "";
+
+	/// <summary>Gets the tags added to device by admin through the ArborXR Web Portal.</summary>
+	/// <returns>
+	///   Tags are represented as a string array. Array will be empty if no tags are assigned to device.
+	/// </returns>
+	public static string[] GetDeviceTags() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetDeviceTags() : null;
+
 	/// <summary>
-	/// Gets a copy of the current assessment start times for application quit handling.
-	/// This method provides safe access to private timing data without using reflection.
+	///   Gets the UUID of the organization where the device is assigned. Organizations are created in the
+	///   ArborXR Web Portal.
 	/// </summary>
-	/// <returns>Copy of the assessment start times dictionary</returns>
-	internal static Dictionary<string, DateTime> GetAssessmentStartTimes()
-	{
-		return new Dictionary<string, DateTime>(_assessmentStartTimes);
-	}
-	
-	/// <summary>
-	/// Gets a copy of the current objective start times for application quit handling.
-	/// This method provides safe access to private timing data without using reflection.
-	/// </summary>
-	/// <returns>Copy of the objective start times dictionary</returns>
-	internal static Dictionary<string, DateTime> GetObjectiveStartTimes()
-	{
-		return new Dictionary<string, DateTime>(_objectiveStartTimes);
-	}
-	
-	/// <summary>
-	/// Gets a copy of the current interaction start times for application quit handling.
-	/// This method provides safe access to private timing data without using reflection.
-	/// </summary>
-	/// <returns>Copy of the interaction start times dictionary</returns>
-	internal static Dictionary<string, DateTime> GetInteractionStartTimes()
-	{
-		return new Dictionary<string, DateTime>(_interactionStartTimes);
-	}
-	
-	/// <summary>
-	/// Gets a copy of the current level start times for application quit handling.
-	/// This method provides safe access to private timing data without using reflection.
-	/// </summary>
-	/// <returns>Copy of the level start times dictionary</returns>
-	internal static Dictionary<string, DateTime> GetLevelStartTimes()
-	{
-		return new Dictionary<string, DateTime>(_levelStartTimes);
-	}
-	
-	/// <summary>
-	/// Clears all timing dictionaries. Used by application quit handler to clean up after processing.
-	/// This method provides safe access to private timing data without using reflection.
-	/// </summary>
-	internal static void ClearAllStartTimes()
-	{
-		_assessmentStartTimes.Clear();
-		_objectiveStartTimes.Clear();
-		_interactionStartTimes.Clear();
-		_levelStartTimes.Clear();
-		_timedEventStartTimes.Clear();
-	}
-	
+	/// <returns>UUID is provided as a string.</returns>
+	public static string GetOrgId() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetOrgId() : Configuration.Instance.orgID;
+
+	/// <summary>Gets the name assigned to organization by admin through the ArborXR Web Portal.</summary>
+	public static string GetOrgTitle() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetOrgTitle() : "";
+
+	/// <summary>Gets the identifier generated by ArborXR when admin assigns title to organization.</summary>
+	public static string GetOrgSlug() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetOrgSlug() : "";
+
+	/// <summary>Gets the physical MAC address assigned to device by OEM.</summary>
+	/// <returns>MAC address is provided as a string.</returns>
+	public static string GetMacAddressFixed() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetMacAddressFixed() : "";
+
+	/// <summary>Gets the randomized MAC address for the current WiFi connection.</summary>
+	/// <returns>MAC address is provided as a string.</returns>
+	public static string GetMacAddressRandom() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetMacAddressRandom() : "";
+
+	/// <summary>Gets whether the device is SSO authenticated.</summary>
+	/// <returns>Whether the device is SSO authenticated.</returns>
+	public static bool GetIsAuthenticated() =>
+		ArborServiceClient.IsConnected() && ArborServiceClient.ServiceWrapper != null && ArborServiceClient.ServiceWrapper.GetIsAuthenticated();
+
+	/// <summary>Gets SSO access token.</summary>
+	/// <returns>SSO access token.</returns>
+	public static string GetAccessToken() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetAccessToken() : "";
+
+	/// <summary>Gets SSO refresh token.</summary>
+	/// <returns>SSO refresh token.</returns>
+	public static string GetRefreshToken() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetRefreshToken() : "";
+
+	/// <summary>Gets SSO token remaining lifetime.</summary>
+	/// <returns>The remaining lifetime of the access token in seconds.</returns>
+	public static DateTime? GetExpiresDateUtc() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetExpiresDateUtc() : DateTime.MinValue;
+
+	// <summary>Gets the device fingerprint.</summary>
+	/// <returns>The device fingerprint.</returns>
+	public static string GetFingerprint() =>
+		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
+
 	#endregion
+
 }
