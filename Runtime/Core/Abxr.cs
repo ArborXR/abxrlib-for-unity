@@ -105,29 +105,6 @@ public static partial class Abxr
 	}
 	#endregion
 
-	#region Subscription Events
-	
-	/// <summary>
-	/// Event triggered when authentication completes
-	/// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
-	/// Subscribe to this event to handle authentication results
-	/// </summary>
-	public static Action<bool, string> OnAuthCompleted;
-
-	/// <summary>
-	/// Event that gets triggered when a moduleTarget should be handled.
-	/// Subscribe to this event to handle moduleTargets with your own logic (e.g., deep link handling, scene navigation, etc.).
-	/// </summary>
-	public static event System.Action<string> OnModuleTarget;
-
-	/// <summary>
-	/// Event triggered when a headset is put on, starting a new session
-	/// Subscribe to this event to handle new session initialization
-	/// </summary>
-	public static Action OnHeadsetPutOnNewSession;
-
-	#endregion
-
 	#region Global Classes and Functions
 
 	/// <summary>
@@ -155,35 +132,22 @@ public static partial class Abxr
 		}
 	}
 
-	/// <summary>
-	/// Mixpanel compatibility class for property values
-	/// This class provides compatibility with Mixpanel Unity SDK for easier migration
-	/// Usage: new Abxr.Value() instead of global Value class
-	/// </summary>
-	public class Value : Dictionary<string, object>
-	{
-		public Value() : base() { }
-		
-		public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
-		
-		/// <summary>
-		/// Converts Value metadata to Dictionary<string, string> for use with AbxrLib Event system
-		/// </summary>
-		/// <returns>Dictionary with all values converted to strings</returns>
-		public Dictionary<string, string> ToDictionary()
-		{
-		var stringDictionary = new Dictionary<string, string>();
-		foreach (var keyValuePair in this)
-		{
-			stringDictionary[keyValuePair.Key] = keyValuePair.Value?.ToString() ?? string.Empty;
-		}
-		return stringDictionary;
-		}
-	}
-
 	#endregion
 
 	#region Authentication Functions and Wrappers
+
+	/// <summary>
+	/// Event triggered when authentication completes
+	/// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
+	/// Subscribe to this event to handle authentication results
+	/// </summary>
+	public static Action<bool, string> OnAuthCompleted;
+
+	/// <summary>
+	/// Event triggered when a headset is put on, starting a new session
+	/// Subscribe to this event to handle new session initialization
+	/// </summary>
+	public static Action OnHeadsetPutOnNewSession;
 
 	/// <summary>
 	/// Check if AbxrLib has an active connection to the server and can send data
@@ -937,21 +901,21 @@ public static partial class Abxr
 
 	#region super metadata
 	/// <summary>
-	/// Register a super metadata property that will be automatically included in all events
+	/// Register a super metadata that will be automatically included in all events
 	/// super metadata persist across app sessions and are stored locally
 	/// </summary>
-	/// <param name="key">Property name</param>
-	/// <param name="value">Property value</param>
+	/// <param name="key">Metadata name</param>
+	/// <param name="value">Metadata value</param>
 	public static void Register(string key, string value)
 	{
-		if (IsReservedSuperPropertyKey(key))
+		if (IsReservedSuperMetaDataKey(key))
 		{
-			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			string errorMessage = $"AbxrLib: Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
 			Debug.LogWarning(errorMessage);
 			LogInfo(errorMessage, new Dictionary<string, string> { 
 				{ "attempted_key", key }, 
 				{ "attempted_value", value },
-				{ "error_type", "reserved_super_property_key" }
+				{ "error_type", "reserved_super_metadata_key" }
 			});
 			return;
 		}
@@ -961,21 +925,21 @@ public static partial class Abxr
 	}
 
 	/// <summary>
-	/// Register a super metadata property only if it doesn't already exist
+	/// Register a super metadata only if it doesn't already exist
 	/// Will not overwrite existing super metadata with the same key
 	/// </summary>
-	/// <param name="key">Property name</param>
-	/// <param name="value">Property value</param>
+	/// <param name="key">Metadata name</param>
+	/// <param name="value">Metadata value</param>
 	public static void RegisterOnce(string key, string value)
 	{
-		if (IsReservedSuperPropertyKey(key))
+		if (IsReservedSuperMetaDataKey(key))
 		{
-			string errorMessage = $"AbxrLib: Cannot register super property with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			string errorMessage = $"AbxrLib: Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
 			Debug.LogWarning(errorMessage);
 			LogInfo(errorMessage, new Dictionary<string, string> { 
 				{ "attempted_key", key }, 
 				{ "attempted_value", value },
-				{ "error_type", "reserved_super_property_key" }
+				{ "error_type", "reserved_super_metadata_key" }
 			});
 			return;
 		}
@@ -988,9 +952,9 @@ public static partial class Abxr
 	}
 
 	/// <summary>
-	/// Remove a super metadata property
+	/// Remove a super metadata entry
 	/// </summary>
-	/// <param name="key">Property name to remove</param>
+	/// <param name="key">Metadata name to remove</param>
 	public static void Unregister(string key)
 	{
 		_superMetaData.Remove(key);
@@ -1121,12 +1085,12 @@ public static partial class Abxr
 		}
 		
 		// Add super metadata to metadata
-		foreach (var superPropertyKeyValue in _superMetaData)
+		foreach (var superMetaDataKeyValue in _superMetaData)
 		{
 			// super metadata don't overwrite data-specific metadata or module info
-			if (!meta.ContainsKey(superPropertyKeyValue.Key))
+			if (!meta.ContainsKey(superMetaDataKeyValue.Key))
 			{
-				meta[superPropertyKeyValue.Key] = superPropertyKeyValue.Value;
+				meta[superMetaDataKeyValue.Key] = superMetaDataKeyValue.Value;
 			}
 		}
 		
@@ -1134,18 +1098,24 @@ public static partial class Abxr
 	}
 
 	/// <summary>
-	/// Private helper to check if a super property key is reserved for module data
+	/// Private helper to check if a super metadata key is reserved for module data
 	/// Reserved keys: module, module_name, module_id, module_order
 	/// </summary>
 	/// <param name="key">The key to validate</param>
 	/// <returns>True if the key is reserved, false otherwise</returns>
-	private static bool IsReservedSuperPropertyKey(string key)
+	private static bool IsReservedSuperMetaDataKey(string key)
 	{
 		return key == "module" || key == "module_name" || key == "module_id" || key == "module_order";
 	}
 	#endregion
 
 	#region Module Management
+
+	/// <summary>
+	/// Event that gets triggered when a moduleTarget should be handled.
+	/// Subscribe to this event to handle moduleTargets with your own logic (e.g., deep link handling, scene navigation, etc.).
+	/// </summary>
+	public static event System.Action<string> OnModuleTarget;
 
 	// Data structures for module target and module information
 	/// <summary>

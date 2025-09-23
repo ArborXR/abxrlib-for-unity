@@ -2,6 +2,112 @@ using System.Collections.Generic;
 
 public static partial class Abxr
 {
+	#region Mixpanel Compatibility Methods
+
+	/// <summary>
+	/// Mixpanel compatibility class for property values
+	/// This class provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Usage: new Abxr.Value() instead of global Value class
+	/// </summary>
+	public class Value : Dictionary<string, object>
+	{
+		public Value() : base() { }
+		
+		public Value(IDictionary<string, object> dictionary) : base(dictionary) { }
+		
+		/// <summary>
+		/// Converts Value metadata to Dictionary<string, string> for use with AbxrLib Event system
+		/// </summary>
+		/// <returns>Dictionary with all values converted to strings</returns>
+		public Dictionary<string, string> ToDictionary()
+		{
+		var stringDictionary = new Dictionary<string, string>();
+		foreach (var keyValuePair in this)
+		{
+			stringDictionary[keyValuePair.Key] = keyValuePair.Value?.ToString() ?? string.Empty;
+		}
+		return stringDictionary;
+		}
+	}
+
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with just a name
+	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	public static void Track(string eventName)
+	{
+		var meta = new Dictionary<string, string>
+		{
+			["AbxrMethod"] = "Track"
+		};
+		Event(eventName, meta);
+	}
+
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with properties
+	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	/// <param name="eventProperties">Properties to send with the event (Abxr.Value format)</param>
+	public static void Track(string eventName, Abxr.Value eventProperties)
+	{
+		Dictionary<string, string> metadata;
+		
+		if (eventProperties == null)
+		{
+			metadata = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
+		}
+		else
+		{
+			metadata = eventProperties.ToDictionary();
+			metadata["AbxrMethod"] = "Track";
+		}
+		
+		Event(eventName, metadata);
+	}
+
+	/// <summary>
+	/// Mixpanel compatibility method - tracks an event with properties as Dictionary
+	/// This method provides additional flexibility for migration from Mixpanel Unity SDK
+	/// Internally calls the AbxrLib Event method
+	/// </summary>
+	/// <param name="eventName">Name of the event to track</param>
+	/// <param name="eventProperties">Properties to send with the event as Dictionary</param>
+	public static void Track(string eventName, Dictionary<string, object> eventProperties)
+	{
+		Dictionary<string, string> stringProperties;
+		
+		if (eventProperties == null)
+		{
+			stringProperties = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
+		}
+		else
+		{
+			stringProperties = new Dictionary<string, string>
+			{
+				["AbxrMethod"] = "Track"
+			};
+			
+			foreach (var keyValuePair in eventProperties)
+			{
+				stringProperties[keyValuePair.Key] = keyValuePair.Value?.ToString() ?? string.Empty;
+			}
+		}
+		
+		Event(eventName, stringProperties);
+	}
+
+	#endregion
+
     #region Cognitive3D Compatibility Methods
 	/// <summary>
 	/// Cognitive3D compatibility class for custom events
@@ -204,95 +310,6 @@ public static partial class Abxr
 			return userData[propertyKey];
 		}
 		return null;
-	}
-	#endregion
-
-	#region Mixpanel Compatibility Methods
-	/// <summary>
-	/// Mixpanel compatibility method - tracks an event with just a name
-	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
-	/// Internally calls the AbxrLib Event method
-	/// </summary>
-	/// <param name="eventName">Name of the event to track</param>
-	public static void Track(string eventName)
-	{
-		var meta = new Dictionary<string, string>
-		{
-			["AbxrMethod"] = "Track"
-		};
-		Event(eventName, meta);
-	}
-
-	/// <summary>
-	/// Mixpanel compatibility method - tracks an event with properties
-	/// This method provides compatibility with Mixpanel Unity SDK for easier migration
-	/// Internally calls the AbxrLib Event method
-	/// </summary>
-	/// <param name="eventName">Name of the event to track</param>
-	/// <param name="eventProperties">Properties to send with the event (Abxr.Value format)</param>
-	public static void Track(string eventName, Abxr.Value eventProperties)
-	{
-		Dictionary<string, string> metadata;
-		
-		if (eventProperties == null)
-		{
-			metadata = new Dictionary<string, string>
-			{
-				["AbxrMethod"] = "Track"
-			};
-		}
-		else
-		{
-			metadata = eventProperties.ToDictionary();
-			metadata["AbxrMethod"] = "Track";
-		}
-		
-		Event(eventName, metadata);
-	}
-
-	/// <summary>
-	/// Mixpanel compatibility method - tracks an event with properties as Dictionary
-	/// This method provides additional flexibility for migration from Mixpanel Unity SDK
-	/// Internally calls the AbxrLib Event method
-	/// </summary>
-	/// <param name="eventName">Name of the event to track</param>
-	/// <param name="eventProperties">Properties to send with the event as Dictionary</param>
-	public static void Track(string eventName, Dictionary<string, object> eventProperties)
-	{
-		Dictionary<string, string> stringProperties;
-		
-		if (eventProperties == null)
-		{
-			stringProperties = new Dictionary<string, string>
-			{
-				["AbxrMethod"] = "Track"
-			};
-		}
-		else
-		{
-			stringProperties = new Dictionary<string, string>
-			{
-				["AbxrMethod"] = "Track"
-			};
-			
-			foreach (var keyValuePair in eventProperties)
-			{
-				stringProperties[keyValuePair.Key] = keyValuePair.Value?.ToString() ?? string.Empty;
-			}
-		}
-		
-		Event(eventName, stringProperties);
-	}
-
-	/// <summary>
-	/// Get a copy of all current super properties (Mixpanel compatibility)
-	/// This method provides compatibility with existing code that may call GetSuperProperties()
-	/// Internally calls the new GetSuperMetaData() method
-	/// </summary>
-	/// <returns>Dictionary containing all super properties</returns>
-	public static Dictionary<string, string> GetSuperProperties()
-	{
-		return GetSuperMetaData();
 	}
 	#endregion
 }
