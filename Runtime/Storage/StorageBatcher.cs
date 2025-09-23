@@ -137,7 +137,7 @@ namespace AbxrLib.Runtime.Storage
 			{
 				{ "scope", scope.ToString() }
 			};
-			if (string.IsNullOrEmpty(name)) queryParams.Add("name", name);
+			if (!string.IsNullOrEmpty(name)) queryParams.Add("name", name);
 		
 			string urlWithParams = Utils.BuildUrlWithParams(_uri.ToString(), queryParams);
 			using UnityWebRequest request = UnityWebRequest.Delete(urlWithParams);

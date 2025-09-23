@@ -1,7 +1,30 @@
-﻿using UnityEngine;
+﻿/*
+ * Copyright (c) 2024 ArborXR. All rights reserved.
+ * 
+ * AbxrLib for Unity - Configuration Management
+ * 
+ * This file contains the Configuration ScriptableObject that manages all AbxrLib settings:
+ * - Application and organization identifiers
+ * - Network configuration (REST URLs, retry settings)
+ * - Telemetry and tracking settings
+ * - Data batching and caching parameters
+ * - UI prefab references for authentication
+ * 
+ * Configuration is loaded from Resources/AbxrLib.asset and can be modified
+ * through the Unity Inspector or programmatically at runtime.
+ */
+
+using UnityEngine;
 
 namespace AbxrLib.Runtime.Core
 {
+    /// <summary>
+    /// Configuration ScriptableObject for AbxrLib settings and parameters
+    /// 
+    /// This class manages all configurable aspects of AbxrLib, including network settings,
+    /// telemetry parameters, data batching configuration, and UI component references.
+    /// Configuration is automatically loaded from Resources/AbxrLib.asset at runtime.
+    /// </summary>
     public class Configuration : ScriptableObject
     {
         private static Configuration _instance;

@@ -1,3 +1,18 @@
+/*
+ * Copyright (c) 2024 ArborXR. All rights reserved.
+ * 
+ * AbxrLib for Unity - Utility Functions
+ * 
+ * This file contains utility functions and helper methods used throughout AbxrLib:
+ * - Cryptographic functions (SHA256, CRC32)
+ * - JWT token decoding and validation
+ * - Network utilities (IP address detection, URL building)
+ * - Command line and Android intent parameter parsing
+ * - Data conversion and formatting utilities
+ * 
+ * These utilities provide low-level functionality that supports the main AbxrLib API.
+ */
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +31,13 @@ using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Core
 {
+    /// <summary>
+    /// Utility functions and helper methods for AbxrLib
+    /// 
+    /// This class provides low-level utility functions used throughout the AbxrLib system,
+    /// including cryptographic operations, network utilities, data parsing, and formatting.
+    /// All methods are static and designed for internal use within the AbxrLib framework.
+    /// </summary>
     public static class Utils
     {
         public static string ComputeSha256Hash(string rawData)
@@ -101,7 +123,10 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogError("AbxrLib: Failed to get local IP address: " + ex.Message);
+                // Log error with consistent format and include network context
+                Debug.LogError($"AbxrLib: Failed to get local IP address: {ex.Message}\n" +
+                              $"Exception Type: {ex.GetType().Name}\n" +
+                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
 
             return "0.0.0.0";
@@ -159,14 +184,21 @@ namespace AbxrLib.Runtime.Core
         public static string GetCommandLineArg(string key)
         {
             string[] args = System.Environment.GetCommandLineArgs();
+            
+            // Pre-build the search strings to avoid repeated concatenation
+            string keyEquals = key + "=";
+            string doubleDashKey = "--" + key;
+            string singleDashKey = "-" + key;
+            int keyLength = key.Length;
+            
             for (int i = 0; i < args.Length; i++)
             {
-                if (args[i].StartsWith(key + "="))
+                if (args[i].StartsWith(keyEquals))
                 {
-                    return args[i].Substring(key.Length + 1);
+                    return args[i].Substring(keyLength + 1);
                 }
                 // Also check for space-separated arguments (--key value or -key value)
-                if ((args[i] == "--" + key || args[i] == "-" + key) && i + 1 < args.Length)
+                if ((args[i] == doubleDashKey || args[i] == singleDashKey) && i + 1 < args.Length)
                 {
                     return args[i + 1];
                 }
@@ -198,7 +230,10 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: Failed to get Android intent parameter '{key}': {ex.Message}");
+                // Log warning with consistent format and include Android context
+                Debug.LogWarning($"AbxrLib: Failed to get Android intent parameter '{key}': {ex.Message}\n" +
+                                $"Exception Type: {ex.GetType().Name}\n" +
+                                $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
     #endif
             return "";
@@ -251,7 +286,10 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Failed to convert module data: {ex.Message}");
+                // Log error with consistent format and include data conversion context
+                Debug.LogError($"Failed to convert module data: {ex.Message}\n" +
+                              $"Exception Type: {ex.GetType().Name}\n" +
+                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
 
             return moduleDataList;

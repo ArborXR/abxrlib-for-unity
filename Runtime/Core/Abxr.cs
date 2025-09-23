@@ -1,4 +1,21 @@
-﻿using System;
+﻿/*
+ * Copyright (c) 2024 ArborXR. All rights reserved.
+ * 
+ * AbxrLib for Unity - Main API Class
+ * 
+ * This file contains the primary public API for AbxrLib, providing methods for:
+ * - Event tracking and analytics
+ * - User authentication and session management
+ * - Data storage and retrieval
+ * - Telemetry collection
+ * - AI proxy functionality
+ * - Exit polling and user feedback
+ * 
+ * The Abxr class serves as the main entry point for all AbxrLib functionality,
+ * offering a comprehensive analytics and data collection system for Unity applications.
+ */
+
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +32,40 @@ using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
+/// <summary>
+/// Main API class for AbxrLib - Unity Analytics and Data Collection Library
+/// 
+/// AbxrLib provides comprehensive analytics, telemetry, and data collection capabilities
+/// for Unity applications, with special focus on XR/VR experiences. This class serves
+/// as the primary entry point for all library functionality.
+/// 
+/// Key Features:
+/// - Event tracking and analytics with hierarchical assessment/objective/interaction structure
+/// - User authentication and session management with LMS integration support
+/// - Persistent data storage with device and user scoping
+/// - Real-time telemetry collection for performance monitoring
+/// - AI proxy functionality for LLM integration
+/// - Exit polling and user feedback collection
+/// - Mixpanel and Cognitive3D compatibility layers
+/// 
+/// Usage Example:
+/// <code>
+/// // Initialize and authenticate
+/// Abxr.OnAuthCompleted += (success, error) => {
+///     if (success) {
+///         // Start tracking events
+///         Abxr.EventAssessmentStart("Training Module 1");
+///         Abxr.EventObjectiveStart("Safety Check");
+///         Abxr.EventInteractionStart("Button Click");
+///         
+///         // Complete events
+///         Abxr.EventInteractionComplete("Button Click", InteractionType.Select, "correct");
+///         Abxr.EventObjectiveComplete("Safety Check", 95, EventStatus.Pass);
+///         Abxr.EventAssessmentComplete("Training Module 1", 88, EventStatus.Pass);
+///     }
+/// };
+/// </code>
+/// </summary>
 public static partial class Abxr
 {
 	private static readonly Dictionary<string, DateTime> TimedEventStartTimes = new();
@@ -610,9 +661,12 @@ public static partial class Abxr
 				}
 			}
 		}
-		catch (Exception e)
+		catch (Exception ex)
 		{
-			Debug.LogWarning($"AbxrLib: Failed to load super properties: {e.Message}");
+			// Log error with consistent format and include stack trace for debugging
+			Debug.LogError($"AbxrLib: Failed to load super properties: {ex.Message}\n" +
+						  $"Exception Type: {ex.GetType().Name}\n" +
+						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 		}
 	}
 
@@ -632,9 +686,12 @@ public static partial class Abxr
 			PlayerPrefs.SetString(SuperPropertiesKey, json);
 			PlayerPrefs.Save();
 		}
-		catch (Exception e)
+		catch (Exception ex)
 		{
-			Debug.LogWarning($"AbxrLib: Failed to save super properties: {e.Message}");
+			// Log error with consistent format and include stack trace for debugging
+			Debug.LogError($"AbxrLib: Failed to save super properties: {ex.Message}\n" +
+						  $"Exception Type: {ex.GetType().Name}\n" +
+						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 		}
 	}
 
@@ -1173,7 +1230,10 @@ public static partial class Abxr
 			}
 			catch (Exception ex)
 			{
-				Debug.LogError($"AbxrLib - Error executing OnModuleTarget event for module {nextModule.moduleTarget}: {ex.Message}");
+				// Log error with consistent format and include module context
+				Debug.LogError($"AbxrLib: Error executing OnModuleTarget event for module {nextModule.moduleTarget}: {ex.Message}\n" +
+							  $"Exception Type: {ex.GetType().Name}\n" +
+							  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 			}
 			
 			nextModule = GetModuleTarget();
@@ -1201,7 +1261,11 @@ public static partial class Abxr
 		}
 		catch (Exception ex)
 		{
-			LogError($"Failed to save module index: {ex.Message}");
+			// Log error with consistent format and include context
+			Debug.LogError($"AbxrLib: Failed to save module index: {ex.Message}\n" +
+						  $"Current Module Index: {currentModuleIndex}\n" +
+						  $"Exception Type: {ex.GetType().Name}\n" +
+						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 		}
 	}
 
@@ -1221,7 +1285,11 @@ public static partial class Abxr
 		catch (Exception ex)
 		{
 			moduleIndexLoading = false;
-			LogError($"Failed to load module index: {ex.Message}");
+			// Log error with consistent format and include context
+			Debug.LogError($"AbxrLib: Failed to load module index: {ex.Message}\n" +
+						  $"Module Index Loaded: {moduleIndexLoaded}\n" +
+						  $"Exception Type: {ex.GetType().Name}\n" +
+						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 		}
 	}
 
@@ -1279,4 +1347,61 @@ public static partial class Abxr
 	/// Subscribe to this event to handle moduleTargets with your own logic (e.g., deep link handling, scene navigation, etc.).
 	/// </summary>
 	public static event System.Action<string> OnModuleTarget;
+
+	#region Application Quit Handler Support
+	
+	/// <summary>
+	/// Gets a copy of the current assessment start times for application quit handling.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	/// <returns>Copy of the assessment start times dictionary</returns>
+	internal static Dictionary<string, DateTime> GetAssessmentStartTimes()
+	{
+		return new Dictionary<string, DateTime>(AssessmentStartTimes);
+	}
+	
+	/// <summary>
+	/// Gets a copy of the current objective start times for application quit handling.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	/// <returns>Copy of the objective start times dictionary</returns>
+	internal static Dictionary<string, DateTime> GetObjectiveStartTimes()
+	{
+		return new Dictionary<string, DateTime>(ObjectiveStartTimes);
+	}
+	
+	/// <summary>
+	/// Gets a copy of the current interaction start times for application quit handling.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	/// <returns>Copy of the interaction start times dictionary</returns>
+	internal static Dictionary<string, DateTime> GetInteractionStartTimes()
+	{
+		return new Dictionary<string, DateTime>(InteractionStartTimes);
+	}
+	
+	/// <summary>
+	/// Gets a copy of the current level start times for application quit handling.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	/// <returns>Copy of the level start times dictionary</returns>
+	internal static Dictionary<string, DateTime> GetLevelStartTimes()
+	{
+		return new Dictionary<string, DateTime>(LevelStartTimes);
+	}
+	
+	/// <summary>
+	/// Clears all timing dictionaries. Used by application quit handler to clean up after processing.
+	/// This method provides safe access to private timing data without using reflection.
+	/// </summary>
+	internal static void ClearAllStartTimes()
+	{
+		AssessmentStartTimes.Clear();
+		ObjectiveStartTimes.Clear();
+		InteractionStartTimes.Clear();
+		LevelStartTimes.Clear();
+		TimedEventStartTimes.Clear();
+	}
+	
+	#endregion
 }

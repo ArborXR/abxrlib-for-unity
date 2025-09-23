@@ -12,10 +12,10 @@ namespace AbxrLib.Runtime.Common
         {
             if (!string.IsNullOrEmpty(_prefabSuffix)) return _prefabSuffix;
 #if UNITY_ANDROID && !UNITY_EDITOR
-        if (IsOVRCameraRigInUse()) _prefabSuffix = "_Meta";
-        else _prefabSuffix = "_OpenXR";
+            if (IsOVRCameraRigInUse()) _prefabSuffix = "_Meta";
+            else _prefabSuffix = "_OpenXR";
 #else
-            else _prefabSuffix = "_Default";
+            _prefabSuffix = "_Default";
 #endif
             return _prefabSuffix;
         }

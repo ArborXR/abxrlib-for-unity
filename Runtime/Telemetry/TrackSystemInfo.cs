@@ -13,6 +13,11 @@ namespace AbxrLib.Runtime.Telemetry
         private static float _systemInfoTimer = 1f;
         private static float _frameRateTimer = 1f;
         private static bool _tracking;
+        
+        // Reusable dictionaries to avoid creating new objects every frame
+        private static readonly Dictionary<string, string> _batteryData = new Dictionary<string, string>();
+        private static readonly Dictionary<string, string> _memoryData = new Dictionary<string, string>();
+        private static readonly Dictionary<string, string> _frameRateData = new Dictionary<string, string>();
     
         private void Start()
         {
@@ -41,20 +46,18 @@ namespace AbxrLib.Runtime.Telemetry
             _systemInfoTimer = 0; // Reset timer
             if (!_tracking) return;
         
-            var batteryData = new Dictionary<string, string>
-            {
-                ["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%",
-                ["Status"] = SystemInfo.batteryStatus.ToString()
-            };
-            Abxr.Telemetry("Battery", batteryData);
+            // Clear and reuse battery data dictionary
+            _batteryData.Clear();
+            _batteryData["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%";
+            _batteryData["Status"] = SystemInfo.batteryStatus.ToString();
+            Abxr.Telemetry("Battery", _batteryData);
         
-            var memoryData = new Dictionary<string, string>
-            {
-                ["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB",
-                ["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB",
-                ["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB"
-            };
-            Abxr.Telemetry("Memory", memoryData);
+            // Clear and reuse memory data dictionary
+            _memoryData.Clear();
+            _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
+            _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
+            _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
+            Abxr.Telemetry("Memory", _memoryData);
         }
     
         private static void CheckFrameRate()
@@ -67,11 +70,12 @@ namespace AbxrLib.Runtime.Telemetry
             if (timeDiff == 0) return;
         
             float frameRate = (Time.frameCount - _lastFrameCount) / timeDiff;
-            var telemetryData = new Dictionary<string, string>
-            {
-                ["Per Second"] = frameRate.ToString(CultureInfo.InvariantCulture)
-            };
-            Abxr.Telemetry("Frame Rate", telemetryData);
+            
+            // Clear and reuse frame rate data dictionary
+            _frameRateData.Clear();
+            _frameRateData["Per Second"] = frameRate.ToString(CultureInfo.InvariantCulture);
+            Abxr.Telemetry("Frame Rate", _frameRateData);
+            
             _lastFrameCount = Time.frameCount;
             _lastTime = Time.time;
         }

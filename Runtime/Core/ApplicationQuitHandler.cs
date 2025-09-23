@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2024 ArborXR. All rights reserved.
+ * 
+ * AbxrLib for Unity - Application Quit Handler
+ * 
+ * This file handles application quit and pause events to ensure proper cleanup
+ * of running assessments, objectives, and interactions. It automatically closes
+ * any open timed events when the application is terminated or paused.
+ * 
+ * Key Features:
+ * - Automatic cleanup of running assessments and objectives
+ * - Graceful handling of application pause/resume events
+ * - Integration with AbxrLib timing system
+ * - Prevents data loss during unexpected application termination
+ */
+
 using System.Collections.Generic;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Events;
@@ -47,10 +63,10 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         private void CloseRunningEvents()
         {
-            // Get references to the static dictionaries using reflection to access private fields
-            var assessmentStartTimes = GetStartTimesDictionary("AssessmentStartTimes");
-            var objectiveStartTimes = GetStartTimesDictionary("ObjectiveStartTimes");
-            var interactionStartTimes = GetStartTimesDictionary("InteractionStartTimes");
+            // Get references to the static dictionaries using safe public methods
+            var assessmentStartTimes = Abxr.GetAssessmentStartTimes();
+            var objectiveStartTimes = Abxr.GetObjectiveStartTimes();
+            var interactionStartTimes = Abxr.GetInteractionStartTimes();
 
             int totalClosed = 0;
 
@@ -106,6 +122,9 @@ namespace AbxrLib.Runtime.Core
             {
                 Debug.Log($"AbxrLib: Automatically closed {totalClosed} running events due to application quit");
                 
+                // Clear all start times since we've processed them
+                Abxr.ClearAllStartTimes();
+                
                 // Force immediate send of all events with maximum redundancy for VR reliability
                 CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
                 
@@ -128,9 +147,9 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         private void LogRunningEvents()
         {
-            var assessmentStartTimes = GetStartTimesDictionary("AssessmentStartTimes");
-            var objectiveStartTimes = GetStartTimesDictionary("ObjectiveStartTimes");
-            var interactionStartTimes = GetStartTimesDictionary("InteractionStartTimes");
+            var assessmentStartTimes = Abxr.GetAssessmentStartTimes();
+            var objectiveStartTimes = Abxr.GetObjectiveStartTimes();
+            var interactionStartTimes = Abxr.GetInteractionStartTimes();
 
             int totalRunning = 0;
             if (assessmentStartTimes != null) totalRunning += assessmentStartTimes.Count;
@@ -143,35 +162,5 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
-        /// <summary>
-        /// Use reflection to access the private static dictionaries from the Abxr class
-        /// This is necessary because the timing dictionaries are private fields
-        /// </summary>
-        /// <param name="fieldName">Name of the static field to retrieve</param>
-        /// <returns>Dictionary of event names to start times, or null if not found</returns>
-        private Dictionary<string, System.DateTime> GetStartTimesDictionary(string fieldName)
-        {
-            try
-            {
-                var abxrType = typeof(Abxr);
-                var field = abxrType.GetField(fieldName, 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-                
-                if (field != null)
-                {
-                    return field.GetValue(null) as Dictionary<string, System.DateTime>;
-                }
-                else
-                {
-                    Debug.LogWarning($"AbxrLib: Could not find field {fieldName} in Abxr class");
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Error accessing field {fieldName}: {ex.Message}");
-            }
-            
-            return null;
-        }
     }
 }
