@@ -240,8 +240,8 @@ public static partial class Abxr
 		{
 			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
 			KeyboardHandler.SetPrompt(promptText != null ?
-				$"{promptText} (<u>username</u>@{emailDomain})" :
-				$"Enter your email username (<u>username</u>@{emailDomain})");
+				$"{promptText} \n(<u>username</u>@{emailDomain})" :
+				$"Enter your email username\n(<u>username</u>@{emailDomain})");
 		}
 	}
 
