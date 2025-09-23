@@ -152,7 +152,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             // Apply additional left offset for Unity editor player (not VR)
             if (Application.isEditor && RigDetector.PrefabSuffix() == "_Default")
             {
-                panelX -= -8f; // Move 20f to the right for Unity editor player
+                panelX += 8f; // Move 8f to the right for Unity editor player
             }
 
             // Set panel anchors to match keyboard's anchor system

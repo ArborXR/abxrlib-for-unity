@@ -12,10 +12,10 @@ namespace AbxrLib.Runtime.Common
         {
             if (!string.IsNullOrEmpty(_prefabSuffix)) return _prefabSuffix;
 #if UNITY_ANDROID && !UNITY_EDITOR
-        if (IsOVRCameraRigInUse()) _prefabSuffix = "_Meta";
-        else _prefabSuffix = "_OpenXR";
+            if (IsOVRCameraRigInUse()) _prefabSuffix = "_Meta";
+            else _prefabSuffix = "_OpenXR";
 #else
-            else _prefabSuffix = "_Default";
+            _prefabSuffix = "_Default";
 #endif
             return _prefabSuffix;
         }
@@ -32,18 +32,18 @@ namespace AbxrLib.Runtime.Common
 
         private static bool IsTypeInScene(string typeName)
         {
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 try
                 {
-                    var type = asm.GetType(typeName, false);
-                    if (type == null) continue;
+                    var targetType = assembly.GetType(typeName, false);
+                    if (targetType == null) continue;
 
-                    var objects = UnityEngine.Object.FindObjectsOfType(typeof(GameObject));
-                    foreach (var obj in objects)
+                    var gameObjects = UnityEngine.Object.FindObjectsOfType(typeof(GameObject));
+                    foreach (var gameObject in gameObjects)
                     {
-                        var components = ((GameObject)obj).GetComponents<Component>();
-                        if (components.Any(c => c && c.GetType() == type))
+                        var components = ((GameObject)gameObject).GetComponents<Component>();
+                        if (components.Any(component => component && component.GetType() == targetType))
                         {
                             return true;
                         }
@@ -60,9 +60,9 @@ namespace AbxrLib.Runtime.Common
             {
                 try
                 {
-                    var type = assembly.GetType(typeName, false);
-                    if (type != null)
-                        return type;
+                    var foundType = assembly.GetType(typeName, false);
+                    if (foundType != null)
+                        return foundType;
                 }
                 catch { }
             }

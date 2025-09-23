@@ -1,4 +1,21 @@
-﻿using System;
+﻿/*
+ * Copyright (c) 2024 ArborXR. All rights reserved.
+ * 
+ * AbxrLib for Unity - Authentication System
+ * 
+ * This file handles user authentication, device identification, and session management
+ * for AbxrLib. It provides comprehensive authentication capabilities including:
+ * - Device fingerprinting and identification
+ * - User authentication with LMS integration support
+ * - Authentication handoff mechanisms for seamless user experience
+ * - Session management and token handling
+ * - Keyboard-based authentication UI
+ * 
+ * The authentication system supports both device-level and user-level authentication,
+ * with automatic fallback mechanisms and robust error handling.
+ */
+
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -158,9 +175,12 @@ namespace AbxrLib.Runtime.Authentication
                 var authSecret = Abxr.GetFingerprint();
                 _authSecret = authSecret;
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: {e.Message}");
+                // Log error with consistent format and include authentication context
+                Debug.LogError($"AbxrLib: Authentication initialization failed: {ex.Message}\n" +
+                              $"Exception Type: {ex.GetType().Name}\n" +
+                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
         }
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -450,7 +470,10 @@ namespace AbxrLib.Runtime.Authentication
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"AbxrLib: Failed to parse handoff JSON: {ex.Message}");
+                    // Log error with consistent format and include JSON parsing context
+                    Debug.LogError($"AbxrLib: Failed to parse handoff JSON: {ex.Message}\n" +
+                                  $"Exception Type: {ex.GetType().Name}\n" +
+                                  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                     yield break;
                 }
                 
@@ -510,7 +533,10 @@ namespace AbxrLib.Runtime.Authentication
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: Failed to process authentication handoff: {ex.Message}");
+                // Log error with consistent format and include handoff processing context
+                Debug.LogError($"AbxrLib: Failed to process authentication handoff: {ex.Message}\n" +
+                              $"Exception Type: {ex.GetType().Name}\n" +
+                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 _authHandoffCompleted = false;
             }
             
