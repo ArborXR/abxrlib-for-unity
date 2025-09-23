@@ -121,14 +121,14 @@ For information on implementing your own backend service or using other compatib
 ### Events
 ```cpp
 //C# Event Method Signatures
-public void Abxr.Event(string name);
-public void Abxr.Event(string name, Dictionary<string, string> meta = null);
-public void Abxr.Event(string name, Dictionary<string, string> meta = null, Vector3 location_data = null);
+public static void Abxr.Event(string name);
+public static void Abxr.Event(string name, Dictionary<string, string> meta = null, bool sendTelemetry = true);
+public static void Abxr.Event(string name, Vector3 position, Dictionary<string, string> meta = null);
 
 // Example Usage - Basic Event
 Abxr.Event("button_pressed");
 
-// Example Usage - Event with Metadata (using Abxr.Dict - no using statements required!)
+// Example Usage - Event with Metadata
 Abxr.Event("item_collected", new Abxr.Dict {
     {"item_type", "coin"},
     {"item_value", "100"}
@@ -139,12 +139,6 @@ Abxr.Event("player_teleported",
     new Abxr.Dict {{"destination", "spawn_point"}},
     new Vector3(1.5f, 0.0f, -3.2f)
 );
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.Event("item_collected", new Dictionary<string, string> {
-    {"item_type", "coin"},
-    {"item_value", "100"}
-});
 ```
 
 **Parameters:**
@@ -277,8 +271,8 @@ Perfect for user attributes, app state, and device information that should be in
 The Log Methods provide straightforward logging functionality, similar to syslogs. These functions are available to developers by default, even across enterprise users, allowing for consistent and accessible logging across different deployment scenarios.
 
 ```cpp
-//C# Event Method Signatures
-public void Abxr.Log(string message, LogLevel level = LogLevel.Info)
+//C# Method Signatures
+public static void Abxr.Log(string message, LogLevel level = LogLevel.Info, Dictionary<string, string> meta = null)
 
 // Example usage
 Abxr.Log("Module started"); // Defaults to LogLevel.Info
@@ -298,14 +292,8 @@ public static void Abxr.LogCritical(string text, Dictionary<string, string> meta
 // Example usage
 Abxr.LogError("Critical error in assessment phase");
 
-// With metadata (using Abxr.Dict - no using statements required!)
+// With metadata
 Abxr.LogDebug("User interaction", new Abxr.Dict {
-    {"action", "button_click"},
-    {"screen", "main_menu"}
-});
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.LogDebug("User interaction", new Dictionary<string, string> {
     {"action", "button_click"},
     {"screen", "main_menu"}
 });
@@ -318,19 +306,15 @@ The Storage API enables developers to store and retrieve learner/player progress
 
 ```cpp
 //C# Method Signatures
-public static void Abxr.StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest);
-public static void Abxr.StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest);
-public static IEnumerator Abxr.StorageGetEntry(string name, StorageScope scope, Action<string> callback);
-public static IEnumerator Abxr.StorageGetDefaultEntry(StorageScope scope, Action<string> callback);
+public static void Abxr.StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest);
+public static void Abxr.StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest);
+public static IEnumerator Abxr.StorageGetEntry(string name, StorageScope scope, Action<List<Dictionary<string, string>>> callback);
+public static IEnumerator Abxr.StorageGetDefaultEntry(StorageScope scope, Action<List<Dictionary<string, string>>> callback);
 public static void Abxr.StorageRemoveEntry(string name, StorageScope scope);
 
-// Save progress data (using Abxr.Dict - no using statements required!)
+// Save progress data
 Abxr.StorageSetEntry("state", new Abxr.Dict{{"progress", "75%"}}, StorageScope.user);
 Abxr.StorageSetDefaultEntry(new Abxr.Dict{{"progress", "75%"}}, StorageScope.user);
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.StorageSetEntry("state", new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
-Abxr.StorageSetDefaultEntry(new Dictionary<string, string>{{"progress", "75%"}}, StorageScope.user);
 
 // Retrieve progress data (requires coroutine)
 StartCoroutine(Abxr.StorageGetEntry("state", StorageScope.user, result => {
@@ -366,13 +350,8 @@ public static void Abxr.Telemetry(string name, Dictionary<string, string> meta);
 // Manual telemetry activation (when auto-telemetry is disabled)
 Abxr.TrackAutoTelemetry();
 
-// Custom telemetry logging (using Abxr.Dict - no using statements required!)
+// Custom telemetry logging
 Abxr.Telemetry("headset_position", new Abxr.Dict { 
-    {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
-});
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.Telemetry("headset_position", new Dictionary<string, string> { 
     {"x", "1.23"}, {"y", "4.56"}, {"z", "7.89"} 
 });
 ```
@@ -412,10 +391,10 @@ Deliver questionnaires to users to gather feedback.
 public enum PollType { Thumbs, Rating, MultipleChoice }
 
 //C# Method Signatures
-public static void Abxr.PollUser(string question, PollType pollType);
+public static void Abxr.PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null);
 
 // Poll types: Thumbs, Rating (1-5), MultipleChoice (2-8 options)
-Abxr.PollUser("How would you rate this training experience?", PollType.Rating);
+Abxr.PollUser("How would you rate this training experience?", ExitPollHandler.PollType.Rating);
 ```
 
 ### Abxr.Dict - Easy Metadata Creation
@@ -453,7 +432,7 @@ Abxr.StorageSetEntry("progress", new Abxr.Dict { ["level"] = "3" }, StorageScope
 The ABXRLib SDK supports multiple flexible metadata formats. All formats are automatically converted to `Dictionary<string, string>`:
 
 ```cpp
-// 1. Abxr.Dict (Recommended - no using statements required!)
+// 1. Abxr.Dict (Recommended)
 Abxr.Event("user_action", new Abxr.Dict
 {
     ["action"] = "click",
@@ -466,14 +445,7 @@ Abxr.Event("purchase_complete", new Abxr.Dict()
     .With("currency", "USD")
     .With("plan", "Premium"));
 
-// 3. Native C# Dictionary (requires using System.Collections.Generic;)
-Abxr.Event("user_action", new Dictionary<string, string>
-{
-    ["action"] = "click",
-    ["userId"] = "12345"
-});
-
-// 4. Mixpanel-style Dictionary (auto-converts objects)
+// 3. Mixpanel-style Dictionary (auto-converts objects)
 Abxr.Track("assessment_complete", new Dictionary<string, object>
 {
     ["score"] = 95,           // → "95"
@@ -481,16 +453,16 @@ Abxr.Track("assessment_complete", new Dictionary<string, object>
     ["timestamp"] = DateTime.UtcNow  // → ISO string
 });
 
-// 5. Abxr.Value class (Mixpanel compatibility)
+// 4. Abxr.Value class (Mixpanel compatibility)
 var props = new Abxr.Value();
 props["plan"] = "Premium";
 props["amount"] = 29.99;
 Abxr.Track("purchase_completed", props);
 
-// 6. No metadata
+// 5. No metadata
 Abxr.Event("app_started");
 
-// 7. With Unity Vector3 position data
+// 6. With Unity Vector3 position data
 Abxr.Event("player_teleported", transform.position, 
     new Abxr.Dict { ["destination"] = "spawn_point" });
 ```
@@ -499,15 +471,7 @@ Abxr.Event("player_teleported", transform.position,
 
 ** Use pre-serialized JSON strings:**
 ```cpp
-// Using Abxr.Dict (recommended - no using statements required!)
 var meta = new Abxr.Dict
-{
-    ["items"] = "[\"sword\", \"shield\", \"potion\"]",
-    ["scores"] = "[95, 87, 92, 88]"
-};
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-var meta = new Dictionary<string, string>
 {
     ["items"] = "[\"sword\", \"shield\", \"potion\"]",
     ["scores"] = "[95, 87, 92, 88]"
@@ -551,7 +515,7 @@ Super properties are automatically merged into **every** event, log, and telemet
 Abxr.Register("app_version", "1.2.3");
 Abxr.Register("user_type", "premium");
 
-// Every event automatically includes super properties (using Abxr.Dict)
+// Every event automatically includes super properties
 Abxr.Event("level_complete", new Abxr.Dict {
     {"level", "3"}, 
     {"user_type", "trial"}  // This overrides the super property
@@ -609,55 +573,74 @@ Abxr.EventAssessmentComplete("final_exam", 95, EventStatus.Pass); // Automatical
 
 The **Module Target** feature enables developers to create single applications with multiple modules, where each module can be its own assignment in an LMS. When a learner enters from the LMS for a specific module, the application can automatically direct the user to that module within the application. Individual grades and results are then tracked for that specific assignment in the LMS.
 
-#### Automatic Module Execution (Recommended)
+#### Event-Based Module Handling (Recommended)
 
-The easiest way to handle modules is using `ExecuteModuleSequence()`, which automatically finds and calls methods in your class based on module names:
+The recommended way to handle modules is using the `OnModuleTarget` event, which gives you full control over how to handle each module target. This event works perfectly with existing Android deep link handlers - you can use the same routing logic for both external deep links and LMS module targets:
 
 ```cpp
 // Subscribe to authentication completion
 Abxr.OnAuthCompleted += OnAuthenticationCompleted;
 
+// Subscribe to module target events
+Abxr.OnModuleTarget += HandleModuleOrDeepLinkTarget;
+
 private void OnAuthenticationCompleted(bool success, string error)
 {
     if (success)
     {
-        // Automatically execute all module functions in sequence
-        int executedCount = Abxr.ExecuteModuleSequence(this, "Module_");
+        // Execute all available modules in sequence
+        int executedCount = Abxr.ExecuteModuleSequence();
         Debug.Log($"Executed {executedCount} modules");
     }
 }
 
-// Create methods with pattern: {prefix}{moduleTarget}
-// Module names with hyphens/spaces are automatically converted to underscores
-private void Module_training_1()
+// This method can handle BOTH external Android deep links AND module targets
+private void HandleModuleOrDeepLinkTarget(string moduleTarget)
 {
-    Debug.Log("Starting traiing #1");
-    // Your module logic here
+    Debug.Log($"Handling module target: {moduleTarget}");
+    
+    // Your existing deep link routing logic works here too
+    switch (moduleTarget)
+    {
+        case "safety-training":
+            LoadScene("SafetyTrainingScene");
+            break;
+        case "equipment-check":
+            LoadScene("EquipmentCheckScene");
+            break;
+        default:
+            Debug.LogWarning($"Unknown module target: {moduleTarget}");
+            LoadScene("MainMenuScene");
+            break;
+    }
 }
 
-private void Module_training_2()
+// Your existing Android deep link handler can call the same method
+private void OnDeepLinkReceived(string deepLink)
 {
-    Debug.Log("Starting traiing #2");
-    // Your module logic here
+    string target = ExtractTargetFromUrl(deepLink); // "myapp://safety-training" -> "safety-training"
+    HandleModuleOrDeepLinkTarget(target);
+}
+
+// Don't forget to unsubscribe in OnDestroy()
+private void OnDestroy()
+{
+    Abxr.OnModuleTarget -= HandleModuleOrDeepLinkTarget;
 }
 ```
 
 **Method Signature:**
 ```cpp
-public static int ExecuteModuleSequence(object targetObject, string functionPrefix = "", string functionPostfix = "")
+public static int ExecuteModuleSequence()
 ```
 
-**Parameters:**
-- `targetObject`: The object instance to search for module methods (usually `this`)
-- `functionPrefix`: Prefix for function names (default: empty string)
-- `functionPostfix`: Suffix for function names (default: empty string)
-
 **Features:**
-- **Automatic Method Discovery**: Uses reflection to find methods matching the pattern
-- **Character Sanitization**: Converts hyphens and spaces to underscores for valid C# method names
-- **Error Handling**: Continues to next module if a method isn't found or throws an exception
+- **Event-Driven**: Uses the `OnModuleTarget` event for maximum flexibility
+- **Developer Control**: You decide how to handle each module target
+- **Deep Link Integration**: Perfect for connecting to existing deep link handlers
+- **Unified Handling**: One method handles both external deep links and LMS module targets
+- **Error Handling**: Continues to next module if an event handler throws an exception
 - **Return Count**: Returns the number of successfully executed modules
-- **Flexible Naming**: Supports any prefix/postfix combination
 
 #### Manual Module Processing
 
@@ -697,6 +680,7 @@ Abxr.ClearModuleTargets();
 var userData = Abxr.GetUserData();
 ```
 
+
 #### Persistence and Recovery
 
 Module progress is automatically persisted across app sessions and device restarts:
@@ -708,11 +692,12 @@ Module progress is automatically persisted across app sessions and device restar
 
 #### Best Practices
 
-1. **Use ExecuteModuleSequence()**: Simplest approach for most use cases
+1. **Use OnModuleTarget Event**: Subscribe to `OnModuleTarget` for flexible module handling
 2. **Subscribe to OnAuthCompleted**: Subscribe before authentication starts
-3. **Method Naming**: Use consistent naming patterns for your module methods
+3. **Connect to Deep Links**: Use `OnModuleTarget` to connect to your existing deep link handling
 4. **Error Handling**: Handle cases where modules don't exist or fail
 5. **Progress Tracking**: Use assessment events to track module completion
+6. **Unsubscribe on Destroy**: Always unsubscribe from events in `OnDestroy()` to prevent memory leaks
 
 #### Data Structures
 
@@ -734,10 +719,10 @@ The ABXRLib SDK provides comprehensive authentication completion callbacks that 
 
 #### Authentication Completion Event
 
-If you would like to have logic to correspond to authentication completion, you can subscrit to this event.
+If you would like to have logic to correspond to authentication completion, you can subscribe to this event.
 ```cpp
 // 'true' for success and 'false' for failure (string argument will contain the error message on failure)
-public static Action<bool, string> onAuthCompleted;
+public static Action<bool, string> OnAuthCompleted;
 ```
 
 #### Use Cases
@@ -793,49 +778,13 @@ else
 - **Error prevention**: Check connection before making API calls
 - **Feature gating**: Enable/disable features that require server communication
 
-#### Accessing Learner Data
-
-After authentication completes, you can access comprehensive learner data and preferences:
-
-```cpp
-// Get learner data and preferences
-Dictionary<string, object> learnerData = Abxr.GetLearnerData();
-if (learnerData != null)
-{
-    var userName = learnerData["name"]?.ToString();
-    var audioPreference = learnerData["audioPreference"]?.ToString();
-    
-    Debug.Log($"Welcome back, {userName}!");
-    SetAudioLevel(audioPreference);
-}
-
-// Check connection status before accessing data
-if (Abxr.ConnectionActive())
-{
-    CustomizeExperience(Abxr.GetLearnerData());
-}
-```
-
-**Returns:** Dictionary containing learner data from the authentication response, or null if not authenticated
-
-**Available Data (when provided by authentication response):**
-- **User Preferences**: `audioPreference`, `speedPreference`, `textPreference`
-- **User Information**: `name`, `email`, `id`, `user_id`
-- **Custom Fields**: Any additional data provided in the userData object
-
-**Use Cases:**
-- **Personalization**: Customize audio levels, playback speed, and text size based on user preferences
-- **Accessibility**: Apply user-specific accessibility settings automatically
-- **User Experience**: Greet users by name and show personalized content
-- **Analytics**: Track usage patterns based on user preferences
-- **Adaptive Content**: Adjust content difficulty or presentation based on user data
 
 ### Headset Removal
-To improve session fidelity and reduce user spoofing or unintended headset sharing, we will trigger a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user this will trigger an event defined in Abxr.cs. This can be subscribed to if the developer would like to have logic corresponding to this event.
+To improve session fidelity and reduce user spoofing or unintended headset sharing, the SDK triggers a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user, this will trigger an event that you can subscribe to:
+
 ```cpp
 public static Action OnHeadsetPutOnNewSession;
 ```
-If the developer would like to have logic to correspond to these events, that would be done by subscribing to these events.
 
 ### Session Management
 
@@ -1132,14 +1081,8 @@ new Abxr.CustomEvent("button_press")
     .SetProperty("screen", "main_menu")
     .Send();
 
-// ABXRLib recommended (using Abxr.Dict - no using statements required!):
+// ABXRLib recommended:
 Abxr.Event("button_press", new Abxr.Dict {
-    {"button_id", "submit"},
-    {"screen", "main_menu"}
-});
-
-// Alternative: Traditional Dictionary (requires using System.Collections.Generic;)
-Abxr.Event("button_press", new Dictionary<string, string> {
     {"button_id", "submit"},
     {"screen", "main_menu"}
 });

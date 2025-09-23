@@ -57,6 +57,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 Destroy(_pinPadInstance);
             }
+            
+            // Restore laser pointer states to their original configuration
+            LaserPointerManager.RestoreLaserPointerStates();
         
             OnKeyboardDestroyed?.Invoke();
         }
@@ -96,6 +99,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 CenterPanelBelowKeyboard();
             }
         
+            // Enable laser pointers for keyboard/PIN pad interaction
+            LaserPointerManager.EnableLaserPointersForInteraction();
             
             OnKeyboardCreated?.Invoke();
         }
