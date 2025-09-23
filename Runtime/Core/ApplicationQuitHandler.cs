@@ -52,7 +52,7 @@ namespace AbxrLib.Runtime.Core
                 Debug.Log("AbxrLib: Application lost focus, checking for running events");
                 // Note: We don't automatically close on focus loss as this can happen during normal use
                 // This is just for logging/debugging purposes
-                LogRunningEvents();
+                DebugLogRunningEvents();
             }
         }
 
@@ -145,7 +145,7 @@ namespace AbxrLib.Runtime.Core
         /// Log information about currently running events without closing them
         /// Used for debugging and monitoring purposes
         /// </summary>
-        private void LogRunningEvents()
+        private void DebugLogRunningEvents()
         {
             var runningAssessmentTimes = Abxr.GetAssessmentStartTimes();
             var runningObjectiveTimes = Abxr.GetObjectiveStartTimes();
