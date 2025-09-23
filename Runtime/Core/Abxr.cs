@@ -80,7 +80,7 @@ public static partial class Abxr
 	}
 	#endregion
 
-	#region Global Classes and Functions
+	#region Dictionary Function
 
 	/// <summary>
 	/// Simple dictionary wrapper for AbxrLib metadata
