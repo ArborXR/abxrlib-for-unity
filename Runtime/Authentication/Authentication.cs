@@ -477,44 +477,34 @@ namespace AbxrLib.Runtime.Authentication
                     yield break;
                 }
                 
-                if (handoffData?.success != true)
+                // Validate that we have the required fields
+                if (handoffData == null || string.IsNullOrEmpty(handoffData.Token) || string.IsNullOrEmpty(handoffData.Secret))
                 {
-                    Debug.LogWarning($"AbxrLib: Authentication handoff indicates failure (handoffData null: {handoffData == null}, success: {handoffData?.success}), falling back to normal auth");
+                    Debug.LogWarning($"AbxrLib: Authentication handoff missing required fields (handoffData null: {handoffData == null}, Token empty: {string.IsNullOrEmpty(handoffData?.Token)}, Secret empty: {string.IsNullOrEmpty(handoffData?.Secret)}), falling back to normal auth");
                     yield break;
                 }
                 
                 // Set authentication state from handoff data
-                _authToken = handoffData.token;
-                _apiSecret = handoffData.secret;
+                _authToken = handoffData.Token;
+                _apiSecret = handoffData.Secret;
                 
                 // Cache user data from handoff
                 _responseData = new AuthResponse
                 {
                     Token = _authToken,
                     Secret = _apiSecret,
-                    UserId = handoffData.userId,
-                    AppId = handoffData.appId,
-                    PackageName = handoffData.packageName
+                    UserId = handoffData.UserId,
+                    AppId = handoffData.AppId,
+                    PackageName = handoffData.PackageName,
+                    UserData = handoffData.UserData,
+                    Modules = handoffData.Modules
                 };
                 _authResponseModuleData = new List<Abxr.ModuleData>();
                 
                 // Convert modules if provided
-                if (handoffData.modules != null)
+                if (handoffData.Modules != null)
                 {
-                    var responseModules = new List<Dictionary<string, object>>();
-                    foreach (var module in handoffData.modules)
-                    {
-                        var moduleDict = new Dictionary<string, object>
-                        {
-                            ["id"] = module.id ?? "",
-                            ["name"] = module.name ?? "",
-                            ["target"] = module.target ?? "",
-                            ["order"] = module.order
-                        };
-                        responseModules.Add(moduleDict);
-                    }
-
-                    _authResponseModuleData = Utils.ConvertToModuleDataList(responseModules);
+                    _authResponseModuleData = Utils.ConvertToModuleDataList(handoffData.Modules);
                 }
                 
                 // Set token expiry to far in the future since we're trusting the handoff
@@ -627,39 +617,35 @@ namespace AbxrLib.Runtime.Authentication
 
         /// <summary>
         /// Data structure for authentication handoff JSON from external launcher apps
+        /// Now matches AuthResponse format with case-insensitive property mapping
         /// </summary>
         [Preserve]
         public class AuthHandoffData
         {
-            public bool success;
-            public string token;
-            public string secret;
-            public object userData;
-            public object userId;
-            public string userEmail;
-            public string appId;
-            public string packageName;
-            public List<AuthHandoffModule> modules;
-            public int moduleCount;
-            public bool isReauthentication;
+            [JsonProperty("Token")]
+            public string Token;
+            
+            [JsonProperty("Secret")]
+            public string Secret;
+            
+            [JsonProperty("UserData")]
+            public Dictionary<string, object> UserData;
+            
+            [JsonProperty("UserId")]
+            public object UserId;
+            
+            [JsonProperty("AppId")]
+            public string AppId;
+            
+            [JsonProperty("PackageName")]
+            public string PackageName;
+            
+            [JsonProperty("Modules")]
+            public List<Dictionary<string, object>> Modules;
 
             [Preserve]
             public AuthHandoffData() { }
         }
 
-        /// <summary>
-        /// Module data structure for authentication handoff
-        /// </summary>
-        [Preserve]
-        public class AuthHandoffModule
-        {
-            public string id;
-            public string name;
-            public string target;
-            public int order;
-
-            [Preserve]
-            public AuthHandoffModule() { }
-        }
     }
 }
