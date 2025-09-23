@@ -80,7 +80,7 @@ public static partial class Abxr
 	}
 	#endregion
 
-	#region Dictionary Function
+	#region Specialized Dictionary
 
 	/// <summary>
 	/// Simple dictionary wrapper for AbxrLib metadata
@@ -884,7 +884,7 @@ public static partial class Abxr
 
 	#endregion
 
-	#region super metadata
+	#region Super Metadata
 
 	// super metadata for metadata
 	private static readonly Dictionary<string, string> _superMetaData = new();
