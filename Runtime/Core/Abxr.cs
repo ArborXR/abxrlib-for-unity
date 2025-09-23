@@ -73,31 +73,6 @@ using AbxrLib.Runtime.UI.Keyboard;
 /// </summary>
 public static partial class Abxr
 {
-	#region Private Fields and Constants
-
-	// Event start times for duration tracking
-	private static readonly Dictionary<string, DateTime> _timedEventStartTimes = new();
-	private static readonly Dictionary<string, DateTime> _assessmentStartTimes = new();
-	private static readonly Dictionary<string, DateTime> _objectiveStartTimes = new();
-	private static readonly Dictionary<string, DateTime> _interactionStartTimes = new();
-	private static readonly Dictionary<string, DateTime> _levelStartTimes = new();
-
-	// super metadata for metadata
-	private static readonly Dictionary<string, string> _superMetaData = new();
-	private const string _superMetaDataKey = "AbxrSuperMetaData";
-
-	// Connection status - tracks whether AbxrLib can communicate with the server
-	private static bool _connectionActive = false;
-
-	// Module index for sequential LMS multi-module applications
-	private static int _currentModuleIndex = 0;
-	private const string _moduleIndexKey = "AbxrModuleIndex";
-	
-	// Module index loading state to prevent repeated storage calls
-	private static bool _moduleIndexLoaded = false;
-	private static bool _moduleIndexLoading = false;
-	#endregion
-
 	#region Constructor
 	static Abxr()
 	{
@@ -148,6 +123,9 @@ public static partial class Abxr
 	/// Subscribe to this event to handle new session initialization
 	/// </summary>
 	public static Action OnHeadsetPutOnNewSession;
+
+	// Connection status - tracks whether AbxrLib can communicate with the server
+	private static bool _connectionActive = false;
 
 	/// <summary>
 	/// Check if AbxrLib has an active connection to the server and can send data
@@ -248,6 +226,13 @@ public static partial class Abxr
 	#endregion
 
 	#region Event Functions and Wrappers
+
+	// Event start times for duration tracking
+	private static readonly Dictionary<string, DateTime> _timedEventStartTimes = new();
+	private static readonly Dictionary<string, DateTime> _assessmentStartTimes = new();
+	private static readonly Dictionary<string, DateTime> _objectiveStartTimes = new();
+	private static readonly Dictionary<string, DateTime> _interactionStartTimes = new();
+	private static readonly Dictionary<string, DateTime> _levelStartTimes = new();
 
 	// Data structures for result options and event status
 	public static EventStatus ToEventStatus(this ResultOptions options) => options switch // Only here for backwards compatibility
@@ -900,6 +885,11 @@ public static partial class Abxr
 	#endregion
 
 	#region super metadata
+
+	// super metadata for metadata
+	private static readonly Dictionary<string, string> _superMetaData = new();
+	private const string _superMetaDataKey = "AbxrSuperMetaData";
+
 	/// <summary>
 	/// Register a super metadata that will be automatically included in all events
 	/// super metadata persist across app sessions and are stored locally
@@ -1110,6 +1100,14 @@ public static partial class Abxr
 	#endregion
 
 	#region Module Management
+
+	// Module index for sequential LMS multi-module applications
+	private static int _currentModuleIndex = 0;
+	private const string _moduleIndexKey = "AbxrModuleIndex";
+	
+	// Module index loading state to prevent repeated storage calls
+	private static bool _moduleIndexLoaded = false;
+	private static bool _moduleIndexLoading = false;
 
 	/// <summary>
 	/// Event that gets triggered when a moduleTarget should be handled.
