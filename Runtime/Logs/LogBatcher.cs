@@ -13,8 +13,8 @@ namespace AbxrLib.Runtime.Logs
 	{
 		private const string UrlPath = "/v1/collect/log";
 		private static Uri _uri;
-		private static readonly List<Payload> Payloads = new();
-		private static readonly object Lock = new();
+		private static readonly List<Payload> _payloads = new();
+		private static readonly object _lock = new();
 		private static float _timer;
 		private static float _lastCallTime;
 		private const float MaxCallFrequencySeconds = 1f;
@@ -42,10 +42,10 @@ namespace AbxrLib.Runtime.Logs
 				meta = meta
 			};
 		
-			lock (Lock)
+			lock (_lock)
 			{
-				Payloads.Add(payload);
-				if (Payloads.Count >= Configuration.Instance.logsPerSendAttempt)
+				_payloads.Add(payload);
+				if (_payloads.Count >= Configuration.Instance.logsPerSendAttempt)
 				{
 					_timer = 0; // Send on the next update
 				}
@@ -59,17 +59,17 @@ namespace AbxrLib.Runtime.Logs
 			_lastCallTime = Time.time;
 			_timer = Configuration.Instance.sendNextBatchWaitSeconds; // reset timer
 			if (!Authentication.Authentication.Authenticated()) yield break;
-			lock (Lock)
+			lock (_lock)
 			{
-				if (Payloads.Count == 0) yield break;
+				if (_payloads.Count == 0) yield break;
 			}
 		
 			List<Payload> logsToSend;
-			lock (Lock)
+			lock (_lock)
 			{
 				// Copy current list and leave original untouched
-				logsToSend = new List<Payload>(Payloads);
-				foreach (var log in logsToSend) Payloads.Remove(log);
+				logsToSend = new List<Payload>(_payloads);
+				foreach (var log in logsToSend) _payloads.Remove(log);
 			}
 		
 			var wrapper = new PayloadWrapper { data = logsToSend };
@@ -88,9 +88,9 @@ namespace AbxrLib.Runtime.Logs
 			{
 				Debug.LogError($"AbxrLib: Log POST Request failed : {request.error} - {request.downloadHandler.text}");
 				_timer = Configuration.Instance.sendRetryIntervalSeconds;
-				lock (Lock)
+				lock (_lock)
 				{
-					Payloads.InsertRange(0, logsToSend);
+					_payloads.InsertRange(0, logsToSend);
 				}
 			}
 		}

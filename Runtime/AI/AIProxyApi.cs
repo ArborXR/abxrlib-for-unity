@@ -12,7 +12,7 @@ namespace AbxrLib.Runtime.AI
     public class AIProxyApi : MonoBehaviour
     {
         private const string UrlPath = "/v1/services/llm";
-        private static readonly List<string> PastMessages = new();
+        private static readonly List<string> _pastMessages = new();
         private static Uri _uri;
 
         private void Start()
@@ -24,7 +24,7 @@ namespace AbxrLib.Runtime.AI
         {
             if (!Authentication.Authentication.Authenticated()) yield break;
         
-            pastMessages = pastMessages == null ? PastMessages : pastMessages.Union(PastMessages).ToList();
+            pastMessages = pastMessages == null ? _pastMessages : pastMessages.Union(_pastMessages).ToList();
         
             var payload = new AIPromptPayload
             {
@@ -42,7 +42,7 @@ namespace AbxrLib.Runtime.AI
             yield return request.SendWebRequest();
             if (request.result == UnityWebRequest.Result.Success)
             {
-                PastMessages.Add(prompt);
+                _pastMessages.Add(prompt);
                 callback?.Invoke(request.downloadHandler.text);
                 Debug.Log("AbxrLib: AI POST Request successful");
             }

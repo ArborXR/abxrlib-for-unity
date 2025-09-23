@@ -64,16 +64,16 @@ namespace AbxrLib.Runtime.Core
         private void CloseRunningEvents()
         {
             // Get references to the static dictionaries using safe public methods
-            var assessmentStartTimes = Abxr.GetAssessmentStartTimes();
-            var objectiveStartTimes = Abxr.GetObjectiveStartTimes();
-            var interactionStartTimes = Abxr.GetInteractionStartTimes();
+            var runningAssessmentTimes = Abxr.GetAssessmentStartTimes();
+            var runningObjectiveTimes = Abxr.GetObjectiveStartTimes();
+            var runningInteractionTimes = Abxr.GetInteractionStartTimes();
 
             int totalClosed = 0;
 
             // Close running Interactions first (lowest level)
-            if (interactionStartTimes != null && interactionStartTimes.Count > 0)
+            if (runningInteractionTimes != null && runningInteractionTimes.Count > 0)
             {
-                var interactionNames = new List<string>(interactionStartTimes.Keys);
+                var interactionNames = new List<string>(runningInteractionTimes.Keys);
                 foreach (string interactionName in interactionNames)
                 {
                     Abxr.EventInteractionComplete(interactionName, Abxr.InteractionType.Null, "incomplete_quit",
@@ -87,9 +87,9 @@ namespace AbxrLib.Runtime.Core
             }
 
             // Close running Objectives second (middle level)
-            if (objectiveStartTimes != null && objectiveStartTimes.Count > 0)
+            if (runningObjectiveTimes != null && runningObjectiveTimes.Count > 0)
             {
-                var objectiveNames = new List<string>(objectiveStartTimes.Keys);
+                var objectiveNames = new List<string>(runningObjectiveTimes.Keys);
                 foreach (string objectiveName in objectiveNames)
                 {
                     Abxr.EventObjectiveComplete(objectiveName, 0, Abxr.EventStatus.Incomplete,
@@ -103,9 +103,9 @@ namespace AbxrLib.Runtime.Core
             }
 
             // Close running Assessments last (highest level)
-            if (assessmentStartTimes != null && assessmentStartTimes.Count > 0)
+            if (runningAssessmentTimes != null && runningAssessmentTimes.Count > 0)
             {
-                var assessmentNames = new List<string>(assessmentStartTimes.Keys);
+                var assessmentNames = new List<string>(runningAssessmentTimes.Keys);
                 foreach (string assessmentName in assessmentNames)
                 {
                     Abxr.EventAssessmentComplete(assessmentName, 0, Abxr.EventStatus.Fail, 
@@ -147,18 +147,18 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         private void LogRunningEvents()
         {
-            var assessmentStartTimes = Abxr.GetAssessmentStartTimes();
-            var objectiveStartTimes = Abxr.GetObjectiveStartTimes();
-            var interactionStartTimes = Abxr.GetInteractionStartTimes();
+            var runningAssessmentTimes = Abxr.GetAssessmentStartTimes();
+            var runningObjectiveTimes = Abxr.GetObjectiveStartTimes();
+            var runningInteractionTimes = Abxr.GetInteractionStartTimes();
 
             int totalRunning = 0;
-            if (assessmentStartTimes != null) totalRunning += assessmentStartTimes.Count;
-            if (objectiveStartTimes != null) totalRunning += objectiveStartTimes.Count;
-            if (interactionStartTimes != null) totalRunning += interactionStartTimes.Count;
+            if (runningAssessmentTimes != null) totalRunning += runningAssessmentTimes.Count;
+            if (runningObjectiveTimes != null) totalRunning += runningObjectiveTimes.Count;
+            if (runningInteractionTimes != null) totalRunning += runningInteractionTimes.Count;
 
             if (totalRunning > 0)
             {
-                Debug.Log($"AbxrLib: Currently {totalRunning} events running (Assessments: {assessmentStartTimes?.Count ?? 0}, Objectives: {objectiveStartTimes?.Count ?? 0}, Interactions: {interactionStartTimes?.Count ?? 0})");
+                Debug.Log($"AbxrLib: Currently {totalRunning} events running (Assessments: {runningAssessmentTimes?.Count ?? 0}, Objectives: {runningObjectiveTimes?.Count ?? 0}, Interactions: {runningInteractionTimes?.Count ?? 0})");
             }
         }
 

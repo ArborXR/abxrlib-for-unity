@@ -21,7 +21,7 @@ namespace AbxrLib.Runtime.ServiceClient
     /// </remarks>
     public class ArborServiceClient : MonoBehaviour
     {
-        private const string PackageName = "app.xrdm.sdk.external";
+        private const string _packageName = "app.xrdm.sdk.external";
         private AndroidJavaObject? _sdk;
         private NativeConnectionCallback? _nativeCallback;
         public static SdkServiceWrapper? ServiceWrapper;
@@ -62,7 +62,7 @@ namespace AbxrLib.Runtime.ServiceClient
         protected void OnEnable()
         {
             // Instantiates our `Sdk.java`.
-            _sdk = new AndroidJavaObject($"{PackageName}.Sdk");
+            _sdk = new AndroidJavaObject($"{_packageName}.Sdk");
             Connect();
         }
 
@@ -162,7 +162,7 @@ namespace AbxrLib.Runtime.ServiceClient
         {
             private readonly ArborServiceClient _sdkBehavior;
 
-            public NativeConnectionCallback(ArborServiceClient sdkBehavior) : base(PackageName + ".IConnectionCallback")
+            public NativeConnectionCallback(ArborServiceClient sdkBehavior) : base(_packageName + ".IConnectionCallback")
             {
                 _sdkBehavior = sdkBehavior;
             }

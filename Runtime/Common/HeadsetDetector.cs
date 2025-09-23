@@ -7,30 +7,30 @@ namespace AbxrLib.Runtime.Common
 {
     public class HeadsetDetector : MonoBehaviour
     {
-        private const float CheckIntervalSeconds = 1f;
-        private const string NewSessionString = "No, I need to log in as someone else.";
-        private const string ContinueSessionString = "Yes, I’d like to continue the current session.";
+        private const float _checkIntervalSeconds = 1f;
+        private const string _newSessionString = "No, I need to log in as someone else.";
+        private const string _continueSessionString = "Yes, I'd like to continue the current session.";
     
-        private bool sensorStatus = true;
-        private float lastCheckTime;
+        private bool _sensorStatus = true;
+        private float _lastCheckTime;
 
         private void Update()
         {
             // Check at intervals to avoid excessive calls
-            if (Time.time - lastCheckTime >= CheckIntervalSeconds)
+            if (Time.time - _lastCheckTime >= _checkIntervalSeconds)
             {
                 bool currentStatus = CheckProximitySensor();
-                if (sensorStatus && !currentStatus)
+                if (_sensorStatus && !currentStatus)
                 {
                     OnHeadsetRemovedDetected();
                 }
-                else if (!sensorStatus && currentStatus)
+                else if (!_sensorStatus && currentStatus)
                 {
                     OnHeadsetPutOnDetected();
                 }
             
-                sensorStatus = currentStatus;
-                lastCheckTime = Time.time;
+                _sensorStatus = currentStatus;
+                _lastCheckTime = Time.time;
             }
         }
     
@@ -58,13 +58,13 @@ namespace AbxrLib.Runtime.Common
         
             Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
                 ExitPollHandler.PollType.MultipleChoice,
-                new List<string>{ContinueSessionString, NewSessionString},
+                new List<string>{_continueSessionString, _newSessionString},
                 NewSessionCheck);
         }
 
         private static void NewSessionCheck(string response)
         {
-            if (response == NewSessionString)
+            if (response == _newSessionString)
             {
                 Authentication.Authentication.ReAuthenticate();
                 Abxr.OnHeadsetPutOnNewSession?.Invoke();

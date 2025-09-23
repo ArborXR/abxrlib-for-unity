@@ -48,7 +48,7 @@ namespace AbxrLib.Runtime.Core
             return Convert.ToBase64String(hash);
         }
 	
-        static readonly uint[] Table = GenerateTable();
+        static readonly uint[] _table = GenerateTable();
 
         public static uint ComputeCRC(string input)
         {
@@ -58,7 +58,7 @@ namespace AbxrLib.Runtime.Core
             foreach (byte b in bytes)
             {
                 byte index = (byte)((crc ^ b) & 0xFF);
-                crc = (crc >> 8) ^ Table[index];
+                crc = (crc >> 8) ^ _table[index];
             }
 
             return ~crc;
@@ -146,11 +146,11 @@ namespace AbxrLib.Runtime.Core
             if (queryParams != null && queryParams.Count > 0)
             {
                 builder.Append("?");
-                foreach (var param in queryParams)
+                foreach (var queryParam in queryParams)
                 {
                     builder.AppendFormat("{0}={1}&",
-                        UnityWebRequest.EscapeURL(param.Key),
-                        UnityWebRequest.EscapeURL(param.Value));
+                        UnityWebRequest.EscapeURL(queryParam.Key),
+                        UnityWebRequest.EscapeURL(queryParam.Value));
                 }
 
                 // Remove trailing '&'
@@ -161,15 +161,15 @@ namespace AbxrLib.Runtime.Core
     
         public static string GetQueryParam(string key, string url)
         {
-            var question = url.IndexOf('?');
-            if (question < 0) return "";
-            var query = url.Substring(question + 1);
-            foreach (var pair in query.Split('&'))
+            var questionMarkIndex = url.IndexOf('?');
+            if (questionMarkIndex < 0) return "";
+            var queryString = url.Substring(questionMarkIndex + 1);
+            foreach (var keyValuePair in queryString.Split('&'))
             {
-                var kv = pair.Split('=');
-                if (kv.Length == 2 && Uri.UnescapeDataString(kv[0]) == key)
+                var keyValueArray = keyValuePair.Split('=');
+                if (keyValueArray.Length == 2 && Uri.UnescapeDataString(keyValueArray[0]) == key)
                 {
-                    return Uri.UnescapeDataString(kv[1]);
+                    return Uri.UnescapeDataString(keyValueArray[1]);
                 }
             }
             return "";
@@ -268,17 +268,17 @@ namespace AbxrLib.Runtime.Core
 			
                 foreach (var rawModule in rawModules)
                 {
-                    var id = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
-                    var name = rawModule.ContainsKey("name") ? rawModule["name"]?.ToString() : "";
-                    var target = rawModule.ContainsKey("target") ? rawModule["target"]?.ToString() : "";
-                    var order = 0;
+                    var moduleId = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
+                    var moduleName = rawModule.ContainsKey("name") ? rawModule["name"]?.ToString() : "";
+                    var moduleTarget = rawModule.ContainsKey("target") ? rawModule["target"]?.ToString() : "";
+                    var moduleOrder = 0;
 				
                     if (rawModule.ContainsKey("order") && rawModule["order"] != null)
                     {
-                        int.TryParse(rawModule["order"].ToString(), out order);
+                        int.TryParse(rawModule["order"].ToString(), out moduleOrder);
                     }
 
-                    tempList.Add(new Abxr.ModuleData(id, name, target, order));
+                    tempList.Add(new Abxr.ModuleData(moduleId, moduleName, moduleTarget, moduleOrder));
                 }
 
                 // Sort modules by order field

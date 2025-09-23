@@ -68,13 +68,13 @@ using UnityEngine;
 /// </summary>
 public static partial class Abxr
 {
-	private static readonly Dictionary<string, DateTime> TimedEventStartTimes = new();
-	private static readonly Dictionary<string, DateTime> AssessmentStartTimes = new();
-	private static readonly Dictionary<string, DateTime> ObjectiveStartTimes = new();
-	private static readonly Dictionary<string, DateTime> InteractionStartTimes = new();
-	private static readonly Dictionary<string, DateTime> LevelStartTimes = new();
-	private static readonly Dictionary<string, string> SuperProperties = new();
-	private const string SuperPropertiesKey = "AbxrSuperProperties";
+	private static readonly Dictionary<string, DateTime> _timedEventStartTimes = new();
+	private static readonly Dictionary<string, DateTime> _assessmentStartTimes = new();
+	private static readonly Dictionary<string, DateTime> _objectiveStartTimes = new();
+	private static readonly Dictionary<string, DateTime> _interactionStartTimes = new();
+	private static readonly Dictionary<string, DateTime> _levelStartTimes = new();
+	private static readonly Dictionary<string, string> _superProperties = new();
+	private const string _superPropertiesKey = "AbxrSuperProperties";
 
 	static Abxr()
 	{
@@ -87,15 +87,15 @@ public static partial class Abxr
 	public static Action<bool, string> OnAuthCompleted;
 
 	// Module index for sequential LMS multi-module applications
-	private static int currentModuleIndex = 0;
-	private const string ModuleIndexKey = "AbxrModuleIndex";
+	private static int _currentModuleIndex = 0;
+	private const string _moduleIndexKey = "AbxrModuleIndex";
 	
 	// Connection status - tracks whether AbxrLib can communicate with the server
-	private static bool connectionActive = false;
+	private static bool _connectionActive = false;
 
 	// Module index loading state to prevent repeated storage calls
-	private static bool moduleIndexLoaded = false;
-	private static bool moduleIndexLoading = false;
+	private static bool _moduleIndexLoaded = false;
+	private static bool _moduleIndexLoading = false;
 
 	/// <summary>
 	/// Mixpanel compatibility class for property values
@@ -114,12 +114,12 @@ public static partial class Abxr
 		/// <returns>Dictionary with all values converted to strings</returns>
 		public Dictionary<string, string> ToDictionary()
 		{
-			var result = new Dictionary<string, string>();
-			foreach (var kvp in this)
-			{
-				result[kvp.Key] = kvp.Value?.ToString() ?? string.Empty;
-			}
-			return result;
+		var stringDictionary = new Dictionary<string, string>();
+		foreach (var keyValuePair in this)
+		{
+			stringDictionary[keyValuePair.Key] = keyValuePair.Value?.ToString() ?? string.Empty;
+		}
+		return stringDictionary;
 		}
 	}
 
@@ -265,23 +265,23 @@ public static partial class Abxr
 	/// This indicates whether the library is configured and ready to communicate
 	/// </summary>
 	/// <returns>True if connection is active, false otherwise</returns>
-	public static bool ConnectionActive() => connectionActive;
+	public static bool ConnectionActive() => _connectionActive;
 
 	/// <summary>
 	/// General logging method with configurable level - main logging function
 	/// </summary>
-	/// <param name="message">The log message</param>
-	/// <param name="level">Log level (defaults to LogLevel.Info)</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void Log(string message, LogLevel level = LogLevel.Info, Dictionary<string, string> meta = null)
+	/// <param name="logMessage">The log message</param>
+	/// <param name="logLevel">Log level (defaults to LogLevel.Info)</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		metadata ??= new Dictionary<string, string>();
+		metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
 		// Add super properties to all logs
-		meta = MergeSuperProperties(meta);
+		metadata = MergeSuperProperties(metadata);
 		
-		string logLevel = level switch
+		string logLevelString = logLevel switch
 		{
 			LogLevel.Debug => "debug",
 			LogLevel.Info => "info",
@@ -291,80 +291,80 @@ public static partial class Abxr
 			_ => "info" // Default case
 		};
 		
-		LogBatcher.Add(logLevel, message, meta);
+		LogBatcher.Add(logLevelString, logMessage, metadata);
 	}
 
 	/// <summary>
 	/// Add log information at the 'Debug' level
 	/// </summary>
-	/// <param name="text">The log text</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void LogDebug(string text, Dictionary<string, string> meta = null)
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogDebug(string logText, Dictionary<string, string> metadata = null)
 	{
-		Log(text, LogLevel.Debug, meta);
+		Log(logText, LogLevel.Debug, metadata);
 	}
 
 	/// <summary>
 	/// Add log information at the 'Informational' level
 	/// </summary>
-	/// <param name="text">The log text</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void LogInfo(string text, Dictionary<string, string> meta = null)
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogInfo(string logText, Dictionary<string, string> metadata = null)
 	{
-		Log(text, LogLevel.Info, meta);
+		Log(logText, LogLevel.Info, metadata);
 	}
 
 	/// <summary>
 	/// Add log information at the 'Warning' level
 	/// </summary>
-	/// <param name="text">The log text</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void LogWarn(string text, Dictionary<string, string> meta = null)
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogWarn(string logText, Dictionary<string, string> metadata = null)
 	{
-		Log(text, LogLevel.Warn, meta);
+		Log(logText, LogLevel.Warn, metadata);
 	}
 
 	/// <summary>
 	/// Add log information at the 'Error' level
 	/// </summary>
-	/// <param name="text">The log text</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void LogError(string text, Dictionary<string, string> meta = null)
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogError(string logText, Dictionary<string, string> metadata = null)
 	{
-		Log(text, LogLevel.Error, meta);
+		Log(logText, LogLevel.Error, metadata);
 	}
 
 	/// <summary>
 	/// Add log information at the 'Critical' level
 	/// </summary>
-	/// <param name="text">The log text</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void LogCritical(string text, Dictionary<string, string> meta = null)
+	/// <param name="logText">The log text</param>
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void LogCritical(string logText, Dictionary<string, string> metadata = null)
 	{
-		Log(text, LogLevel.Critical, meta);
+		Log(logText, LogLevel.Critical, metadata);
 	}
 
 	/// <summary>
 	/// Add event information
 	/// </summary>
-	/// <param name="name">Name of the event</param>
-	/// <param name="meta">Any additional information (optional)</param>
+	/// <param name="eventName">Name of the event</param>
+	/// <param name="metadata">Any additional information (optional)</param>
 	/// <param name="sendTelemetry">Send telemetry with the event (optional)</param>
-	public static void Event(string name, Dictionary<string, string> meta = null, bool sendTelemetry = true)
+	public static void Event(string eventName, Dictionary<string, string> metadata = null, bool sendTelemetry = true)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		metadata ??= new Dictionary<string, string>();
+		metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
 		// Add super properties to all events
-		meta = MergeSuperProperties(meta);
+		metadata = MergeSuperProperties(metadata);
 		
 		// Add duration if this was a timed event (StartTimedEvent functionality)
-		if (TimedEventStartTimes.ContainsKey(name) && !meta.ContainsKey("duration"))
+		if (_timedEventStartTimes.ContainsKey(eventName) && !metadata.ContainsKey("duration"))
 		{
-			AddDuration(TimedEventStartTimes, name, meta);
+			AddDuration(_timedEventStartTimes, eventName, metadata);
 		}
 		
-		EventBatcher.Add(name, meta);
+		EventBatcher.Add(eventName, metadata);
 		if (sendTelemetry)
 		{
 			TrackSystemInfo.SendAll();
@@ -375,16 +375,16 @@ public static partial class Abxr
 	/// <summary>
 	/// Add event information
 	/// </summary>
-	/// <param name="name">Name of the event</param>
+	/// <param name="eventName">Name of the event</param>
 	/// <param name="position">Adds position tracking of the object</param>
-	/// <param name="meta">Any additional information (optional)</param>
-	public static void Event(string name, Vector3 position, Dictionary<string, string> meta = null)
+	/// <param name="metadata">Any additional information (optional)</param>
+	public static void Event(string eventName, Vector3 position, Dictionary<string, string> metadata = null)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["position_x"] = position.x.ToString();
-		meta["position_y"] = position.y.ToString();
-		meta["position_z"] = position.z.ToString();
-		Event(name, meta);
+		metadata ??= new Dictionary<string, string>();
+		metadata["position_x"] = position.x.ToString();
+		metadata["position_y"] = position.y.ToString();
+		metadata["position_z"] = position.z.ToString();
+		Event(eventName, metadata);
 	}
 
 	/// <summary>
@@ -395,32 +395,32 @@ public static partial class Abxr
 	/// <param name="eventName">Name of the event to start timing</param>
 	public static void StartTimedEvent(string eventName)
 	{
-		TimedEventStartTimes[eventName] = DateTime.UtcNow;
+		_timedEventStartTimes[eventName] = DateTime.UtcNow;
 	}
 
 	/// <summary>
 	/// Send spatial, hardware, or system telemetry data for XR analytics
 	/// Captures headset/controller movements, performance metrics, and environmental data
 	/// </summary>
-	/// <param name="name">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
-	/// <param name="meta">Key-value pairs of telemetry measurements</param>
-	public static void Telemetry(string name, Dictionary<string, string> meta)
+	/// <param name="telemetryName">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
+	/// <param name="telemetryData">Key-value pairs of telemetry measurements</param>
+	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
 	{
-		meta ??= new Dictionary<string, string>();
-		meta["sceneName"] = SceneChangeDetector.CurrentSceneName;
+		telemetryData ??= new Dictionary<string, string>();
+		telemetryData["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
 		// Add super properties to all telemetry entries
-		meta = MergeSuperProperties(meta);
+		telemetryData = MergeSuperProperties(telemetryData);
 		
-		TelemetryBatcher.Add(name, meta);
+		TelemetryBatcher.Add(telemetryName, telemetryData);
 	}
 
 	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
 	// This method exists purely for backward compatibility with older code that used TelemetryEntry()
 	// It simply wraps the new Telemetry() method. Keep this undocumented in README files.
-	public static void TelemetryEntry(string name, Dictionary<string, string> meta)
+	public static void TelemetryEntry(string telemetryName, Dictionary<string, string> telemetryData)
 	{
-		Telemetry(name, meta);
+		Telemetry(telemetryName, telemetryData);
 	}
 
 	/// <summary>
@@ -445,13 +445,13 @@ public static partial class Abxr
 	///	    Debug.Log("Result: " + result);
 	/// }));
 	/// </summary>
-	/// <param name="name">The name of the entry to retrieve</param>
+	/// <param name="entryName">The name of the entry to retrieve</param>
 	/// <param name="scope">Get from 'device' or 'user'</param>
 	/// <param name="callback">Return value when finished</param>
 	/// <returns>All the session data stored under the given name</returns>
-	public static IEnumerator StorageGetEntry(string name, StorageScope scope, Action<List<Dictionary<string, string>>> callback)
+	public static IEnumerator StorageGetEntry(string entryName, StorageScope scope, Action<List<Dictionary<string, string>>> callback)
 	{
-		yield return StorageBatcher.Get(name, scope, callback);
+		yield return StorageBatcher.Get(entryName, scope, callback);
 	}
 
 	/// <summary>
@@ -483,11 +483,11 @@ public static partial class Abxr
 	/// <summary>
 	/// Set the session data with the given name
 	/// </summary>
-	/// <param name="name">The name of the entry to store</param>
-	/// <param name="entry">The data to store</param>
+	/// <param name="entryName">The name of the entry to store</param>
+	/// <param name="entryData">The data to store</param>
 	/// <param name="scope">Store under 'device' or 'user'</param>
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
-	public static void StorageSetEntry(string name, Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
+	public static void StorageSetEntry(string entryName, Dictionary<string, string> entryData, StorageScope scope, StoragePolicy policy = StoragePolicy.keepLatest)
 	{
 		// Check if basic authentication is ready
 		if (!Authentication.Authenticated())
@@ -504,7 +504,7 @@ public static partial class Abxr
 			return;
 		}
 		
-		StorageBatcher.Add(name, entry, scope, policy);
+		StorageBatcher.Add(entryName, entryData, scope, policy);
 	}
 
 	/// <summary>
@@ -519,11 +519,11 @@ public static partial class Abxr
 	/// <summary>
 	/// Remove the session data stored under the given name
 	/// </summary>
-	/// <param name="name">The name of the entry to remove</param>
+	/// <param name="entryName">The name of the entry to remove</param>
 	/// <param name="scope">Remove from 'device' or 'user' (defaults to 'user')</param>
-	public static void StorageRemoveEntry(string name, StorageScope scope = StorageScope.user)
+	public static void StorageRemoveEntry(string entryName, StorageScope scope = StorageScope.user)
 	{
-		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(scope, name));
+		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(scope, entryName));
 	}
 
 	/// <summary>
@@ -586,7 +586,7 @@ public static partial class Abxr
 			return;
 		}
 
-		SuperProperties[key] = value;
+		_superProperties[key] = value;
 		SaveSuperProperties();
 	}
 
@@ -610,9 +610,9 @@ public static partial class Abxr
 			return;
 		}
 
-		if (!SuperProperties.ContainsKey(key))
+		if (!_superProperties.ContainsKey(key))
 		{
-			SuperProperties[key] = value;
+			_superProperties[key] = value;
 			SaveSuperProperties();
 		}
 	}
@@ -623,7 +623,7 @@ public static partial class Abxr
 	/// <param name="key">Property name to remove</param>
 	public static void Unregister(string key)
 	{
-		SuperProperties.Remove(key);
+		_superProperties.Remove(key);
 		SaveSuperProperties();
 	}
 
@@ -633,7 +633,7 @@ public static partial class Abxr
 	/// </summary>
 	public static void Reset()
 	{
-		SuperProperties.Clear();
+		_superProperties.Clear();
 		SaveSuperProperties();
 	}
 
@@ -643,23 +643,23 @@ public static partial class Abxr
 	/// <returns>Dictionary containing all super properties</returns>
 	public static Dictionary<string, string> GetSuperProperties()
 	{
-		return new Dictionary<string, string>(SuperProperties);
+		return new Dictionary<string, string>(_superProperties);
 	}
 
 	private static void LoadSuperProperties()
 	{
-		string json = PlayerPrefs.GetString(SuperPropertiesKey, "{}");
+		string json = PlayerPrefs.GetString(_superPropertiesKey, "{}");
 		try
 		{
-			var dict = JsonUtility.FromJson<SerializableDictionary>(json);
-			if (dict?.items != null)
+		var serializableDictionary = JsonUtility.FromJson<SerializableDictionary>(json);
+		if (serializableDictionary?.items != null)
+		{
+			_superProperties.Clear();
+			foreach (var keyValueItem in serializableDictionary.items)
 			{
-				SuperProperties.Clear();
-				foreach (var item in dict.items)
-				{
-					SuperProperties[item.key] = item.value;
-				}
+				_superProperties[keyValueItem.key] = keyValueItem.value;
 			}
+		}
 		}
 		catch (Exception ex)
 		{
@@ -674,16 +674,16 @@ public static partial class Abxr
 	{
 		try
 		{
-			var dict = new SerializableDictionary
+		var serializableDictionary = new SerializableDictionary
+		{
+			items = _superProperties.Select(keyValuePair => new SerializableKeyValuePair
 			{
-				items = SuperProperties.Select(kvp => new SerializableKeyValuePair
-				{
-					key = kvp.Key,
-					value = kvp.Value
-				}).ToArray()
-			};
-			string json = JsonUtility.ToJson(dict);
-			PlayerPrefs.SetString(SuperPropertiesKey, json);
+				key = keyValuePair.Key,
+				value = keyValuePair.Value
+			}).ToArray()
+		};
+		string json = JsonUtility.ToJson(serializableDictionary);
+			PlayerPrefs.SetString(_superPropertiesKey, json);
 			PlayerPrefs.Save();
 		}
 		catch (Exception ex)
@@ -719,44 +719,44 @@ public static partial class Abxr
 		meta ??= new Dictionary<string, string>();
 		
 		// Add current module information if available
-		var currentSession = GetModuleTargetWithoutAdvance();
-		if (currentSession != null)
+		var currentSessionData = GetModuleTargetWithoutAdvance();
+		if (currentSessionData != null)
 		{
 			// Only add module info if not already present (data-specific properties take precedence)
-			if (!meta.ContainsKey("module") && !string.IsNullOrEmpty(currentSession.moduleTarget))
+			if (!meta.ContainsKey("module") && !string.IsNullOrEmpty(currentSessionData.moduleTarget))
 			{
-				meta["module"] = currentSession.moduleTarget;
+				meta["module"] = currentSessionData.moduleTarget;
 			}
 			// For additional module metadata, we need to get it from the modules list
 			if (Authentication.GetModuleData() != null && Authentication.GetModuleData().Count > 0)
 			{
-				LoadModuleIndex();
-				if (currentModuleIndex < Authentication.GetModuleData().Count)
-				{
-					ModuleData currentModule = Authentication.GetModuleData()[currentModuleIndex];
-					if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModule.name))
+		LoadModuleIndex();
+		if (_currentModuleIndex < Authentication.GetModuleData().Count)
+		{
+			ModuleData currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
+					if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModuleData.name))
 					{
-						meta["module_name"] = currentModule.name;
+						meta["module_name"] = currentModuleData.name;
 					}
-					if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModule.id))
+					if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModuleData.id))
 					{
-						meta["module_id"] = currentModule.id;
+						meta["module_id"] = currentModuleData.id;
 					}
 					if (!meta.ContainsKey("module_order"))
 					{
-						meta["module_order"] = currentModule.order.ToString();
+						meta["module_order"] = currentModuleData.order.ToString();
 					}
 				}
 			}
 		}
 		
 		// Add super properties to metadata
-		foreach (var superProperty in SuperProperties)
+		foreach (var superPropertyKeyValue in _superProperties)
 		{
 			// Super properties don't overwrite data-specific properties or module info
-			if (!meta.ContainsKey(superProperty.Key))
+			if (!meta.ContainsKey(superPropertyKeyValue.Key))
 			{
-				meta[superProperty.Key] = superProperty.Value;
+				meta[superPropertyKeyValue.Key] = superPropertyKeyValue.Value;
 			}
 		}
 		
@@ -789,7 +789,7 @@ public static partial class Abxr
 		meta ??= new Dictionary<string, string>();
 		meta["type"] = "assessment";
 		meta["verb"] = "started";
-		AssessmentStartTimes[assessmentName] = DateTime.UtcNow;
+		_assessmentStartTimes[assessmentName] = DateTime.UtcNow;
 		Event(assessmentName, meta);
 	}
 	
@@ -810,7 +810,7 @@ public static partial class Abxr
 		meta["verb"] = "completed";
 		meta["score"] = score.ToString();
 		meta["status"] = status.ToString();
-		AddDuration(AssessmentStartTimes, assessmentName, meta);
+		AddDuration(_assessmentStartTimes, assessmentName, meta);
 		Event(assessmentName, meta);
 		CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
 	}
@@ -826,7 +826,7 @@ public static partial class Abxr
 		meta ??= new Dictionary<string, string>();
 		meta["type"] = "objective";
 		meta["verb"] = "started";
-		ObjectiveStartTimes[objectiveName] = DateTime.UtcNow;
+		_objectiveStartTimes[objectiveName] = DateTime.UtcNow;
 		Event(objectiveName, meta);
 	}
 	
@@ -847,7 +847,7 @@ public static partial class Abxr
 		meta["verb"] = "completed";
 		meta["score"] = score.ToString();
 		meta["status"] = status.ToString();
-		AddDuration(ObjectiveStartTimes, objectiveName, meta);
+		AddDuration(_objectiveStartTimes, objectiveName, meta);
 		Event(objectiveName, meta);
 	}
 
@@ -862,7 +862,7 @@ public static partial class Abxr
 		meta ??= new Dictionary<string, string>();
 		meta["type"] = "interaction";
 		meta["verb"] = "started";
-		InteractionStartTimes[interactionName] = DateTime.UtcNow;
+		_interactionStartTimes[interactionName] = DateTime.UtcNow;
 		Event(interactionName, meta);
 	}
 	
@@ -883,7 +883,7 @@ public static partial class Abxr
 		meta["verb"] = "completed";
 		meta["interaction"] = interactionType.ToString();
 		if (!string.IsNullOrEmpty(response)) meta["response"] = response;
-		AddDuration(InteractionStartTimes, interactionName, meta);
+		AddDuration(_interactionStartTimes, interactionName, meta);
 		Event(interactionName, meta);
 	}
 
@@ -898,7 +898,7 @@ public static partial class Abxr
 		meta ??= new Dictionary<string, string>();
 		meta["verb"] = "started";
 		meta["id"] = levelName;
-		LevelStartTimes[levelName] = DateTime.UtcNow;
+		_levelStartTimes[levelName] = DateTime.UtcNow;
 		Event("level_start", meta);
 	}
 	
@@ -915,7 +915,7 @@ public static partial class Abxr
 		meta["verb"] = "completed";
 		meta["id"] = levelName;
 		meta["score"] = score;
-		AddDuration(LevelStartTimes, levelName, meta);
+		AddDuration(_levelStartTimes, levelName, meta);
 		Event("level_complete", meta);
 	}
 
@@ -1138,16 +1138,16 @@ public static partial class Abxr
 
 		LoadModuleIndex();
 
-		if (currentModuleIndex >= Authentication.GetModuleData().Count)
+		if (_currentModuleIndex >= Authentication.GetModuleData().Count)
 		{
 			return null;
 		}
 
-		var currentModule = Authentication.GetModuleData()[currentModuleIndex];
+		var currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
 		
 		// Return CurrentSessionData structure (same as GetModuleTarget but without advancing index)
 		return new CurrentSessionData(
-			currentModule.target,
+			currentModuleData.target,
 			GetUserData(),
 			Authentication.GetAuthResponse().UserId
 		);
@@ -1170,7 +1170,7 @@ public static partial class Abxr
 
 		// Advance to next module
 		LoadModuleIndex();
-		currentModuleIndex++;
+		_currentModuleIndex++;
 		SaveModuleIndex();
 
 		return currentSessionData;
@@ -1185,8 +1185,8 @@ public static partial class Abxr
 		if (Authentication.GetModuleData() == null) return 0;
 
 		LoadModuleIndex();
-		int remaining = Authentication.GetModuleData().Count - currentModuleIndex;
-		return Math.Max(0, remaining);
+		int remainingModuleCount = Authentication.GetModuleData().Count - _currentModuleIndex;
+		return Math.Max(0, remainingModuleCount);
 	}
 
 	/// <summary>
@@ -1194,11 +1194,11 @@ public static partial class Abxr
 	/// </summary>
 	public static void ClearModuleTargets()
 	{
-		currentModuleIndex = 0;
+		_currentModuleIndex = 0;
 		// Reset cache since we're clearing the module state
-		moduleIndexLoaded = false;
-		moduleIndexLoading = false;
-		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, ModuleIndexKey));
+		_moduleIndexLoaded = false;
+		_moduleIndexLoading = false;
+		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, _moduleIndexKey));
 	}
 
 	/// <summary>
@@ -1215,32 +1215,32 @@ public static partial class Abxr
 			return 0;
 		}
 
-		int executedCount = 0;
-		var nextModule = GetModuleTarget();
+		int executedModuleCount = 0;
+		var nextModuleData = GetModuleTarget();
 		
-		while (nextModule != null)
+		while (nextModuleData != null)
 		{
-			Debug.Log($"AbxrLib - Triggering OnModuleTarget event for module: {nextModule.moduleTarget}");
+			Debug.Log($"AbxrLib - Triggering OnModuleTarget event for module: {nextModuleData.moduleTarget}");
 			
 			try
 			{
-				OnModuleTarget.Invoke(nextModule.moduleTarget);
-				Debug.Log($"AbxrLib - Module {nextModule.moduleTarget} executed via OnModuleTarget event");
-				executedCount++;
+				OnModuleTarget.Invoke(nextModuleData.moduleTarget);
+				Debug.Log($"AbxrLib - Module {nextModuleData.moduleTarget} executed via OnModuleTarget event");
+				executedModuleCount++;
 			}
 			catch (Exception ex)
 			{
 				// Log error with consistent format and include module context
-				Debug.LogError($"AbxrLib: Error executing OnModuleTarget event for module {nextModule.moduleTarget}: {ex.Message}\n" +
+				Debug.LogError($"AbxrLib: Error executing OnModuleTarget event for module {nextModuleData.moduleTarget}: {ex.Message}\n" +
 							  $"Exception Type: {ex.GetType().Name}\n" +
 							  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 			}
 			
-			nextModule = GetModuleTarget();
+			nextModuleData = GetModuleTarget();
 		}
 		
-		Debug.Log($"AbxrLib - Module sequence completed. {executedCount} modules executed.");
-		return executedCount;
+		Debug.Log($"AbxrLib - Module sequence completed. {executedModuleCount} modules executed.");
+		return executedModuleCount;
 	}
 
 	private static void SaveModuleIndex()
@@ -1249,21 +1249,21 @@ public static partial class Abxr
 		{
 			// Module tracking uses user scope for LMS integrations - requires user to be logged in
 			// The StorageSetEntry function will handle the authentication checks and defer until user auth is ready
-			var serializedData = new Dictionary<string, string>
+			var moduleIndexData = new Dictionary<string, string>
 			{
-				["moduleIndex"] = currentModuleIndex.ToString()
+				["moduleIndex"] = _currentModuleIndex.ToString()
 			};
 
-			StorageSetEntry(ModuleIndexKey, serializedData, StorageScope.user, StoragePolicy.keepLatest);
+			StorageSetEntry(_moduleIndexKey, moduleIndexData, StorageScope.user, StoragePolicy.keepLatest);
 			
 			// Reset cache since we've updated the stored index
-			moduleIndexLoaded = false;
+			_moduleIndexLoaded = false;
 		}
 		catch (Exception ex)
 		{
 			// Log error with consistent format and include context
 			Debug.LogError($"AbxrLib: Failed to save module index: {ex.Message}\n" +
-						  $"Current Module Index: {currentModuleIndex}\n" +
+						  $"Current Module Index: {_currentModuleIndex}\n" +
 						  $"Exception Type: {ex.GetType().Name}\n" +
 						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 		}
@@ -1272,22 +1272,22 @@ public static partial class Abxr
 	private static void LoadModuleIndex()
 	{
 		// Don't load if already loaded or currently loading
-		if (moduleIndexLoaded || moduleIndexLoading)
+		if (_moduleIndexLoaded || _moduleIndexLoading)
 		{
 			return;
 		}
 
 		try
 		{
-			moduleIndexLoading = true;
+			_moduleIndexLoading = true;
 			CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
 		}
 		catch (Exception ex)
 		{
-			moduleIndexLoading = false;
+			_moduleIndexLoading = false;
 			// Log error with consistent format and include context
 			Debug.LogError($"AbxrLib: Failed to load module index: {ex.Message}\n" +
-						  $"Module Index Loaded: {moduleIndexLoaded}\n" +
+						  $"Module Index Loaded: {_moduleIndexLoaded}\n" +
 						  $"Exception Type: {ex.GetType().Name}\n" +
 						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 		}
@@ -1295,27 +1295,27 @@ public static partial class Abxr
 
 	private static IEnumerator LoadModuleIndexCoroutine()
 	{
-		yield return StorageGetEntry(ModuleIndexKey, StorageScope.user, result =>
+		yield return StorageGetEntry(_moduleIndexKey, StorageScope.user, result =>
 		{
 			if (result != null && result.Count > 0)
 			{
-				var data = result[0]; // Get the first (and should be only) entry
-				if (data.ContainsKey("moduleIndex"))
+				var moduleIndexEntry = result[0]; // Get the first (and should be only) entry
+				if (moduleIndexEntry.ContainsKey("moduleIndex"))
 				{
-					var moduleIndexString = data["moduleIndex"];
+					var moduleIndexString = moduleIndexEntry["moduleIndex"];
 					if (!string.IsNullOrEmpty(moduleIndexString))
 					{
-						if (int.TryParse(moduleIndexString, out int savedIndex))
+						if (int.TryParse(moduleIndexString, out int savedModuleIndex))
 						{
-							currentModuleIndex = savedIndex;
+							_currentModuleIndex = savedModuleIndex;
 						}
 					}
 				}
 			}
 			
 			// Mark loading as complete
-			moduleIndexLoaded = true;
-			moduleIndexLoading = false;
+			_moduleIndexLoaded = true;
+			_moduleIndexLoading = false;
 		});
 	}
 
@@ -1328,15 +1328,15 @@ public static partial class Abxr
 	internal static void NotifyAuthCompleted(bool success, string error = null)
 	{
 		// Update connection status based on authentication success
-		connectionActive = success;
+		_connectionActive = success;
 		
 		// Reset module index cache for new authentication
-		moduleIndexLoaded = false;
-		moduleIndexLoading = false;
+		_moduleIndexLoaded = false;
+		_moduleIndexLoading = false;
 		
 		// Set up module index for GetModuleTarget() calls
 		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
-		currentModuleIndex = 0;
+		_currentModuleIndex = 0;
 		SaveModuleIndex();
 		OnAuthCompleted?.Invoke(success, error);
 	}
@@ -1357,7 +1357,7 @@ public static partial class Abxr
 	/// <returns>Copy of the assessment start times dictionary</returns>
 	internal static Dictionary<string, DateTime> GetAssessmentStartTimes()
 	{
-		return new Dictionary<string, DateTime>(AssessmentStartTimes);
+		return new Dictionary<string, DateTime>(_assessmentStartTimes);
 	}
 	
 	/// <summary>
@@ -1367,7 +1367,7 @@ public static partial class Abxr
 	/// <returns>Copy of the objective start times dictionary</returns>
 	internal static Dictionary<string, DateTime> GetObjectiveStartTimes()
 	{
-		return new Dictionary<string, DateTime>(ObjectiveStartTimes);
+		return new Dictionary<string, DateTime>(_objectiveStartTimes);
 	}
 	
 	/// <summary>
@@ -1377,7 +1377,7 @@ public static partial class Abxr
 	/// <returns>Copy of the interaction start times dictionary</returns>
 	internal static Dictionary<string, DateTime> GetInteractionStartTimes()
 	{
-		return new Dictionary<string, DateTime>(InteractionStartTimes);
+		return new Dictionary<string, DateTime>(_interactionStartTimes);
 	}
 	
 	/// <summary>
@@ -1387,7 +1387,7 @@ public static partial class Abxr
 	/// <returns>Copy of the level start times dictionary</returns>
 	internal static Dictionary<string, DateTime> GetLevelStartTimes()
 	{
-		return new Dictionary<string, DateTime>(LevelStartTimes);
+		return new Dictionary<string, DateTime>(_levelStartTimes);
 	}
 	
 	/// <summary>
@@ -1396,11 +1396,11 @@ public static partial class Abxr
 	/// </summary>
 	internal static void ClearAllStartTimes()
 	{
-		AssessmentStartTimes.Clear();
-		ObjectiveStartTimes.Clear();
-		InteractionStartTimes.Clear();
-		LevelStartTimes.Clear();
-		TimedEventStartTimes.Clear();
+		_assessmentStartTimes.Clear();
+		_objectiveStartTimes.Clear();
+		_interactionStartTimes.Clear();
+		_levelStartTimes.Clear();
+		_timedEventStartTimes.Clear();
 	}
 	
 	#endregion

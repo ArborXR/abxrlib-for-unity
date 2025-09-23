@@ -20,10 +20,10 @@ namespace AbxrLib.Runtime.Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void OnBeforeSceneLoad()
         {
-            var version = typeof(JsonConvert).Assembly.GetName().Version;
-            Debug.Log($"AbxrLib: Using Newtonsoft.Json version: {version}");
+            var jsonVersion = typeof(JsonConvert).Assembly.GetName().Version;
+            Debug.Log($"AbxrLib: Using Newtonsoft.Json version: {jsonVersion}");
 
-            if (version < new Version(13, 0, 0))
+            if (jsonVersion < new Version(13, 0, 0))
             {
                 Debug.LogError("AbxrLib: Incompatible Newtonsoft.Json version loaded.");
             }
@@ -56,11 +56,11 @@ namespace AbxrLib.Runtime.Core
 
     public class ObjectAttacher : MonoBehaviour
     {
-        public static T Attach<T>(string name) where T : MonoBehaviour
+        public static T Attach<T>(string componentName) where T : MonoBehaviour
         {
-            var go = new GameObject(name);
-            DontDestroyOnLoad(go);
-            return go.AddComponent<T>();
+            var gameObject = new GameObject(componentName);
+            DontDestroyOnLoad(gameObject);
+            return gameObject.AddComponent<T>();
         }
     }
 }

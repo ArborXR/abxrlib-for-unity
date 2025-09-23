@@ -15,9 +15,9 @@ namespace AbxrLib.Runtime.Telemetry
         private static InputDevice _leftController;
         private static InputDevice _hmd;
 
-        private const string HmdName = "Head";
-        private const string RightControllerName = "Right Controller";
-        private const string LeftControllerName = "Left Controller";
+        private const string _hmdName = "Head";
+        private const string _rightControllerName = "Right Controller";
+        private const string _leftControllerName = "Left Controller";
 
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _rightTriggerValues = new();
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _leftTriggerValues = new();
@@ -66,9 +66,9 @@ namespace AbxrLib.Runtime.Telemetry
             device.TryGetFeatureValue(CommonUsages.devicePosition, out Vector3 position);
             device.TryGetFeatureValue(CommonUsages.deviceRotation, out Quaternion rotation);
 
-            string deviceName = HmdName;
-            if (device.characteristics.HasFlag(InputDeviceCharacteristics.Right)) deviceName = RightControllerName;
-            if (device.characteristics.HasFlag(InputDeviceCharacteristics.Left)) deviceName = LeftControllerName;
+            string deviceName = _hmdName;
+            if (device.characteristics.HasFlag(InputDeviceCharacteristics.Right)) deviceName = _rightControllerName;
+            if (device.characteristics.HasFlag(InputDeviceCharacteristics.Left)) deviceName = _leftControllerName;
 
             var positionDict = new Dictionary<string, string>
             {
@@ -99,35 +99,35 @@ namespace AbxrLib.Runtime.Telemetry
         {
             if (_rightController.isValid)
             {
-                _rightController.TryGetFeatureValue(trigger, out bool pressed);
-                _rightTriggerValues.TryGetValue(trigger, out bool current);
-                if (pressed != current)
+                _rightController.TryGetFeatureValue(trigger, out bool isPressed);
+                _rightTriggerValues.TryGetValue(trigger, out bool wasPressed);
+                if (isPressed != wasPressed)
                 {
                     string action = "Pressed";
-                    if (!pressed) action = "Released";
+                    if (!isPressed) action = "Released";
                     var telemetryData = new Dictionary<string, string>
                     {
                         [trigger.name] = action
                     };
                     Abxr.Telemetry($"Right Controller {trigger.name}", telemetryData);
-                    _rightTriggerValues[trigger] = pressed;
+                    _rightTriggerValues[trigger] = isPressed;
                 }
             }
 
             if (_leftController.isValid)
             {
-                _leftController.TryGetFeatureValue(trigger, out bool pressed);
-                _leftTriggerValues.TryGetValue(trigger, out bool current);
-                if (pressed != current)
+                _leftController.TryGetFeatureValue(trigger, out bool isPressed);
+                _leftTriggerValues.TryGetValue(trigger, out bool wasPressed);
+                if (isPressed != wasPressed)
                 {
                     string action = "Pressed";
-                    if (!pressed) action = "Released";
+                    if (!isPressed) action = "Released";
                     var telemetryData = new Dictionary<string, string>
                     {
                         [trigger.name] = action
                     };
                     Abxr.Telemetry($"Left Controller {trigger.name}", telemetryData);
-                    _leftTriggerValues[trigger] = pressed;
+                    _leftTriggerValues[trigger] = isPressed;
                 }
             }
         }
