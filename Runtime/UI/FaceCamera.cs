@@ -29,13 +29,11 @@ namespace AbxrLib.Runtime.UI
             Vector3 newPos = new Vector3(targetPos.x - 0.05f, 1.1f + verticalOffset, targetPos.z);
             transform.position = newPos;
 #endif
-
-            // face the camera
-            //transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
         }
    
         private void Update()
         {
+            faceCamera = Abxr.AuthUIFollowCamera;
             if (faceCamera)
             {
                 Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
@@ -43,7 +41,7 @@ namespace AbxrLib.Runtime.UI
                 transform.position = newPos;
 
                 // face the camera
-                //transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
+                transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
             }
         }
     }
