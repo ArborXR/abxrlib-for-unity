@@ -13,8 +13,8 @@ namespace AbxrLib.Runtime.Storage
 	{
 		private const string UrlPath = "/v1/storage";
 		private static Uri _uri;
-		private static readonly List<Payload> Payloads = new();
-		private static readonly object Lock = new();
+		private static readonly List<Payload> _payloads = new();
+		private static readonly object _lock = new();
 		private static float _timer;
 		private static float _lastCallTime;
 		private const float MaxCallFrequencySeconds = 1f;
@@ -47,10 +47,10 @@ namespace AbxrLib.Runtime.Storage
 				scope = scope.ToString()
 			};
 		
-			lock (Lock)
+			lock (_lock)
 			{
-				Payloads.Add(payload);
-				if (Payloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt)
+				_payloads.Add(payload);
+				if (_payloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt)
 				{
 					_timer = 0; // Send on the next update
 				}
@@ -64,17 +64,17 @@ namespace AbxrLib.Runtime.Storage
 			_lastCallTime = Time.time;
 			_timer = Configuration.Instance.sendNextBatchWaitSeconds; // reset timer
 			if (!Authentication.Authentication.Authenticated()) yield break;
-			lock (Lock)
+			lock (_lock)
 			{
-				if (Payloads.Count == 0) yield break;
+				if (_payloads.Count == 0) yield break;
 			}
 		
 			List<Payload> storagesToSend;
-			lock (Lock)
+			lock (_lock)
 			{
 				// Copy current list and leave original untouched
-				storagesToSend = new List<Payload>(Payloads);
-				foreach (var storage in storagesToSend) Payloads.Remove(storage);
+				storagesToSend = new List<Payload>(_payloads);
+				foreach (var storage in storagesToSend) _payloads.Remove(storage);
 			}
 		
 			var wrapper = new PayloadWrapper { data = storagesToSend };
@@ -93,9 +93,9 @@ namespace AbxrLib.Runtime.Storage
 			{
 				Debug.LogError($"AbxrLib: Storage POST Request failed : {request.error} - {request.downloadHandler.text}");
 				_timer = Configuration.Instance.sendRetryIntervalSeconds;
-				lock (Lock)
+				lock (_lock)
 				{
-					Payloads.InsertRange(0, storagesToSend);
+					_payloads.InsertRange(0, storagesToSend);
 				}
 			}
 		}
@@ -137,7 +137,7 @@ namespace AbxrLib.Runtime.Storage
 			{
 				{ "scope", scope.ToString() }
 			};
-			if (string.IsNullOrEmpty(name)) queryParams.Add("name", name);
+			if (!string.IsNullOrEmpty(name)) queryParams.Add("name", name);
 		
 			string urlWithParams = Utils.BuildUrlWithParams(_uri.ToString(), queryParams);
 			using UnityWebRequest request = UnityWebRequest.Delete(urlWithParams);

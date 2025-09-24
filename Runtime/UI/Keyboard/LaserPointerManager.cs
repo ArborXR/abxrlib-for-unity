@@ -7,11 +7,87 @@ namespace AbxrLib.Runtime.UI.Keyboard
     /// <summary>
     /// Manages XR ray interactors (laser pointers) to ensure they are enabled during keyboard/PIN pad interactions.
     /// Automatically detects and restores the original state when interactions are complete.
+    /// Requires Unity XR Interaction Toolkit to be available.
     /// </summary>
     public static class LaserPointerManager
     {
         private static Dictionary<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor, bool> _originalStates = new Dictionary<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor, bool>();
         private static bool _isManagingLaserPointers = false;
+        
+        /// <summary>
+        /// Cleans up any null references from destroyed objects to prevent memory leaks.
+        /// This should be called periodically or when objects might be destroyed.
+        /// </summary>
+        public static void CleanupDestroyedReferences()
+        {
+            if (_originalStates.Count == 0) return;
+            
+            var keysToRemove = new List<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+            
+            foreach (var kvp in _originalStates)
+            {
+                if (kvp.Key == null)
+                {
+                    keysToRemove.Add(kvp.Key);
+                }
+            }
+            
+            foreach (var key in keysToRemove)
+            {
+                _originalStates.Remove(key);
+            }
+            
+            if (keysToRemove.Count > 0)
+            {
+                Debug.Log($"AbxrLib - LaserPointerManager: Cleaned up {keysToRemove.Count} destroyed ray interactor references");
+            }
+        }
+        
+        /// <summary>
+        /// Forces cleanup of all managed states. Use this when you want to reset the manager completely.
+        /// </summary>
+        public static void ForceCleanup()
+        {
+            _originalStates.Clear();
+            _isManagingLaserPointers = false;
+            Debug.Log("AbxrLib - LaserPointerManager: Force cleanup completed");
+        }
+        
+        /// <summary>
+        /// Called when scenes change to ensure proper cleanup of destroyed objects.
+        /// This prevents memory leaks when ray interactors are destroyed during scene transitions.
+        /// </summary>
+        public static void OnSceneChanged()
+        {
+            if (_isManagingLaserPointers)
+            {
+                Debug.Log("AbxrLib - LaserPointerManager: Scene changed while managing laser pointers, performing cleanup");
+                ForceCleanup();
+            }
+            else
+            {
+                // Just clean up any orphaned references
+                CleanupDestroyedReferences();
+            }
+        }
+        
+        /// <summary>
+        /// Checks if XR Interaction Toolkit is available and properly configured.
+        /// </summary>
+        /// <returns>True if XR Interaction Toolkit is available, false otherwise</returns>
+        public static bool IsXRInteractionToolkitAvailable()
+        {
+            try
+            {
+                // Try to access the XRRayInteractor type to verify the toolkit is available
+                var rayInteractorType = typeof(UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor);
+                return rayInteractorType != null;
+            }
+            catch (System.Exception)
+            {
+                return false;
+            }
+        }
 
         /// <summary>
         /// Enables laser pointers for keyboard/PIN pad interaction if they are not already enabled.
@@ -19,7 +95,19 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void EnableLaserPointersForInteraction()
         {
-            if (_isManagingLaserPointers) return; // Already managing, avoid duplicate calls
+            // Check if XR Interaction Toolkit is available
+            if (!IsXRInteractionToolkitAvailable())
+            {
+                Debug.LogWarning("AbxrLib - LaserPointerManager: XR Interaction Toolkit is not available. Laser pointer management will be skipped.");
+                return;
+            }
+
+            if (_isManagingLaserPointers) 
+            {
+                // Clean up any destroyed references before continuing
+                CleanupDestroyedReferences();
+                return; // Already managing, avoid duplicate calls
+            }
 
             _isManagingLaserPointers = true;
             _originalStates.Clear();
@@ -52,8 +140,20 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void RestoreLaserPointerStates()
         {
+            // Check if XR Interaction Toolkit is available
+            if (!IsXRInteractionToolkitAvailable())
+            {
+                Debug.LogWarning("AbxrLib - LaserPointerManager: XR Interaction Toolkit is not available. Laser pointer restoration will be skipped.");
+                return;
+            }
+
             if (!_isManagingLaserPointers) return; // Not managing, nothing to restore
 
+            // Clean up any null references before processing
+            CleanupDestroyedReferences();
+
+            var keysToRemove = new List<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+            
             foreach (var kvp in _originalStates)
             {
                 UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor rayInteractor = kvp.Key;
@@ -67,10 +167,21 @@ namespace AbxrLib.Runtime.UI.Keyboard
                         rayInteractor.gameObject.SetActive(originalState);
                         Debug.Log($"AbxrLib - LaserPointerManager: Restored ray interactor on {rayInteractor.gameObject.name} to {(originalState ? "enabled" : "disabled")}");
                     }
+                    keysToRemove.Add(rayInteractor); // Mark for removal after processing
+                }
+                else
+                {
+                    // Object was destroyed, mark for removal
+                    keysToRemove.Add(rayInteractor);
                 }
             }
 
-            _originalStates.Clear();
+            // Remove all processed entries
+            foreach (var key in keysToRemove)
+            {
+                _originalStates.Remove(key);
+            }
+
             _isManagingLaserPointers = false;
 
             Debug.Log("AbxrLib - LaserPointerManager: Restored all ray interactors to original states");
@@ -78,12 +189,14 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         /// <summary>
         /// Checks if laser pointers are currently being managed by this system.
+        /// Returns false if XR Interaction Toolkit is not available.
         /// </summary>
-        public static bool IsManagingLaserPointers => _isManagingLaserPointers;
+        public static bool IsManagingLaserPointers => IsXRInteractionToolkitAvailable() && _isManagingLaserPointers;
 
         /// <summary>
         /// Gets the number of ray interactors currently being managed.
+        /// Returns 0 if XR Interaction Toolkit is not available.
         /// </summary>
-        public static int ManagedRayInteractorCount => _originalStates.Count;
+        public static int ManagedRayInteractorCount => IsXRInteractionToolkitAvailable() ? _originalStates.Count : 0;
     }
 }

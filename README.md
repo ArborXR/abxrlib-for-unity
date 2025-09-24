@@ -10,7 +10,7 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
    - [Events](#events)
    - [Analytics Event Wrappers](#analytics-event-wrappers-essential-for-all-developers)
    - [Timed Events](#timed-events)
-   - [Super Properties](#super-properties)
+   - [Super Meta Data](#super-meta-data)
    - [Logging](#logging)
    - [Storage](#storage)
    - [Telemetry](#telemetry)
@@ -244,16 +244,16 @@ Abxr.Track("User Session"); // Duration automatically included
 
 **Note:** The timer automatically adds a `duration` field (in seconds) to any subsequent event with the same name. The timer is automatically removed after the first matching event.
 
-#### Super Properties
+#### Super Meta Data
 
-Global properties automatically included in all events, logs, and telemetry data:
+Global metadata automatically included in all events, logs, and telemetry data:
 
 ```cpp
 //C# Method Signatures
 public static void Abxr.Register(string key, string value);
 public static void Abxr.RegisterOnce(string key, string value);
 
-// Set persistent properties (included in all events, logs, and telemetry)
+// Set persistent "super metadata" (included in all events, logs, and telemetry)
 Abxr.Register("user_type", "premium");
 Abxr.Register("app_version", "1.2.3");
 
@@ -261,8 +261,8 @@ Abxr.Register("app_version", "1.2.3");
 Abxr.RegisterOnce("user_tier", "free");
 
 // Management
-Abxr.Unregister("device_type");  // Remove specific property
-Abxr.Reset();                    // Clear all super properties
+Abxr.Unregister("device_type");  // Remove specific super metadata 
+Abxr.Reset();                    // Clear all super metadata
 ```
 
 Perfect for user attributes, app state, and device information that should be included with every event, log entry, and telemetry data point.
@@ -508,21 +508,21 @@ Abxr.Event("button_pressed"); // Automatically includes {"sceneName": "MainMenu"
 Abxr.LogInfo("User logged in"); // Automatically includes {"sceneName": "LoginScene"}
 ```
 
-#### Super Properties Auto-Merge
-Super properties are automatically merged into **every** event, log, and telemetry entry's metadata. Data-specific properties take precedence when keys conflict:
+#### Super Meta Data Auto-Merge
+Super metadata are automatically merged into **every** event, log, and telemetry entry's metadata. Data-specific metadata take precedence when keys conflict:
 ```cpp
-// Set super properties
+// Set super metadata
 Abxr.Register("app_version", "1.2.3");
 Abxr.Register("user_type", "premium");
 
-// Every event automatically includes super properties
+// Every event automatically includes super metadata
 Abxr.Event("level_complete", new Abxr.Dict {
     {"level", "3"}, 
-    {"user_type", "trial"}  // This overrides the super property
+    {"user_type", "trial"}  // This overrides the super metadata
 });
 // Result includes: app_version=1.2.3, user_type=trial, level=3, sceneName=CurrentScene
 
-// Logs and telemetry also automatically include super properties
+// Logs and telemetry also automatically include super metadata
 Abxr.LogInfo("Player action", new Abxr.Dict { {"action", "jump"} });
 // Result includes: app_version=1.2.3, user_type=premium, action=jump, sceneName=CurrentScene
 
@@ -941,6 +941,11 @@ Abxr.Track("purchase_completed", props);
 Abxr.StartTimedEvent("puzzle_solving");
 // ... later ...
 Abxr.Track("puzzle_solving"); // Duration automatically included
+
+// Super Meta Data (equivalent to Mixpanel's Super Properties)
+Abxr.Register("user_type", "premium");     // Set persistent "super metadata "
+Abxr.RegisterOnce("app_version", "1.2.3"); // Set only if not already set
+Abxr.Reset();                              // Clear all super metadata
 ```
 
 #### Key Advantages Over Mixpanel
@@ -949,7 +954,7 @@ Abxr.Track("puzzle_solving"); // Duration automatically included
 |---------|----------|-----------|
 | **Basic Event Tracking** | ✅ | ✅ |
 | **Custom Properties** | ✅ | ✅ |
-| **Super Properties** | ✅ | ✅ (Register/RegisterOnce available) |
+| **Super Metadata/Properties** | ✅ | ✅ (Register/RegisterOnce available) |
 | **Timed Events** | ✅ | ✅ (StartTimedEvent available) |
 | **3D Spatial Data** | ❌ | ✅ (Built-in Vector3 support) |
 | **XR-Specific Events** | ❌ | ✅ (Assessments, Interactions, Objectives) |
