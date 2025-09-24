@@ -967,17 +967,18 @@ Abxr.Reset();                              // Clear all super metadata
 
 ### Cognitive3D Compatibility
 
-The ABXRLib SDK provides full compatibility with Cognitive3D SDK, making migration simple and straightforward for event tracking. You can replace your existing Cognitive3D tracking calls with minimal code changes while gaining access to ABXR's advanced XR analytics capabilities and LMS integrations.
+The ABXRLib SDK provides full compatibility with Cognitive3D SDK, allowing you to either migrate from Cognitive3D or use both libraries side-by-side. You can add ABXRLib to your existing Cognitive3D implementation with minimal code changes while gaining access to ABXR's advanced XR analytics capabilities and LMS integrations.
 
 > **Note:** This compatibility guide covers event tracking only. Spatial analytics features of Cognitive3D are not covered as they have different architectures.
 
-#### Why Migrate from Cognitive3D?
+#### Why Add ABXRLib to Your Cognitive3D Setup?
 
 - **LMS Integration**: Native LMS platform support with SCORM/xAPI compatibility
 - **Advanced Analytics**: Purpose-built dashboards for learning and training outcomes
 - **Enterprise Features**: Session management, cross-device continuity, and AI-powered insights
 - **Open Source**: No vendor lock-in, deploy to any backend service
 - **Structured Events**: Rich event wrappers for assessments, objectives, and interactions
+- **Side-by-Side Usage**: Keep your existing Cognitive3D implementation while adding ABXR features
 
 #### Migration Overview
 
@@ -990,19 +991,52 @@ The ABXRLib SDK provides full compatibility with Cognitive3D SDK, making migrati
 | `Cognitive3D.SetSessionProperty(key, val)`   | `Abxr.SetSessionProperty(key, val)` or `Abxr.Register(key, val)`             |
 | `Cognitive3D.Log("message")`                 | `Abxr.Log("message")` or `Abxr.LogInfo("message")`                           |
 
-#### Migration Steps
+#### Usage Options
 
-**Step 1: Namespace Updates**
+**Option 1: Side-by-Side Usage (Recommended)**
+Keep your existing Cognitive3D implementation and add ABXRLib for enhanced features:
+
 ```cpp
-// Option 1: Update using statements
-// Before: using Cognitive3D;
-// After:   (remove - use Abxr static methods)
+// Your existing Cognitive3D code stays unchanged
+new Cognitive3D.CustomEvent("Pressed Space").Send();
 
-// Option 2: String replacement approach
-// Replace "Cognitive3D." with "Abxr." throughout your codebase for compatibility methods
+// Add ABXRLib right below for enhanced tracking
+Abxr.Event("Pressed Space");
+
+// Both libraries work together seamlessly
+Cognitive3D.StartEvent("final_exam");
+Abxr.EventAssessmentStart("final_exam"); // Enhanced LMS integration
+
+// Later...
+Cognitive3D.EndEvent("final_exam", "pass", 95);
+Abxr.EventAssessmentComplete("final_exam", 95, EventStatus.Pass); // Structured data
 ```
 
-**Step 2: Event Tracking Migration**
+**Option 2: Quick Migration**
+If you want to replace Cognitive3D entirely, migration may be as simple as the following steps.
+
+Step 1: Disable using statement
+```cpp
+// Before: using Cognitive3D;
+// After:  //using Cognitive3D;
+```
+Step 2: Replace "Cognitive3D." with "Abxr." throughout your codebase to use the compatibility methods
+```cpp
+// Before (Cognitive3D):
+new Cognitive3D.CustomEvent("Pressed Space").Send();
+
+// After (ABXRLib) - Direct replacement:
+new Abxr.CustomEvent("Pressed Space").Send();
+
+```
+
+**Option 3: Detailed Event Tracking Migration**
+Step 1: Disable using statement
+```cpp
+// Before: using Cognitive3D;
+// After:  //using Cognitive3D;
+```
+Step 2: Review all your "Cognitive3D." usage to convert and improve the data being sent.
 
 ```cpp
 ///// CUSTOM EVENTS /////
@@ -1119,9 +1153,15 @@ The ABXRLib compatibility layer automatically converts common Cognitive3D result
 | **AI-Powered Insights** | ❌ | ✅ (Content optimization, learner analysis) |
 | **Open Source** | ❌ | ✅ |
 
-#### Migration Recommendations
+#### Implementation Recommendations
 
-**For Quick Migration:**
+**For Side-by-Side Usage (Recommended):**
+1. Keep your existing Cognitive3D code unchanged
+2. Add ABXRLib initialization alongside Cognitive3D
+3. Add ABXRLib calls right below existing Cognitive3D calls
+4. Use ABXRLib for enhanced features like LMS integration and structured events
+
+**For Full Migration:**
 1. Use the direct compatibility methods (`Abxr.StartEvent`, `Abxr.EndEvent`, etc.)
 2. Perform string replacement: `"Cognitive3D."` → `"Abxr."`
 3. Test existing functionality
@@ -1132,13 +1172,17 @@ The ABXRLib compatibility layer automatically converts common Cognitive3D result
 3. Use structured `EventStatus` enum instead of string results
 4. Add `InteractionType` tracking for detailed user behavior analysis
 
-**Migration Path:**
+**Implementation Path:**
 ```cpp
-// Phase 1: Direct replacement (immediate compatibility)
+// Option 1: Side-by-side (recommended)
+Cognitive3D.StartEvent("training_module");
+Abxr.EventAssessmentStart("training_module"); // Enhanced tracking
+
+// Option 2: Direct replacement (immediate compatibility)
 Abxr.StartEvent("training_module");        // Works immediately
 Abxr.EndEvent("training_module", "pass");  // Automatic conversion
 
-// Phase 2: Enhanced features (recommended)  
+// Option 3: Enhanced features (recommended)  
 Abxr.EventAssessmentStart("training_module");
 Abxr.EventAssessmentComplete("training_module", 92, EventStatus.Pass);
 ```
