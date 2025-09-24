@@ -8,49 +8,49 @@ namespace AbxrLib.Runtime.Core
 {
     public static class Logcat
 {
-    private static void Log(string logLevel, string msg, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
+    private static void Log(string logLevel, string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
-        char seperatorChar = (char)typeof(Path).GetTypeInfo().GetDeclaredField("DirectorySeparatorChar").GetValue(null);
-        var classType = Path.GetFileName(filePath.Replace('\\', seperatorChar));
+        char separatorChar = (char)typeof(Path).GetTypeInfo().GetDeclaredField("DirectorySeparatorChar").GetValue(null);
+        var className = Path.GetFileName(filePath.Replace('\\', separatorChar));
     
-        var log = new AndroidJavaClass("android.util.Log");
-        log.CallStatic<int>(logLevel, "AbxrLib", "(Line: " + lineNumber + "), Class: " + classType + ", Method: " + memberName + "- Message: " + msg);
+        var androidLog = new AndroidJavaClass("android.util.Log");
+        androidLog.CallStatic<int>(logLevel, "AbxrLib", "(Line: " + lineNumber + "), Class: " + className + ", Method: " + memberName + "- Message: " + message);
     }
     
     [Conditional("ENABLE_LOGS"), Conditional("DEVELOPMENT_BUILD")]
-    public static void Info(string msg, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
+    public static void Info(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
 #if UNITY_EDITOR
-        UnityEngine.Debug.Log($"{msg} {lineNumber} {memberName} {memberName} {filePath} ");
+        UnityEngine.Debug.Log($"{message} {lineNumber} {memberName} {filePath} ");
 #endif
-        Logcat.Log ("i", msg, lineNumber, memberName, filePath);
+        Logcat.Log ("i", message, lineNumber, memberName, filePath);
     }
 
     [Conditional("ENABLE_LOGS"), Conditional("DEVELOPMENT_BUILD")]
-    public static void Debug(string msg, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
+    public static void Debug(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
 #if UNITY_EDITOR
-        UnityEngine.Debug.Log($"{msg} {lineNumber} {memberName} {memberName} {filePath} ");
+        UnityEngine.Debug.Log($"{message} {lineNumber} {memberName} {filePath} ");
 #endif
-        Logcat.Log ("d", msg, lineNumber, memberName, filePath);
+        Logcat.Log ("d", message, lineNumber, memberName, filePath);
     }
 
     [Conditional("ENABLE_LOGS"), Conditional("DEVELOPMENT_BUILD")]
-    public static void Warning(string msg, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
+    public static void Warning(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
 #if UNITY_EDITOR
-        UnityEngine.Debug.LogWarning($"{msg} {lineNumber} {memberName} {memberName} {filePath} ");
+        UnityEngine.Debug.LogWarning($"{message} {lineNumber} {memberName} {filePath} ");
 #endif
-        Logcat.Log ("w", msg, lineNumber, memberName, filePath);
+        Logcat.Log ("w", message, lineNumber, memberName, filePath);
     }
 
     [Conditional("ENABLE_LOGS"), Conditional("DEVELOPMENT_BUILD")]
-    public static void Error(string msg, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
+    public static void Error(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
 #if UNITY_EDITOR
-        UnityEngine.Debug.LogError($"{msg} {lineNumber} {memberName} {memberName} {filePath} ");
+        UnityEngine.Debug.LogError($"{message} {lineNumber} {memberName} {filePath} ");
 #endif
-        Logcat.Log ("e", msg, lineNumber, memberName, filePath);
+        Logcat.Log ("e", message, lineNumber, memberName, filePath);
     }
 }
 }
