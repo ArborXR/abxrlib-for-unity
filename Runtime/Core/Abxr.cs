@@ -165,6 +165,21 @@ public static partial class Abxr
 	public static Dictionary<string, object> GetUserData() => Authentication.GetAuthResponse().UserData;
 
 	/// <summary>
+	/// Manually start the authentication process
+	/// Use this when autoStartAuthentication is disabled in configuration
+	/// or when you want to trigger authentication at a specific time in your app
+	/// </summary>
+	public static void StartAuthentication()
+	{
+		CoroutineRunner.Instance.StartCoroutine(StartAuthenticationCoroutine());
+	}
+
+	private static IEnumerator StartAuthenticationCoroutine()
+	{
+		yield return Authentication.Authenticate();
+	}
+
+	/// <summary>
 	/// Trigger manual reauthentication with existing stored parameters
 	/// Primarily useful for testing authentication flows or recovering from auth issues
 	/// Resets authentication state and attempts to re-authenticate with stored credentials

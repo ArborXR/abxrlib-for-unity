@@ -71,6 +71,14 @@ namespace AbxrLib.Runtime.Core
         public bool disableAutomaticTelemetry;
         public bool disableSceneEvents;
 
+        [Header("Authentication Control")]
+        [Tooltip("When enabled, authentication will NOT start automatically on app launch. You must manually call Abxr.StartAuthentication()")]
+        public bool disableAutoStartAuthentication = false;
+        
+        [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
+        public float authenticationStartDelay = 0f;
+
+        [Header("Authentication Prefabs")]
         public GameObject KeyboardPrefab;
         public GameObject PinPrefab;
         public GameObject PanelPrefab;
