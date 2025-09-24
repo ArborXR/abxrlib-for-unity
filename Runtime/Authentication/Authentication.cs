@@ -84,9 +84,36 @@ namespace AbxrLib.Runtime.Authentication
             if (!ValidateConfigValues()) return;
 
             SetSessionData();
-            StartCoroutine(Authenticate());
+            
+            // Start the deferred authentication system
+            StartCoroutine(DeferredAuthenticationSystem());
             StartCoroutine(PollForReAuth());
         }
+
+        private IEnumerator DeferredAuthenticationSystem()
+        {
+            // Wait for the end of the frame to allow all other Start() methods to run
+            yield return new WaitForEndOfFrame();
+            
+            // Wait one more frame to ensure all Awake() and Start() methods have completed
+            yield return null;
+            
+            // Check if auto-start authentication is enabled in configuration
+            if (!Configuration.Instance.disableAutoStartAuthentication)
+            {
+                if (Configuration.Instance.authenticationStartDelay > 0)
+                {
+                    yield return new WaitForSeconds(Configuration.Instance.authenticationStartDelay);
+                }
+                
+                yield return Authenticate();
+            }
+            else
+            {
+                Debug.Log("AbxrLib: Auto-start authentication is disabled. Call Abxr.StartAuthentication() manually when ready.");
+            }
+        }
+
 
         public static void SetSessionId(string sessionId) => _sessionId = sessionId;
 
