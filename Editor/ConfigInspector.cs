@@ -63,6 +63,18 @@ namespace AbxrLib.Editor
             config.disableSceneEvents = EditorGUILayout.Toggle("Disable Scene Events", config.disableSceneEvents);
 
             EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Authentication Control", EditorStyles.boldLabel);
+            config.disableAutoStartAuthentication = EditorGUILayout.Toggle(new GUIContent(
+                "Disable Auto Start Authentication", "When enabled, authentication will NOT start automatically on app launch. You must manually call Abxr.StartAuthentication()"), config.disableAutoStartAuthentication);
+            
+            // Only show delay field if auto-start is enabled
+            if (!config.disableAutoStartAuthentication)
+            {
+                config.authenticationStartDelay = EditorGUILayout.FloatField(new GUIContent(
+                    "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay);
+            }
+
+            EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Prefabs", EditorStyles.boldLabel);
             config.KeyboardPrefab = (GameObject)EditorGUILayout.ObjectField("Keyboard Prefab", config.KeyboardPrefab, typeof(GameObject));
             config.PinPrefab = (GameObject)EditorGUILayout.ObjectField("Pin Prefab", config.PinPrefab, typeof(GameObject));
@@ -87,6 +99,8 @@ namespace AbxrLib.Editor
                 config.retainLocalAfterSent = false;
                 config.disableAutomaticTelemetry = false;
                 config.disableSceneEvents = false;
+                config.disableAutoStartAuthentication = false;
+                config.authenticationStartDelay = 0f;
             }
 
             EditorGUILayout.Space();
