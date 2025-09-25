@@ -4067,8 +4067,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4cc586c9ddf94214b78ab4dcd9e26307, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  faceCamera: 1
-  xPosition: 0
   distanceFromCamera: 1
   verticalOffset: 0.19
 --- !u!1 &8507609020988169254
