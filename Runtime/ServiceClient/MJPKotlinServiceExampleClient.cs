@@ -88,13 +88,21 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		{
 			bool	bOk;
 
-			Debug.Log($"[MJPKotlinServiceExampleClient] Start() called on GameObject: {gameObject.name}");
-			MjpKotlinServiceExampleServiceBridge.Init();
-			bOk = MjpKotlinServiceExampleServiceBridge.Bind();
-			Debug.Log($"[MJPKotlinServiceExampleClient] Bind() result: {bOk}");
-			// ---
-			//_nativeCallback = new MJPNativeConnectionCallback();
-			// ---
+			try
+			{
+				Debug.Log($"[MJPKotlinServiceExampleClient] Start() called on GameObject: {gameObject.name}");
+				MjpKotlinServiceExampleServiceBridge.Init();
+				Debug.Log($"[MJPKotlinServiceExampleClient] about to call MjpKotlinServiceExampleServiceBridge.Bind() on GameObject: {gameObject.name}");
+				bOk = MjpKotlinServiceExampleServiceBridge.Bind();
+				Debug.Log($"[MJPKotlinServiceExampleClient] Bind() result: {bOk}");
+				// ---
+				//_nativeCallback = new MJPNativeConnectionCallback();
+				// ---
+			}
+			catch (Exception e)
+			{
+				Debug.Log($"[MJPKotlinServiceExampleClient] Bind() blew: {e.Message}");
+			}
 		}
 		private void OnDestroy()
 		{
