@@ -135,6 +135,12 @@ public static partial class Abxr
 	public static bool ConnectionActive() => _connectionActive;
 
 	/// <summary>
+	/// Allow the user to toggle whether the authentication UI follows them or stay
+	/// in place
+	/// </summary>
+	public static bool AuthUIFollowCamera = true;
+	
+	/// <summary>
 	/// Trigger authentication completion callback
 	/// Internal method - called by authentication system when authentication completes
 	/// </summary>
