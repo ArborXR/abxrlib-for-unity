@@ -3,6 +3,7 @@ using UnityEngine;
 
 namespace AbxrLib.Runtime.UI.Keyboard
 {
+#if UNITY_XR_INTERACTION_TOOLKIT
     /// <summary>
     /// Manages XR ray interactors (laser pointers) to ensure they are enabled during keyboard/PIN pad interactions.
     /// Automatically detects and restores the original state when interactions are complete.
@@ -76,20 +77,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// <returns>True if XR Interaction Toolkit is available, false otherwise</returns>
         public static bool IsXRInteractionToolkitAvailable()
         {
-#if UNITY_XR_INTERACTION_TOOLKIT
-            return true;
-#else
-            try
-            {
-                // Try to access the XRRayInteractor type to verify the toolkit is available
-                var rayInteractorType = System.Type.GetType("UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor, Unity.XR.Interaction.Toolkit");
-                return rayInteractorType != null;
-            }
-            catch (System.Exception)
-            {
-                return false;
-            }
-#endif
+            return true; // Always true since we're inside the UNITY_XR_INTERACTION_TOOLKIT block
         }
 
         /// <summary>
@@ -98,7 +86,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void EnableLaserPointersForInteraction()
         {
-#if UNITY_XR_INTERACTION_TOOLKIT
             if (_isManagingLaserPointers) 
             {
                 // Clean up any destroyed references before continuing
@@ -129,9 +116,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
 
             Debug.Log($"AbxrLib - LaserPointerManager: Managing {_originalStates.Count} ray interactors for keyboard interaction");
-#else
-            // XR Interaction Toolkit not available - no-op
-#endif
         }
 
         /// <summary>
@@ -139,7 +123,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void RestoreLaserPointerStates()
         {
-#if UNITY_XR_INTERACTION_TOOLKIT
             if (!_isManagingLaserPointers) return; // Not managing, nothing to restore
 
             // Clean up any null references before processing
@@ -178,22 +161,19 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _isManagingLaserPointers = false;
 
             Debug.Log("AbxrLib - LaserPointerManager: Restored all ray interactors to original states");
-#else
-            // XR Interaction Toolkit not available - no-op
-#endif
         }
 
         /// <summary>
         /// Checks if laser pointers are currently being managed by this system.
         /// Returns false if XR Interaction Toolkit is not available.
         /// </summary>
-        public static bool IsManagingLaserPointers => IsXRInteractionToolkitAvailable() && _isManagingLaserPointers;
+        public static bool IsManagingLaserPointers => _isManagingLaserPointers;
 
         /// <summary>
         /// Gets the number of ray interactors currently being managed.
         /// Returns 0 if XR Interaction Toolkit is not available.
         /// </summary>
-        public static int ManagedRayInteractorCount => IsXRInteractionToolkitAvailable() ? _originalStates.Count : 0;
+        public static int ManagedRayInteractorCount => _originalStates.Count;
 
         /// <summary>
         /// Disposes of all managed resources and clears state.
@@ -203,4 +183,22 @@ namespace AbxrLib.Runtime.UI.Keyboard
             ForceCleanup();
         }
     }
+#else
+    /// <summary>
+    /// Stub implementation when XR Interaction Toolkit is not available.
+    /// This redirects all calls to the stub implementation.
+    /// </summary>
+    public static class LaserPointerManager
+    {
+        public static void CleanupDestroyedReferences() => LaserPointerManagerStub.CleanupDestroyedReferences();
+        public static void ForceCleanup() => LaserPointerManagerStub.ForceCleanup();
+        public static void OnSceneChanged() => LaserPointerManagerStub.OnSceneChanged();
+        public static bool IsXRInteractionToolkitAvailable() => LaserPointerManagerStub.IsXRInteractionToolkitAvailable();
+        public static void EnableLaserPointersForInteraction() => LaserPointerManagerStub.EnableLaserPointersForInteraction();
+        public static void RestoreLaserPointerStates() => LaserPointerManagerStub.RestoreLaserPointerStates();
+        public static bool IsManagingLaserPointers => LaserPointerManagerStub.IsManagingLaserPointers;
+        public static int ManagedRayInteractorCount => LaserPointerManagerStub.ManagedRayInteractorCount;
+        public static void Dispose() => LaserPointerManagerStub.Dispose();
+    }
+#endif
 }

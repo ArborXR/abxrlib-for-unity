@@ -55,6 +55,12 @@ namespace AbxrLib.Runtime.Telemetry
             _frameRateTimer += Time.deltaTime;
             if (_systemInfoTimer >= Configuration.Instance.telemetryTrackingPeriodSeconds) CheckSystemInfo();
             if (_frameRateTimer >= Configuration.Instance.frameRateTrackingPeriodSeconds) CheckFrameRate();
+            
+            // Periodically clean up dictionaries to prevent memory leaks
+            if (Time.frameCount % 1000 == 0) // Every 1000 frames
+            {
+                CleanupDictionaries();
+            }
         }
 
         public static void StartTracking() => _tracking = true;
@@ -77,11 +83,35 @@ namespace AbxrLib.Runtime.Telemetry
             _batteryData["Status"] = SystemInfo.batteryStatus.ToString();
             Abxr.Telemetry("Battery", _batteryData);
         
-            // Clear and reuse memory data dictionary
+            // Clear and reuse memory data dictionary with Unity version compatibility
             _memoryData.Clear();
-            _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
-            _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
-            _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
+            try
+            {
+                // Check if newer Profiler methods are available (Unity 2020.1+)
+                var profilerType = typeof(UnityEngine.Profiling.Profiler);
+                var getTotalAllocatedMethod = profilerType.GetMethod("GetTotalAllocatedMemoryLong");
+                
+                if (getTotalAllocatedMethod != null)
+                {
+                    // Use newer methods (Unity 2020.1+)
+                    _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
+                    _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
+                    _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
+                }
+                else
+                {
+                    // Fallback to older methods (Unity 2019.x and earlier)
+                    _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemory() / 1000000 + " MB";
+                    _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemory() / 1000000 + " MB";
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"AbxrLib: Memory profiling not available: {ex.Message}");
+                _memoryData["Total Allocated"] = "N/A";
+                _memoryData["Total Reserved"] = "N/A";
+                _memoryData["Total Unused Reserved"] = "N/A";
+            }
             Abxr.Telemetry("Memory", _memoryData);
         }
     
@@ -103,6 +133,32 @@ namespace AbxrLib.Runtime.Telemetry
             
             _lastFrameCount = Time.frameCount;
             _lastTime = Time.time;
+        }
+        
+        /// <summary>
+        /// Cleans up dictionaries to prevent memory leaks by limiting their size
+        /// </summary>
+        private static void CleanupDictionaries()
+        {
+            const int maxDictionarySize = 50; // Reasonable limit for telemetry data
+            
+            if (_batteryData.Count > maxDictionarySize)
+            {
+                _batteryData.Clear();
+                Debug.LogWarning("AbxrLib: Battery data dictionary was growing too large, cleared to prevent memory leak");
+            }
+            
+            if (_memoryData.Count > maxDictionarySize)
+            {
+                _memoryData.Clear();
+                Debug.LogWarning("AbxrLib: Memory data dictionary was growing too large, cleared to prevent memory leak");
+            }
+            
+            if (_frameRateData.Count > maxDictionarySize)
+            {
+                _frameRateData.Clear();
+                Debug.LogWarning("AbxrLib: Frame rate data dictionary was growing too large, cleared to prevent memory leak");
+            }
         }
     }
 }

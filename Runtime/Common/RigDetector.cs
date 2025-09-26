@@ -68,64 +68,97 @@ namespace AbxrLib.Runtime.Common
 
         private static bool IsTypeInScene(string typeName)
         {
-            // First, try to get the type from cache
-            var targetType = GetCachedType(typeName);
-            if (targetType == null) return false;
-
-            // Try multiple approaches to find objects of specific type, with robust error handling
             try
             {
-                // Method 1: Try the generic FindObjectsOfType<T>() approach first (most reliable)
-                var findObjectsOfTypeGenericMethod = typeof(UnityEngine.Object).GetMethod("FindObjectsOfType", System.Type.EmptyTypes);
-                if (findObjectsOfTypeGenericMethod != null)
-                {
-                    var genericMethod = findObjectsOfTypeGenericMethod.MakeGenericMethod(targetType);
-                    var objects = (Component[])genericMethod.Invoke(null, null);
-                    return objects != null && objects.Length > 0;
-                }
-            }
-            catch { /* ignore and try next method */ }
+                // First, try to get the type from cache
+                var targetType = GetCachedType(typeName);
+                if (targetType == null) return false;
 
-            try
+                // Try multiple approaches to find objects of specific type, with robust error handling
+                try
+                {
+                    // Method 1: Try the generic FindObjectsOfType<T>() approach first (most reliable)
+                    var findObjectsOfTypeGenericMethod = typeof(UnityEngine.Object).GetMethod("FindObjectsOfType", System.Type.EmptyTypes);
+                    if (findObjectsOfTypeGenericMethod != null)
+                    {
+                        var genericMethod = findObjectsOfTypeGenericMethod.MakeGenericMethod(targetType);
+                        var objects = (Component[])genericMethod.Invoke(null, null);
+                        return objects != null && objects.Length > 0;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"AbxrLib: Generic FindObjectsOfType method failed for {typeName}: {ex.Message}");
+                }
+
+                try
+                {
+                    // Method 2: Try the Type-based FindObjectsOfType approach
+                    var findObjectsOfTypeMethod = typeof(UnityEngine.Object).GetMethod("FindObjectsOfType", new System.Type[] { typeof(System.Type) });
+                    if (findObjectsOfTypeMethod != null)
+                    {
+                        var objects = (Component[])findObjectsOfTypeMethod.Invoke(null, new object[] { targetType });
+                        return objects != null && objects.Length > 0;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"AbxrLib: Type-based FindObjectsOfType method failed for {typeName}: {ex.Message}");
+                }
+
+                try
+                {
+                    // Method 3: Try the newer FindObjectsOfType with includeInactive parameter
+                    var findObjectsOfTypeWithIncludeMethod = typeof(UnityEngine.Object).GetMethod("FindObjectsOfType", new System.Type[] { typeof(System.Type), typeof(bool) });
+                    if (findObjectsOfTypeWithIncludeMethod != null)
+                    {
+                        var objects = (Component[])findObjectsOfTypeWithIncludeMethod.Invoke(null, new object[] { targetType, false });
+                        return objects != null && objects.Length > 0;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"AbxrLib: FindObjectsOfType with includeInactive method failed for {typeName}: {ex.Message}");
+                }
+
+                // Fallback to the original method if all reflection approaches fail
+                return IsTypeInSceneFallback(targetType);
+            }
+            catch (System.Exception ex)
             {
-                // Method 2: Try the Type-based FindObjectsOfType approach
-                var findObjectsOfTypeMethod = typeof(UnityEngine.Object).GetMethod("FindObjectsOfType", new System.Type[] { typeof(System.Type) });
-                if (findObjectsOfTypeMethod != null)
-                {
-                    var objects = (Component[])findObjectsOfTypeMethod.Invoke(null, new object[] { targetType });
-                    return objects != null && objects.Length > 0;
-                }
+                Debug.LogError($"AbxrLib: Type detection failed for {typeName}: {ex.Message}");
+                return false;
             }
-            catch { /* ignore and try next method */ }
-
-            try
-            {
-                // Method 3: Try the newer FindObjectsOfType with includeInactive parameter
-                var findObjectsOfTypeWithIncludeMethod = typeof(UnityEngine.Object).GetMethod("FindObjectsOfType", new System.Type[] { typeof(System.Type), typeof(bool) });
-                if (findObjectsOfTypeWithIncludeMethod != null)
-                {
-                    var objects = (Component[])findObjectsOfTypeWithIncludeMethod.Invoke(null, new object[] { targetType, false });
-                    return objects != null && objects.Length > 0;
-                }
-            }
-            catch { /* ignore and fallback */ }
-
-            // Fallback to the original method if all reflection approaches fail
-            return IsTypeInSceneFallback(targetType);
         }
 
         private static bool IsTypeInSceneFallback(System.Type targetType)
         {
-            var gameObjects = UnityEngine.Object.FindObjectsOfType(typeof(GameObject));
-            foreach (var gameObject in gameObjects)
+            try
             {
-                var components = ((GameObject)gameObject).GetComponents<Component>();
-                if (components.Any(component => component && component.GetType() == targetType))
+                var gameObjects = UnityEngine.Object.FindObjectsOfType(typeof(GameObject));
+                foreach (var gameObject in gameObjects)
                 {
-                    return true;
+                    try
+                    {
+                        var components = ((GameObject)gameObject).GetComponents<Component>();
+                        if (components.Any(component => component && component.GetType() == targetType))
+                        {
+                            return true;
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"AbxrLib: Error checking components on GameObject {gameObject.name}: {ex.Message}");
+                        continue;
+                    }
                 }
+                return false;
             }
-            return false;
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Fallback type detection failed: {ex.Message}");
+                return false;
+            }
         }
 
         /// <summary>
@@ -151,44 +184,58 @@ namespace AbxrLib.Runtime.Common
 
         private static System.Type FindType(string typeName)
         {
-            // Try common assemblies first for better performance
-            var commonAssemblies = new string[] 
+            try
             {
-                "Unity.XR.Interaction.Toolkit",
-                "Unity.XR.CoreUtils", 
-                "Unity.XR.Management",
-                "Oculus.VR",
-                "UnityEngine"
-            };
-
-            foreach (var assemblyName in commonAssemblies)
-            {
-                try
+                // Try common assemblies first for better performance
+                var commonAssemblies = new string[] 
                 {
-                    var assembly = System.AppDomain.CurrentDomain.GetAssemblies()
-                        .FirstOrDefault(a => a.GetName().Name == assemblyName);
-                    if (assembly != null)
+                    "Unity.XR.Interaction.Toolkit",
+                    "Unity.XR.CoreUtils", 
+                    "Unity.XR.Management",
+                    "Oculus.VR",
+                    "UnityEngine"
+                };
+
+                foreach (var assemblyName in commonAssemblies)
+                {
+                    try
+                    {
+                        var assembly = System.AppDomain.CurrentDomain.GetAssemblies()
+                            .FirstOrDefault(a => a.GetName().Name == assemblyName);
+                        if (assembly != null)
+                        {
+                            var foundType = assembly.GetType(typeName, false);
+                            if (foundType != null)
+                                return foundType;
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"AbxrLib: Error searching assembly {assemblyName} for type {typeName}: {ex.Message}");
+                    }
+                }
+
+                // Fallback to scanning all assemblies
+                foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    try
                     {
                         var foundType = assembly.GetType(typeName, false);
                         if (foundType != null)
                             return foundType;
                     }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"AbxrLib: Error searching assembly {assembly.GetName().Name} for type {typeName}: {ex.Message}");
+                    }
                 }
-                catch { /* ignore */ }
+                return null;
             }
-
-            // Fallback to scanning all assemblies
-            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            catch (System.Exception ex)
             {
-                try
-                {
-                    var foundType = assembly.GetType(typeName, false);
-                    if (foundType != null)
-                        return foundType;
-                }
-                catch { /* ignore */ }
+                Debug.LogError($"AbxrLib: Type finding failed for {typeName}: {ex.Message}");
+                return null;
             }
-            return null;
         }
 
         /// <summary>
