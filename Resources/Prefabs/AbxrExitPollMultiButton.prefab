@@ -269,6 +269,6 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7434d126d65a44c07a9eb516e3307e49, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Nobi.UiRoundedCorners::Nobi.UiRoundedCorners.ImageWithRoundedCorners
+  m_EditorClassIdentifier: AbxrLib.UiRoundedCorners::AbxrLib.UiRoundedCorners.ImageWithRoundedCorners
   radius: 0.6
   image: {fileID: 7445795817946427618}

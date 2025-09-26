@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 
-namespace Nobi.UiRoundedCorners {
+namespace AbxrLib.UiRoundedCorners {
 	[ExecuteInEditMode]                             //Required to check the OnEnable function
 	[DisallowMultipleComponent]                     //You can only have one of these in every object.
 	[RequireComponent(typeof(RectTransform))]
@@ -51,7 +51,17 @@ namespace Nobi.UiRoundedCorners {
 
 		public void Validate() {
 			if (material == null) {
-				material = new Material(Shader.Find("UI/RoundedCorners/RoundedCorners"));
+				var shader = Shader.Find("AbxrLib/UI/RoundedCorners/RoundedCorners");
+				// Fallback to original shader name if new one not found (during compilation)
+				if (shader == null) {
+					shader = Shader.Find("UI/RoundedCorners/RoundedCorners");
+				}
+				if (shader != null) {
+					material = new Material(shader);
+				} else {
+					Debug.LogError("AbxrLib: Could not find rounded corners shader. Make sure the shader is compiled.");
+					return;
+				}
 			}
 
 			if (image == null) {
@@ -68,6 +78,8 @@ namespace Nobi.UiRoundedCorners {
 		}
 
 		public void Refresh() {
+			if (material == null) return;
+			
 			var rect = ((RectTransform)transform).rect;
 
 			//Multiply radius value by 2 to make the radius value appear consistent with ImageWithIndependentRoundedCorners script.

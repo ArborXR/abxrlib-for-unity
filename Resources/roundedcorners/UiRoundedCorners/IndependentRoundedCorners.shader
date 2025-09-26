@@ -1,4 +1,4 @@
-﻿Shader "UI/RoundedCorners/IndependentRoundedCorners" {
+﻿Shader "AbxrLib/UI/RoundedCorners/IndependentRoundedCorners" {
     
     Properties {
         [HideInInspector] _MainTex ("Texture", 2D) = "white" {}

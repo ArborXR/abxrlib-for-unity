@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Nobi.UiRoundedCorners {
+namespace AbxrLib.UiRoundedCorners {
 	internal static class DestroyHelper {
 		internal static void Destroy(Object @object) {
 #if UNITY_EDITOR
