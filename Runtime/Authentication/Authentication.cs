@@ -343,32 +343,151 @@ namespace AbxrLib.Runtime.Authentication
             };
         
             string json = JsonConvert.SerializeObject(data);
-
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
-            using var request = new UnityWebRequest(fullUri.ToString(), "POST");
-            Utils.BuildRequest(request, json);
+            
+            // Use separate coroutine to avoid yield in try-catch
+            yield return AuthRequestWithRetry(fullUri, json);
+        }
         
-            yield return request.SendWebRequest();
-            if (request.result == UnityWebRequest.Result.Success)
+        /// <summary>
+        /// Performs authentication request with retry logic, avoiding yield statements in try-catch blocks
+        /// </summary>
+        private static IEnumerator AuthRequestWithRetry(Uri fullUri, string json)
+        {
+            int retryCount = 0;
+            int maxRetries = Configuration.Instance.sendRetriesOnFailure;
+            bool success = false;
+            string lastError = "";
+            
+            while (retryCount <= maxRetries && !success)
             {
-                AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(request.downloadHandler.text);
-                _authToken = postResponse.Token;
-                _apiSecret = postResponse.Secret;
-                Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
-                _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                // Create request and handle creation errors
+                UnityWebRequest request = null;
+                bool requestCreated = false;
+                bool shouldRetry = false;
                 
-                _responseData = postResponse;
-                _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
+                // Request creation with error handling (no yield statements)
+                try
+                {
+                    request = new UnityWebRequest(fullUri.ToString(), "POST");
+                    Utils.BuildRequest(request, json);
+                    
+                    // Set timeout to prevent hanging requests
+                    request.timeout = 30; // 30 second timeout
+                    requestCreated = true;
+                }
+                catch (System.Exception ex)
+                {
+                    lastError = $"Authentication request creation failed: {ex.Message}";
+                    Debug.LogError($"AbxrLib: {lastError}");
+                    
+                    if (IsRetryableException(ex) && retryCount < maxRetries)
+                    {
+                        shouldRetry = true;
+                    }
+                }
+                
+                // Handle retry logic for request creation failure (yield outside try-catch)
+                if (shouldRetry)
+                {
+                    retryCount++;
+                    Debug.LogWarning($"AbxrLib: Authentication request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+                    yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
+                    continue;
+                }
+                else if (!requestCreated)
+                {
+                    break; // Non-retryable error or max retries reached
+                }
+                
+                // Send request (yield outside try-catch)
+                yield return request.SendWebRequest();
+                
+                // Handle response (no yield statements in try-catch)
+                bool responseSuccess = false;
+                bool responseShouldRetry = false;
+                
+                try
+                {
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(request.downloadHandler.text);
+                        
+                        // Validate response data
+                        if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
+                        {
+                            throw new System.Exception("Invalid authentication response: missing token");
+                        }
+                        
+                        _authToken = postResponse.Token;
+                        _apiSecret = postResponse.Secret;
+                        
+                        // Decode JWT with error handling
+                        Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
+                        if (decodedJwt == null || !decodedJwt.ContainsKey("exp"))
+                        {
+                            throw new System.Exception("Invalid JWT token: missing expiration");
+                        }
+                        
+                        _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                        
+                        _responseData = postResponse;
+                        _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
 
-                if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
+                        if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
+                        
+                        // Log initial success - but don't notify completion yet since additional auth may be required
+                        Debug.Log("AbxrLib: API connection established");
+                        responseSuccess = true;
+                        success = true;
+                    }
+                    else
+                    {
+                        // Handle different types of network errors
+                        lastError = HandleNetworkError(request, retryCount, maxRetries);
+                        
+                        if (IsRetryableError(request))
+                        {
+                            responseShouldRetry = true;
+                        }
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    lastError = $"Authentication response handling failed: {ex.Message}";
+                    Debug.LogError($"AbxrLib: {lastError}");
+                    
+                    if (IsRetryableException(ex) && retryCount < maxRetries)
+                    {
+                        responseShouldRetry = true;
+                    }
+                }
+                finally
+                {
+                    // Always dispose of request
+                    request?.Dispose();
+                }
                 
-                // Log initial success - but don't notify completion yet since additional auth may be required
-                Debug.Log("AbxrLib: API connection established");
+                // Handle retry logic for response failure (yield outside try-catch)
+                if (responseShouldRetry)
+                {
+                    retryCount++;
+                    if (retryCount <= maxRetries)
+                    {
+                        Debug.LogWarning($"AbxrLib: Authentication attempt {retryCount} failed, retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+                        yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
+                    }
+                }
+                else if (!responseSuccess)
+                {
+                    // Non-retryable error, break out of retry loop
+                    break;
+                }
             }
-            else
+            
+            if (!success)
             {
-                string error = $"{request.error} - {request.downloadHandler.text}";
-                Debug.LogError($"AbxrLib: Authentication failed : {error}");
+                Debug.LogError($"AbxrLib: Authentication failed after {retryCount} attempts: {lastError}");
                 _sessionId = null;
                 
                 // Clear cached user data on failure
@@ -376,28 +495,200 @@ namespace AbxrLib.Runtime.Authentication
                 _authResponseModuleData = null;
                 
                 // Notify authentication failure
-                Abxr.NotifyAuthCompleted(false, error);
+                Abxr.NotifyAuthCompleted(false, lastError);
             }
+        }
+        
+        /// <summary>
+        /// Handles network errors and determines appropriate error messages
+        /// </summary>
+        private static string HandleNetworkError(UnityWebRequest request, int retryCount, int maxRetries)
+        {
+            string errorMessage = "";
+            
+            switch (request.result)
+            {
+                case UnityWebRequest.Result.ConnectionError:
+                    errorMessage = $"Connection error: {request.error}";
+                    break;
+                case UnityWebRequest.Result.DataProcessingError:
+                    errorMessage = $"Data processing error: {request.error}";
+                    break;
+                case UnityWebRequest.Result.ProtocolError:
+                    errorMessage = $"Protocol error ({request.responseCode}): {request.error}";
+                    break;
+                default:
+                    errorMessage = $"Unknown error: {request.error}";
+                    break;
+            }
+            
+            if (!string.IsNullOrEmpty(request.downloadHandler.text))
+            {
+                errorMessage += $" - Response: {request.downloadHandler.text}";
+            }
+            
+            return errorMessage;
+        }
+        
+        /// <summary>
+        /// Determines if a network error is retryable
+        /// </summary>
+        private static bool IsRetryableError(UnityWebRequest request)
+        {
+            // Retry on connection errors and 5xx server errors
+            if (request.result == UnityWebRequest.Result.ConnectionError)
+                return true;
+                
+            if (request.result == UnityWebRequest.Result.ProtocolError)
+            {
+                // Retry on 5xx server errors, but not on 4xx client errors
+                return request.responseCode >= 500 && request.responseCode < 600;
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Determines if an exception is retryable
+        /// </summary>
+        private static bool IsRetryableException(System.Exception ex)
+        {
+            // Retry on network-related exceptions
+            return ex is System.Net.WebException || 
+                   ex is System.Net.Sockets.SocketException ||
+                   ex.Message.Contains("timeout") ||
+                   ex.Message.Contains("connection");
         }
 
         private static IEnumerator GetConfiguration()
         {
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
-            using UnityWebRequest request = UnityWebRequest.Get(fullUri.ToString());
-            request.SetRequestHeader("Accept", "application/json");
-            SetAuthHeaders(request);
-
-            yield return request.SendWebRequest();
-            if (request.result == UnityWebRequest.Result.Success)
+            
+            // Use separate coroutine to avoid yield in try-catch
+            yield return GetConfigurationWithRetry(fullUri);
+        }
+        
+        /// <summary>
+        /// Performs configuration request with retry logic, avoiding yield statements in try-catch blocks
+        /// </summary>
+        private static IEnumerator GetConfigurationWithRetry(Uri fullUri)
+        {
+            int retryCount = 0;
+            int maxRetries = Configuration.Instance.sendRetriesOnFailure;
+            bool success = false;
+            
+            while (retryCount <= maxRetries && !success)
             {
-                string response = request.downloadHandler.text;
-                var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
-                SetConfigFromPayload(config);
-                _authMechanism = config.authMechanism;
+                // Create request and handle creation errors
+                UnityWebRequest request = null;
+                bool requestCreated = false;
+                bool shouldRetry = false;
+                
+                // Request creation with error handling (no yield statements)
+                try
+                {
+                    request = UnityWebRequest.Get(fullUri.ToString());
+                    request.SetRequestHeader("Accept", "application/json");
+                    request.timeout = 30; // 30 second timeout
+                    SetAuthHeaders(request);
+                    requestCreated = true;
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
+                    
+                    if (IsRetryableException(ex) && retryCount < maxRetries)
+                    {
+                        shouldRetry = true;
+                    }
+                }
+                
+                // Handle retry logic for request creation failure (yield outside try-catch)
+                if (shouldRetry)
+                {
+                    retryCount++;
+                    Debug.LogWarning($"AbxrLib: GetConfiguration request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+                    yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
+                    continue;
+                }
+                else if (!requestCreated)
+                {
+                    break; // Non-retryable error or max retries reached
+                }
+                
+                // Send request (yield outside try-catch)
+                yield return request.SendWebRequest();
+                
+                // Handle response (no yield statements in try-catch)
+                bool responseSuccess = false;
+                bool responseShouldRetry = false;
+                
+                try
+                {
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        string response = request.downloadHandler.text;
+                        if (string.IsNullOrEmpty(response))
+                        {
+                            throw new System.Exception("Empty configuration response");
+                        }
+                        
+                        var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
+                        if (config == null)
+                        {
+                            throw new System.Exception("Failed to deserialize configuration response");
+                        }
+                        
+                        SetConfigFromPayload(config);
+                        _authMechanism = config.authMechanism;
+                        responseSuccess = true;
+                        success = true;
+                        Debug.Log("AbxrLib: Configuration loaded successfully");
+                    }
+                    else
+                    {
+                        string errorMessage = HandleNetworkError(request, retryCount, maxRetries);
+                        Debug.LogWarning($"AbxrLib: GetConfiguration failed (attempt {retryCount + 1}): {errorMessage}");
+                        
+                        if (IsRetryableError(request))
+                        {
+                            responseShouldRetry = true;
+                        }
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
+                    
+                    if (IsRetryableException(ex) && retryCount < maxRetries)
+                    {
+                        responseShouldRetry = true;
+                    }
+                }
+                finally
+                {
+                    // Always dispose of request
+                    request?.Dispose();
+                }
+                
+                // Handle retry logic for response failure (yield outside try-catch)
+                if (responseShouldRetry)
+                {
+                    retryCount++;
+                    if (retryCount <= maxRetries)
+                    {
+                        yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
+                    }
+                }
+                else if (!responseSuccess)
+                {
+                    break; // Non-retryable error, break out of retry loop
+                }
             }
-            else
+            
+            if (!success)
             {
-                Debug.LogWarning($"AbxrLib: GetConfiguration failed: {request.error} - {request.downloadHandler.text}");
+                Debug.LogWarning("AbxrLib: GetConfiguration failed after all retry attempts, using default configuration");
             }
         }
     

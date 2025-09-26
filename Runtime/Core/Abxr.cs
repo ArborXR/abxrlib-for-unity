@@ -849,7 +849,8 @@ public static partial class Abxr
 		
 		// For user-scoped storage, we need a user to actually be logged in
 		// For device-scoped storage, app-level authentication should be sufficient
-		if (scope == StorageScope.user && Authentication.GetAuthResponse().UserId == null)
+		var authResponse = Authentication.GetAuthResponse();
+		if (scope == StorageScope.user && (authResponse == null || authResponse.UserId == null))
 		{
 			// User-scoped storage requires a user to be logged in, defer this request
 			return;

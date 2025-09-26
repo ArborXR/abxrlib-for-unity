@@ -34,8 +34,11 @@ namespace AbxrLib.Runtime.UI.Keyboard
     
         private void Delete()
         {
-            int length = inputField.text.Length - 1;
-            inputField.text = inputField.text.Substring(0, length);
+            if (inputField.text.Length > 0)
+            {
+                int length = inputField.text.Length - 1;
+                inputField.text = inputField.text.Substring(0, length);
+            }
         }
 
         private void Submit()
