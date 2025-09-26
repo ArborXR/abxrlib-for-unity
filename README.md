@@ -166,8 +166,9 @@ These three event types work together to provide comprehensive tracking of user 
 
 ```cpp
 // Status enumeration for all analytics events
-public enum EventStatus { Pass, Fail, Complete, Incomplete, Browsed }
+public enum EventStatus { Pass, Fail, Complete, Incomplete, Browsed, NotAttempted }
 public enum InteractionType { Null, Bool, Select, Text, Rating, Number, Matching, Performance, Sequencing }
+public enum InteractionResult { Correct, Incorrect, Neutral } // defaults to Neutral
 
 //C# Method Signatures
 public static void Abxr.EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null);
@@ -175,7 +176,7 @@ public static void Abxr.EventAssessmentComplete(string assessmentName, int score
 public static void Abxr.EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null);
 public static void Abxr.EventObjectiveComplete(string objectiveName, int score, EventStatus status, Dictionary<string, string> meta = null);
 public static void Abxr.EventInteractionStart(string interactionName, Dictionary<string, string> meta = null);
-public static void Abxr.EventInteractionComplete(string interactionName, InteractionType type, string result, Dictionary<string, string> meta = null);
+public static void Abxr.EventInteractionComplete(string interactionName, InteractionType type, InteractionResult result, string response, Dictionary<string, string> meta = null);
 
 // Assessment tracking (overall course/curriculum performance)
 Abxr.EventAssessmentStart("final_exam");
@@ -571,30 +572,19 @@ Abxr.EventAssessmentComplete("final_exam", 95, EventStatus.Pass); // Automatical
 
 ### Module Targets
 
-The **Module Target** feature enables developers to create single applications with multiple modules, where each module can be its own assignment in an LMS. When a learner enters from the LMS for a specific module, the application can automatically direct the user to that module within the application. Individual grades and results are then tracked for that specific assignment in the LMS.
+The **Module Target** feature enables developers to create single applications with multiple modules, where users can be assigned to specific module(s) and the application can automatically direct users to their assigned module within the application. When combined with Insights LMS integration, each module can be its own assignment, and individual grades and results are tracked for that specific assignment.
 
 #### Event-Based Module Handling (Recommended)
 
-The recommended way to handle modules is using the `OnModuleTarget` event, which gives you full control over how to handle each module target. This event works perfectly with existing Android deep link handlers - you can use the same routing logic for both external deep links and LMS module targets:
+The recommended way to handle modules is to subscribe your Module/Deep link handler to the `OnModuleTarget` event, which gives you full control over how to handle each module target. This event works perfectly with existing Android deep link handlers—you can use the same routing logic for both external deep links and LMS module targets. **The module sequence executes automatically when authentication completes, and will wait for your subscription if needed**, so you only need to subscribe to the event:
 
 ```cpp
-// Subscribe to authentication completion
-Abxr.OnAuthCompleted += OnAuthenticationCompleted;
-
 // Subscribe to module target events
-Abxr.OnModuleTarget += HandleModuleOrDeepLinkTarget;
+Abxr.OnModuleTarget += HandleModuleOrDeepLinkTarget; // HandleModuleOrDeepLinkTarget points to your module/deep link handler
 
-private void OnAuthenticationCompleted(bool success, string error)
-{
-    if (success)
-    {
-        // Execute all available modules in sequence
-        int executedCount = Abxr.ExecuteModuleSequence();
-        Debug.Log($"Executed {executedCount} modules");
-    }
-}
+// Module(s) will be executed automatically when authentication completes!
 
-// This method can handle BOTH external Android deep links AND module targets
+// Create or use your own module/deep link handler along these lines
 private void HandleModuleOrDeepLinkTarget(string moduleTarget)
 {
     Debug.Log($"Handling module target: {moduleTarget}");
@@ -615,26 +605,10 @@ private void HandleModuleOrDeepLinkTarget(string moduleTarget)
     }
 }
 
-// Your existing Android deep link handler can call the same method
-private void OnDeepLinkReceived(string deepLink)
-{
-    string target = ExtractTargetFromUrl(deepLink); // "myapp://safety-training" -> "safety-training"
-    HandleModuleOrDeepLinkTarget(target);
-}
-
-// Don't forget to unsubscribe in OnDestroy()
-private void OnDestroy()
-{
-    Abxr.OnModuleTarget -= HandleModuleOrDeepLinkTarget;
-}
-```
-
-**Method Signature:**
-```cpp
-public static int ExecuteModuleSequence()
 ```
 
 **Features:**
+- **Smart Automatic Execution**: Module sequence executes automatically when authentication completes, and waits for your subscription if needed
 - **Event-Driven**: Uses the `OnModuleTarget` event for maximum flexibility
 - **Developer Control**: You decide how to handle each module target
 - **Deep Link Integration**: Perfect for connecting to existing deep link handlers
@@ -664,11 +638,7 @@ else
 // Check remaining module count
 int remaining = Abxr.GetModuleTargetCount();
 Debug.Log($"Modules remaining: {remaining}");
-```
 
-#### Module Management
-
-```cpp
 // Get all available modules
 var allModules = Abxr.GetModuleTargetList();
 Debug.Log($"Total modules: {allModules.Count}");
@@ -679,7 +649,6 @@ Abxr.ClearModuleTargets();
 // Get current user information
 var userData = Abxr.GetUserData();
 ```
-
 
 #### Persistence and Recovery
 

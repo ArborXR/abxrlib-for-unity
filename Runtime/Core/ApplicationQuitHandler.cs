@@ -76,7 +76,7 @@ namespace AbxrLib.Runtime.Core
                 var interactionNames = new List<string>(runningInteractionTimes.Keys);
                 foreach (string interactionName in interactionNames)
                 {
-                    Abxr.EventInteractionComplete(interactionName, Abxr.InteractionType.Null, "incomplete_quit",
+                    Abxr.EventInteractionComplete(interactionName, Abxr.InteractionType.Null, Abxr.InteractionResult.Neutral, "",
                         new Dictionary<string, string> 
                         { 
                             ["quit_reason"] = "application_quit",

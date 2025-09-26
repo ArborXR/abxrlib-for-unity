@@ -153,7 +153,31 @@ public static partial class Abxr
 		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
 		_currentModuleIndex = 0;
 		SaveModuleIndex();
+		
+		// Invoke authentication completion event first
 		OnAuthCompleted?.Invoke(success, error);
+		
+		// Check if we should execute module sequence after authentication completes
+		if (success)
+		{
+			// Check if there are modules available to execute
+			var moduleToExecute = GetModuleTargetWithoutAdvance();
+			if (moduleToExecute != null)
+			{
+				// Check if there are already subscribers to OnModuleTarget
+				if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
+				{
+					// Execute immediately since there are already subscribers
+					ExecuteModuleSequence();
+				}
+				else
+				{
+					// Mark as pending - will execute when first subscriber is added
+					_hasPendingModules = true;
+				}
+			}
+		}
+		
 	}
 
 	/// <summary>
@@ -267,7 +291,8 @@ public static partial class Abxr
 		Fail,
 		Complete,
 		Incomplete,
-		Browsed
+		Browsed,
+		NotAttempted
 	}
 
 	public enum ResultOptions // Only here for backwards compatibility
@@ -291,6 +316,14 @@ public static partial class Abxr
 		Matching,
 		Performance,
 		Sequencing
+	}
+
+
+	public enum InteractionResult
+	{
+		Correct,
+		Incorrect,
+		Neutral
 	}
 
 	/// <summary>
@@ -374,19 +407,22 @@ public static partial class Abxr
 	/// <param name="score">Numerical score achieved (typically 0-100, but any integer is valid)</param>
 	/// <param name="status">Result status of the assessment (Pass, Fail, Complete, etc.)</param>
 	/// <param name="meta">Optional metadata with completion details</param>
-	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
-		EventAssessmentComplete(assessmentName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
+	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
+		EventAssessmentComplete(assessmentName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["type"] = "assessment";
 		meta["verb"] = "completed";
 		meta["score"] = score.ToString();
-		meta["status"] = status.ToString();
+		meta["status"] = status.ToString().ToLower();
 		AddDuration(_assessmentStartTimes, assessmentName, meta);
 		Event(assessmentName, meta);
 		CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
 	}
+	// backwards compatibility for old method signature
+	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
+        EventAssessmentComplete(assessmentName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
 
 	/// <summary>
 	/// Start tracking an objective - individual learning goals within assessments
@@ -411,15 +447,15 @@ public static partial class Abxr
 	/// <param name="score">Numerical score achieved for this objective</param>
 	/// <param name="status">Result status (Complete, Pass, Fail, etc.)</param>
 	/// <param name="meta">Optional metadata with completion details</param>
-	public static void EventObjectiveComplete(string objectiveName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
-		EventObjectiveComplete(objectiveName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
+	public static void EventObjectiveComplete(string objectiveName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
+		EventObjectiveComplete(objectiveName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["type"] = "objective";
 		meta["verb"] = "completed";
 		meta["score"] = score.ToString();
-		meta["status"] = status.ToString();
+		meta["status"] = status.ToString().ToLower();
 		AddDuration(_objectiveStartTimes, objectiveName, meta);
 		Event(objectiveName, meta);
 	}
@@ -445,19 +481,38 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="interactionName">Name of the interaction (must match the start event)</param>
 	/// <param name="interactionType">Type of interaction (Select, Text, Bool, Rating, etc.)</param>
-	/// <param name="response">User's response or result (e.g., "A", "correct", "blue_button")</param>
+	/// <param name="result">User's response (e.g., Correct, Incorrect, Neutral)</param>
+	/// <param name="response">User's response (e.g., "A", "red_pill", "blue_pill")</param>
 	/// <param name="meta">Optional metadata with interaction details</param>
-	public static void EventInteractionComplete(string interactionName, string result, string resultOptions = "", InteractionType interactionType = InteractionType.Null, Dictionary<string, string> meta = null) =>
-		EventInteractionComplete(interactionName, interactionType, result, meta); // Just here for backwards compatability
-	public static void EventInteractionComplete(string interactionName, InteractionType interactionType, string response = "", Dictionary<string, string> meta = null)
+	public static void EventInteractionComplete(string interactionName, InteractionType type, InteractionResult result = InteractionResult.Neutral, string response = "", Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
 		meta["type"] = "interaction";
 		meta["verb"] = "completed";
-		meta["interaction"] = interactionType.ToString();
+		meta["interaction"] = type.ToString().ToLower();
+		meta["result"] = result.ToString().ToLower();
 		if (!string.IsNullOrEmpty(response)) meta["response"] = response;
 		AddDuration(_interactionStartTimes, interactionName, meta);
 		Event(interactionName, meta);
+	}
+	// backwards compatibility for old method signature
+	public static void EventInteractionComplete(string interactionName, InteractionType type, string response = "", Dictionary<string, string> meta = null)
+	{
+		EventInteractionComplete(interactionName, type, InteractionResult.Neutral, response, meta); // Just here for backwards compatability
+	}
+
+	// backwards compatibility for very old method signature (string, string, string, InteractionType, meta)
+	public static void EventInteractionComplete(string interactionName, string result, string response, InteractionType interactionType, Dictionary<string, string> meta = null)
+	{
+		// Convert string result to InteractionResult enum
+		InteractionResult interactionResult = result?.ToLower() switch
+		{
+			"true" or "correct" or "pass" => InteractionResult.Correct,
+			"false" or "incorrect" or "fail" => InteractionResult.Incorrect,
+			_ => InteractionResult.Neutral
+		};
+		
+		EventInteractionComplete(interactionName, interactionType, interactionResult, response, meta);
 	}
 
 	/// <summary>
@@ -1128,7 +1183,32 @@ public static partial class Abxr
 	/// Event that gets triggered when a moduleTarget should be handled.
 	/// Subscribe to this event to handle moduleTargets with your own logic (e.g., deep link handling, scene navigation, etc.).
 	/// </summary>
-	public static event System.Action<string> OnModuleTarget;
+	public static event System.Action<string> OnModuleTarget
+	{
+		add
+		{
+			_onModuleTarget += value;
+			
+			// If this is the first subscriber and we have modules to execute, execute them now
+			if (_onModuleTarget.GetInvocationList().Length == 1 && _hasPendingModules)
+			{
+				// Double-check that we still have modules to execute
+				var moduleToExecute = GetModuleTargetWithoutAdvance();
+				if (moduleToExecute != null)
+				{
+					_hasPendingModules = false;
+					ExecuteModuleSequence();
+				}
+			}
+		}
+		remove
+		{
+			_onModuleTarget -= value;
+		}
+	}
+	
+	private static System.Action<string> _onModuleTarget;
+	private static bool _hasPendingModules = false;
 
 	// Data structures for module target and module information
 	/// <summary>
@@ -1172,7 +1252,6 @@ public static partial class Abxr
 	}
 
 
-
 	/// <summary>
 	/// Execute module sequence by triggering the OnModuleTarget event for each available module.
 	/// Developers should subscribe to OnModuleTarget to handle module targets with their own logic.
@@ -1181,7 +1260,7 @@ public static partial class Abxr
 	/// <returns>Number of modules successfully executed</returns>
 	public static int ExecuteModuleSequence()
 	{
-		if (OnModuleTarget == null)
+		if (_onModuleTarget == null)
 		{
 			Debug.LogWarning("AbxrLib - ExecuteModuleSequence: No subscribers to OnModuleTarget event. Subscribe to OnModuleTarget to handle module targets.");
 			return 0;
@@ -1196,8 +1275,8 @@ public static partial class Abxr
 			
 			try
 			{
-				OnModuleTarget.Invoke(nextModuleData.moduleTarget);
-				Debug.Log($"AbxrLib - Module {nextModuleData.moduleTarget} executed via OnModuleTarget event");
+				_onModuleTarget.Invoke(nextModuleData.moduleTarget);
+				//Debug.Log($"AbxrLib - Module {nextModuleData.moduleTarget} executed via OnModuleTarget event");
 				executedModuleCount++;
 			}
 			catch (Exception ex)
