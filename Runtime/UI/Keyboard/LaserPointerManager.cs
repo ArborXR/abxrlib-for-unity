@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-
 namespace AbxrLib.Runtime.UI.Keyboard
 {
     /// <summary>
@@ -11,7 +10,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
     /// </summary>
     public static class LaserPointerManager
     {
-        private static Dictionary<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor, bool> _originalStates = new Dictionary<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor, bool>();
+        private static Dictionary<object, bool> _originalStates = new Dictionary<object, bool>();
         private static bool _isManagingLaserPointers = false;
         
         /// <summary>
@@ -22,7 +21,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (_originalStates.Count == 0) return;
             
-            var keysToRemove = new List<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+            var keysToRemove = new List<object>();
             
             foreach (var kvp in _originalStates)
             {
@@ -77,16 +76,20 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// <returns>True if XR Interaction Toolkit is available, false otherwise</returns>
         public static bool IsXRInteractionToolkitAvailable()
         {
+#if UNITY_XR_INTERACTION_TOOLKIT
+            return true;
+#else
             try
             {
                 // Try to access the XRRayInteractor type to verify the toolkit is available
-                var rayInteractorType = typeof(UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor);
+                var rayInteractorType = System.Type.GetType("UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor, Unity.XR.Interaction.Toolkit");
                 return rayInteractorType != null;
             }
             catch (System.Exception)
             {
                 return false;
             }
+#endif
         }
 
         /// <summary>
@@ -95,13 +98,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void EnableLaserPointersForInteraction()
         {
-            // Check if XR Interaction Toolkit is available
-            if (!IsXRInteractionToolkitAvailable())
-            {
-                Debug.LogWarning("AbxrLib - LaserPointerManager: XR Interaction Toolkit is not available. Laser pointer management will be skipped.");
-                return;
-            }
-
+#if UNITY_XR_INTERACTION_TOOLKIT
             if (_isManagingLaserPointers) 
             {
                 // Clean up any destroyed references before continuing
@@ -113,9 +110,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _originalStates.Clear();
 
             // Find all XRRayInteractor components in the scene
-            UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor[] rayInteractors = Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
-
-            foreach (UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor rayInteractor in rayInteractors)
+            var rayInteractors = UnityEngine.Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+            foreach (var rayInteractor in rayInteractors)
             {
                 if (rayInteractor != null)
                 {
@@ -133,6 +129,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
 
             Debug.Log($"AbxrLib - LaserPointerManager: Managing {_originalStates.Count} ray interactors for keyboard interaction");
+#else
+            // XR Interaction Toolkit not available - no-op
+#endif
         }
 
         /// <summary>
@@ -140,28 +139,22 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void RestoreLaserPointerStates()
         {
-            // Check if XR Interaction Toolkit is available
-            if (!IsXRInteractionToolkitAvailable())
-            {
-                Debug.LogWarning("AbxrLib - LaserPointerManager: XR Interaction Toolkit is not available. Laser pointer restoration will be skipped.");
-                return;
-            }
-
+#if UNITY_XR_INTERACTION_TOOLKIT
             if (!_isManagingLaserPointers) return; // Not managing, nothing to restore
 
             // Clean up any null references before processing
             CleanupDestroyedReferences();
 
-            var keysToRemove = new List<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+            var keysToRemove = new List<object>();
             
             foreach (var kvp in _originalStates)
             {
-                UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor rayInteractor = kvp.Key;
+                object rayInteractor = kvp.Key;
                 bool originalState = kvp.Value;
 
                 if (rayInteractor != null)
                 {
-                    // Only change state if it's different from original
+                    // Restore original state
                     if (rayInteractor.gameObject.activeInHierarchy != originalState)
                     {
                         rayInteractor.gameObject.SetActive(originalState);
@@ -185,6 +178,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _isManagingLaserPointers = false;
 
             Debug.Log("AbxrLib - LaserPointerManager: Restored all ray interactors to original states");
+#else
+            // XR Interaction Toolkit not available - no-op
+#endif
         }
 
         /// <summary>
@@ -198,5 +194,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// Returns 0 if XR Interaction Toolkit is not available.
         /// </summary>
         public static int ManagedRayInteractorCount => IsXRInteractionToolkitAvailable() ? _originalStates.Count : 0;
+
+        /// <summary>
+        /// Disposes of all managed resources and clears state.
+        /// </summary>
+        public static void Dispose()
+        {
+            ForceCleanup();
+        }
     }
 }
