@@ -6,7 +6,7 @@ using UnityEngine;
 namespace AbxrLib.Runtime.Telemetry
 {
     [DefaultExecutionOrder(100)] // Doesn't matter when this one runs
-    public class TrackSystemInfo : MonoBehaviour
+    public class TrackSystemInfo : MonoBehaviour, System.IDisposable
     {
         private static int _lastFrameCount;
         private static float _lastTime;
@@ -22,6 +22,31 @@ namespace AbxrLib.Runtime.Telemetry
         private void Start()
         {
             if (!Configuration.Instance.disableAutomaticTelemetry) _tracking = true;
+        }
+
+        private void OnDestroy()
+        {
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            System.GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // Clear static dictionaries to prevent memory leaks
+                _batteryData?.Clear();
+                _memoryData?.Clear();
+                _frameRateData?.Clear();
+                
+                // Reset tracking state
+                _tracking = false;
+            }
         }
     
         private void Update()

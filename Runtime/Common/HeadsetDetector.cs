@@ -66,8 +66,15 @@ namespace AbxrLib.Runtime.Common
         {
             if (response == _newSessionString)
             {
-                Authentication.Authentication.ReAuthenticate();
-                Abxr.OnHeadsetPutOnNewSession?.Invoke();
+                try
+                {
+                    Authentication.Authentication.ReAuthenticate();
+                    Abxr.OnHeadsetPutOnNewSession?.Invoke();
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"AbxrLib - HeadsetDetector: Error during re-authentication: {ex.Message}");
+                }
             }
         }
     }

@@ -7,7 +7,7 @@ using UnityEngine.XR;
 namespace AbxrLib.Runtime.Telemetry
 {
     [DefaultExecutionOrder(100)] // Doesn't matter when this one runs
-    public class TrackInputDevices : MonoBehaviour
+    public class TrackInputDevices : MonoBehaviour, System.IDisposable
     {
         private static float _timer = 1f;
     
@@ -24,10 +24,17 @@ namespace AbxrLib.Runtime.Telemetry
 
         private void Start()
         {
-            _leftController  = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
-            _rightController = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
-            _hmd = InputDevices.GetDeviceAtXRNode(XRNode.Head);
-            InputDevices.deviceConnected += RegisterDevice;
+            try
+            {
+                _leftController  = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+                _rightController = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+                _hmd = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+                InputDevices.deviceConnected += RegisterDevice;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"AbxrLib - TrackInputDevices: Failed to initialize XR device tracking: {ex.Message}");
+            }
         }
     
         private void Update()
@@ -39,7 +46,31 @@ namespace AbxrLib.Runtime.Telemetry
 
         private void OnDestroy()
         {
-            InputDevices.deviceConnected -= RegisterDevice;
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            System.GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // Unsubscribe from events
+                InputDevices.deviceConnected -= RegisterDevice;
+                
+                // Clear static references
+                _rightController = default(InputDevice);
+                _leftController = default(InputDevice);
+                _hmd = default(InputDevice);
+                
+                // Clear dictionaries
+                _rightTriggerValues?.Clear();
+                _leftTriggerValues?.Clear();
+            }
         }
 
         // Listen for hot-swaps and handle reconnects

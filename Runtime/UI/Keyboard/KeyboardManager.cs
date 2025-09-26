@@ -40,9 +40,18 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         private void Submit()
         {
-            StartCoroutine(KeyboardHandler.ProcessingVisual());
-            StartCoroutine(Authentication.Authentication.KeyboardAuthenticate(inputField.text));
-            inputField.text = "";
+            try
+            {
+                StartCoroutine(KeyboardHandler.ProcessingVisual());
+                StartCoroutine(Authentication.Authentication.KeyboardAuthenticate(inputField.text));
+                inputField.text = "";
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib - KeyboardManager: Error during authentication submission: {ex.Message}");
+                // Stop processing visual and clear input on error
+                inputField.text = "";
+            }
         }
     }
 }

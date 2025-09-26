@@ -33,6 +33,9 @@ namespace AbxrLib.Runtime.Common
             // Clean up laser pointer manager to prevent memory leaks from destroyed objects
             LaserPointerManager.OnSceneChanged();
             
+            // Clear RigDetector cache since scene objects have changed
+            RigDetector.ClearCache();
+            
             if (!Configuration.Instance.disableSceneEvents)
             {
                 Abxr.Event("Scene Changed", new Dictionary<string, string> { ["Scene Name"] = newScene.name });
