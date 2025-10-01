@@ -18,6 +18,15 @@ namespace AbxrLib.Runtime.UI
         [Tooltip("Use configuration values instead of inspector values")]
         public bool useConfigurationValues = true;
         
+        // Default values when using configuration
+        private const float DEFAULT_DISTANCE_FROM_CAMERA = 1.0f;
+        private const float DEFAULT_VERTICAL_OFFSET = 0f;
+        private const float DEFAULT_X_POSITION = 0f;
+        
+        // Base positioning values
+        private const float BASE_EYE_HEIGHT = 1.1f;
+        private const float BUILD_X_OFFSET = -0.05f;
+        
         private Transform cam;
         private Configuration config;
 
@@ -31,18 +40,19 @@ namespace AbxrLib.Runtime.UI
             // Use configuration values if enabled
             if (useConfigurationValues)
             {
-                distanceFromCamera = config.uiDistanceFromCamera;
-                verticalOffset = config.uiVerticalOffset;
-                xPosition = config.uiHorizontalOffset;
+                // Use default positioning values - no longer configurable
+                distanceFromCamera = DEFAULT_DISTANCE_FROM_CAMERA;
+                verticalOffset = DEFAULT_VERTICAL_OFFSET;
+                xPosition = DEFAULT_X_POSITION;
             }
             
 #if UNITY_EDITOR
             Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
-            Vector3 newPos = new Vector3(targetPos.x + xPosition, 1.1f + verticalOffset, targetPos.z);
+            Vector3 newPos = new Vector3(targetPos.x + xPosition, BASE_EYE_HEIGHT + verticalOffset, targetPos.z);
             transform.position = newPos;
 #else
             Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
-            Vector3 newPos = new Vector3(targetPos.x + xPosition - 0.05f, 1.1f + verticalOffset, targetPos.z);
+            Vector3 newPos = new Vector3(targetPos.x + xPosition + BUILD_X_OFFSET, BASE_EYE_HEIGHT + verticalOffset, targetPos.z);
             transform.position = newPos;
 #endif
         }
@@ -53,9 +63,10 @@ namespace AbxrLib.Runtime.UI
             if (useConfigurationValues && config != null)
             {
                 faceCamera = config.authUIFollowCamera;
-                distanceFromCamera = config.uiDistanceFromCamera;
-                verticalOffset = config.uiVerticalOffset;
-                xPosition = config.uiHorizontalOffset;
+                // Use default positioning values - no longer configurable
+                distanceFromCamera = DEFAULT_DISTANCE_FROM_CAMERA;
+                verticalOffset = DEFAULT_VERTICAL_OFFSET;
+                xPosition = DEFAULT_X_POSITION;
             }
             else
             {
@@ -65,7 +76,7 @@ namespace AbxrLib.Runtime.UI
             if (faceCamera)
             {
                 Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
-                Vector3 newPos = new Vector3(cam.position.x + xPosition, 1.1f + verticalOffset, targetPos.z);
+                Vector3 newPos = new Vector3(cam.position.x + xPosition, BASE_EYE_HEIGHT + verticalOffset, targetPos.z);
                 transform.position = newPos;
 
                 // face the camera

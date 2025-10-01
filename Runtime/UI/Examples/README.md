@@ -228,9 +228,42 @@ All button interactions are automatically logged with AbxrLib analytics:
 
 ## Example Scenes
 
+### Custom Button System
 See the `CustomButtonExample.cs` for a complete implementation example that demonstrates:
 - Custom button handling
 - Visual feedback (color flashing)
 - Sound effects
 - Analytics integration
 - Runtime configuration changes
+
+### Keyboard System
+See the `KeyboardExample.cs` for a complete implementation example that demonstrates:
+- Keyboard creation and management
+- Event handling and callbacks
+- Input monitoring
+- Configuration management
+- Analytics integration
+- Error handling
+
+### Hand Tracking Buttons
+See the `HandTrackingButtonExample.cs` for hand tracking button interactions:
+- Hand tracking button setup
+- Visual feedback for hand interactions
+- Analytics integration for hand tracking
+- Configuration management
+
+## Documentation
+
+- **CustomButtonExample.cs**: Complete custom button system implementation
+- **KeyboardExample.cs**: Comprehensive keyboard system usage
+- **HandTrackingButtonExample.cs**: Hand tracking button interactions
+- **KeyboardGuide.md**: Detailed keyboard system documentation
+- **HandTrackingGuide.md**: Hand tracking implementation guide
+
+## Specialized Documentation
+
+For users who need detailed information about specific systems:
+
+- **Keyboard System**: See `../Keyboard/README.md` for comprehensive keyboard system documentation
+- **Custom Button System**: See this README for custom button implementation guide
+- **Hand Tracking**: See `HandTrackingGuide.md` for hand tracking implementation guide

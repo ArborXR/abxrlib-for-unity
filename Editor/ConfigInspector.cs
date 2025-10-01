@@ -91,9 +91,6 @@ namespace AbxrLib.Editor
             config.PinPrefab = (GameObject)EditorGUILayout.ObjectField(new GUIContent(
                 "Pin Prefab", "Custom PIN pad prefab. Leave empty to use default AbxrPinPad prefab."), 
                 config.PinPrefab, typeof(GameObject));
-            config.PanelPrefab = (GameObject)EditorGUILayout.ObjectField(new GUIContent(
-                "Panel Prefab", "Custom panel prefab. Leave empty to use default AbxrDarkPanelWithText prefab."), 
-                config.PanelPrefab, typeof(GameObject));
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("UI Behavior Control", EditorStyles.boldLabel);
@@ -102,19 +99,6 @@ namespace AbxrLib.Editor
             
             config.enableDirectTouchInteraction = EditorGUILayout.Toggle(new GUIContent(
                 "Enable Direct Touch Interaction", "When enabled, direct touch interaction will be used for UI elements instead of ray casting."), config.enableDirectTouchInteraction);
-            
-            // Only show positioning options if face camera is enabled
-            if (config.authUIFollowCamera)
-            {
-                EditorGUI.indentLevel++;
-                config.uiDistanceFromCamera = EditorGUILayout.FloatField(new GUIContent(
-                    "UI Distance From Camera (meters)", "Distance from camera for UI panels when face camera is enabled"), config.uiDistanceFromCamera);
-                config.uiVerticalOffset = EditorGUILayout.FloatField(new GUIContent(
-                    "UI Vertical Offset (meters)", "Vertical offset from camera eye height for UI panels"), config.uiVerticalOffset);
-                config.uiHorizontalOffset = EditorGUILayout.FloatField(new GUIContent(
-                    "UI Horizontal Offset (meters)", "Horizontal offset from camera center for UI panels"), config.uiHorizontalOffset);
-                EditorGUI.indentLevel--;
-            }
 
 
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
@@ -139,9 +123,6 @@ namespace AbxrLib.Editor
                 config.authenticationStartDelay = 0f;
                 config.authUIFollowCamera = true;
                 config.enableDirectTouchInteraction = true;
-                config.uiDistanceFromCamera = 1.5f;
-                config.uiVerticalOffset = 0f;
-                config.uiHorizontalOffset = 0f;
             }
 
             EditorGUILayout.Space();
