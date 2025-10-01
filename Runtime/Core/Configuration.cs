@@ -82,5 +82,21 @@ namespace AbxrLib.Runtime.Core
         public GameObject KeyboardPrefab;
         public GameObject PinPrefab;
         public GameObject PanelPrefab;
+
+        [Header("UI Behavior Control")]
+        [Tooltip("When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions.")]
+        public bool authUIFollowCamera = true;
+        
+        [Tooltip("When enabled, direct touch interaction will be used for UI elements instead of ray casting.")]
+        public bool enableDirectTouchInteraction = true;
+        
+        [Tooltip("Distance from camera for UI panels when face camera is enabled (in meters)")]
+        public float uiDistanceFromCamera = 1.5f;
+        
+        [Tooltip("Vertical offset from camera eye height for UI panels (in meters)")]
+        public float uiVerticalOffset = 0f;
+        
+        [Tooltip("Horizontal offset from camera center for UI panels (in meters)")]
+        public float uiHorizontalOffset = 0f;
     }
 }
