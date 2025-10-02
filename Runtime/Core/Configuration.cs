@@ -92,13 +92,14 @@ namespace AbxrLib.Runtime.Core
         public int sendRetriesOnFailure = 3;
         public int sendRetryIntervalSeconds = 3;
         public int sendNextBatchWaitSeconds = 30;
+        public int requestTimeoutSeconds = 30;
         public int stragglerTimeoutSeconds = 15;
-        public int eventsPerSendAttempt = 16;
-        public int logsPerSendAttempt = 16;
-        public int telemetryEntriesPerSendAttempt = 16;
+        public float maxCallFrequencySeconds = 1f;
+        public int dataEntriesPerSendAttempt = 32;
         public int storageEntriesPerSendAttempt = 16;
         public int pruneSentItemsOlderThanHours = 12;
         public int maximumCachedItems = 1024;
+        [HideInInspector] public int maxDictionarySize = 50;
         public bool retainLocalAfterSent;
         public bool disableAutomaticTelemetry;
         public bool disableSceneEvents;

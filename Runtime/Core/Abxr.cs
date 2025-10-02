@@ -1186,6 +1186,7 @@ public static partial class Abxr
 	// Module index loading state to prevent repeated storage calls
 	private static bool _moduleIndexLoaded = false;
 	private static bool _moduleIndexLoading = false;
+	private static readonly object _moduleIndexLock = new object();
 
 	/// <summary>
 	/// Event that gets triggered when a moduleTarget should be handled.
@@ -1416,25 +1417,29 @@ public static partial class Abxr
 
 	private static void LoadModuleIndex()
 	{
-		// Don't load if already loaded or currently loading
-		if (_moduleIndexLoaded || _moduleIndexLoading)
+		// Use lock to prevent race conditions
+		lock (_moduleIndexLock)
 		{
-			return;
-		}
+			// Don't load if already loaded or currently loading
+			if (_moduleIndexLoaded || _moduleIndexLoading)
+			{
+				return;
+			}
 
-		try
-		{
-			_moduleIndexLoading = true;
-			CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
-		}
-		catch (Exception ex)
-		{
-			_moduleIndexLoading = false;
-			// Log error with consistent format and include context
-			Debug.LogError($"AbxrLib: Failed to load module index: {ex.Message}\n" +
-						  $"Module Index Loaded: {_moduleIndexLoaded}\n" +
-						  $"Exception Type: {ex.GetType().Name}\n" +
-						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+			try
+			{
+				_moduleIndexLoading = true;
+				CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
+			}
+			catch (Exception ex)
+			{
+				_moduleIndexLoading = false;
+				// Log error with consistent format and include context
+				Debug.LogError($"AbxrLib: Failed to load module index: {ex.Message}\n" +
+							  $"Module Index Loaded: {_moduleIndexLoaded}\n" +
+							  $"Exception Type: {ex.GetType().Name}\n" +
+							  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+			}
 		}
 	}
 
@@ -1442,25 +1447,29 @@ public static partial class Abxr
 	{
 		yield return StorageGetEntry(_moduleIndexKey, StorageScope.user, result =>
 		{
-			if (result != null && result.Count > 0)
+			// Use lock to protect the completion of loading
+			lock (_moduleIndexLock)
 			{
-				var moduleIndexEntry = result[0]; // Get the first (and should be only) entry
-				if (moduleIndexEntry.ContainsKey("moduleIndex"))
+				if (result != null && result.Count > 0)
 				{
-					var moduleIndexString = moduleIndexEntry["moduleIndex"];
-					if (!string.IsNullOrEmpty(moduleIndexString))
+					var moduleIndexEntry = result[0]; // Get the first (and should be only) entry
+					if (moduleIndexEntry.ContainsKey("moduleIndex"))
 					{
-						if (int.TryParse(moduleIndexString, out int savedModuleIndex))
+						var moduleIndexString = moduleIndexEntry["moduleIndex"];
+						if (!string.IsNullOrEmpty(moduleIndexString))
 						{
-							_currentModuleIndex = savedModuleIndex;
+							if (int.TryParse(moduleIndexString, out int savedModuleIndex))
+							{
+								_currentModuleIndex = savedModuleIndex;
+							}
 						}
 					}
 				}
+				
+				// Mark loading as complete
+				_moduleIndexLoaded = true;
+				_moduleIndexLoading = false;
 			}
-			
-			// Mark loading as complete
-			_moduleIndexLoaded = true;
-			_moduleIndexLoading = false;
 		});
 	}
 

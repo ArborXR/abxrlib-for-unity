@@ -43,16 +43,12 @@ namespace AbxrLib.Editor
             config.sendRetriesOnFailure = EditorGUILayout.IntField("Send Retries On Failure", config.sendRetriesOnFailure);
             config.sendRetryIntervalSeconds = EditorGUILayout.IntField("Send Retry Interval Seconds", config.sendRetryIntervalSeconds);
             config.sendNextBatchWaitSeconds = EditorGUILayout.IntField("Send Next Batch Wait Seconds", config.sendNextBatchWaitSeconds);
+            config.requestTimeoutSeconds = EditorGUILayout.IntField(new GUIContent(
+                "Request Timeout Seconds", "How long to wait before giving up on network requests"), config.requestTimeoutSeconds);
             config.stragglerTimeoutSeconds = EditorGUILayout.IntField(new GUIContent(
-                "Straggler Timeout Seconds", "0 = Infinite, i.e. Never send remainders = Always send exactly EventsPerSendAttempt"), config.stragglerTimeoutSeconds);
-            config.eventsPerSendAttempt = EditorGUILayout.IntField(new GUIContent(
-                "Events Per Send Attempt", "0 = Send all not already sent"), config.eventsPerSendAttempt);
-            config.logsPerSendAttempt = EditorGUILayout.IntField("Logs Per Send Attempt", config.logsPerSendAttempt);
-        
-            // Disable telemetry entries field if telemetry is disabled
-            EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
-            config.telemetryEntriesPerSendAttempt = EditorGUILayout.IntField("Telemetry Entries Per Send Attempt", config.telemetryEntriesPerSendAttempt);
-            EditorGUI.EndDisabledGroup();
+                "Straggler Timeout Seconds", "0 = Infinite, i.e. Never send remainders = Always send exactly DataEntriesPerSendAttempt"), config.stragglerTimeoutSeconds);
+            config.dataEntriesPerSendAttempt = EditorGUILayout.IntField(new GUIContent(
+                "Data Entries Per Send Attempt", "Total count of events, logs, and telemetry entries to batch before sending (0 = Send all not already sent)"), config.dataEntriesPerSendAttempt);
         
             config.storageEntriesPerSendAttempt = EditorGUILayout.IntField("Storage Entries Per Send Attempt", config.storageEntriesPerSendAttempt);
             config.pruneSentItemsOlderThanHours = EditorGUILayout.IntField(new GUIContent(
@@ -103,26 +99,31 @@ namespace AbxrLib.Editor
 
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
-                config.positionTrackingPeriodSeconds = 1f;
-                config.telemetryTrackingPeriodSeconds = 10f;
-                config.frameRateTrackingPeriodSeconds = 0.5f;
-                config.sendRetriesOnFailure = 3;
-                config.sendRetryIntervalSeconds = 3;
-                config.sendNextBatchWaitSeconds = 30;
-                config.stragglerTimeoutSeconds = 15;
-                config.eventsPerSendAttempt = 16;
-                config.logsPerSendAttempt = 16;
-                config.telemetryEntriesPerSendAttempt = 16;
-                config.storageEntriesPerSendAttempt = 16;
-                config.pruneSentItemsOlderThanHours = 12;
-                config.maximumCachedItems = 1024;
-                config.retainLocalAfterSent = false;
-                config.disableAutomaticTelemetry = false;
-                config.disableSceneEvents = false;
-                config.disableAutoStartAuthentication = false;
-                config.authenticationStartDelay = 0f;
-                config.authUIFollowCamera = true;
-                config.enableDirectTouchInteraction = true;
+                // Create a temporary instance to get the default values
+                var defaultConfig = CreateInstance<Configuration>();
+                
+                config.positionTrackingPeriodSeconds = defaultConfig.positionTrackingPeriodSeconds;
+                config.telemetryTrackingPeriodSeconds = defaultConfig.telemetryTrackingPeriodSeconds;
+                config.frameRateTrackingPeriodSeconds = defaultConfig.frameRateTrackingPeriodSeconds;
+                config.sendRetriesOnFailure = defaultConfig.sendRetriesOnFailure;
+                config.sendRetryIntervalSeconds = defaultConfig.sendRetryIntervalSeconds;
+                config.sendNextBatchWaitSeconds = defaultConfig.sendNextBatchWaitSeconds;
+                config.requestTimeoutSeconds = defaultConfig.requestTimeoutSeconds;
+                config.stragglerTimeoutSeconds = defaultConfig.stragglerTimeoutSeconds;
+                config.dataEntriesPerSendAttempt = defaultConfig.dataEntriesPerSendAttempt;
+                config.storageEntriesPerSendAttempt = defaultConfig.storageEntriesPerSendAttempt;
+                config.pruneSentItemsOlderThanHours = defaultConfig.pruneSentItemsOlderThanHours;
+                config.maximumCachedItems = defaultConfig.maximumCachedItems;
+                config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
+                config.disableAutomaticTelemetry = defaultConfig.disableAutomaticTelemetry;
+                config.disableSceneEvents = defaultConfig.disableSceneEvents;
+                config.disableAutoStartAuthentication = defaultConfig.disableAutoStartAuthentication;
+                config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
+                config.authUIFollowCamera = defaultConfig.authUIFollowCamera;
+                config.enableDirectTouchInteraction = defaultConfig.enableDirectTouchInteraction;
+                
+                // Clean up the temporary instance
+                DestroyImmediate(defaultConfig);
             }
 
             EditorGUILayout.Space();

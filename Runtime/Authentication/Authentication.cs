@@ -392,7 +392,7 @@ namespace AbxrLib.Runtime.Authentication
                     Utils.BuildRequest(request, json);
                     
                     // Set timeout to prevent hanging requests
-                    request.timeout = 30; // 30 second timeout
+                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
                     requestCreated = true;
                 }
                 catch (System.Exception ex)
@@ -618,7 +618,7 @@ namespace AbxrLib.Runtime.Authentication
                 {
                     request = UnityWebRequest.Get(fullUri.ToString());
                     request.SetRequestHeader("Accept", "application/json");
-                    request.timeout = 30; // 30 second timeout
+                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
                     SetAuthHeaders(request);
                     requestCreated = true;
                 }
@@ -763,9 +763,7 @@ namespace AbxrLib.Runtime.Authentication
             if (!string.IsNullOrEmpty(payload.sendRetryInterval)) Configuration.Instance.sendRetryIntervalSeconds = Convert.ToInt32(payload.sendRetryInterval);
             if (!string.IsNullOrEmpty(payload.sendNextBatchWait)) Configuration.Instance.sendNextBatchWaitSeconds = Convert.ToInt32(payload.sendNextBatchWait);
             if (!string.IsNullOrEmpty(payload.stragglerTimeout)) Configuration.Instance.stragglerTimeoutSeconds = Convert.ToInt32(payload.stragglerTimeout);
-            if (!string.IsNullOrEmpty(payload.eventsPerSendAttempt)) Configuration.Instance.eventsPerSendAttempt = Convert.ToInt32(payload.eventsPerSendAttempt);
-            if (!string.IsNullOrEmpty(payload.logsPerSendAttempt)) Configuration.Instance.logsPerSendAttempt = Convert.ToInt32(payload.logsPerSendAttempt);
-            if (!string.IsNullOrEmpty(payload.telemetryEntriesPerSendAttempt)) Configuration.Instance.telemetryEntriesPerSendAttempt = Convert.ToInt32(payload.telemetryEntriesPerSendAttempt);
+            if (!string.IsNullOrEmpty(payload.dataEntriesPerSendAttempt)) Configuration.Instance.dataEntriesPerSendAttempt = Convert.ToInt32(payload.dataEntriesPerSendAttempt);
             if (!string.IsNullOrEmpty(payload.storageEntriesPerSendAttempt)) Configuration.Instance.storageEntriesPerSendAttempt = Convert.ToInt32(payload.storageEntriesPerSendAttempt);
             if (!string.IsNullOrEmpty(payload.pruneSentItemsOlderThan)) Configuration.Instance.pruneSentItemsOlderThanHours = Convert.ToInt32(payload.pruneSentItemsOlderThan);
             if (!string.IsNullOrEmpty(payload.maximumCachedItems)) Configuration.Instance.maximumCachedItems = Convert.ToInt32(payload.maximumCachedItems);
@@ -913,9 +911,7 @@ namespace AbxrLib.Runtime.Authentication
             public string sendRetryInterval;
             public string sendNextBatchWait;
             public string stragglerTimeout;
-            public string eventsPerSendAttempt;
-            public string logsPerSendAttempt;
-            public string telemetryEntriesPerSendAttempt;
+            public string dataEntriesPerSendAttempt;
             public string storageEntriesPerSendAttempt;
             public string pruneSentItemsOlderThan;
             public string maximumCachedItems;

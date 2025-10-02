@@ -19,7 +19,6 @@ namespace AbxrLib.Runtime.Data
 		private static readonly object _lock = new();
 		private static float _timer;
 		private static float _lastCallTime;
-		private const float MaxCallFrequencySeconds = 1f;
 
 		private void Start()
 		{
@@ -55,7 +54,7 @@ namespace AbxrLib.Runtime.Data
 					return; // Reject new event if queue is at limit
 				}
 				_eventPayloads.Add(payload);
-				if (_eventPayloads.Count >= Configuration.Instance.eventsPerSendAttempt)
+				if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
 				{
 					_timer = 0; // Send on the next update
 				}
@@ -84,7 +83,7 @@ namespace AbxrLib.Runtime.Data
 					return; // Reject new telemetry if queue is at limit
 				}
 				_telemetryPayloads.Add(payload);
-				if (_telemetryPayloads.Count >= Configuration.Instance.telemetryEntriesPerSendAttempt)
+				if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
 				{
 					_timer = 0; // Send on the next update
 				}
@@ -114,7 +113,7 @@ namespace AbxrLib.Runtime.Data
 					return; // Reject new log if queue is at limit
 				}
 				_logPayloads.Add(payload);
-				if (_logPayloads.Count >= Configuration.Instance.logsPerSendAttempt)
+				if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
 				{
 					_timer = 0; // Send on the next update
 				}
@@ -126,7 +125,7 @@ namespace AbxrLib.Runtime.Data
 		/// </summary>
 		public static IEnumerator Send()
 		{
-			if (Time.time - _lastCallTime < MaxCallFrequencySeconds) yield break;
+			if (Time.time - _lastCallTime < Configuration.Instance.maxCallFrequencySeconds) yield break;
 
 			_lastCallTime = Time.time;
 			_timer = Configuration.Instance.sendNextBatchWaitSeconds; // reset timer
@@ -190,7 +189,7 @@ namespace AbxrLib.Runtime.Data
 					Authentication.Authentication.SetAuthHeaders(request, json);
 
 					// Set timeout to prevent hanging requests
-					request.timeout = 30; // 30 second timeout
+					request.timeout = Configuration.Instance.requestTimeoutSeconds;
 					requestCreated = true;
 				}
 				catch (System.Exception ex)
@@ -392,6 +391,14 @@ namespace AbxrLib.Runtime.Data
 				return true;
 			}
 			return false;
+		}
+
+		/// <summary>
+		/// Gets the total count of all data entries across all queues
+		/// </summary>
+		private static int GetTotalDataCount()
+		{
+			return _eventPayloads.Count + _telemetryPayloads.Count + _logPayloads.Count;
 		}
 
 		// Payload classes

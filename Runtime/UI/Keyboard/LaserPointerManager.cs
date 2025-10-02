@@ -15,7 +15,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private static bool _isManagingLaserPointers = false;
         private static int _cleanupCounter = 0;
         private const int CLEANUP_FREQUENCY = 100; // Clean up every 100 operations
-        private const int MAX_DICTIONARY_SIZE = 50; // Maximum number of ray interactors to track
+        // MAX_DICTIONARY_SIZE now configurable via Configuration.maxDictionarySize
         
         /// <summary>
         /// Cleans up any null references from destroyed objects to prevent memory leaks.
@@ -119,7 +119,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             var rayInteractors = UnityEngine.Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
             foreach (var rayInteractor in rayInteractors)
             {
-                if (rayInteractor != null && _originalStates.Count < MAX_DICTIONARY_SIZE)
+                if (rayInteractor != null && _originalStates.Count < Configuration.Instance.maxDictionarySize)
                 {
                     // Store original state
                     bool wasActive = rayInteractor.gameObject.activeInHierarchy;
@@ -132,9 +132,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
                         Debug.Log($"AbxrLib - LaserPointerManager: Enabled ray interactor on {rayInteractor.gameObject.name}");
                     }
                 }
-                else if (_originalStates.Count >= MAX_DICTIONARY_SIZE)
+                else if (_originalStates.Count >= Configuration.Instance.maxDictionarySize)
                 {
-                    Debug.LogWarning($"AbxrLib - LaserPointerManager: Maximum dictionary size ({MAX_DICTIONARY_SIZE}) reached, skipping additional ray interactors");
+                    Debug.LogWarning($"AbxrLib - LaserPointerManager: Maximum dictionary size ({Configuration.Instance.maxDictionarySize}) reached, skipping additional ray interactors");
                     break;
                 }
             }
