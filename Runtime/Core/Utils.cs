@@ -21,10 +21,8 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using AbxrLib.Runtime.Common;
-using AbxrLib.Runtime.Events;
-using AbxrLib.Runtime.Logs;
+using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.Storage;
-using AbxrLib.Runtime.Telemetry;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -293,9 +291,7 @@ namespace AbxrLib.Runtime.Core
         public static void SendAllData()
         {
             // Send all pending data from all batcher types
-            CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
-            CoroutineRunner.Instance.StartCoroutine(TelemetryBatcher.Send());
-            CoroutineRunner.Instance.StartCoroutine(LogBatcher.Send());
+            CoroutineRunner.Instance.StartCoroutine(DataBatcher.Send());
             CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
         }
         
