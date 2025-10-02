@@ -11,7 +11,8 @@
  * - How to handle keyboard events and callbacks
  * - How to integrate with AbxrLib analytics
  * - How to use configuration-driven behavior
- * - How to work with the updated keyboard prefab that includes a panel
+ * - How to work with authentication keyboards that have built-in panels
+ * - How to use independent panel prefabs for other UI messages
  */
 
 using UnityEngine;
@@ -381,6 +382,45 @@ namespace AbxrLib.Runtime.UI.Examples
                 Abxr.InteractionType.Select, 
                 Abxr.InteractionResult.Neutral, 
                 "pin_demo");
+        }
+        
+        /// <summary>
+        /// Example method to demonstrate independent panel usage for non-authentication messages
+        /// This shows how to use panel prefabs for other UI messages while authentication
+        /// keyboards have their own built-in panels
+        /// </summary>
+        public void DemonstrateIndependentPanelUsage()
+        {
+            Debug.Log("AbxrLib - KeyboardExample: Demonstrating independent panel usage");
+            
+            // Load independent panel prefab for custom messages
+            GameObject panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
+            if (panelPrefab != null)
+            {
+                GameObject panelInstance = Instantiate(panelPrefab);
+                
+                // Set custom message text
+                var panelText = panelInstance.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+                if (panelText != null)
+                {
+                    panelText.text = "This is an independent panel for custom messages.\nAuthentication keyboards have built-in panels.";
+                }
+                
+                // Auto-destroy after 5 seconds
+                Destroy(panelInstance, 5f);
+                
+                Debug.Log("AbxrLib - KeyboardExample: Independent panel created and will auto-destroy in 5 seconds");
+            }
+            else
+            {
+                Debug.LogWarning("AbxrLib - KeyboardExample: Could not load AbxrDarkPanelWithText prefab");
+            }
+            
+            // Log analytics event
+            Abxr.EventInteractionComplete("keyboard_example_independent_panel_demo", 
+                Abxr.InteractionType.Select, 
+                Abxr.InteractionResult.Neutral, 
+                "independent_panel_demo");
         }
         
         /// <summary>

@@ -10,7 +10,7 @@ namespace AbxrLib.Runtime.UI
         public float xPosition;
         
         [Tooltip("How far in front of the camera the panel should float")]
-        public float distanceFromCamera = 1.5f;
+        public float distanceFromCamera = 1.0f;
 
         [Tooltip("Vertical offset from the camera's eye height (in meters)")]
         public float verticalOffset = 0;
@@ -23,8 +23,7 @@ namespace AbxrLib.Runtime.UI
         private const float DEFAULT_VERTICAL_OFFSET = 0f;
         private const float DEFAULT_X_POSITION = 0f;
         
-        // Base positioning values
-        private const float BASE_EYE_HEIGHT = 1.1f;
+        // Build-specific positioning offset
         private const float BUILD_X_OFFSET = -0.05f;
         
         private Transform cam;
@@ -59,6 +58,21 @@ namespace AbxrLib.Runtime.UI
    
         private void Update()
         {
+            // Check if camera reference is still valid
+            if (cam == null)
+            {
+                // Try to reacquire the camera reference
+                if (Camera.main != null)
+                {
+                    cam = Camera.main.transform;
+                }
+                else
+                {
+                    // Camera is not available, skip this update
+                    return;
+                }
+            }
+            
             // Use configuration values if enabled
             if (useConfigurationValues && config != null)
             {

@@ -13,6 +13,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
     {
         private static Dictionary<object, bool> _originalStates = new Dictionary<object, bool>();
         private static bool _isManagingLaserPointers = false;
+        private static int _cleanupCounter = 0;
+        private const int CLEANUP_FREQUENCY = 100; // Clean up every 100 operations
+        private const int MAX_DICTIONARY_SIZE = 50; // Maximum number of ray interactors to track
         
         /// <summary>
         /// Cleans up any null references from destroyed objects to prevent memory leaks.
@@ -24,6 +27,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             
             var keysToRemove = new List<object>();
             
+            // Find all null keys (destroyed objects)
             foreach (var kvp in _originalStates)
             {
                 if (kvp.Key == null)
@@ -32,13 +36,21 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
             }
             
-            foreach (var key in keysToRemove)
-            {
-                _originalStates.Remove(key);
-            }
-            
+            // Remove null keys from dictionary - we need to handle this carefully
+            // since Dictionary.Remove(null) doesn't work as expected
             if (keysToRemove.Count > 0)
             {
+                // Create a new dictionary without null keys
+                var newDictionary = new Dictionary<object, bool>();
+                foreach (var kvp in _originalStates)
+                {
+                    if (kvp.Key != null)
+                    {
+                        newDictionary[kvp.Key] = kvp.Value;
+                    }
+                }
+                _originalStates = newDictionary;
+                
                 Debug.Log($"AbxrLib - LaserPointerManager: Cleaned up {keysToRemove.Count} destroyed ray interactor references");
             }
         }
@@ -86,6 +98,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void EnableLaserPointersForInteraction()
         {
+            // Periodic cleanup to prevent memory leaks
+            if (++_cleanupCounter >= CLEANUP_FREQUENCY)
+            {
+                _cleanupCounter = 0;
+                CleanupDestroyedReferences();
+            }
+            
             if (_isManagingLaserPointers) 
             {
                 // Clean up any destroyed references before continuing
@@ -100,7 +119,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             var rayInteractors = UnityEngine.Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
             foreach (var rayInteractor in rayInteractors)
             {
-                if (rayInteractor != null)
+                if (rayInteractor != null && _originalStates.Count < MAX_DICTIONARY_SIZE)
                 {
                     // Store original state
                     bool wasActive = rayInteractor.gameObject.activeInHierarchy;
@@ -112,6 +131,11 @@ namespace AbxrLib.Runtime.UI.Keyboard
                         rayInteractor.gameObject.SetActive(true);
                         Debug.Log($"AbxrLib - LaserPointerManager: Enabled ray interactor on {rayInteractor.gameObject.name}");
                     }
+                }
+                else if (_originalStates.Count >= MAX_DICTIONARY_SIZE)
+                {
+                    Debug.LogWarning($"AbxrLib - LaserPointerManager: Maximum dictionary size ({MAX_DICTIONARY_SIZE}) reached, skipping additional ray interactors");
+                    break;
                 }
             }
 
@@ -152,10 +176,19 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
             }
 
-            // Remove all processed entries
-            foreach (var key in keysToRemove)
+            // Remove all processed entries - handle null keys properly
+            if (keysToRemove.Count > 0)
             {
-                _originalStates.Remove(key);
+                // Create a new dictionary without the processed entries
+                var newDictionary = new Dictionary<object, bool>();
+                foreach (var kvp in _originalStates)
+                {
+                    if (!keysToRemove.Contains(kvp.Key))
+                    {
+                        newDictionary[kvp.Key] = kvp.Value;
+                    }
+                }
+                _originalStates = newDictionary;
             }
 
             _isManagingLaserPointers = false;

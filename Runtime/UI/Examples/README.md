@@ -259,6 +259,7 @@ See the `HandTrackingButtonExample.cs` for hand tracking button interactions:
 - **HandTrackingButtonExample.cs**: Hand tracking button interactions
 - **KeyboardGuide.md**: Detailed keyboard system documentation
 - **HandTrackingGuide.md**: Hand tracking implementation guide
+- **PanelArchitectureGuide.md**: Complete guide to the dual-panel architecture (authentication keyboards vs independent panels)
 
 ## Specialized Documentation
 
@@ -267,3 +268,4 @@ For users who need detailed information about specific systems:
 - **Keyboard System**: See `../Keyboard/README.md` for comprehensive keyboard system documentation
 - **Custom Button System**: See this README for custom button implementation guide
 - **Hand Tracking**: See `HandTrackingGuide.md` for hand tracking implementation guide
+- **Panel Architecture**: See `PanelArchitectureGuide.md` for understanding the dual-panel system (authentication keyboards vs independent panels)

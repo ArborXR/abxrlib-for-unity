@@ -67,9 +67,34 @@ namespace AbxrLib.Runtime.Authentication
         // Auth handoff for external launcher apps
         private static bool _authHandoffCompleted = false;
 
-        public static bool Authenticated() => DateTime.UtcNow <= _tokenExpiry;
+        public static bool Authenticated() 
+        {
+            // Check if we have a valid token and it hasn't expired
+            return !string.IsNullOrEmpty(_authToken) && 
+                   !string.IsNullOrEmpty(_apiSecret) && 
+                   DateTime.UtcNow <= _tokenExpiry;
+        }
 
         public static bool FullyAuthenticated() => Authenticated() && _keyboardAuthSuccess == true;
+        
+        /// <summary>
+        /// Clears authentication state and stops data transmission
+        /// </summary>
+        private static void ClearAuthenticationState()
+        {
+            _authToken = null;
+            _apiSecret = null;
+            _tokenExpiry = DateTime.MinValue;
+            _keyboardAuthSuccess = null;
+            _sessionId = null;
+            _authMechanism = null;
+            
+            // Clear cached user data
+            _responseData = null;
+            _authResponseModuleData = null;
+            
+            Debug.LogWarning("AbxrLib: Authentication state cleared - data transmission stopped");
+        }
 
         private void Start()
         {
@@ -148,16 +173,8 @@ namespace AbxrLib.Runtime.Authentication
 
         public static void ReAuthenticate()
         {
-            _sessionId = null;
-            _apiSecret = null;
-            _authMechanism = null;
-            _authToken = null;
-            _tokenExpiry = DateTime.MinValue;
-            _keyboardAuthSuccess = null;
-            
-            // Clear cached user data
-            _responseData = null;
-            _authResponseModuleData = null;
+            // Clear authentication state to stop data transmission
+            ClearAuthenticationState();
             
             // Reset auth handoff state
             _authHandoffCompleted = false;
@@ -241,10 +258,18 @@ namespace AbxrLib.Runtime.Authentication
 #endif
         private static bool ValidateConfigValues()
         {
-            const string appIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
-            if (string.IsNullOrEmpty(_appId) || !Regex.IsMatch(_appId, appIdPattern))
+            // First check basic configuration validation
+            if (!Configuration.Instance.IsValid())
             {
-                Debug.LogError("AbxrLib: Invalid Application ID. Cannot authenticate.");
+                Debug.LogError("AbxrLib: Configuration validation failed. Cannot authenticate.");
+                return false;
+            }
+            
+            // Additional format validation for appID (UUID format)
+            const string appIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
+            if (!Regex.IsMatch(_appId, appIdPattern))
+            {
+                Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
                 return false;
             }
         
@@ -254,16 +279,10 @@ namespace AbxrLib.Runtime.Authentication
                 const string orgIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
                 if (!Regex.IsMatch(_orgId, orgIdPattern))
                 {
-                    Debug.LogError("AbxrLib: Invalid Organization ID. Cannot authenticate.");
+                    Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
                     return false;
                 }
             }
-        
-            // if (string.IsNullOrEmpty(_authSecret))
-            // {
-            //     Debug.LogError("AbxrLib: Missing Auth Secret. Cannot authenticate.");
-            //     return false;
-            // }
 
             return true;
         }
@@ -424,12 +443,24 @@ namespace AbxrLib.Runtime.Authentication
                         
                         // Decode JWT with error handling
                         Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
-                        if (decodedJwt == null || !decodedJwt.ContainsKey("exp"))
+                        if (decodedJwt == null)
                         {
-                            throw new System.Exception("Invalid JWT token: missing expiration");
+                            throw new System.Exception("Failed to decode JWT token - authentication cannot proceed");
                         }
                         
-                        _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                        if (!decodedJwt.ContainsKey("exp"))
+                        {
+                            throw new System.Exception("Invalid JWT token: missing expiration field");
+                        }
+                        
+                        try
+                        {
+                            _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new System.Exception($"Invalid JWT token expiration: {ex.Message}");
+                        }
                         
                         _responseData = postResponse;
                         _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
@@ -488,11 +519,9 @@ namespace AbxrLib.Runtime.Authentication
             if (!success)
             {
                 Debug.LogError($"AbxrLib: Authentication failed after {retryCount} attempts: {lastError}");
-                _sessionId = null;
                 
-                // Clear cached user data on failure
-                _responseData = null;
-                _authResponseModuleData = null;
+                // Clear authentication state to stop data transmission
+                ClearAuthenticationState();
                 
                 // Notify authentication failure
                 Abxr.NotifyAuthCompleted(false, lastError);
@@ -694,6 +723,13 @@ namespace AbxrLib.Runtime.Authentication
     
         public static void SetAuthHeaders(UnityWebRequest request, string json = "")
         {
+            // Check if we have valid authentication tokens
+            if (string.IsNullOrEmpty(_authToken) || string.IsNullOrEmpty(_apiSecret))
+            {
+                Debug.LogError("AbxrLib: Cannot set auth headers - authentication tokens are missing");
+                return;
+            }
+            
             request.SetRequestHeader("Authorization", "Bearer " + _authToken);
         
             string unixTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();

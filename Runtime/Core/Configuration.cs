@@ -49,6 +49,38 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("Required")] public string appID;
         [Tooltip("Optional")] public string orgID;
         [Tooltip("Optional")] public string authSecret;
+        
+        /// <summary>
+        /// Validates that the configuration has the required fields set properly.
+        /// appID is required and must not be empty if set.
+        /// orgID and authSecret are optional but must not be empty if set.
+        /// </summary>
+        /// <returns>True if configuration is valid, false otherwise</returns>
+        public bool IsValid()
+        {
+            // appID is required and must not be empty if set
+            if (string.IsNullOrEmpty(appID))
+            {
+                Debug.LogError("AbxrLib: Configuration validation failed - appID is required but not set");
+                return false;
+            }
+            
+            // orgID is optional but must not be empty if set
+            if (!string.IsNullOrEmpty(orgID) && string.IsNullOrWhiteSpace(orgID))
+            {
+                Debug.LogError("AbxrLib: Configuration validation failed - orgID cannot be empty if set");
+                return false;
+            }
+            
+            // authSecret is optional but must not be empty if set
+            if (!string.IsNullOrEmpty(authSecret) && string.IsNullOrWhiteSpace(authSecret))
+            {
+                Debug.LogError("AbxrLib: Configuration validation failed - authSecret cannot be empty if set");
+                return false;
+            }
+            
+            return true;
+        }
     
         public bool headsetTracking = true;
         public float positionTrackingPeriodSeconds = 1f;

@@ -200,19 +200,40 @@ Abxr.EventInteractionComplete("custom_keyboard_action",
 
 ## Panel Structure
 
-The updated keyboard prefab includes a panel structure that provides:
+The authentication keyboard prefabs now include built-in panel structures that provide:
 
-- **Better visual organization** with a background panel
+- **Better visual organization** with integrated background panels
 - **Improved styling** with consistent theming
 - **Enhanced user experience** with clear visual boundaries
 - **Responsive design** that adapts to different screen sizes
+- **Self-contained UI** that doesn't require separate panel prefabs
 
-### Panel Components
+### Authentication Keyboard Panel Components
 
-- **Main Panel**: Contains the entire keyboard interface
+- **PanelCanvas**: The main canvas containing the entire keyboard interface
+- **Panel**: Background panel providing visual structure
 - **Input Panel**: Houses the input field and prompt text
 - **Key Panel**: Contains all the keyboard keys
 - **Control Panel**: Houses special keys (space, delete, submit)
+
+### Independent Panel Usage
+
+For non-authentication messages (like exit polls, notifications, etc.), you can still use independent panel prefabs:
+
+```csharp
+// Load independent panel prefab for custom messages
+GameObject panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
+GameObject panelInstance = Instantiate(panelPrefab);
+
+// Set custom message text
+TextMeshProUGUI panelText = panelInstance.GetComponentInChildren<TextMeshProUGUI>();
+panelText.text = "Your custom message here";
+```
+
+This approach allows you to:
+- Use built-in panels for authentication keyboards (automatic)
+- Use independent panels for other UI messages (manual)
+- Maintain consistent styling across different UI elements
 
 ## Face Camera Control
 
