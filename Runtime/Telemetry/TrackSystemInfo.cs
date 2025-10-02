@@ -73,9 +73,10 @@ namespace AbxrLib.Runtime.Telemetry
 
         private static void CheckSystemInfo()
         {
-            if (_systemInfoTimer == 0f) return; // Make sure not to send twice in the same update
-            _systemInfoTimer = 0; // Reset timer
             if (!_tracking) return;
+            
+            // Reset timer first to prevent duplicate calls in the same frame
+            _systemInfoTimer = 0f;
         
             // Clear and reuse battery data dictionary
             _batteryData.Clear();
@@ -117,9 +118,10 @@ namespace AbxrLib.Runtime.Telemetry
     
         private static void CheckFrameRate()
         {
-            if (_frameRateTimer == 0f) return; // Make sure not to send twice in the same update
-            _frameRateTimer = 0; // Reset timer
             if (!_tracking) return;
+            
+            // Reset timer first to prevent duplicate calls in the same frame
+            _frameRateTimer = 0f;
         
             float timeDiff = Time.time - _lastTime;
             if (timeDiff == 0) return;

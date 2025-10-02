@@ -138,7 +138,10 @@ public static partial class Abxr
 	/// Allow the user to toggle whether the authentication UI follows them or stay
 	/// in place
 	/// </summary>
-	public static bool AuthUIFollowCamera = true;
+	/// <summary>
+	/// Gets the AuthUIFollowCamera setting from configuration
+	/// </summary>
+	public static bool AuthUIFollowCamera => Configuration.Instance.authUIFollowCamera;
 	
 	/// <summary>
 	/// Trigger authentication completion callback
