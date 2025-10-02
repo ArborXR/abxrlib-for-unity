@@ -1,8 +1,7 @@
 ﻿using System;
 using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
-using AbxrLib.Runtime.Events;
-using AbxrLib.Runtime.Logs;
+using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.ServiceClient;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
@@ -37,10 +36,8 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<Authentication.Authentication>("Authentication");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
             ObjectAttacher.Attach<SceneChangeDetector>("SceneChangeDetector");
-            ObjectAttacher.Attach<EventBatcher>("EventBatcher");
-            ObjectAttacher.Attach<LogBatcher>("LogBatcher");
+            ObjectAttacher.Attach<DataBatcher>("DataBatcher");
             ObjectAttacher.Attach<StorageBatcher>("StorageBatcher");
-            ObjectAttacher.Attach<TelemetryBatcher>("TelemetryBatcher");
             ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
             ObjectAttacher.Attach<ApplicationQuitHandler>("ApplicationQuitHandler");
 #if UNITY_ANDROID && !UNITY_EDITOR
