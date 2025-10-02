@@ -76,9 +76,29 @@ namespace AbxrLib.Editor
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Prefabs", EditorStyles.boldLabel);
-            config.KeyboardPrefab = (GameObject)EditorGUILayout.ObjectField("Keyboard Prefab", config.KeyboardPrefab, typeof(GameObject));
-            config.PinPrefab = (GameObject)EditorGUILayout.ObjectField("Pin Prefab", config.PinPrefab, typeof(GameObject));
-            config.PanelPrefab = (GameObject)EditorGUILayout.ObjectField("Panel Prefab", config.PanelPrefab, typeof(GameObject));
+            
+            // Help box explaining how prefab references work
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("ℹ️ Prefab Reference Usage", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("• Leave empty to use default prefabs from Resources/Prefabs/", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField("• Assign custom prefabs to override the default behavior", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField("• Custom prefabs must have the same components as the default ones", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.EndVertical();
+            
+            config.KeyboardPrefab = (GameObject)EditorGUILayout.ObjectField(new GUIContent(
+                "Keyboard Prefab", "Custom keyboard prefab. Leave empty to use default AbxrKeyboard prefab."), 
+                config.KeyboardPrefab, typeof(GameObject));
+            config.PinPrefab = (GameObject)EditorGUILayout.ObjectField(new GUIContent(
+                "Pin Prefab", "Custom PIN pad prefab. Leave empty to use default AbxrPinPad prefab."), 
+                config.PinPrefab, typeof(GameObject));
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("UI Behavior Control", EditorStyles.boldLabel);
+            config.authUIFollowCamera = EditorGUILayout.Toggle(new GUIContent(
+                "Auth UI Follow Camera", "When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions."), config.authUIFollowCamera);
+            
+            config.enableDirectTouchInteraction = EditorGUILayout.Toggle(new GUIContent(
+                "Enable Direct Touch Interaction", "When enabled, direct touch interaction will be used for UI elements instead of ray casting."), config.enableDirectTouchInteraction);
 
 
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
@@ -101,6 +121,8 @@ namespace AbxrLib.Editor
                 config.disableSceneEvents = false;
                 config.disableAutoStartAuthentication = false;
                 config.authenticationStartDelay = 0f;
+                config.authUIFollowCamera = true;
+                config.enableDirectTouchInteraction = true;
             }
 
             EditorGUILayout.Space();

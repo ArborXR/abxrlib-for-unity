@@ -82,13 +82,62 @@ namespace AbxrLib.Runtime.Core
     
         public static Dictionary<string, object> DecodeJwt(string token)
         {
-            string[] parts = token.Split('.');
-            string payload = parts[1];
-            payload = PadBase64(payload); // Ensure padding is correct
-            byte[] bytes = Convert.FromBase64String(Base64UrlDecode(payload));
-            string json = Encoding.UTF8.GetString(bytes);
+            try
+            {
+                if (string.IsNullOrEmpty(token))
+                {
+                    Debug.LogError("AbxrLib: JWT token is null or empty");
+                    return null;
+                }
 
-            return JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                string[] parts = token.Split('.');
+                if (parts.Length != 3)
+                {
+                    Debug.LogError($"AbxrLib: Invalid JWT token format - expected 3 parts, got {parts.Length}");
+                    return null;
+                }
+
+                string payload = parts[1];
+                if (string.IsNullOrEmpty(payload))
+                {
+                    Debug.LogError("AbxrLib: JWT payload is empty");
+                    return null;
+                }
+
+                payload = PadBase64(payload); // Ensure padding is correct
+                byte[] bytes = Convert.FromBase64String(Base64UrlDecode(payload));
+                string json = Encoding.UTF8.GetString(bytes);
+
+                if (string.IsNullOrEmpty(json))
+                {
+                    Debug.LogError("AbxrLib: JWT payload decoded to empty JSON");
+                    return null;
+                }
+
+                var result = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                if (result == null)
+                {
+                    Debug.LogError("AbxrLib: Failed to deserialize JWT payload JSON");
+                    return null;
+                }
+
+                return result;
+            }
+            catch (FormatException ex)
+            {
+                Debug.LogError($"AbxrLib: JWT token format error: {ex.Message}");
+                return null;
+            }
+            catch (JsonException ex)
+            {
+                Debug.LogError($"AbxrLib: JWT JSON parsing error: {ex.Message}");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: JWT decoding error: {ex.Message}");
+                return null;
+            }
         }
 
         private static string Base64UrlDecode(string input)
