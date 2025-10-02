@@ -421,7 +421,6 @@ public static partial class Abxr
 		meta["status"] = status.ToString().ToLower();
 		AddDuration(_assessmentStartTimes, assessmentName, meta);
 		Event(assessmentName, meta);
-		CoroutineRunner.Instance.StartCoroutine(DataBatcher.Send());
 	}
 	// backwards compatibility for old method signature
 	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>

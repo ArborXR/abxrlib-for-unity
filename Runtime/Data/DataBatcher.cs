@@ -50,6 +50,10 @@ namespace AbxrLib.Runtime.Data
 
 			lock (_lock)
 			{
+				if (IsQueueAtLimit(_eventPayloads, "Event"))
+				{
+					return; // Reject new event if queue is at limit
+				}
 				_eventPayloads.Add(payload);
 				if (_eventPayloads.Count >= Configuration.Instance.eventsPerSendAttempt)
 				{
@@ -75,6 +79,10 @@ namespace AbxrLib.Runtime.Data
 
 			lock (_lock)
 			{
+				if (IsQueueAtLimit(_telemetryPayloads, "Telemetry"))
+				{
+					return; // Reject new telemetry if queue is at limit
+				}
 				_telemetryPayloads.Add(payload);
 				if (_telemetryPayloads.Count >= Configuration.Instance.telemetryEntriesPerSendAttempt)
 				{
@@ -101,6 +109,10 @@ namespace AbxrLib.Runtime.Data
 
 			lock (_lock)
 			{
+				if (IsQueueAtLimit(_logPayloads, "Log"))
+				{
+					return; // Reject new log if queue is at limit
+				}
 				_logPayloads.Add(payload);
 				if (_logPayloads.Count >= Configuration.Instance.logsPerSendAttempt)
 				{
@@ -264,16 +276,45 @@ namespace AbxrLib.Runtime.Data
 				}
 			}
 
-			// If all retries failed, put data back in queue
+			// If all retries failed, put data back in queue (with size limits enforced)
 			if (!success)
 			{
 				Debug.LogError($"AbxrLib: Data POST Request failed after {retryCount} attempts: {lastError}");
 				_timer = Configuration.Instance.sendRetryIntervalSeconds;
 				lock (_lock)
 				{
-					_eventPayloads.InsertRange(0, eventsToSend);
-					_telemetryPayloads.InsertRange(0, telemetriesToSend);
-					_logPayloads.InsertRange(0, logsToSend);
+					// Re-insert events with queue limit enforcement
+					foreach (var eventPayload in eventsToSend)
+					{
+						if (IsQueueAtLimit(_eventPayloads, "Event"))
+						{
+							Debug.LogWarning("AbxrLib: Cannot re-insert failed events - queue at limit, dropping event");
+							break; // Stop re-inserting if queue is at limit
+						}
+						_eventPayloads.Insert(0, eventPayload);
+					}
+					
+					// Re-insert telemetry with queue limit enforcement
+					foreach (var telemetryPayload in telemetriesToSend)
+					{
+						if (IsQueueAtLimit(_telemetryPayloads, "Telemetry"))
+						{
+							Debug.LogWarning("AbxrLib: Cannot re-insert failed telemetry - queue at limit, dropping telemetry");
+							break; // Stop re-inserting if queue is at limit
+						}
+						_telemetryPayloads.Insert(0, telemetryPayload);
+					}
+					
+					// Re-insert logs with queue limit enforcement
+					foreach (var logPayload in logsToSend)
+					{
+						if (IsQueueAtLimit(_logPayloads, "Log"))
+						{
+							Debug.LogWarning("AbxrLib: Cannot re-insert failed logs - queue at limit, dropping log");
+							break; // Stop re-inserting if queue is at limit
+						}
+						_logPayloads.Insert(0, logPayload);
+					}
 				}
 			}
 		}
@@ -337,6 +378,20 @@ namespace AbxrLib.Runtime.Data
 				   ex is System.Net.Sockets.SocketException ||
 				   ex.Message.Contains("timeout") ||
 				   ex.Message.Contains("connection");
+		}
+
+		/// <summary>
+		/// Checks if the queue has reached its maximum size limit
+		/// </summary>
+		private static bool IsQueueAtLimit<T>(List<T> queue, string queueType)
+		{
+			int maxSize = Configuration.Instance.maximumCachedItems;
+			if (maxSize > 0 && queue.Count >= maxSize)
+			{
+				Debug.LogWarning($"AbxrLib: {queueType} queue limit reached ({maxSize}), rejecting new items");
+				return true;
+			}
+			return false;
 		}
 
 		// Payload classes
