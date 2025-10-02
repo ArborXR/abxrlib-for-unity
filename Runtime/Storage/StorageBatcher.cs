@@ -49,6 +49,10 @@ namespace AbxrLib.Runtime.Storage
 		
 			lock (_lock)
 			{
+				if (IsQueueAtLimit(_payloads, "Storage"))
+				{
+					return; // Reject new storage if queue is at limit
+				}
 				_payloads.Add(payload);
 				if (_payloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt)
 				{
@@ -95,7 +99,16 @@ namespace AbxrLib.Runtime.Storage
 				_timer = Configuration.Instance.sendRetryIntervalSeconds;
 				lock (_lock)
 				{
-					_payloads.InsertRange(0, storagesToSend);
+					// Re-insert storage entries with queue limit enforcement
+					foreach (var storagePayload in storagesToSend)
+					{
+						if (IsQueueAtLimit(_payloads, "Storage"))
+						{
+							Debug.LogWarning("AbxrLib: Cannot re-insert failed storage - queue at limit, dropping storage");
+							break; // Stop re-inserting if queue is at limit
+						}
+						_payloads.Insert(0, storagePayload);
+					}
 				}
 			}
 		}
@@ -153,6 +166,20 @@ namespace AbxrLib.Runtime.Storage
 			{
 				Debug.LogWarning($"AbxrLib: Storage DELETE failed: {request.error} - {request.downloadHandler.text}");
 			}
+		}
+
+		/// <summary>
+		/// Checks if the queue has reached its maximum size limit
+		/// </summary>
+		private static bool IsQueueAtLimit<T>(List<T> queue, string queueType)
+		{
+			int maxSize = Configuration.Instance.maximumCachedItems;
+			if (maxSize > 0 && queue.Count >= maxSize)
+			{
+				Debug.LogWarning($"AbxrLib: {queueType} queue limit reached ({maxSize}), rejecting new items");
+				return true;
+			}
+			return false;
 		}
 	
 		private class Payload

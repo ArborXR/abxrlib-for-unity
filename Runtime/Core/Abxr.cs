@@ -29,8 +29,7 @@ using AbxrLib.Runtime.AI;
 using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
-using AbxrLib.Runtime.Events;
-using AbxrLib.Runtime.Logs;
+using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.ServiceClient;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
@@ -355,7 +354,7 @@ public static partial class Abxr
 			AddDuration(_timedEventStartTimes, eventName, metadata);
 		}
 		
-		EventBatcher.Add(eventName, metadata);
+		DataBatcher.AddEvent(eventName, metadata);
 		if (sendTelemetry)
 		{
 			TrackSystemInfo.SendAll();
@@ -416,8 +415,6 @@ public static partial class Abxr
 	/// <param name="score">Numerical score achieved (typically 0-100, but any integer is valid)</param>
 	/// <param name="status">Result status of the assessment (Pass, Fail, Complete, etc.)</param>
 	/// <param name="meta">Optional metadata with completion details</param>
-	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
-		EventAssessmentComplete(assessmentName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
 	{
 		meta ??= new Dictionary<string, string>();
@@ -427,9 +424,10 @@ public static partial class Abxr
 		meta["status"] = status.ToString().ToLower();
 		AddDuration(_assessmentStartTimes, assessmentName, meta);
 		Event(assessmentName, meta);
-		CoroutineRunner.Instance.StartCoroutine(EventBatcher.Send());
 	}
 	// backwards compatibility for old method signature
+	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
+		EventAssessmentComplete(assessmentName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
         EventAssessmentComplete(assessmentName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
 
@@ -676,7 +674,7 @@ public static partial class Abxr
 			_ => "info" // Default case
 		};
 		
-		LogBatcher.Add(logLevelString, logMessage, metadata);
+		DataBatcher.AddLog(logLevelString, logMessage, metadata);
 	}
 
 	/// <summary>
@@ -755,7 +753,7 @@ public static partial class Abxr
 		// Add super metadata to all telemetry entries
 		telemetryData = MergeSuperMetaData(telemetryData);
 		
-		TelemetryBatcher.Add(telemetryName, telemetryData);
+		DataBatcher.AddTelemetry(telemetryName, telemetryData);
 	}
 
 	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
