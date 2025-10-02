@@ -48,11 +48,11 @@ namespace AbxrLib.Runtime.UI
             
 #if UNITY_EDITOR
             Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
-            Vector3 newPos = new Vector3(targetPos.x + xPosition, BASE_EYE_HEIGHT + verticalOffset, targetPos.z);
+            Vector3 newPos = new Vector3(targetPos.x + xPosition, cam.position.y + verticalOffset, targetPos.z);
             transform.position = newPos;
 #else
             Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
-            Vector3 newPos = new Vector3(targetPos.x + xPosition + BUILD_X_OFFSET, BASE_EYE_HEIGHT + verticalOffset, targetPos.z);
+            Vector3 newPos = new Vector3(targetPos.x + xPosition + BUILD_X_OFFSET, cam.position.y + verticalOffset, targetPos.z);
             transform.position = newPos;
 #endif
         }
@@ -75,11 +75,13 @@ namespace AbxrLib.Runtime.UI
             
             if (faceCamera)
             {
+                // Position the pinpad directly in front of the camera at the specified distance
                 Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
-                Vector3 newPos = new Vector3(cam.position.x + xPosition, BASE_EYE_HEIGHT + verticalOffset, targetPos.z);
+                // Use the camera's actual Y position plus vertical offset for proper alignment
+                Vector3 newPos = new Vector3(targetPos.x + xPosition, cam.position.y + verticalOffset, targetPos.z);
                 transform.position = newPos;
 
-                // face the camera
+                // face the camera - ensure perfect perpendicular alignment
                 transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
             }
         }
