@@ -907,6 +907,13 @@ public static partial class Abxr
 	/// <param name="callback">Optional callback that will be called with the selected string value (Multiple-choice poll only)</param>
 	public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null)
 	{
+		// Validate prompt
+		if (string.IsNullOrWhiteSpace(prompt))
+		{
+			Debug.LogError("AbxrLib: Poll prompt cannot be null or empty");
+			return;
+		}
+
 		if (pollType == ExitPollHandler.PollType.MultipleChoice)
 		{
 			if (responses == null)
@@ -919,6 +926,16 @@ public static partial class Abxr
 			{
 				Debug.LogError("AbxrLib: Multiple choice poll must have at least two and no more than 8 responses");
 				return;
+			}
+
+			// Validate that all responses are not null or empty
+			for (int i = 0; i < responses.Count; i++)
+			{
+				if (string.IsNullOrWhiteSpace(responses[i]))
+				{
+					Debug.LogError($"AbxrLib: Response at index {i} cannot be null or empty");
+					return;
+				}
 			}
 		}
 
@@ -1129,27 +1146,28 @@ public static partial class Abxr
 			{
 				meta["module"] = currentSessionData.moduleTarget;
 			}
-			// For additional module metadata, we need to get it from the modules list
-			if (Authentication.GetModuleData() != null && Authentication.GetModuleData().Count > 0)
-			{
-		LoadModuleIndex();
-		if (_currentModuleIndex < Authentication.GetModuleData().Count)
+		// For additional module metadata, we need to get it from the modules list
+		var moduleData = Authentication.GetModuleData();
+		if (moduleData != null && moduleData.Count > 0)
 		{
-			ModuleData currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
-					if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModuleData.name))
-					{
-						meta["module_name"] = currentModuleData.name;
-					}
-					if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModuleData.id))
-					{
-						meta["module_id"] = currentModuleData.id;
-					}
-					if (!meta.ContainsKey("module_order"))
-					{
-						meta["module_order"] = currentModuleData.order.ToString();
-					}
+			LoadModuleIndex();
+			if (_currentModuleIndex < moduleData.Count)
+			{
+				ModuleData currentModuleData = moduleData[_currentModuleIndex];
+				if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModuleData.name))
+				{
+					meta["module_name"] = currentModuleData.name;
+				}
+				if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModuleData.id))
+				{
+					meta["module_id"] = currentModuleData.id;
+				}
+				if (!meta.ContainsKey("module_order"))
+				{
+					meta["module_order"] = currentModuleData.order.ToString();
 				}
 			}
+		}
 		}
 		
 		// Add super metadata to metadata
@@ -1426,13 +1444,16 @@ public static partial class Abxr
 				return;
 			}
 
+			// Set loading flag first, before any operations that might fail
+			_moduleIndexLoading = true;
+			
 			try
 			{
-				_moduleIndexLoading = true;
 				CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
 			}
 			catch (Exception ex)
 			{
+				// Reset loading flag within the lock to prevent race conditions
 				_moduleIndexLoading = false;
 				// Log error with consistent format and include context
 				Debug.LogError($"AbxrLib: Failed to load module index: {ex.Message}\n" +

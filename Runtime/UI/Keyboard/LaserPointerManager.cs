@@ -15,7 +15,10 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private static bool _isManagingLaserPointers = false;
         private static int _cleanupCounter = 0;
         private const int CLEANUP_FREQUENCY = 100; // Clean up every 100 operations
-        // MAX_DICTIONARY_SIZE now configurable via Configuration.maxDictionarySize
+        
+        // Cache for ray interactors to avoid expensive FindObjectsOfType calls
+        private static UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor[] _cachedRayInteractors = null;
+        private static bool _cacheValid = false; // Cache is valid until explicitly invalidated
         
         /// <summary>
         /// Cleans up any null references from destroyed objects to prevent memory leaks.
@@ -62,6 +65,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             _originalStates.Clear();
             _isManagingLaserPointers = false;
+            _cachedRayInteractors = null; // Clear cache
+            _cacheValid = false; // Invalidate cache
             Debug.Log("AbxrLib - LaserPointerManager: Force cleanup completed");
         }
         
@@ -93,6 +98,44 @@ namespace AbxrLib.Runtime.UI.Keyboard
         }
 
         /// <summary>
+        /// Gets cached ray interactors or finds them if cache is invalid
+        /// Ray interactors are cached for the lifetime of the app since they rarely change
+        /// </summary>
+        /// <returns>Array of XRRayInteractor components</returns>
+        private static UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor[] GetRayInteractors()
+        {
+            // Check if cache is valid
+            if (_cacheValid && _cachedRayInteractors != null)
+            {
+                // Filter out any null references from destroyed objects
+                var validInteractors = new List<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+                foreach (var interactor in _cachedRayInteractors)
+                {
+                    if (interactor != null)
+                    {
+                        validInteractors.Add(interactor);
+                    }
+                }
+                
+                // Update cache with valid interactors only if some were destroyed
+                if (validInteractors.Count != _cachedRayInteractors.Length)
+                {
+                    _cachedRayInteractors = validInteractors.ToArray();
+                    Debug.Log($"AbxrLib - LaserPointerManager: Updated cache, removed {_cachedRayInteractors.Length - validInteractors.Count} destroyed ray interactors");
+                }
+                
+                return _cachedRayInteractors;
+            }
+            
+            // Cache is invalid or null, find new ray interactors
+            _cachedRayInteractors = UnityEngine.Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+            _cacheValid = true;
+            
+            Debug.Log($"AbxrLib - LaserPointerManager: Cached {_cachedRayInteractors.Length} ray interactors for app lifetime");
+            return _cachedRayInteractors;
+        }
+
+        /// <summary>
         /// Enables laser pointers for keyboard/PIN pad interaction if they are not already enabled.
         /// Stores the original state for restoration later.
         /// </summary>
@@ -115,8 +158,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _isManagingLaserPointers = true;
             _originalStates.Clear();
 
-            // Find all XRRayInteractor components in the scene
-            var rayInteractors = UnityEngine.Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+            // Get cached ray interactors (or find them if cache is expired)
+            var rayInteractors = GetRayInteractors();
             foreach (var rayInteractor in rayInteractors)
             {
                 if (rayInteractor != null && _originalStates.Count < Configuration.Instance.maxDictionarySize)

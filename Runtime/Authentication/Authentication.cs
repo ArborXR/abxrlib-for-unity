@@ -435,7 +435,9 @@ namespace AbxrLib.Runtime.Authentication
                         // Validate response data
                         if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
                         {
-                            throw new System.Exception("Invalid authentication response: missing token");
+                            lastError = "Invalid authentication response: missing token";
+                            Debug.LogError($"AbxrLib: {lastError}");
+                            break; // Exit retry loop - this is a non-retryable error
                         }
                         
                         _authToken = postResponse.Token;
@@ -445,12 +447,16 @@ namespace AbxrLib.Runtime.Authentication
                         Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                         if (decodedJwt == null)
                         {
-                            throw new System.Exception("Failed to decode JWT token - authentication cannot proceed");
+                            lastError = "Failed to decode JWT token - authentication cannot proceed";
+                            Debug.LogError($"AbxrLib: {lastError}");
+                            break; // Exit retry loop - this is a non-retryable error
                         }
                         
                         if (!decodedJwt.ContainsKey("exp"))
                         {
-                            throw new System.Exception("Invalid JWT token: missing expiration field");
+                            lastError = "Invalid JWT token: missing expiration field";
+                            Debug.LogError($"AbxrLib: {lastError}");
+                            break; // Exit retry loop - this is a non-retryable error
                         }
                         
                         try
@@ -459,7 +465,9 @@ namespace AbxrLib.Runtime.Authentication
                         }
                         catch (Exception ex)
                         {
-                            throw new System.Exception($"Invalid JWT token expiration: {ex.Message}");
+                            lastError = $"Invalid JWT token expiration: {ex.Message}";
+                            Debug.LogError($"AbxrLib: {lastError}");
+                            break; // Exit retry loop - this is a non-retryable error
                         }
                         
                         _responseData = postResponse;
@@ -659,20 +667,28 @@ namespace AbxrLib.Runtime.Authentication
                         string response = request.downloadHandler.text;
                         if (string.IsNullOrEmpty(response))
                         {
-                            throw new System.Exception("Empty configuration response");
+                            Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
+                            responseSuccess = true;
+                            success = true;
                         }
-                        
-                        var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
-                        if (config == null)
+                        else
                         {
-                            throw new System.Exception("Failed to deserialize configuration response");
+                            var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
+                            if (config == null)
+                            {
+                                Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
+                                responseSuccess = true;
+                                success = true;
+                            }
+                            else
+                            {
+                                SetConfigFromPayload(config);
+                                _authMechanism = config.authMechanism;
+                                responseSuccess = true;
+                                success = true;
+                                Debug.Log("AbxrLib: Configuration loaded successfully");
+                            }
                         }
-                        
-                        SetConfigFromPayload(config);
-                        _authMechanism = config.authMechanism;
-                        responseSuccess = true;
-                        success = true;
-                        Debug.Log("AbxrLib: Configuration loaded successfully");
                     }
                     else
                     {
