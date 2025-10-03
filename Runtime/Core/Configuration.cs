@@ -46,6 +46,7 @@ namespace AbxrLib.Runtime.Core
             }
         }
     
+        [Header("Application Identity")]
         [Tooltip("Required")] public string appID;
         [Tooltip("Optional")] public string orgID;
         [Tooltip("Optional")] public string authSecret;
@@ -206,28 +207,20 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
         }
-    
-        public bool headsetTracking = true;
-        public float positionTrackingPeriodSeconds = 1f;
-    
+
+        [Header("Service Provider")]
         public string restUrl = "https://lib-backend.xrdm.app/";
 
-        public float frameRateTrackingPeriodSeconds = 0.5f;
-        public float telemetryTrackingPeriodSeconds = 10f;
-        public int sendRetriesOnFailure = 3;
-        public int sendRetryIntervalSeconds = 3;
-        public int sendNextBatchWaitSeconds = 30;
-        public int requestTimeoutSeconds = 30;
-        public int stragglerTimeoutSeconds = 15;
-        public float maxCallFrequencySeconds = 1f;
-        public int dataEntriesPerSendAttempt = 32;
-        public int storageEntriesPerSendAttempt = 16;
-        public int pruneSentItemsOlderThanHours = 12;
-        public int maximumCachedItems = 1024;
-        [HideInInspector] public int maxDictionarySize = 50;
-        public bool retainLocalAfterSent;
-        public bool disableAutomaticTelemetry;
-        public bool disableSceneEvents;
+        [Header("UI Behavior Control")]
+        [Tooltip("When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions.")]
+        public bool authUIFollowCamera = true;
+        
+        [Tooltip("When enabled, direct touch interaction will be used for UI elements instead of ray casting.")]
+        public bool enableDirectTouchInteraction = true;
+
+        [Header("Player Tracking")]
+        public bool headsetTracking = true;
+        public float positionTrackingPeriodSeconds = 1f;
 
         [Header("Authentication Control")]
         [Tooltip("When enabled, authentication will NOT start automatically on app launch. You must manually call Abxr.StartAuthentication()")]
@@ -240,11 +233,24 @@ namespace AbxrLib.Runtime.Core
         public GameObject KeyboardPrefab;
         public GameObject PinPrefab;
 
-        [Header("UI Behavior Control")]
-        [Tooltip("When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions.")]
-        public bool authUIFollowCamera = true;
-        
-        [Tooltip("When enabled, direct touch interaction will be used for UI elements instead of ray casting.")]
-        public bool enableDirectTouchInteraction = true;
+        [Header("Data Sending Rules")]
+        public float telemetryTrackingPeriodSeconds = 10f;
+        public float frameRateTrackingPeriodSeconds = 0.5f;
+        public int sendRetriesOnFailure = 3;
+        public int sendRetryIntervalSeconds = 3;
+        public int sendNextBatchWaitSeconds = 30;
+        public int requestTimeoutSeconds = 30;
+        public int stragglerTimeoutSeconds = 15;
+        public float maxCallFrequencySeconds = 1f;
+        public int dataEntriesPerSendAttempt = 32;
+        public int storageEntriesPerSendAttempt = 16;
+        public int pruneSentItemsOlderThanHours = 12;
+        public int maximumCachedItems = 1024;
+        public bool retainLocalAfterSent;
+        public bool disableAutomaticTelemetry;
+        public bool disableSceneEvents;
+
+        [HideInInspector] 
+        public int maxDictionarySize = 50;
     }
 }
