@@ -7,11 +7,28 @@ namespace AbxrLib.Runtime.ServiceClient
 {
     public static class AndroidJavaObjectExt
     {
-        public static T CallResult<T>(this AndroidJavaObject native, string methodName, params object[] args) =>
-            native.Call<AndroidJavaObject>(methodName, args) is var result
-            && result.Call<bool>("isOk")
-                ? result.Call<T>("getValue")
-                : throw new SdkException(result.Call<string>("getError"));
+        public static T CallResult<T>(this AndroidJavaObject native, string methodName, params object[] args)
+        {
+            try
+            {
+                var result = native.Call<AndroidJavaObject>(methodName, args);
+                if (result != null && result.Call<bool>("isOk"))
+                {
+                    return result.Call<T>("getValue");
+                }
+                else
+                {
+                    var error = result?.Call<string>("getError") ?? "Unknown SDK error";
+                    Debug.LogWarning($"AbxrLib: SDK call {methodName} failed: {error}");
+                    return default(T);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: SDK call {methodName} threw exception: {ex.Message}");
+                return default(T);
+            }
+        }
     }
 
     /// <summary>Allows interacting with the SDK service.</summary>
@@ -30,13 +47,13 @@ namespace AbxrLib.Runtime.ServiceClient
         // so we must reattached the current thread to AndroidJNI right after Task.Delay to ensure we don't run into threading issues.
         private static Task DelayAndReattachThreadToJNI(int delay) => Task.Delay(delay).ContinueWith(_ => AndroidJNI.AttachCurrentThread());
 
-        private AndroidJavaObject Sdk
+        private AndroidJavaObject? Sdk
         {
             get
             {
                 if (_sdk is null)
                 {
-                    throw new InvalidOperationException("This MonoBehaviour is not enabled.");
+                    Debug.LogWarning("AbxrLib: ArborServiceClient SDK is not initialized. This MonoBehaviour may not be enabled.");
                 }
 
                 return _sdk;
@@ -50,7 +67,7 @@ namespace AbxrLib.Runtime.ServiceClient
             using var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
             using var currentActivity = unityPlayerClass.GetStatic<AndroidJavaObject>("currentActivity");
             _nativeCallback = new NativeConnectionCallback(this);
-            Sdk.Call("connect", currentActivity, _nativeCallback);
+            Sdk?.Call("connect", currentActivity, _nativeCallback);
         }
     
         protected void OnDisable()

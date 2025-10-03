@@ -291,8 +291,15 @@ namespace AbxrLib.Runtime.Core
         public static void SendAllData()
         {
             // Send all pending data from all batcher types
-            CoroutineRunner.Instance.StartCoroutine(DataBatcher.Send());
-            CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
+            if (CoroutineRunner.Instance != null)
+            {
+                CoroutineRunner.Instance.StartCoroutine(DataBatcher.Send());
+                CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
+            }
+            else
+            {
+                Debug.LogWarning("AbxrLib: Cannot send data - CoroutineRunner.Instance is null");
+            }
         }
         
         /// <summary>

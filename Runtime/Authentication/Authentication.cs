@@ -392,7 +392,7 @@ namespace AbxrLib.Runtime.Authentication
                     Utils.BuildRequest(request, json);
                     
                     // Set timeout to prevent hanging requests
-                    request.timeout = 30; // 30 second timeout
+                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
                     requestCreated = true;
                 }
                 catch (System.Exception ex)
@@ -435,7 +435,9 @@ namespace AbxrLib.Runtime.Authentication
                         // Validate response data
                         if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
                         {
-                            throw new System.Exception("Invalid authentication response: missing token");
+                            lastError = "Invalid authentication response: missing token";
+                            Debug.LogError($"AbxrLib: {lastError}");
+                            break; // Exit retry loop - this is a non-retryable error
                         }
                         
                         _authToken = postResponse.Token;
@@ -445,12 +447,16 @@ namespace AbxrLib.Runtime.Authentication
                         Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                         if (decodedJwt == null)
                         {
-                            throw new System.Exception("Failed to decode JWT token - authentication cannot proceed");
+                            lastError = "Failed to decode JWT token - authentication cannot proceed";
+                            Debug.LogError($"AbxrLib: {lastError}");
+                            break; // Exit retry loop - this is a non-retryable error
                         }
                         
                         if (!decodedJwt.ContainsKey("exp"))
                         {
-                            throw new System.Exception("Invalid JWT token: missing expiration field");
+                            lastError = "Invalid JWT token: missing expiration field";
+                            Debug.LogError($"AbxrLib: {lastError}");
+                            break; // Exit retry loop - this is a non-retryable error
                         }
                         
                         try
@@ -459,7 +465,9 @@ namespace AbxrLib.Runtime.Authentication
                         }
                         catch (Exception ex)
                         {
-                            throw new System.Exception($"Invalid JWT token expiration: {ex.Message}");
+                            lastError = $"Invalid JWT token expiration: {ex.Message}";
+                            Debug.LogError($"AbxrLib: {lastError}");
+                            break; // Exit retry loop - this is a non-retryable error
                         }
                         
                         _responseData = postResponse;
@@ -618,7 +626,7 @@ namespace AbxrLib.Runtime.Authentication
                 {
                     request = UnityWebRequest.Get(fullUri.ToString());
                     request.SetRequestHeader("Accept", "application/json");
-                    request.timeout = 30; // 30 second timeout
+                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
                     SetAuthHeaders(request);
                     requestCreated = true;
                 }
@@ -659,20 +667,28 @@ namespace AbxrLib.Runtime.Authentication
                         string response = request.downloadHandler.text;
                         if (string.IsNullOrEmpty(response))
                         {
-                            throw new System.Exception("Empty configuration response");
+                            Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
+                            responseSuccess = true;
+                            success = true;
                         }
-                        
-                        var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
-                        if (config == null)
+                        else
                         {
-                            throw new System.Exception("Failed to deserialize configuration response");
+                            var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
+                            if (config == null)
+                            {
+                                Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
+                                responseSuccess = true;
+                                success = true;
+                            }
+                            else
+                            {
+                                SetConfigFromPayload(config);
+                                _authMechanism = config.authMechanism;
+                                responseSuccess = true;
+                                success = true;
+                                Debug.Log("AbxrLib: Configuration loaded successfully");
+                            }
                         }
-                        
-                        SetConfigFromPayload(config);
-                        _authMechanism = config.authMechanism;
-                        responseSuccess = true;
-                        success = true;
-                        Debug.Log("AbxrLib: Configuration loaded successfully");
                     }
                     else
                     {
@@ -763,9 +779,7 @@ namespace AbxrLib.Runtime.Authentication
             if (!string.IsNullOrEmpty(payload.sendRetryInterval)) Configuration.Instance.sendRetryIntervalSeconds = Convert.ToInt32(payload.sendRetryInterval);
             if (!string.IsNullOrEmpty(payload.sendNextBatchWait)) Configuration.Instance.sendNextBatchWaitSeconds = Convert.ToInt32(payload.sendNextBatchWait);
             if (!string.IsNullOrEmpty(payload.stragglerTimeout)) Configuration.Instance.stragglerTimeoutSeconds = Convert.ToInt32(payload.stragglerTimeout);
-            if (!string.IsNullOrEmpty(payload.eventsPerSendAttempt)) Configuration.Instance.eventsPerSendAttempt = Convert.ToInt32(payload.eventsPerSendAttempt);
-            if (!string.IsNullOrEmpty(payload.logsPerSendAttempt)) Configuration.Instance.logsPerSendAttempt = Convert.ToInt32(payload.logsPerSendAttempt);
-            if (!string.IsNullOrEmpty(payload.telemetryEntriesPerSendAttempt)) Configuration.Instance.telemetryEntriesPerSendAttempt = Convert.ToInt32(payload.telemetryEntriesPerSendAttempt);
+            if (!string.IsNullOrEmpty(payload.dataEntriesPerSendAttempt)) Configuration.Instance.dataEntriesPerSendAttempt = Convert.ToInt32(payload.dataEntriesPerSendAttempt);
             if (!string.IsNullOrEmpty(payload.storageEntriesPerSendAttempt)) Configuration.Instance.storageEntriesPerSendAttempt = Convert.ToInt32(payload.storageEntriesPerSendAttempt);
             if (!string.IsNullOrEmpty(payload.pruneSentItemsOlderThan)) Configuration.Instance.pruneSentItemsOlderThanHours = Convert.ToInt32(payload.pruneSentItemsOlderThan);
             if (!string.IsNullOrEmpty(payload.maximumCachedItems)) Configuration.Instance.maximumCachedItems = Convert.ToInt32(payload.maximumCachedItems);
@@ -913,9 +927,7 @@ namespace AbxrLib.Runtime.Authentication
             public string sendRetryInterval;
             public string sendNextBatchWait;
             public string stragglerTimeout;
-            public string eventsPerSendAttempt;
-            public string logsPerSendAttempt;
-            public string telemetryEntriesPerSendAttempt;
+            public string dataEntriesPerSendAttempt;
             public string storageEntriesPerSendAttempt;
             public string pruneSentItemsOlderThan;
             public string maximumCachedItems;

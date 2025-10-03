@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using AbxrLib.Runtime.Core;
 using UnityEngine;
 
@@ -55,12 +56,6 @@ namespace AbxrLib.Runtime.Telemetry
             _frameRateTimer += Time.deltaTime;
             if (_systemInfoTimer >= Configuration.Instance.telemetryTrackingPeriodSeconds) CheckSystemInfo();
             if (_frameRateTimer >= Configuration.Instance.frameRateTrackingPeriodSeconds) CheckFrameRate();
-            
-            // Periodically clean up dictionaries to prevent memory leaks
-            if (Time.frameCount % 1000 == 0) // Every 1000 frames
-            {
-                CleanupDictionaries();
-            }
         }
 
         public static void StartTracking() => _tracking = true;
@@ -78,13 +73,14 @@ namespace AbxrLib.Runtime.Telemetry
             // Reset timer first to prevent duplicate calls in the same frame
             _systemInfoTimer = 0f;
         
-            // Clear and reuse battery data dictionary
+            // Clear and reuse battery data dictionary with size limit
             _batteryData.Clear();
             _batteryData["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%";
             _batteryData["Status"] = SystemInfo.batteryStatus.ToString();
+            EnsureDictionarySizeLimit(_batteryData, "Battery");
             Abxr.Telemetry("Battery", _batteryData);
         
-            // Clear and reuse memory data dictionary with Unity version compatibility
+            // Clear and reuse memory data dictionary with Unity version compatibility and size limit
             _memoryData.Clear();
             try
             {
@@ -113,6 +109,7 @@ namespace AbxrLib.Runtime.Telemetry
                 _memoryData["Total Reserved"] = "N/A";
                 _memoryData["Total Unused Reserved"] = "N/A";
             }
+            EnsureDictionarySizeLimit(_memoryData, "Memory");
             Abxr.Telemetry("Memory", _memoryData);
         }
     
@@ -128,9 +125,10 @@ namespace AbxrLib.Runtime.Telemetry
         
             float frameRate = (Time.frameCount - _lastFrameCount) / timeDiff;
             
-            // Clear and reuse frame rate data dictionary
+            // Clear and reuse frame rate data dictionary with size limit
             _frameRateData.Clear();
             _frameRateData["Per Second"] = frameRate.ToString(CultureInfo.InvariantCulture);
+            EnsureDictionarySizeLimit(_frameRateData, "Frame Rate");
             Abxr.Telemetry("Frame Rate", _frameRateData);
             
             _lastFrameCount = Time.frameCount;
@@ -138,28 +136,33 @@ namespace AbxrLib.Runtime.Telemetry
         }
         
         /// <summary>
-        /// Cleans up dictionaries to prevent memory leaks by limiting their size
+        /// Ensures dictionary size stays within limits by removing oldest entries when needed
+        /// This prevents memory leaks by maintaining a maximum of 50 entries per dictionary
         /// </summary>
-        private static void CleanupDictionaries()
+        private static void EnsureDictionarySizeLimit(Dictionary<string, string> dictionary, string dictionaryName)
         {
-            const int maxDictionarySize = 50; // Reasonable limit for telemetry data
+            int maxDictionarySize = Configuration.Instance.maxDictionarySize;
             
-            if (_batteryData.Count > maxDictionarySize)
+            if (dictionary.Count > maxDictionarySize)
             {
-                _batteryData.Clear();
-                Debug.LogWarning("AbxrLib: Battery data dictionary was growing too large, cleared to prevent memory leak");
-            }
-            
-            if (_memoryData.Count > maxDictionarySize)
-            {
-                _memoryData.Clear();
-                Debug.LogWarning("AbxrLib: Memory data dictionary was growing too large, cleared to prevent memory leak");
-            }
-            
-            if (_frameRateData.Count > maxDictionarySize)
-            {
-                _frameRateData.Clear();
-                Debug.LogWarning("AbxrLib: Frame rate data dictionary was growing too large, cleared to prevent memory leak");
+                // Remove oldest entries (first entries in the dictionary)
+                var keysToRemove = new List<string>();
+                int entriesToRemove = dictionary.Count - maxDictionarySize;
+                int removedCount = 0;
+                
+                foreach (var key in dictionary.Keys)
+                {
+                    if (removedCount >= entriesToRemove) break;
+                    keysToRemove.Add(key);
+                    removedCount++;
+                }
+                
+                foreach (var key in keysToRemove)
+                {
+                    dictionary.Remove(key);
+                }
+                
+                Debug.LogWarning($"AbxrLib: {dictionaryName} data dictionary exceeded size limit ({dictionary.Count + removedCount}), removed {removedCount} oldest entries to prevent memory leak");
             }
         }
     }

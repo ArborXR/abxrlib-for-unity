@@ -907,6 +907,13 @@ public static partial class Abxr
 	/// <param name="callback">Optional callback that will be called with the selected string value (Multiple-choice poll only)</param>
 	public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null)
 	{
+		// Validate prompt
+		if (string.IsNullOrWhiteSpace(prompt))
+		{
+			Debug.LogError("AbxrLib: Poll prompt cannot be null or empty");
+			return;
+		}
+
 		if (pollType == ExitPollHandler.PollType.MultipleChoice)
 		{
 			if (responses == null)
@@ -919,6 +926,16 @@ public static partial class Abxr
 			{
 				Debug.LogError("AbxrLib: Multiple choice poll must have at least two and no more than 8 responses");
 				return;
+			}
+
+			// Validate that all responses are not null or empty
+			for (int i = 0; i < responses.Count; i++)
+			{
+				if (string.IsNullOrWhiteSpace(responses[i]))
+				{
+					Debug.LogError($"AbxrLib: Response at index {i} cannot be null or empty");
+					return;
+				}
 			}
 		}
 
@@ -1129,27 +1146,28 @@ public static partial class Abxr
 			{
 				meta["module"] = currentSessionData.moduleTarget;
 			}
-			// For additional module metadata, we need to get it from the modules list
-			if (Authentication.GetModuleData() != null && Authentication.GetModuleData().Count > 0)
-			{
-		LoadModuleIndex();
-		if (_currentModuleIndex < Authentication.GetModuleData().Count)
+		// For additional module metadata, we need to get it from the modules list
+		var moduleData = Authentication.GetModuleData();
+		if (moduleData != null && moduleData.Count > 0)
 		{
-			ModuleData currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
-					if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModuleData.name))
-					{
-						meta["module_name"] = currentModuleData.name;
-					}
-					if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModuleData.id))
-					{
-						meta["module_id"] = currentModuleData.id;
-					}
-					if (!meta.ContainsKey("module_order"))
-					{
-						meta["module_order"] = currentModuleData.order.ToString();
-					}
+			LoadModuleIndex();
+			if (_currentModuleIndex < moduleData.Count)
+			{
+				ModuleData currentModuleData = moduleData[_currentModuleIndex];
+				if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModuleData.name))
+				{
+					meta["module_name"] = currentModuleData.name;
+				}
+				if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModuleData.id))
+				{
+					meta["module_id"] = currentModuleData.id;
+				}
+				if (!meta.ContainsKey("module_order"))
+				{
+					meta["module_order"] = currentModuleData.order.ToString();
 				}
 			}
+		}
 		}
 		
 		// Add super metadata to metadata
@@ -1186,6 +1204,7 @@ public static partial class Abxr
 	// Module index loading state to prevent repeated storage calls
 	private static bool _moduleIndexLoaded = false;
 	private static bool _moduleIndexLoading = false;
+	private static readonly object _moduleIndexLock = new object();
 
 	/// <summary>
 	/// Event that gets triggered when a moduleTarget should be handled.
@@ -1416,25 +1435,32 @@ public static partial class Abxr
 
 	private static void LoadModuleIndex()
 	{
-		// Don't load if already loaded or currently loading
-		if (_moduleIndexLoaded || _moduleIndexLoading)
+		// Use lock to prevent race conditions
+		lock (_moduleIndexLock)
 		{
-			return;
-		}
+			// Don't load if already loaded or currently loading
+			if (_moduleIndexLoaded || _moduleIndexLoading)
+			{
+				return;
+			}
 
-		try
-		{
+			// Set loading flag first, before any operations that might fail
 			_moduleIndexLoading = true;
-			CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
-		}
-		catch (Exception ex)
-		{
-			_moduleIndexLoading = false;
-			// Log error with consistent format and include context
-			Debug.LogError($"AbxrLib: Failed to load module index: {ex.Message}\n" +
-						  $"Module Index Loaded: {_moduleIndexLoaded}\n" +
-						  $"Exception Type: {ex.GetType().Name}\n" +
-						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+			
+			try
+			{
+				CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
+			}
+			catch (Exception ex)
+			{
+				// Reset loading flag within the lock to prevent race conditions
+				_moduleIndexLoading = false;
+				// Log error with consistent format and include context
+				Debug.LogError($"AbxrLib: Failed to load module index: {ex.Message}\n" +
+							  $"Module Index Loaded: {_moduleIndexLoaded}\n" +
+							  $"Exception Type: {ex.GetType().Name}\n" +
+							  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+			}
 		}
 	}
 
@@ -1442,25 +1468,29 @@ public static partial class Abxr
 	{
 		yield return StorageGetEntry(_moduleIndexKey, StorageScope.user, result =>
 		{
-			if (result != null && result.Count > 0)
+			// Use lock to protect the completion of loading
+			lock (_moduleIndexLock)
 			{
-				var moduleIndexEntry = result[0]; // Get the first (and should be only) entry
-				if (moduleIndexEntry.ContainsKey("moduleIndex"))
+				if (result != null && result.Count > 0)
 				{
-					var moduleIndexString = moduleIndexEntry["moduleIndex"];
-					if (!string.IsNullOrEmpty(moduleIndexString))
+					var moduleIndexEntry = result[0]; // Get the first (and should be only) entry
+					if (moduleIndexEntry.ContainsKey("moduleIndex"))
 					{
-						if (int.TryParse(moduleIndexString, out int savedModuleIndex))
+						var moduleIndexString = moduleIndexEntry["moduleIndex"];
+						if (!string.IsNullOrEmpty(moduleIndexString))
 						{
-							_currentModuleIndex = savedModuleIndex;
+							if (int.TryParse(moduleIndexString, out int savedModuleIndex))
+							{
+								_currentModuleIndex = savedModuleIndex;
+							}
 						}
 					}
 				}
+				
+				// Mark loading as complete
+				_moduleIndexLoaded = true;
+				_moduleIndexLoading = false;
 			}
-			
-			// Mark loading as complete
-			_moduleIndexLoaded = true;
-			_moduleIndexLoading = false;
 		});
 	}
 
