@@ -24,36 +24,61 @@ namespace AbxrLib.Editor
             EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
             config.headsetTracking = EditorGUILayout.Toggle(new GUIContent(
                 "Headset/Controller Tracking", "Track the Headset and Controllers"), config.headsetTracking);
-            config.positionTrackingPeriodSeconds = EditorGUILayout.FloatField(
-                "Position Capture Period (seconds)", config.positionTrackingPeriodSeconds);
+            config.positionTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
+                "Position Capture Period (seconds)", config.positionTrackingPeriodSeconds), 0.1f, 60f);
             EditorGUI.EndDisabledGroup();
         
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Network", EditorStyles.boldLabel);
-            config.restUrl = EditorGUILayout.TextField(new GUIContent(
+            string newRestUrl = EditorGUILayout.TextField(new GUIContent(
                 "REST URL", "Should most likely be\nhttps://lib-backend.xrdm.app/ during Beta"), config.restUrl);
+            
+            // Validate URL format
+            if (!string.IsNullOrEmpty(newRestUrl))
+            {
+                try
+                {
+                    var uri = new System.Uri(newRestUrl);
+                    if (uri.Scheme == "http" || uri.Scheme == "https")
+                    {
+                        config.restUrl = newRestUrl;
+                    }
+                    else
+                    {
+                        EditorGUILayout.HelpBox("URL must start with http:// or https://", MessageType.Warning);
+                    }
+                }
+                catch
+                {
+                    EditorGUILayout.HelpBox("Invalid URL format", MessageType.Warning);
+                }
+            }
+            else
+            {
+                config.restUrl = newRestUrl;
+            }
             //if (config.restUrl == "https://lib-backend.xrdm.dev/") config.restUrl = "https://lib-backend.xrdm.app/"; //TODO remove
         
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Data Sending Rules", EditorStyles.boldLabel);
-            config.telemetryTrackingPeriodSeconds = EditorGUILayout.FloatField(
-                "Telemetry Tracking Period (seconds)", config.telemetryTrackingPeriodSeconds);
-            config.frameRateTrackingPeriodSeconds = EditorGUILayout.FloatField(
-                "Frame Rate Tracking Period (seconds)", config.frameRateTrackingPeriodSeconds);
-            config.sendRetriesOnFailure = EditorGUILayout.IntField("Send Retries On Failure", config.sendRetriesOnFailure);
-            config.sendRetryIntervalSeconds = EditorGUILayout.IntField("Send Retry Interval Seconds", config.sendRetryIntervalSeconds);
-            config.sendNextBatchWaitSeconds = EditorGUILayout.IntField("Send Next Batch Wait Seconds", config.sendNextBatchWaitSeconds);
-            config.requestTimeoutSeconds = EditorGUILayout.IntField(new GUIContent(
-                "Request Timeout Seconds", "How long to wait before giving up on network requests"), config.requestTimeoutSeconds);
-            config.stragglerTimeoutSeconds = EditorGUILayout.IntField(new GUIContent(
-                "Straggler Timeout Seconds", "0 = Infinite, i.e. Never send remainders = Always send exactly DataEntriesPerSendAttempt"), config.stragglerTimeoutSeconds);
-            config.dataEntriesPerSendAttempt = EditorGUILayout.IntField(new GUIContent(
-                "Data Entries Per Send Attempt", "Total count of events, logs, and telemetry entries to batch before sending (0 = Send all not already sent)"), config.dataEntriesPerSendAttempt);
+            config.telemetryTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
+                "Telemetry Tracking Period (seconds)", config.telemetryTrackingPeriodSeconds), 1f, 300f);
+            config.frameRateTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
+                "Frame Rate Tracking Period (seconds)", config.frameRateTrackingPeriodSeconds), 0.1f, 60f);
+            config.sendRetriesOnFailure = Mathf.Clamp(EditorGUILayout.IntField("Send Retries On Failure", config.sendRetriesOnFailure), 0, 10);
+            config.sendRetryIntervalSeconds = Mathf.Clamp(EditorGUILayout.IntField("Send Retry Interval Seconds", config.sendRetryIntervalSeconds), 1, 300);
+            config.sendNextBatchWaitSeconds = Mathf.Clamp(EditorGUILayout.IntField("Send Next Batch Wait Seconds", config.sendNextBatchWaitSeconds), 1, 3600);
+            config.requestTimeoutSeconds = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
+                "Request Timeout Seconds", "How long to wait before giving up on network requests"), config.requestTimeoutSeconds), 5, 300);
+            config.stragglerTimeoutSeconds = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
+                "Straggler Timeout Seconds", "0 = Infinite, i.e. Never send remainders = Always send exactly DataEntriesPerSendAttempt"), config.stragglerTimeoutSeconds), 0, 3600);
+            config.dataEntriesPerSendAttempt = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
+                "Data Entries Per Send Attempt", "Total count of events, logs, and telemetry entries to batch before sending (0 = Send all not already sent)"), config.dataEntriesPerSendAttempt), 1, 1000);
         
-            config.storageEntriesPerSendAttempt = EditorGUILayout.IntField("Storage Entries Per Send Attempt", config.storageEntriesPerSendAttempt);
-            config.pruneSentItemsOlderThanHours = EditorGUILayout.IntField(new GUIContent(
-                "Prune Sent Items Older Than Hours", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours);
-            config.maximumCachedItems = EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems);
+            config.storageEntriesPerSendAttempt = Mathf.Clamp(EditorGUILayout.IntField("Storage Entries Per Send Attempt", config.storageEntriesPerSendAttempt), 1, 1000);
+            config.pruneSentItemsOlderThanHours = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
+                "Prune Sent Items Older Than Hours", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours), 0, 8760);
+            config.maximumCachedItems = Mathf.Clamp(EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems), 10, 10000);
             config.retainLocalAfterSent = EditorGUILayout.Toggle("Retain Local After Sent", config.retainLocalAfterSent);
             config.disableAutomaticTelemetry = EditorGUILayout.Toggle("Disable Automatic Telemetry", config.disableAutomaticTelemetry);
             config.disableSceneEvents = EditorGUILayout.Toggle("Disable Scene Events", config.disableSceneEvents);
@@ -66,8 +91,8 @@ namespace AbxrLib.Editor
             // Only show delay field if auto-start is enabled
             if (!config.disableAutoStartAuthentication)
             {
-                config.authenticationStartDelay = EditorGUILayout.FloatField(new GUIContent(
-                    "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay);
+                config.authenticationStartDelay = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
+                    "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay), 0f, 60f);
             }
 
             EditorGUILayout.Space();
