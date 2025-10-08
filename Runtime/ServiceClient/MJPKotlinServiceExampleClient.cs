@@ -80,6 +80,10 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		{
 			return MjpKotlinServiceExampleServiceBridge.WhatTimeIsIt();
 		}
+		public static bool IsServiceAvailable()
+		{
+			return MjpKotlinServiceExampleServiceBridge.IsServiceAvailable();
+		}
 		private void Awake()
 		{
 			Debug.Log($"[MJPKotlinServiceExampleClient] Awake() called on GameObject: {gameObject.name}");

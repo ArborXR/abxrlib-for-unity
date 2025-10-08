@@ -1132,7 +1132,7 @@ public static class Abxr
 	/// <returns>The current time as a string, or empty string if service is not connected.</returns>
 	public static string WhatTimeIsIt()
 	{
-		Debug.Log("[Abxr] WhatTimeIsIt() called");
+		Debug.Log("[Abxr][MJPKotlinServiceExampleClient] WhatTimeIsIt() called");
 		
 		//// First check if there's even an instance of the service client in the scene
 		//var instance = MJPKotlinServiceExampleClient.FindInstance();
@@ -1159,17 +1159,22 @@ public static class Abxr
 		
 		try
 		{
-			Debug.Log("[Abxr] Calling MjpServiceWrapper.WhatTimeIsIt()");
+			Debug.Log("[Abxr][MJPKotlinServiceExampleClient] Calling MjpServiceWrapper.WhatTimeIsIt()");
 			string result = MJPKotlinServiceExampleClient.WhatTimeIsIt();
-			Debug.Log($"[Abxr] WhatTimeIsIt() result: '{result}'");
+			Debug.Log($"[Abxr][MJPKotlinServiceExampleClient] WhatTimeIsIt() result: '{result}'");
 			return result;
 		}
 		catch (Exception ex)
 		{
-			Debug.LogError($"[Abxr] Error in WhatTimeIsIt(): {ex.Message}");
-			Debug.LogError($"[Abxr] Stack trace: {ex.StackTrace}");
+			Debug.LogError($"[Abxr][MJPKotlinServiceExampleClient] Error in WhatTimeIsIt(): {ex.Message}");
+			Debug.LogError($"[Abxr][MJPKotlinServiceExampleClient] Stack trace: {ex.StackTrace}");
 			return "";
 		}
+	}
+	public static bool IsServiceAvailable()
+	{
+		return MJPKotlinServiceExampleClient.IsServiceAvailable();
+		//return ArborServiceClient.IsConnected();	// VS2022 AI suggested this... might be a better way to go in the final version.
 	}
 
 	#region Module Target and User Data Methods
