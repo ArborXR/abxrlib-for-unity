@@ -995,7 +995,7 @@ public static partial class Abxr
 	{
 		if (IsReservedSuperMetaDataKey(key))
 		{
-			string errorMessage = $"AbxrLib: Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			string errorMessage = $"AbxrLib: Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
 			Debug.LogWarning(errorMessage);
 			LogInfo(errorMessage, new Dictionary<string, string> { 
 				{ "attempted_key", key }, 
@@ -1019,7 +1019,7 @@ public static partial class Abxr
 	{
 		if (IsReservedSuperMetaDataKey(key))
 		{
-			string errorMessage = $"AbxrLib: Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, module_name, module_id, module_order";
+			string errorMessage = $"AbxrLib: Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
 			Debug.LogWarning(errorMessage);
 			LogInfo(errorMessage, new Dictionary<string, string> { 
 				{ "attempted_key", key }, 
@@ -1154,17 +1154,17 @@ public static partial class Abxr
 			if (_currentModuleIndex < moduleData.Count)
 			{
 				ModuleData currentModuleData = moduleData[_currentModuleIndex];
-				if (!meta.ContainsKey("module_name") && !string.IsNullOrEmpty(currentModuleData.name))
+				if (!meta.ContainsKey("moduleName") && !string.IsNullOrEmpty(currentModuleData.name))
 				{
-					meta["module_name"] = currentModuleData.name;
+					meta["moduleName"] = currentModuleData.name;
 				}
-				if (!meta.ContainsKey("module_id") && !string.IsNullOrEmpty(currentModuleData.id))
+				if (!meta.ContainsKey("moduleId") && !string.IsNullOrEmpty(currentModuleData.id))
 				{
-					meta["module_id"] = currentModuleData.id;
+					meta["moduleId"] = currentModuleData.id;
 				}
-				if (!meta.ContainsKey("module_order"))
+				if (!meta.ContainsKey("moduleOrder"))
 				{
-					meta["module_order"] = currentModuleData.order.ToString();
+					meta["moduleOrder"] = currentModuleData.order.ToString();
 				}
 			}
 		}
@@ -1185,13 +1185,13 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Private helper to check if a super metadata key is reserved for module data
-	/// Reserved keys: module, module_name, module_id, module_order
+	/// Reserved keys: module, moduleName, moduleId, moduleOrder
 	/// </summary>
 	/// <param name="key">The key to validate</param>
 	/// <returns>True if the key is reserved, false otherwise</returns>
 	private static bool IsReservedSuperMetaDataKey(string key)
 	{
-		return key == "module" || key == "module_name" || key == "module_id" || key == "module_order";
+		return key == "module" || key == "moduleName" || key == "moduleId" || key == "moduleOrder";
 	}
 	#endregion
 
