@@ -17,7 +17,6 @@ namespace AbxrLib.Runtime.Storage
 		private static readonly object _lock = new();
 		private static float _timer;
 		private static float _lastCallTime;
-		// MaxCallFrequencySeconds now configurable via Configuration.maxCallFrequencySeconds
 	
 		private void Start()
 		{
