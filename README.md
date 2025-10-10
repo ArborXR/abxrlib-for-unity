@@ -143,7 +143,7 @@ Abxr.Event("player_teleported",
 
 **Parameters:**
 - `name` (string): The name of the event. Use snake_case for better analytics processing.
-- `meta` (Dictionary<string, string> or Abxr.Dict): Optional. Additional key-value pairs describing the event. Use `Abxr.Dict` to avoid requiring using statements.
+- `meta` (`Dictionary<string, string>` or `Abxr.Dict`): Optional. Additional key-value pairs describing the event. Use `Abxr.Dict` to avoid requiring using statements.
 - `location_data` (Vector3): Optional. The (x, y, z) coordinates of the event in 3D space.
 
 Logs a named event with optional metadata and spatial context. Timestamps and origin (`user` or `system`) are automatically appended.
@@ -209,10 +209,10 @@ Abxr.EventCritical("safety_violation");
 **Parameters for all Event Wrapper Functions:**
 - `levelName/assessmentName/objectiveName/interactionName` (string): The identifier for the assessment, objective, interaction, or level.
 - `score` (int): The numerical score achieved. While typically between 1-100, any integer is valid. In metadata, you can also set a minScore and maxScore to define the range of scores for this objective.
-- `result` (Interactions): The result for the interaction is based on the InteractionType.
+- `result` (`Interactions`): The result for the interaction is based on the `InteractionType`.
 - `result_details` (string): Optional. Additional details about the result. For interactions, this can be a single character or a string. For example: "a", "b", "c" or "correct", "incorrect".
-- `type` (InteractionType): Optional. The type of interaction for this event.
-- `meta` (Dictionary<string, string> or Abxr.Dict): Optional. Additional key-value pairs describing the event. Use `Abxr.Dict` to avoid requiring using statements.
+- `type` (`InteractionType`): Optional. The type of interaction for this event.
+- `meta` (`Dictionary<string, string>` or `Abxr.Dict`): Optional. Additional key-value pairs describing the event. Use `Abxr.Dict` to avoid requiring using statements.
 
 **Note:** All complete events automatically calculate duration if a corresponding start event was logged.
 
@@ -334,9 +334,9 @@ Abxr.StorageRemoveMultipleEntries(StorageScope.user); // Clear all entries (use 
 
 **Parameters:**
 - `name` (string): The identifier for this storage entry.
-- `entry` (Dictionary<string, string> or Abxr.Dict): The key-value pairs to store. Use `Abxr.Dict` to avoid requiring using statements.
-- `scope` (StorageScope): Store/retrieve from 'device' or 'user' storage.
-- `policy` (StoragePolicy): How data should be stored - 'keepLatest' or 'appendHistory' (defaults to 'keepLatest').
+- `entry` (`Dictionary<string, string>` or `Abxr.Dict`): The key-value pairs to store. Use `Abxr.Dict` to avoid requiring using statements.
+- `scope` (`StorageScope`): Store/retrieve from 'device' or 'user' storage.
+- `policy` (`StoragePolicy`): How data should be stored - 'keepLatest' or 'appendHistory' (defaults to 'keepLatest').
 - `callback` (Action): Callback function for retrieval operations.
 
 ---
@@ -359,7 +359,7 @@ Abxr.Telemetry("headset_position", new Abxr.Dict {
 
 **Parameters:**
 - `name` (string): The type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level").
-- `meta` (Dictionary<string, string> or Abxr.Dict): Key-value pairs of telemetry measurements. Use `Abxr.Dict` to avoid requiring using statements.
+- `meta` (`Dictionary<string, string>` or `Abxr.Dict`): Key-value pairs of telemetry measurements. Use `Abxr.Dict` to avoid requiring using statements.
 
 ---
 ### AI Integration
@@ -380,8 +380,8 @@ StartCoroutine(Abxr.AIProxy("What's the weather like?", pastMessages, "gpt-4", r
 **Parameters:**
 - `prompt` (string): The input prompt for the AI.
 - `llmProvider` (string): The LLM provider identifier.
-- `pastMessages` (List<string>): Optional. Previous conversation history for context.
-- `callback` (Action<string>): Callback function that receives the AI response.
+- `pastMessages` (`List<string>`): Optional. Previous conversation history for context.
+- `callback` (`Action<string>`): Callback function that receives the AI response.
 
 **Note:** AIProxy calls are processed immediately and bypass the cache system.
 
@@ -398,7 +398,7 @@ public static void Abxr.PollUser(string prompt, ExitPollHandler.PollType pollTyp
 Abxr.PollUser("How would you rate this training experience?", ExitPollHandler.PollType.Rating);
 ```
 
-### Abxr.Dict - Easy Metadata Creation
+### `Abxr.Dict` - Easy Metadata Creation
 
 **NEW:** The ABXRLib SDK now includes `Abxr.Dict` - a wrapper class that makes creating metadata dictionaries simple without requiring `using System.Collections.Generic;` statements:
 
@@ -426,7 +426,7 @@ Abxr.StorageSetEntry("progress", new Abxr.Dict { ["level"] = "3" }, StorageScope
 - ✅ **No using statements required** - Works immediately without imports
 - ✅ **Backwards compatible** - Seamlessly integrates with existing Dictionary parameters  
 - ✅ **Multiple usage patterns** - Collection initializer, fluent API, or traditional approaches
-- ✅ **Automatic compatibility** - Inherits from Dictionary<string, string> for seamless integration
+- ✅ **Automatic compatibility** - Inherits from `Dictionary<string, string>` for seamless integration
 
 ### Metadata Formats
 
