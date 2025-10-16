@@ -6,7 +6,8 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
 1. [Introduction](#introduction)
 2. [Installation](#installation)
 3. [Configuration](#configuration)
-4. [Sending Data](#sending-data)
+4. [Quick  Start Guide](#quickstart)
+5. [Sending Data](#sending-data)
    - [Events](#events)
    - [Analytics Event Wrappers](#analytics-event-wrappers-essential-for-all-developers)
    - [Timed Events](#timed-events)
@@ -17,7 +18,7 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
    - [AI Integration](#ai-integration)
    - [Exit Polls](#exit-polls)
    - [Metadata Formats](#metadata-formats)
-5. [Advanced Features](#advanced-features)
+6. [Advanced Features](#advanced-features)
    - [Module Targets](#module-targets)
    - [Authentication](#authentication)
    - [Headset Removal](#headset-removal)
@@ -26,7 +27,7 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
    - [ArborXR Device Management](#arborxr-device-management)
    - [Mixpanel Compatibility](#mixpanel-compatibility)
    - [Cognitive3D Compatibility](#cognitive3d-compatibility)
-8. [Support](#support)
+7. [Support](#support)
    - [Resources](#resources)
    - [FAQ](#faq)
 
@@ -113,6 +114,37 @@ On any non-managed headset, you must manually enter all three values for testing
 
 ### Using with Other Backend Services
 For information on implementing your own backend service or using other compatible services, please refer to the ABXR protocol specification.
+
+---
+## Quick Start Guide
+Once installed and configuration is complete
+
+
+```cpp
+// Add at the start your training (or training module)
+Abxr.EventAssessmentStart("safety_training1");
+
+
+// Add at the end your training (or training module)
+Abxr.EventAssessmentComplete("safety_training1", 92, EventStatus.Pass);
+// or
+Abxr.EventAssessmentComplete("safety_training1", 28, EventStatus.Fail);
+```
+
+
+In many cases you may want to track sub-tasks within the content
+
+```cpp
+
+// To track
+Abxr.EventObjectiveStart("open_valve");
+Abxr.EventObjectiveComplete("open_valve", 100, EventStatus.Complete);
+
+// Interaction tracking (individual user responses)
+Abxr.EventInteractionStart("select_option_a");
+Abxr.EventInteractionComplete("select_option_a", InteractionType.Select, "true");
+```
+
 
 ---
 
