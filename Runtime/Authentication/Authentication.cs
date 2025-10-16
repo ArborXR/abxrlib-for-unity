@@ -360,6 +360,12 @@ namespace AbxrLib.Runtime.Authentication
                 abxrLibVersion = AbxrLibVersion.Version,
                 authMechanism = CreateAuthMechanismDict()
             };
+
+            //only allow when authentication type is none
+            //userId
+            //userData = Abxr.GetUserData();
+            //name, username, email only
+            //data.userId = _userId;
         
             string json = JsonConvert.SerializeObject(data);
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
