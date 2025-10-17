@@ -78,7 +78,7 @@ Developers can implement their own backend services by following the ABXR protoc
 ### Unity Package Installation
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 1. Open Unity and go to `Window > Package Manager`.
 2. Select the '+' dropdown and choose **'Add package from git URL'**.
@@ -141,7 +141,7 @@ To use the ABXRLib SDK with ArborXR Insights:
 > **⚠️ Security Note:** For production builds distributed to third parties, avoid compiling `Org ID` and `Auth Secret` directly into your project. These credentials should only be compiled into builds when creating custom applications for specific individual clients. For general distribution, use ArborXR-managed devices or implement runtime credential provisioning.
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
 2. **For Development/Testing:** Paste in the App ID, Org ID, and Auth Secret. All 3 are required if you are testing from Unity itself.
@@ -199,7 +199,7 @@ For information on implementing your own backend service or using other compatib
 ### Events
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 //C# Event Method Signatures
@@ -223,12 +223,9 @@ Abxr.Event("player_teleported",
 );
 ```
 
-**Parameters:**
-- `name` (string): The name of the event. Use snake_case for better analytics processing.
-- `meta` (`Dictionary<string, string>` or `Abxr.Dict`): Optional. Additional key-value pairs describing the event. Use `Abxr.Dict` to avoid requiring using statements.
-- `location_data` (Vector3): Optional. The (x, y, z) coordinates of the event in 3D space.
-
-Logs a named event with optional metadata and spatial context. Timestamps and origin (`user` or `system`) are automatically appended.
+**Platform-Specific Notes:**
+- Use `Abxr.Dict` to avoid requiring using statements
+- `location_data` parameter is a Vector3
 
 </details>
 
@@ -250,11 +247,9 @@ Meta.Add(TEXT("item_value"), TEXT("100"));
 UAbxr::Event(TEXT("item_collected"), Meta);
 ```
 
-**Parameters:**
-- `name` (FString): The name of the event. Use snake_case for better analytics processing.
-- `meta` (TMap<FString, FString>): Optional. Additional key-value pairs describing the event.
-
-Logs a named event with optional metadata and spatial context. Timestamps and origin (`user` or `system`) are automatically appended.
+**Platform-Specific Notes:**
+- Use `TEXT()` macro for string literals
+- Metadata uses `TMap<FString, FString>`
 
 </details>
 
@@ -282,14 +277,19 @@ Abxr.Event('player_teleported',
 );
 ```
 
-**Parameters:**
-- `name` (string): The name of the event. Use snake_case for better analytics processing.
-- `meta` (object): Optional. Additional key-value pairs describing the event.
-- `position` (Vector3): Optional. The (x, y, z) coordinates of the event in 3D space.
+**Platform-Specific Notes:**
+- Use single quotes for strings
+- `position` parameter is a Vector3 object
+- Methods return Promise<number>
+
+</details>
 
 Logs a named event with optional metadata and spatial context. Timestamps and origin (`user` or `system`) are automatically appended.
 
-</details>
+**Parameters:**
+- `name`: The name of the event. Use snake_case for better analytics processing.
+- `meta`: Optional. Additional key-value pairs describing the event.
+- `position/location_data`: Optional. The (x, y, z) coordinates of the event in 3D space.
 
 ### Analytics Event Wrappers (Essential for All Developers)
 
@@ -308,7 +308,7 @@ These three event types work together to provide comprehensive tracking of user 
 - **Interaction**: Tracks individual user responses or actions within an objective or assessment. These capture specific user inputs, choices, or behaviors that demonstrate engagement and learning progress.
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 // Status enumeration for all analytics events
@@ -411,7 +411,7 @@ Abxr.EventInteractionComplete('select_option_a', Abxr.InteractionType.Select, Ab
 #### Additional Event Wrappers
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 //C# Method Signatures
@@ -485,7 +485,7 @@ Abxr.EventCritical('safety_violation');
 The ABXRLib SDK includes a built-in timing system that allows you to measure the duration of any event. This is useful for tracking how long users spend on specific activities.
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 //C# Timed Event Method Signature
@@ -506,11 +506,6 @@ Abxr.StartTimedEvent("User Session");
 // ... later ...
 Abxr.Track("User Session"); // Duration automatically included
 ```
-
-**Parameters:**
-- `eventName` (string): The name of the event to start timing. Must match the event name used later.
-
-**Note:** The timer automatically adds a `duration` field (in seconds) to any subsequent event with the same name. The timer is automatically removed after the first matching event.
 
 </details>
 
@@ -537,11 +532,6 @@ UAbxr::StartTimedEvent(TEXT("User Session"));
 UAbxr::Track(TEXT("User Session")); // Duration automatically included
 ```
 
-**Parameters:**
-- `eventName` (FString): The name of the event to start timing. Must match the event name used later.
-
-**Note:** The timer automatically adds a `duration` field (in seconds) to any subsequent event with the same name. The timer is automatically removed after the first matching event.
-
 </details>
 
 <details>
@@ -567,19 +557,19 @@ Abxr.StartTimedEvent("User Session");
 Abxr.Track("User Session"); // Duration automatically included
 ```
 
+</details>
+
 **Parameters:**
-- `eventName` (string): The name of the event to start timing. Must match the event name used later.
+- `eventName`: The name of the event to start timing. Must match the event name used later.
 
 **Note:** The timer automatically adds a `duration` field (in seconds) to any subsequent event with the same name. The timer is automatically removed after the first matching event.
 
-</details>
-
 ### Super Meta Data
 
-Global metadata automatically included in all events, logs, and telemetry data:
+Global metadata automatically included in all events, logs, and telemetry data.
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 //C# Method Signatures
@@ -597,8 +587,6 @@ Abxr.RegisterOnce("user_tier", "free");
 Abxr.Unregister("device_type");  // Remove specific super metadata 
 Abxr.Reset();                    // Clear all super metadata
 ```
-
-Perfect for user attributes, app state, and device information that should be included with every event, log entry, and telemetry data point.
 
 </details>
 
@@ -622,8 +610,6 @@ UAbxr::Unregister(TEXT("device_type"));  // Remove specific property
 UAbxr::Reset();                          // Clear all super properties
 ```
 
-Perfect for user attributes, app state, and device information that should be included with every event.
-
 </details>
 
 <details>
@@ -646,16 +632,16 @@ Abxr.Unregister("device_type");  // Remove specific super metadata
 Abxr.Reset();                    // Clear all super metadata
 ```
 
-Perfect for user attributes, app state, and device information that should be included with every event, log entry, and telemetry data point.
-
 </details>
+
+Perfect for user attributes, app state, and device information that should be included with every event, log entry, and telemetry data point.
 
 ### Logging
 
 The Log Methods provide straightforward logging functionality, similar to syslogs. These functions are available to developers by default, even across enterprise users, allowing for consistent and accessible logging across different deployment scenarios.
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 //C# Method Signatures
@@ -765,8 +751,17 @@ The **Module Target** feature enables developers to create single applications w
 
 The recommended way to handle modules is to subscribe your Module/Deep link handler to the `OnModuleTarget` event, which gives you full control over how to handle each module target. This event works perfectly with existing Android deep link handlers—you can use the same routing logic for both external deep links and LMS module targets. **The module sequence executes automatically when authentication completes, and will wait for your subscription if needed**, so you only need to subscribe to the event:
 
+**Features:**
+- **Smart Automatic Execution**: Module sequence executes automatically when authentication completes, and waits for your subscription if needed
+- **Event-Driven**: Uses the `OnModuleTarget` event for maximum flexibility
+- **Developer Control**: You decide how to handle each module target
+- **Deep Link Integration**: Perfect for connecting to existing deep link handlers
+- **Unified Handling**: One method handles both external deep links and LMS module targets
+- **Error Handling**: Continues to next module if an event handler throws an exception
+- **Return Count**: Returns the number of successfully executed modules
+
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 // Subscribe to module target events
@@ -796,15 +791,6 @@ private void HandleModuleOrDeepLinkTarget(string moduleTarget)
 }
 ```
 
-**Features:**
-- **Smart Automatic Execution**: Module sequence executes automatically when authentication completes, and waits for your subscription if needed
-- **Event-Driven**: Uses the `OnModuleTarget` event for maximum flexibility
-- **Developer Control**: You decide how to handle each module target
-- **Deep Link Integration**: Perfect for connecting to existing deep link handlers
-- **Unified Handling**: One method handles both external deep links and LMS module targets
-- **Error Handling**: Continues to next module if an event handler throws an exception
-- **Return Count**: Returns the number of successfully executed modules
-
 </details>
 
 <details>
@@ -833,15 +819,6 @@ Abxr.OnModuleTarget = (moduleTarget) => {
 // Module(s) will be executed automatically when authentication completes!
 ```
 
-**Features:**
-- **Smart Automatic Execution**: Module sequence executes automatically when authentication completes, and waits for your subscription if needed
-- **Event-Driven**: Uses the `OnModuleTarget` event for maximum flexibility
-- **Developer Control**: You decide how to handle each module target
-- **Deep Link Integration**: Perfect for connecting to existing deep link handlers
-- **Unified Handling**: One method handles both external deep links and LMS module targets
-- **Error Handling**: Continues to next module if an event handler throws an exception
-- **Return Count**: Returns the number of successfully executed modules
-
 </details>
 
 #### Manual Module Processing
@@ -849,7 +826,7 @@ Abxr.OnModuleTarget = (moduleTarget) => {
 For more control, you can manually process modules:
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 // Get the next module target from available modules
@@ -938,7 +915,7 @@ Module progress is automatically persisted across app sessions and device restar
 The module target callback provides a `CurrentSessionData` object with the following properties:
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 public class CurrentSessionData
@@ -975,7 +952,7 @@ The ABXRLib SDK provides comprehensive authentication completion callbacks that 
 If you would like to have logic to correspond to authentication completion, you can subscribe to this event.
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 // 'true' for success and 'false' for failure (string argument will contain the error message on failure)
@@ -1072,7 +1049,7 @@ Abxr.OnAuthCompleted = (authData) => {
 You can check if AbxrLib has an active connection to the server at any time:
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 //C# Method Signature
@@ -1192,7 +1169,7 @@ if (Abxr.ConnectionActive()) {
 To improve session fidelity and reduce user spoofing or unintended headset sharing, the SDK triggers a re-authentication prompt when the headset is taken off and then put back on mid-session. If the headset is put on by a new user, this will trigger an event that you can subscribe to:
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 public static Action OnHeadsetPutOnNewSession;
@@ -1250,8 +1227,14 @@ The ABXRLib SDK provides comprehensive session management capabilities that allo
 #### StartNewSession
 Start a new session with a fresh session identifier. This method generates a new session ID and performs fresh authentication, making it ideal for starting new training experiences or resetting user context.
 
+**Use Cases:**
+- Starting new training modules or courses
+- Resetting user progress for a fresh start
+- Creating separate sessions for different users on the same device
+- Beginning new assessment attempts
+
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 //C# Method Signature
@@ -1260,12 +1243,6 @@ public static void Abxr.StartNewSession()
 // Example Usage
 Abxr.StartNewSession();
 ```
-
-**Use Cases:**
-- Starting new training modules or courses
-- Resetting user progress for a fresh start
-- Creating separate sessions for different users on the same device
-- Beginning new assessment attempts
 
 </details>
 
@@ -1280,12 +1257,6 @@ void UAbxr::StartNewSession();
 UAbxr::StartNewSession();
 ```
 
-**Use Cases:**
-- Starting new training modules or courses
-- Resetting user progress for a fresh start
-- Creating separate sessions for different users on the same device
-- Beginning new assessment attempts
-
 </details>
 
 <details>
@@ -1299,19 +1270,19 @@ static StartNewSession(): void
 Abxr.StartNewSession();
 ```
 
-**Use Cases:**
-- Starting new training modules or courses
-- Resetting user progress for a fresh start
-- Creating separate sessions for different users on the same device
-- Beginning new assessment attempts
-
 </details>
 
 #### ReAuthenticate
 Trigger manual reauthentication with existing stored parameters. This method is primarily useful for testing authentication flows or recovering from authentication issues.
 
+**Use Cases:**
+- Testing authentication flows during development
+- Recovering from authentication errors
+- Refreshing expired credentials
+- Debugging authentication issues
+
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 //C# Method Signature
@@ -1320,12 +1291,6 @@ public static void Abxr.ReAuthenticate()
 // Example Usage
 Abxr.ReAuthenticate();
 ```
-
-**Use Cases:**
-- Testing authentication flows during development
-- Recovering from authentication errors
-- Refreshing expired credentials
-- Debugging authentication issues
 
 </details>
 
@@ -1340,12 +1305,6 @@ void UAbxr::ReAuthenticate();
 UAbxr::ReAuthenticate();
 ```
 
-**Use Cases:**
-- Testing authentication flows during development
-- Recovering from authentication errors
-- Refreshing expired credentials
-- Debugging authentication issues
-
 </details>
 
 <details>
@@ -1358,12 +1317,6 @@ static ReAuthenticate(): void
 // Example Usage
 Abxr.ReAuthenticate();
 ```
-
-**Use Cases:**
-- Testing authentication flows during development
-- Recovering from authentication errors
-- Refreshing expired credentials
-- Debugging authentication issues
 
 </details>
 
@@ -1386,7 +1339,7 @@ These methods provide access to device-level information and SSO authentication 
 > **Note:** ArborXR Device Management is supported in Unity and WebXR. Unreal Engine support is planned for future releases.
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 // Device Information Methods
@@ -1461,7 +1414,7 @@ The ABXRLib SDK provides full compatibility with Mixpanel's tracking patterns, m
 3. Replace Mixpanel tracking calls with ABXRLib equivalents throughout codebase
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 // Mixpanel → ABXR migration example
@@ -1609,7 +1562,7 @@ new Abxr.CustomEvent("Pressed Space").Send();
 Keep your existing Cognitive3D implementation and add ABXRLib for enhanced features:
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 // Your existing Cognitive3D code stays unchanged, and then add the Abxr version right below
@@ -1732,7 +1685,7 @@ Object tracking can be enabled by adding the Track Object component to any GameO
 Once installed and configuration is complete, you can start tracking assessments with these simple calls:
 
 <details open>
-<summary><strong>Unity (C#)</strong> - Click to collapse</summary>
+<summary><strong>Unity (C#)</strong></summary>
 
 ```cpp
 // Add at the start your training (or training module)
