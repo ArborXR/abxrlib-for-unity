@@ -27,6 +27,7 @@ The name "ABXR" stands for "Analytics Backbone for XR"—a flexible, open-source
    - [ArborXR Device Management](#arborxr-device-management)
    - [Mixpanel Compatibility](#mixpanel-compatibility)
    - [Cognitive3D Compatibility](#cognitive3d-compatibility)
+   - [Dialog Customization](#dialog-customization)
 7. [Support](#support)
    - [Resources](#resources)
    - [FAQ](#faq)
@@ -130,7 +131,7 @@ npm install abxrlib-for-webxr
 To use the ABXRLib SDK with ArborXR Insights:
 
 #### Get Your Credentials
-1. Go to the ArborXR Insights web app and log in.
+1. Go to the ArborXR Portal and log in.
 2. Grab these three values from the **View Data** screen of the specific app you are configuring:
 - App ID
 - Organization ID
@@ -1327,10 +1328,51 @@ Abxr.ReAuthenticate();
 The Debug Window is a little bonus feature from the AbxrLib developers.
 To help with general debugging, this feature routes a copy of all AbxrLib messages (Logs, Events, etc) to a window within the VR space. This enables developers to view logs in VR without having to repeatedly take on and off your headset while debugging.
 
-> **Note:** Debug Window is currently only available in Unity. Unreal Engine support is planned for future releases.
+> **Note:** Debug Window is currently only available in Unity. WebXR does not have a Debug Window, but it does have "Debug Mode" for enhanced logging. Unreal Engine support is planned for future releases.
 
-#### Setup
+#### Unity Debug Window Setup
 To use this feature, simply drag the `AbxrDebugWindow` Prefab from `AbxrLib for Unity/Resources/Prefabs`, to whatever object in the scene you want this window attached to (i.e. `Left Controller`).
+
+#### WebXR Debug Mode
+
+For debugging authentication, network issues, or other problems, enable debug logging:
+
+<details>
+<summary><strong>WebXR (JavaScript/TypeScript)</strong> - Click to expand</summary>
+
+```javascript
+// Check if connection is established with the service
+Abxr.ConnectionActive();
+
+// Enable and check debug mode Method Signatures
+Abxr.SetDebugMode(enabled)
+Abxr.GetDebugMode()
+
+// Example usage
+Abxr.SetDebugMode(true);  // Enable debug logging
+Abxr.SetDebugMode(false); // Disable debug logging
+
+const isDebugging = Abxr.GetDebugMode();
+console.log('Debug mode:', isDebugging);
+
+// Conditional debug setup for development
+if (process.env.NODE_ENV === 'development') {
+    Abxr.SetDebugMode(true);
+}
+```
+
+**Parameters:**
+- `enabled` (boolean): Enable or disable debug mode
+
+**Returns:** `GetDebugMode()` returns boolean indicating current debug state
+
+**Debug Mode Benefits:**
+- **Detailed error messages**: See exactly what's failing during authentication
+- **Network request logging**: Track API calls and responses
+- **State information**: Monitor internal library state changes
+- **Performance insights**: Identify bottlenecks and timing issues
+
+</details>
 
 ### ArborXR Device Management
 
@@ -1584,6 +1626,162 @@ Abxr.EventAssessmentComplete("final_exam", 95, Abxr.EventStatus.Pass); // Struct
 | **AI-Powered Insights** | ❌ | ✅ (Content optimization, learner analysis) |
 | **Open Source** | ❌ | ✅ |
 
+### Dialog Customization
+
+The SDK has built-in dialogs to support two-step authentication when the backend requires additional credentials (like a PIN or email). 
+
+> **Note:** Dialog Customization are supported in Unity and WebXR. Unreal Engine support is planned for future releases.
+
+<details>
+<summary><strong>Unity (C#)</strong></summary>
+
+DETAILS COMING SOON
+
+</details>
+
+<details open>
+<summary><strong>WebXR (JavaScript/TypeScript)</strong> - Click to expand</summary>
+
+There are multiple approaches to handle this:
+
+##### Option 1: Built-in Dialog System (Recommended)
+
+**NEW:** Zero-code authentication with beautiful, XR-optimized dialogs! Perfect for VR/AR developers:
+
+
+```javascript
+import { Abxr_init } from 'abxrlib-for-webxr';
+
+// Simple initialization - XR dialog appears automatically when needed
+Abxr_init('app123', 'org456', 'secret789');
+
+// That's it! The library handles everything:
+// - Auto-detects XR environments vs regular browsers
+// - Shows beautiful XR-optimized dialogs in VR/AR
+// - Includes virtual keyboards for XR environments
+// - Falls back to HTML dialogs for regular browsers
+// - Handles all auth types (email, PIN, etc.) automatically
+```
+##### Option 2: Customize Styling of Built-in Dialog System
+
+```javascript
+const dialogOptions = {
+    enabled: true,
+    type: 'xr',           // 'html', 'xr', or 'auto' (default)
+    xrFallback: true,     // Fallback to HTML if XR fails
+    xrStyle: {
+        colors: {
+            primary: '#00ffff',     // Cyan accent
+            success: '#00ff88',     // Green submit button
+            background: 'linear-gradient(135deg, #0a0a0a, #1a1a2e)',
+            keyBg: 'rgba(0, 255, 255, 0.1)',  // Virtual keyboard keys
+            keyText: '#ffffff',
+            keyActive: '#00ffff'
+        },
+        dialog: {
+            borderRadius: '20px',
+            border: '3px solid #00ffff',
+            boxShadow: '0 0 50px rgba(0, 255, 255, 0.5)'
+        },
+        overlay: {
+            background: 'radial-gradient(circle, rgba(0, 255, 255, 0.2) 0%, rgba(0, 0, 0, 0.9) 100%)'
+        }
+    }
+};
+
+Abxr_init('app123', undefined, undefined, undefined, dialogOptions);
+```
+
+**What makes XR dialogs special:**
+- 🥽 **VR/AR Optimized**: Beautiful in both desktop browsers and XR headsets
+- ⌨️ **Virtual Keyboard**: Built-in keyboard for XR environments (PIN pad for PINs)
+- 🎨 **Fully Customizable**: Colors, styling, and behavior - match your brand
+- 🔄 **Auto-Detection**: Automatically chooses XR vs HTML dialog based on environment
+- 📱 **Universal**: Works everywhere - desktop, mobile, and XR devices
+
+##### Option 3: Custom Callback Approach
+
+For developers who want to provide their own authentication UI:
+
+```javascript
+import { Abxr_init, Abxr, AuthMechanismData } from 'abxrlib-for-webxr';
+
+// Define callback to handle authentication requirements
+function handleAuthMechanism(authData: AuthMechanismData) {
+    console.log('Auth required:', authData.type); // e.g., 'email', 'assessmentPin'
+    console.log('Prompt:', authData.prompt);      // e.g., 'Enter your Email'
+    console.log('Domain:', authData.domain);      // e.g., 'acme.com' (for email type)
+    
+    // Show UI to collect user input
+    const userInput = prompt(authData.prompt);
+    
+    // Format and submit authentication data
+    const formattedAuthData = Abxr.formatAuthDataForSubmission(userInput, authData.type, authData.domain);
+    
+    Abxr.completeFinalAuth(formattedAuthData).then(success => {
+        if (success) {
+            console.log('Authentication complete');
+        } else {
+            console.log('Authentication failed');
+        }
+    });
+}
+
+// Initialize with callback
+Abxr_init('app123', undefined, undefined, undefined, undefined, handleAuthMechanism);
+```
+
+##### Option 4: Manual Check Approach
+
+Check for additional authentication requirements manually (for advanced use cases):
+
+```javascript
+import { Abxr_init, Abxr } from 'abxrlib-for-webxr';
+
+// Step 1: Initial authentication
+Abxr_init('app123', 'org456', 'secret789');
+
+// Step 2: Check if additional authentication is required
+if (Abxr.getRequiresFinalAuth()) {
+    console.log('Additional authentication required');
+    
+    // Extract structured auth data
+    const authData = Abxr.extractAuthMechanismData();
+    if (authData) {
+        console.log('Auth type:', authData.type);     // e.g., 'email', 'assessmentPin'
+        console.log('Prompt:', authData.prompt);      // e.g., 'Enter your Email'
+        console.log('Domain:', authData.domain);      // e.g., 'acme.com'
+        
+        // Get user input
+        const userInput = prompt(authData.prompt);
+        
+        // Format and submit
+        const formattedData = Abxr.formatAuthDataForSubmission(userInput, authData.type, authData.domain);
+        const success = await Abxr.completeFinalAuth(formattedData);
+        
+        if (success) {
+            console.log('Authentication complete');
+        }
+    }
+}
+```
+
+</details>
+
+##### AuthMechanism Types
+
+The SDK supports various authentication types:
+- **`email`**: Email-based authentication with domain support
+- **`assessmentPin`**: PIN-based authentication for assessments
+- **Custom types**: As defined by your backend service
+
+##### Helper Methods
+
+- `Abxr.extractAuthMechanismData()` - Get structured auth requirements
+- `Abxr.formatAuthDataForSubmission(input, type, domain?)` - Format user input for submission
+- `Abxr.getRequiresFinalAuth()` - Check if additional auth is required
+- `Abxr.completeFinalAuth(authData)` - Submit final authentication credentials
+
 ---
 
 ## Support
@@ -1598,7 +1796,7 @@ Abxr.EventAssessmentComplete("final_exam", 95, Abxr.EventStatus.Pass); // Struct
 ### FAQ
 
 #### How do I retrieve my Application ID and Authorization Secret?
-Your Application ID can be found in the ArborXR Insights Web Dashboard under the application details (you must be sure to use the App ID from the specific application you need data sent through). For the Authorization Secret, navigate to Settings > Organization Codes on the same dashboard.
+Your Application ID can be found in the ArborXR Portal under the application details (you must be sure to use the App ID from the specific application you need data sent through). For the Authorization Secret, navigate to Settings > Organization Codes on the same portal.
 
 #### How do I enable object tracking?
 Object tracking can be enabled by adding the Track Object component to any GameObject in your scene via the Unity Inspector.
@@ -1620,14 +1818,18 @@ Object tracking can be enabled by adding the Track Object component to any GameO
 | **Authentication** | ✅ | ✅ | ✅ |
 | **Headset Removal** | ✅ | ✅ | ✅ |
 | **Session Management** | ✅ | ✅ | ✅ |
-| **Debug Window** | ✅ | 🔄 Planned | 🔄 Planned |
+| **Debug Window** | ✅ | 🔄 Planned | ❌ |
+| **Debug Mode** | ❌ | ❌ | ✅ |
 | **ArborXR Device Management** | ✅ | 🔄 Planned | 🔄 Planned |
 | **Mixpanel Compatibility** | ✅ | ✅ | ✅ |
 | **Cognitive3D Compatibility** | ✅ | ❌ | ✅ |
+| **Dialog Customization** | ✅ | 🔄 Planned | ✅ |
 
 **Legend:** ✅ Supported | 🔄 Planned | ❌ Not Available
 
-#### Troubleshooting
+---
+
+## Troubleshooting
 
 **Problem: Library fails to authenticate**
 - **Solution**: Verify your App ID, Org ID, and Auth Secret are correct in your project settings
@@ -1648,146 +1850,3 @@ Object tracking can be enabled by adding the Track Object component to any GameO
 - **Solution**: Ensure all three credentials (App ID, Org ID, Auth Secret) are configured for development/testing
 - **Check**: Verify credentials are correctly entered in your platform's project settings
 - **Debug**: Check that the configuration is properly saved with the project
-
----
-
-## Quick Start Guide
-
-Once installed and configuration is complete, you can start tracking assessments with these simple calls:
-
-<details open>
-<summary><strong>Unity (C#)</strong></summary>
-
-```cpp
-// Add at the start your training (or training module)
-Abxr.EventAssessmentStart("safety_training1");
-
-// Add at the end your training (or training module)
-Abxr.EventAssessmentComplete("safety_training1", 92, EventStatus.Pass);
-// or
-Abxr.EventAssessmentComplete("safety_training1", 28, EventStatus.Fail);
-```
-
-In many cases you may want to track sub-tasks within the content
-
-```cpp
-// To track
-Abxr.EventObjectiveStart("open_valve");
-Abxr.EventObjectiveComplete("open_valve", 100, EventStatus.Complete);
-
-// Interaction tracking (individual user responses)
-Abxr.EventInteractionStart("select_option_a");
-Abxr.EventInteractionComplete("select_option_a", InteractionType.Select, "true");
-```
-
-</details>
-
-<details>
-<summary><strong>Unreal Engine (C++)</strong> - Click to expand</summary>
-
-```cpp
-// Add at the start your training (or training module)
-UAbxr::EventAssessmentStart(TEXT("safety_training1"));
-
-// Add at the end your training (or training module)
-UAbxr::EventAssessmentComplete(TEXT("safety_training1"), 92, EEventStatus::Pass);
-// or
-UAbxr::EventAssessmentComplete(TEXT("safety_training1"), 28, EEventStatus::Fail);
-```
-
-In many cases you may want to track sub-tasks within the content
-
-```cpp
-// To track
-UAbxr::EventObjectiveStart(TEXT("open_valve"));
-UAbxr::EventObjectiveComplete(TEXT("open_valve"), 100, EEventStatus::Complete);
-
-// Interaction tracking (individual user responses)
-UAbxr::EventInteractionStart(TEXT("select_option_a"));
-UAbxr::EventInteractionComplete(TEXT("select_option_a"), EInteractionType::Select, TEXT("true"));
-```
-
-</details>
-
-<details>
-<summary><strong>WebXR (JavaScript/TypeScript)</strong> - Click to expand</summary>
-
-```javascript
-// Add at the start your training (or training module)
-Abxr.EventAssessmentStart('safety_training1');
-
-// Add at the end your training (or training module)
-Abxr.EventAssessmentComplete('safety_training1', 92, Abxr.EventStatus.Pass);
-// or
-Abxr.EventAssessmentComplete('safety_training1', 28, Abxr.EventStatus.Fail);
-```
-
-In many cases you may want to track sub-tasks within the content
-
-```javascript
-// To track
-Abxr.EventObjectiveStart('open_valve');
-Abxr.EventObjectiveComplete('open_valve', 100, Abxr.EventStatus.Complete);
-
-// Interaction tracking (individual user responses)
-Abxr.EventInteractionStart('select_option_a');
-Abxr.EventInteractionComplete('select_option_a', Abxr.InteractionType.Select, Abxr.InteractionResult.Correct, 'true');
-```
-
-</details>
-
-<details>
-<summary><strong>Unreal Engine (C++)</strong> - Click to expand</summary>
-
-```cpp
-// Add at the start your training (or training module)
-UAbxr::EventAssessmentStart(TEXT("safety_training1"));
-
-// Add at the end your training (or training module)
-UAbxr::EventAssessmentComplete(TEXT("safety_training1"), 92, EEventStatus::Pass);
-// or
-UAbxr::EventAssessmentComplete(TEXT("safety_training1"), 28, EEventStatus::Fail);
-```
-
-In many cases you may want to track sub-tasks within the content
-
-```cpp
-// To track
-UAbxr::EventObjectiveStart(TEXT("open_valve"));
-UAbxr::EventObjectiveComplete(TEXT("open_valve"), 100, EEventStatus::Complete);
-
-// Interaction tracking (individual user responses)
-UAbxr::EventInteractionStart(TEXT("select_option_a"));
-UAbxr::EventInteractionComplete(TEXT("select_option_a"), EInteractionType::Select, TEXT("true"));
-```
-
-</details>
-
-<details>
-<summary><strong>WebXR (JavaScript/TypeScript)</strong> - Click to expand</summary>
-
-```javascript
-// Add at the start your training (or training module)
-Abxr.EventAssessmentStart('safety_training1');
-
-// Add at the end your training (or training module)
-Abxr.EventAssessmentComplete('safety_training1', 92, Abxr.EventStatus.Pass);
-// or
-Abxr.EventAssessmentComplete('safety_training1', 28, Abxr.EventStatus.Fail);
-```
-
-In many cases you may want to track sub-tasks within the content
-
-```javascript
-// To track
-Abxr.EventObjectiveStart('open_valve');
-Abxr.EventObjectiveComplete('open_valve', 100, Abxr.EventStatus.Complete);
-
-// Interaction tracking (individual user responses)
-Abxr.EventInteractionStart('select_option_a');
-Abxr.EventInteractionComplete('select_option_a', Abxr.InteractionType.Select, Abxr.InteractionResult.Correct, 'true');
-```
-
-</details>
-
----
