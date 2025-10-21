@@ -93,6 +93,9 @@ namespace AbxrLib.Runtime.Authentication
             _responseData = null;
             _authResponseModuleData = null;
             
+            // Reset failed authentication attempts counter
+            _failedAuthAttempts = 0;
+            
             Debug.LogWarning("AbxrLib: Authentication state cleared - data transmission stopped");
         }
 
@@ -168,6 +171,12 @@ namespace AbxrLib.Runtime.Authentication
                     Abxr.NotifyAuthCompleted(true);
                     _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
                 }
+            }
+            else
+            {
+                // AuthRequest failed - _authMechanism may be null due to ClearAuthenticationState()
+                Debug.LogWarning("AbxrLib: Initial authentication failed - no additional authentication possible");
+                Abxr.NotifyAuthCompleted(false, "Initial authentication failed");
             }
         }
 
@@ -290,6 +299,24 @@ namespace AbxrLib.Runtime.Authentication
         public static IEnumerator KeyboardAuthenticate(string keyboardInput = null)
         {
             _keyboardAuthSuccess = false;
+            
+            // Check if _authMechanism is null (can happen after failed authentication)
+            if (_authMechanism == null)
+            {
+                Debug.LogError("AbxrLib: Authentication mechanism is null. Cannot proceed with keyboard authentication.");
+                Abxr.NotifyAuthCompleted(false, "Authentication mechanism not available");
+                yield break;
+            }
+            
+            // Check if we've exceeded maximum retry attempts
+            int maxRetries = Configuration.Instance.sendRetriesOnFailure;
+            if (_failedAuthAttempts >= maxRetries)
+            {
+                Debug.LogError($"AbxrLib: Maximum authentication attempts ({maxRetries}) exceeded. Authentication failed.");
+                Abxr.NotifyAuthCompleted(false, $"Maximum authentication attempts ({maxRetries}) exceeded");
+                yield break;
+            }
+            
             if (keyboardInput != null)
             {
                 string originalPrompt = _authMechanism.prompt;
