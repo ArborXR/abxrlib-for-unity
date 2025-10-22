@@ -306,7 +306,7 @@ namespace AbxrLib.Runtime.Authentication
             {
                 string originalPrompt = _authMechanism.prompt;
                 _authMechanism.prompt = keyboardInput;
-                yield return AuthRequest();
+                yield return AuthRequest(false); // Don't retry on invalid credentials
                 if (_keyboardAuthSuccess == true)
                 {
                     KeyboardHandler.Destroy();
@@ -352,7 +352,7 @@ namespace AbxrLib.Runtime.Authentication
             //TODO Geolocation
         }
 
-        private static IEnumerator AuthRequest()
+        private static IEnumerator AuthRequest(bool withRetry = true)
         {
             if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
@@ -380,15 +380,6 @@ namespace AbxrLib.Runtime.Authentication
             string json = JsonConvert.SerializeObject(data);
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             
-            // Use separate coroutine to avoid yield in try-catch
-            yield return AuthRequestWithRetry(fullUri, json);
-        }
-        
-        /// <summary>
-        /// Performs authentication request with retry logic, avoiding yield statements in try-catch blocks
-        /// </summary>
-        private static IEnumerator AuthRequestWithRetry(Uri fullUri, string json)
-        {
             int retryCount = 0;
             bool success = false;
             string lastError = "";
@@ -548,8 +539,12 @@ namespace AbxrLib.Runtime.Authentication
                     Debug.LogWarning($"AbxrLib: Authentication attempt {retryCount} failed, retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
                     yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
                 }
+                
+                // Exit retry loop if withRetry is false (for keyboard auth)
+                if (!withRetry) break;
             }
         }
+        
         
         /// <summary>
         /// Determines if an HTTP error should be retried
