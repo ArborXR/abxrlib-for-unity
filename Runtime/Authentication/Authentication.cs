@@ -318,8 +318,12 @@ namespace AbxrLib.Runtime.Authentication
                     
                     yield break;
                 }
-
-                _authMechanism.prompt = originalPrompt;
+                else
+                {
+                    // Authentication failed - likely invalid credentials
+                    Debug.Log("AbxrLib: Authentication failed, restoring original prompt for retry");
+                    _authMechanism.prompt = originalPrompt;
+                }
             }
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
@@ -500,8 +504,18 @@ namespace AbxrLib.Runtime.Authentication
                         // Handle different types of network errors
                         lastError = HandleNetworkError(request, retryCount);
                         
-                        // All network errors should be retryable since we need authentication to succeed
-                        responseShouldRetry = true;
+                        // Only retry on server errors (5xx) and network errors, not client errors (4xx)
+                        if (IsRetryableHttpError(request))
+                        {
+                            responseShouldRetry = true;
+                        }
+                        else
+                        {
+                            // Client error (4xx) - don't retry, this is likely invalid credentials
+                            Debug.LogWarning($"AbxrLib: Authentication failed with client error: {lastError}");
+                            // Exit the retry loop for client errors (invalid credentials)
+                            break;
+                        }
                     }
                 }
                 catch (System.Exception ex)
@@ -535,6 +549,24 @@ namespace AbxrLib.Runtime.Authentication
                     yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
                 }
             }
+        }
+        
+        /// <summary>
+        /// Determines if an HTTP error should be retried
+        /// </summary>
+        private static bool IsRetryableHttpError(UnityWebRequest request)
+        {
+            // Retry on connection errors and 5xx server errors
+            if (request.result == UnityWebRequest.Result.ConnectionError)
+                return true;
+                
+            if (request.result == UnityWebRequest.Result.ProtocolError)
+            {
+                // Retry on 5xx server errors, but not on 4xx client errors
+                return request.responseCode >= 500 && request.responseCode < 600;
+            }
+            
+            return false;
         }
         
         /// <summary>
