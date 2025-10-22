@@ -155,28 +155,21 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             yield return AuthRequest();
-            if (!string.IsNullOrEmpty(_authToken))
+            
+            // AuthRequest() now guarantees success due to infinite retry loop
+            yield return GetConfiguration();
+            if (!string.IsNullOrEmpty(_authMechanism?.prompt))
             {
-                yield return GetConfiguration();
-                if (!string.IsNullOrEmpty(_authMechanism?.prompt))
-                {
-                    Debug.Log("AbxrLib: Additional user authentication required (PIN/credentials)");
-                    yield return KeyboardAuthenticate();
-                    // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
-                }
-                else
-                {
-                    Debug.Log("AbxrLib: Authentication fully completed");
-                    // No additional auth needed - notify completion now
-                    Abxr.NotifyAuthCompleted(true);
-                    _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
-                }
+                Debug.Log("AbxrLib: Additional user authentication required (PIN/credentials)");
+                yield return KeyboardAuthenticate();
+                // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
             }
             else
             {
-                // AuthRequest failed - _authMechanism may be null due to ClearAuthenticationState()
-                Debug.LogWarning("AbxrLib: Initial authentication failed - no additional authentication possible");
-                Abxr.NotifyAuthCompleted(false, "Initial authentication failed");
+                Debug.Log("AbxrLib: Authentication fully completed");
+                // No additional auth needed - notify completion now
+                Abxr.NotifyAuthCompleted(true);
+                _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
             }
         }
 
@@ -298,49 +291,67 @@ namespace AbxrLib.Runtime.Authentication
 
         public static IEnumerator KeyboardAuthenticate(string keyboardInput = null)
         {
+            Debug.Log($"AbxrLib: KeyboardAuthenticate called with input: {(keyboardInput != null ? "provided" : "null")}");
             _keyboardAuthSuccess = false;
             
             // Check if _authMechanism is null (can happen after failed authentication)
             if (_authMechanism == null)
             {
                 Debug.LogError("AbxrLib: Authentication mechanism is null. Cannot proceed with keyboard authentication.");
-                Abxr.NotifyAuthCompleted(false, "Authentication mechanism not available");
+                // Don't notify failure - keep user locked in until they authenticate properly
                 yield break;
             }
             
-            // Check if we've exceeded maximum retry attempts
-            int maxRetries = Configuration.Instance.sendRetriesOnFailure;
-            if (_failedAuthAttempts >= maxRetries)
-            {
-                Debug.LogError($"AbxrLib: Maximum authentication attempts ({maxRetries}) exceeded. Authentication failed.");
-                Abxr.NotifyAuthCompleted(false, $"Maximum authentication attempts ({maxRetries}) exceeded");
-                yield break;
-            }
+            Debug.Log($"AbxrLib: Starting keyboard authentication loop, _keyboardAuthSuccess = {_keyboardAuthSuccess}");
             
-            if (keyboardInput != null)
+            // Keep asking for authentication until successful
+            while (_keyboardAuthSuccess != true)
             {
-                string originalPrompt = _authMechanism.prompt;
-                _authMechanism.prompt = keyboardInput;
-                yield return AuthRequest();
-                if (_keyboardAuthSuccess == true)
+                Debug.Log($"AbxrLib: Keyboard auth loop iteration, keyboardInput = {(keyboardInput != null ? "provided" : "null")}");
+                
+                if (keyboardInput != null)
                 {
-                    KeyboardHandler.Destroy();
-                    _failedAuthAttempts = 0;
-                    Debug.Log("AbxrLib: Final authentication successful");
+                    Debug.Log($"AbxrLib: Processing keyboard input: {keyboardInput}");
+                    string originalPrompt = _authMechanism.prompt;
+                    _authMechanism.prompt = keyboardInput;
+                    yield return AuthRequest(retryOnFailure: false);
+                    Debug.Log($"AbxrLib: AuthRequest completed, _keyboardAuthSuccess = {_keyboardAuthSuccess}");
                     
-                    // Notify completion for keyboard authentication success
-                    Abxr.NotifyAuthCompleted(true);
-                    
-                    yield break;
-                }
+                    if (_keyboardAuthSuccess == true)
+                    {
+                        Debug.Log("AbxrLib: Final authentication successful");
+                        KeyboardHandler.Destroy();
+                        _failedAuthAttempts = 0;
+                        
+                        // Notify completion for keyboard authentication success
+                        Abxr.NotifyAuthCompleted(true);
+                        
+                        yield break;
+                    }
 
-                _authMechanism.prompt = originalPrompt;
+                    Debug.Log("AbxrLib: Authentication failed, restoring original prompt");
+                    _authMechanism.prompt = originalPrompt;
+                    keyboardInput = null; // Clear the input so we show the keyboard next time
+                }
+            
+                Debug.Log($"AbxrLib: Showing keyboard again, failed attempts: {_failedAuthAttempts}");
+                string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
+                prompt += _authMechanism.prompt;
+                
+                // Destroy existing keyboard before recreating to ensure fresh instance
+                Debug.Log("AbxrLib: Destroying existing keyboard before recreating");
+                KeyboardHandler.Destroy();
+                
+                Debug.Log("AbxrLib: Presenting keyboard");
+                Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
+                _failedAuthAttempts++;
+                
+                Debug.Log("AbxrLib: Keyboard updated, yielding to wait for user input");
+                // Wait for user input - this will be called again with the new input
+                yield break;
             }
-        
-            string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
-            prompt += _authMechanism.prompt;
-            Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
-            _failedAuthAttempts++;
+            
+            Debug.Log("AbxrLib: Keyboard authentication loop completed");
         }
 
         private static void SetSessionData()
@@ -363,7 +374,7 @@ namespace AbxrLib.Runtime.Authentication
             //TODO Geolocation
         }
 
-        private static IEnumerator AuthRequest()
+        private static IEnumerator AuthRequest(bool retryOnFailure = true)
         {
             if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
@@ -391,82 +402,65 @@ namespace AbxrLib.Runtime.Authentication
             string json = JsonConvert.SerializeObject(data);
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             
-            // Use separate coroutine to avoid yield in try-catch
-            yield return AuthRequestWithRetry(fullUri, json);
+            if (retryOnFailure)
+            {
+                yield return AuthRequestWithRetry(fullUri, json);
+            }
+            else
+            {
+                yield return AuthRequestSingleAttempt(fullUri, json);
+            }
         }
         
         /// <summary>
-        /// Performs authentication request with retry logic, avoiding yield statements in try-catch blocks
+        /// Performs a single authentication attempt without retry logic
+        /// Used for keyboard authentication where we don't want to retry with the same invalid credentials
         /// </summary>
-        private static IEnumerator AuthRequestWithRetry(Uri fullUri, string json)
+        private static IEnumerator AuthRequestSingleAttempt(Uri fullUri, string json)
         {
-            int retryCount = 0;
-            int maxRetries = Configuration.Instance.sendRetriesOnFailure;
-            bool success = false;
-            string lastError = "";
+            // Create request and handle creation errors
+            UnityWebRequest request = null;
             
-            while (retryCount <= maxRetries && !success)
+            // Request creation with error handling (no yield statements)
+            try
             {
-                // Create request and handle creation errors
-                UnityWebRequest request = null;
-                bool requestCreated = false;
-                bool shouldRetry = false;
+                request = new UnityWebRequest(fullUri.ToString(), "POST");
+                Utils.BuildRequest(request, json);
                 
-                // Request creation with error handling (no yield statements)
-                try
+                // Set timeout to prevent hanging requests
+                request.timeout = Configuration.Instance.requestTimeoutSeconds;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Authentication request creation failed: {ex.Message}");
+                yield break;
+            }
+            
+            // Send request (yield outside try-catch)
+            yield return request.SendWebRequest();
+            
+            // Handle response (no yield statements in try-catch)
+            try
+            {
+                if (request.result == UnityWebRequest.Result.Success)
                 {
-                    request = new UnityWebRequest(fullUri.ToString(), "POST");
-                    Utils.BuildRequest(request, json);
-                    
-                    // Set timeout to prevent hanging requests
-                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
-                    requestCreated = true;
-                }
-                catch (System.Exception ex)
-                {
-                    lastError = $"Authentication request creation failed: {ex.Message}";
-                    Debug.LogError($"AbxrLib: {lastError}");
-                    
-                    if (IsRetryableException(ex) && retryCount < maxRetries)
+                    AuthResponse postResponse = null;
+                    try
                     {
-                        shouldRetry = true;
+                        postResponse = JsonConvert.DeserializeObject<AuthResponse>(request.downloadHandler.text);
                     }
-                }
-                
-                // Handle retry logic for request creation failure (yield outside try-catch)
-                if (shouldRetry)
-                {
-                    retryCount++;
-                    Debug.LogWarning($"AbxrLib: Authentication request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
-                    yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
-                    continue;
-                }
-                else if (!requestCreated)
-                {
-                    break; // Non-retryable error or max retries reached
-                }
-                
-                // Send request (yield outside try-catch)
-                yield return request.SendWebRequest();
-                
-                // Handle response (no yield statements in try-catch)
-                bool responseSuccess = false;
-                bool responseShouldRetry = false;
-                
-                try
-                {
-                    if (request.result == UnityWebRequest.Result.Success)
+                    catch (Exception ex)
                     {
-                        AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(request.downloadHandler.text);
-                        
-                        // Validate response data
-                        if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
-                        {
-                            lastError = "Invalid authentication response: missing token";
-                            Debug.LogError($"AbxrLib: {lastError}");
-                            break; // Exit retry loop - this is a non-retryable error
-                        }
-                        
+                        Debug.LogError($"AbxrLib: Failed to deserialize authentication response: {ex.Message}");
+                    }
+                    
+                    // Validate response data
+                    if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
+                    {
+                        Debug.LogError("AbxrLib: Invalid authentication response: missing token");
+                    }
+                    else
+                    {
                         _authToken = postResponse.Token;
                         _apiSecret = postResponse.Secret;
                         
@@ -474,99 +468,99 @@ namespace AbxrLib.Runtime.Authentication
                         Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                         if (decodedJwt == null)
                         {
-                            lastError = "Failed to decode JWT token - authentication cannot proceed";
-                            Debug.LogError($"AbxrLib: {lastError}");
-                            break; // Exit retry loop - this is a non-retryable error
+                            Debug.LogError("AbxrLib: Failed to decode JWT token - authentication cannot proceed");
                         }
-                        
-                        if (!decodedJwt.ContainsKey("exp"))
+                        else if (!decodedJwt.ContainsKey("exp"))
                         {
-                            lastError = "Invalid JWT token: missing expiration field";
-                            Debug.LogError($"AbxrLib: {lastError}");
-                            break; // Exit retry loop - this is a non-retryable error
+                            Debug.LogError("AbxrLib: Invalid JWT token: missing expiration field");
                         }
-                        
-                        try
+                        else
                         {
-                            _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
-                        }
-                        catch (Exception ex)
-                        {
-                            lastError = $"Invalid JWT token expiration: {ex.Message}";
-                            Debug.LogError($"AbxrLib: {lastError}");
-                            break; // Exit retry loop - this is a non-retryable error
-                        }
-                        
-                        _responseData = postResponse;
-                        _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
+                            try
+                            {
+                                // Safely cast exp to long, handling different numeric types
+                                long expValue;
+                                if (decodedJwt["exp"] is long longVal)
+                                    expValue = longVal;
+                                else if (decodedJwt["exp"] is int intVal)
+                                    expValue = intVal;
+                                else if (decodedJwt["exp"] is double doubleVal)
+                                    expValue = (long)doubleVal;
+                                else
+                                    throw new InvalidCastException($"JWT exp field is not a valid number type: {decodedJwt["exp"]?.GetType()}");
+                                
+                                _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds(expValue).UtcDateTime;
+                                
+                                _responseData = postResponse;
+                                _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules ?? new List<Dictionary<string, object>>());
 
-                        if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
-                        
-                        // Log initial success - but don't notify completion yet since additional auth may be required
-                        Debug.Log("AbxrLib: API connection established");
-                        responseSuccess = true;
-                        success = true;
-                    }
-                    else
-                    {
-                        // Handle different types of network errors
-                        lastError = HandleNetworkError(request, retryCount, maxRetries);
-                        
-                        if (IsRetryableError(request))
-                        {
-                            responseShouldRetry = true;
+                                if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
+                                
+                                // Log success for keyboard authentication
+                                Debug.Log("AbxrLib: Keyboard authentication successful");
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.LogError($"AbxrLib: Invalid JWT token expiration: {ex.Message}");
+                            }
                         }
                     }
                 }
-                catch (System.Exception ex)
+                else
                 {
-                    lastError = $"Authentication response handling failed: {ex.Message}";
-                    Debug.LogError($"AbxrLib: {lastError}");
-                    
-                    if (IsRetryableException(ex) && retryCount < maxRetries)
-                    {
-                        responseShouldRetry = true;
-                    }
-                }
-                finally
-                {
-                    // Always dispose of request
-                    request?.Dispose();
-                }
-                
-                // Handle retry logic for response failure (yield outside try-catch)
-                if (responseShouldRetry)
-                {
-                    retryCount++;
-                    if (retryCount <= maxRetries)
-                    {
-                        Debug.LogWarning($"AbxrLib: Authentication attempt {retryCount} failed, retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
-                        yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
-                    }
-                }
-                else if (!responseSuccess)
-                {
-                    // Non-retryable error, break out of retry loop
-                    break;
+                    // Handle different types of network errors
+                    string errorMessage = HandleNetworkError(request, 0);
+                    Debug.LogError($"AbxrLib: Keyboard authentication failed: {errorMessage}");
                 }
             }
-            
-            if (!success)
+            catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib: Authentication failed after {retryCount} attempts: {lastError}");
+                Debug.LogError($"AbxrLib: Keyboard authentication response handling failed: {ex.Message}");
+            }
+            finally
+            {
+                // Always dispose of request
+                request?.Dispose();
+            }
+        }
+        
+        /// <summary>
+        /// Performs authentication request with continuous retry until success
+        /// </summary>
+        private static IEnumerator AuthRequestWithRetry(Uri fullUri, string json)
+        {
+            int retryCount = 0;
+            bool success = false;
+            
+            while (!success)
+            {
+                // Store the current authentication state to check if it changed
+                string tokenBefore = _authToken;
                 
-                // Clear authentication state to stop data transmission
-                ClearAuthenticationState();
+                // Attempt authentication
+                yield return AuthRequestSingleAttempt(fullUri, json);
                 
-                // Notify authentication failure
-                Abxr.NotifyAuthCompleted(false, lastError);
+                // Check if authentication was successful
+                if (!string.IsNullOrEmpty(_authToken) && _authToken != tokenBefore)
+                {
+                    success = true;
+                    Debug.Log("AbxrLib: API connection established");
+                }
+                else
+                {
+                    retryCount++;
+                    Debug.LogError($"AbxrLib: Authentication attempt {retryCount} failed, retrying...");
+                    
+                    // Wait before retrying to avoid overwhelming the server
+                    yield return new WaitForSeconds(1.0f);
+                }
             }
         }
         
         /// <summary>
         /// Handles network errors and determines appropriate error messages
         /// </summary>
-        private static string HandleNetworkError(UnityWebRequest request, int retryCount, int maxRetries)
+        private static string HandleNetworkError(UnityWebRequest request, int retryCount)
         {
             string errorMessage = "";
             
@@ -594,173 +588,77 @@ namespace AbxrLib.Runtime.Authentication
             return errorMessage;
         }
         
-        /// <summary>
-        /// Determines if a network error is retryable
-        /// </summary>
-        private static bool IsRetryableError(UnityWebRequest request)
-        {
-            // Retry on connection errors and 5xx server errors
-            if (request.result == UnityWebRequest.Result.ConnectionError)
-                return true;
-                
-            if (request.result == UnityWebRequest.Result.ProtocolError)
-            {
-                // Retry on 5xx server errors, but not on 4xx client errors
-                return request.responseCode >= 500 && request.responseCode < 600;
-            }
-            
-            return false;
-        }
-        
-        /// <summary>
-        /// Determines if an exception is retryable
-        /// </summary>
-        private static bool IsRetryableException(System.Exception ex)
-        {
-            // Retry on network-related exceptions
-            return ex is System.Net.WebException || 
-                   ex is System.Net.Sockets.SocketException ||
-                   ex.Message.Contains("timeout") ||
-                   ex.Message.Contains("connection");
-        }
 
         private static IEnumerator GetConfiguration()
         {
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
             
-            // Use separate coroutine to avoid yield in try-catch
-            yield return GetConfigurationWithRetry(fullUri);
-        }
-        
-        /// <summary>
-        /// Performs configuration request with retry logic, avoiding yield statements in try-catch blocks
-        /// </summary>
-        private static IEnumerator GetConfigurationWithRetry(Uri fullUri)
-        {
-            int retryCount = 0;
-            int maxRetries = Configuration.Instance.sendRetriesOnFailure;
-            bool success = false;
+            // Create request and handle creation errors
+            UnityWebRequest request = null;
             
-            while (retryCount <= maxRetries && !success)
+            // Request creation with error handling (no yield statements)
+            bool requestCreated = false;
+            try
             {
-                // Create request and handle creation errors
-                UnityWebRequest request = null;
-                bool requestCreated = false;
-                bool shouldRetry = false;
-                
-                // Request creation with error handling (no yield statements)
-                try
+                request = UnityWebRequest.Get(fullUri.ToString());
+                request.SetRequestHeader("Accept", "application/json");
+                request.timeout = Configuration.Instance.requestTimeoutSeconds;
+                SetAuthHeaders(request);
+                requestCreated = true;
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
+                Debug.LogWarning("AbxrLib: GetConfiguration request creation failed, using default configuration");
+            }
+            
+            if (!requestCreated)
+            {
+                yield break;
+            }
+            
+            // Send request (yield outside try-catch)
+            yield return request.SendWebRequest();
+            
+            // Handle response (no yield statements in try-catch)
+            try
+            {
+                if (request.result == UnityWebRequest.Result.Success)
                 {
-                    request = UnityWebRequest.Get(fullUri.ToString());
-                    request.SetRequestHeader("Accept", "application/json");
-                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
-                    SetAuthHeaders(request);
-                    requestCreated = true;
-                }
-                catch (System.Exception ex)
-                {
-                    Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
-                    
-                    if (IsRetryableException(ex) && retryCount < maxRetries)
+                    string response = request.downloadHandler.text;
+                    if (string.IsNullOrEmpty(response))
                     {
-                        shouldRetry = true;
-                    }
-                }
-                
-                // Handle retry logic for request creation failure (yield outside try-catch)
-                if (shouldRetry)
-                {
-                    retryCount++;
-                    Debug.LogWarning($"AbxrLib: GetConfiguration request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
-                    yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
-                    continue;
-                }
-                else if (!requestCreated)
-                {
-                    break; // Non-retryable error or max retries reached
-                }
-                
-                // Send request (yield outside try-catch)
-                yield return request.SendWebRequest();
-                
-                // Handle response (no yield statements in try-catch)
-                bool responseSuccess = false;
-                bool responseShouldRetry = false;
-                
-                try
-                {
-                    if (request.result == UnityWebRequest.Result.Success)
-                    {
-                        string response = request.downloadHandler.text;
-                        if (string.IsNullOrEmpty(response))
-                        {
-                            Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
-                            responseSuccess = true;
-                            success = true;
-                        }
-                        else
-                        {
-                            var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
-                            if (config == null)
-                            {
-                                Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
-                                responseSuccess = true;
-                                success = true;
-                            }
-                            else
-                            {
-                                SetConfigFromPayload(config);
-                                _authMechanism = config.authMechanism;
-                                responseSuccess = true;
-                                success = true;
-                                Debug.Log("AbxrLib: Configuration loaded successfully");
-                            }
-                        }
+                        Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
                     }
                     else
                     {
-                        string errorMessage = HandleNetworkError(request, retryCount, maxRetries);
-                        Debug.LogWarning($"AbxrLib: GetConfiguration failed (attempt {retryCount + 1}): {errorMessage}");
-                        
-                        if (IsRetryableError(request))
+                        var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
+                        if (config == null)
                         {
-                            responseShouldRetry = true;
+                            Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
+                        }
+                        else
+                        {
+                            SetConfigFromPayload(config);
+                            _authMechanism = config.authMechanism;
+                            Debug.Log("AbxrLib: Configuration loaded successfully");
                         }
                     }
                 }
-                catch (System.Exception ex)
+                else
                 {
-                    Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
-                    
-                    if (IsRetryableException(ex) && retryCount < maxRetries)
-                    {
-                        responseShouldRetry = true;
-                    }
-                }
-                finally
-                {
-                    // Always dispose of request
-                    request?.Dispose();
-                }
-                
-                // Handle retry logic for response failure (yield outside try-catch)
-                if (responseShouldRetry)
-                {
-                    retryCount++;
-                    if (retryCount <= maxRetries)
-                    {
-                        yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
-                    }
-                }
-                else if (!responseSuccess)
-                {
-                    break; // Non-retryable error, break out of retry loop
+                    string errorMessage = HandleNetworkError(request, 0);
+                    Debug.LogWarning($"AbxrLib: GetConfiguration failed: {errorMessage}");
                 }
             }
-            
-            if (!success)
+            catch (System.Exception ex)
             {
-                Debug.LogWarning("AbxrLib: GetConfiguration failed after all retry attempts, using default configuration");
+                Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
+            }
+            finally
+            {
+                // Always dispose of request
+                request?.Dispose();
             }
         }
     
@@ -851,17 +749,17 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         private static IEnumerator ProcessAuthHandoff(string handoffJson)
         {
-            bool success = false;
-            
             try
             {
                 Debug.Log("AbxrLib: Processing authentication handoff from external launcher");
                 
                 // Parse the handoff JSON
                 AuthHandoffData handoffData = null;
+                bool parseSuccess = false;
                 try 
                 {
                     handoffData = JsonConvert.DeserializeObject<AuthHandoffData>(handoffJson);
+                    parseSuccess = true;
                 }
                 catch (Exception ex)
                 {
@@ -869,6 +767,10 @@ namespace AbxrLib.Runtime.Authentication
                     Debug.LogError($"AbxrLib: Failed to parse handoff JSON: {ex.Message}\n" +
                                   $"Exception Type: {ex.GetType().Name}\n" +
                                   $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+                }
+                
+                if (!parseSuccess)
+                {
                     yield break;
                 }
                 
@@ -913,7 +815,6 @@ namespace AbxrLib.Runtime.Authentication
                 Abxr.NotifyAuthCompleted(true);
                 _keyboardAuthSuccess = true;
                 
-                success = true;
                 _authHandoffData = handoffData;
             }
             catch (Exception ex)
@@ -923,12 +824,6 @@ namespace AbxrLib.Runtime.Authentication
                               $"Exception Type: {ex.GetType().Name}\n" +
                               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 _authHandoffCompleted = false;
-            }
-            
-            // Yield outside of try-catch block
-            if (success)
-            {
-                yield return null;
             }
         }
     
