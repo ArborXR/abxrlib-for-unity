@@ -398,8 +398,7 @@ namespace AbxrLib.Runtime.Authentication
                         // Validate response data
                         if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
                         {
-                            Debug.LogError("AbxrLib: Invalid authentication response: missing token");
-                            break; // Exit retry loop - this is a non-retryable error
+                            throw new Exception("Invalid authentication response: missing token");
                         }
                         
                         _authToken = postResponse.Token;
@@ -409,14 +408,12 @@ namespace AbxrLib.Runtime.Authentication
                         Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
                         if (decodedJwt == null)
                         {
-                            Debug.LogError("AbxrLib: Failed to decode JWT token - authentication cannot proceed");
-                            break; // Exit retry loop - this is a non-retryable error
+                            throw new Exception("Failed to decode JWT token - authentication cannot proceed");
                         }
                         
                         if (!decodedJwt.ContainsKey("exp"))
                         {
-                            Debug.LogError("AbxrLib: Invalid JWT token: missing expiration field");
-                            break; // Exit retry loop - this is a non-retryable error
+                            throw new Exception("Invalid JWT token: missing expiration field");
                         }
                         
                         try
@@ -425,8 +422,7 @@ namespace AbxrLib.Runtime.Authentication
                         }
                         catch (Exception ex)
                         {
-                            Debug.LogError($"AbxrLib: Invalid JWT token expiration: {ex.Message}");
-                            break; // Exit retry loop - this is a non-retryable error
+                            throw new Exception($"Invalid JWT token expiration: {ex.Message}");
                         }
                         
                         _responseData = postResponse;
@@ -512,7 +508,7 @@ namespace AbxrLib.Runtime.Authentication
             catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
-                yield break; // Non-retryable error
+                yield break;
             }
             
             // Send request (yield outside try-catch)
