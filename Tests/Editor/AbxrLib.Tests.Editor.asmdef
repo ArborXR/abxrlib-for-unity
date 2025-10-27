@@ -1,0 +1,23 @@
+{
+    "name": "AbxrLib.Tests.Editor",
+    "rootNamespace": "AbxrLib.Tests.Editor",
+    "references": [
+        "AbxrLib.Runtime",
+        "AbxrLib.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
