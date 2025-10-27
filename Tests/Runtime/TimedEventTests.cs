@@ -74,7 +74,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string assessmentName = "timed_assessment";
             int score = 95;
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             
             // Act
             Abxr.StartTimedEvent(assessmentName);
@@ -101,7 +101,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string objectiveName = "timed_objective";
             int score = 90;
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             
             // Act
             Abxr.StartTimedEvent(objectiveName);
@@ -127,8 +127,8 @@ namespace AbxrLib.Tests.Runtime
         {
             // Arrange
             string interactionName = "timed_interaction";
-            var type = InteractionType.Select;
-            var result = InteractionResult.Correct;
+            var type = Abxr.InteractionType.Select;
+            var result = Abxr.InteractionResult.Correct;
             string response = "timed_response";
             
             // Act

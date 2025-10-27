@@ -256,15 +256,15 @@ namespace AbxrLib.Tests.Runtime.TestDoubles
         public void SetMockModuleData(params string[] moduleTargets)
         {
             MockModuleData.Clear();
-            foreach (var target in moduleTargets)
+            for (int i = 0; i < moduleTargets.Length; i++)
             {
-                MockModuleData.Add(new Abxr.ModuleData
-                {
-                    moduleTarget = target,
-                    userId = MockUserId,
-                    userEmail = MockUserEmail,
-                    userData = new Dictionary<string, object> { { "test_data", "value" } }
-                });
+                var target = moduleTargets[i];
+                MockModuleData.Add(new Abxr.ModuleData(
+                    id: $"module_{i + 1}",
+                    name: $"Module {i + 1}",
+                    target: target,
+                    order: i + 1
+                ));
             }
         }
     }

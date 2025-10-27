@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.TestTools;
 using NUnit.Framework;
+using AbxrLib.Runtime.Core;
 using AbxrLib.Tests.Runtime.TestDoubles;
 
 namespace AbxrLib.Tests.Runtime.Utilities
@@ -33,44 +34,80 @@ namespace AbxrLib.Tests.Runtime.Utilities
             // Clear any existing timers
             ClearTimedEvents();
             
-            // Reset any authentication state
-            // Note: This would need to be implemented in the actual Abxr class
-            // Abxr.ClearAuthenticationState();
+            // Enable auto-start authentication for real server testing
+            if (Configuration.Instance != null)
+            {
+                Configuration.Instance.disableAutoStartAuthentication = false;
+                Configuration.Instance.authenticationStartDelay = 0.1f; // Small delay for test stability
+            }
             
-            Debug.Log("TestHelpers: Test environment setup complete");
+            Debug.Log("TestHelpers: Test environment setup complete (real server authentication enabled)");
         }
         
         /// <summary>
-        /// Sets up test environment with specific credentials for authentication testing
+        /// Sets up test environment with real server credentials for integration testing
         /// </summary>
-        public static void SetupAuthTestEnvironment(string appID = "test_app_id", string orgID = "test_org_id", string authSecret = "test_auth_secret", string restUrl = "https://test-api.example.com")
+        public static void SetupRealServerTestEnvironment(string appID, string orgID, string authSecret, string restUrl)
         {
             // Clear any existing state
             CleanupTestEnvironment();
             
-            // Set up mock configuration with provided credentials
-            var mockConfig = new MockConfiguration
+            // Configure the real Configuration instance with provided credentials
+            if (Configuration.Instance != null)
             {
-                appID = appID,
-                orgID = orgID,
-                authSecret = authSecret,
-                restUrl = restUrl,
-                disableAutoStartAuthentication = false, // Enable for auth tests
-                authenticationStartDelay = 0.1f
-            };
-            
-            // Validate configuration has required fields
-            if (!mockConfig.IsValid())
-            {
-                Debug.LogError("TestHelpers: Auth test configuration is invalid");
-                return;
+                Configuration.Instance.appID = appID;
+                Configuration.Instance.orgID = orgID;
+                Configuration.Instance.authSecret = authSecret;
+                Configuration.Instance.restUrl = restUrl;
+                Configuration.Instance.disableAutoStartAuthentication = false;
+                Configuration.Instance.authenticationStartDelay = 0.1f;
+                
+                Debug.Log($"TestHelpers: Real server test environment setup complete with appID: {appID}, orgID: {orgID}, restUrl: {restUrl}");
             }
+            else
+            {
+                Debug.LogError("TestHelpers: Configuration.Instance is null - cannot set up real server credentials");
+            }
+        }
+        
+        /// <summary>
+        /// Sets up test environment using existing configuration from the demo app
+        /// </summary>
+        public static void SetupTestEnvironmentWithExistingConfig()
+        {
+            // Clear any existing state
+            CleanupTestEnvironment();
             
-            // Initialize Abxr with mock configuration
-            // Note: This would need to be implemented in the actual Abxr class
-            // For now, we'll assume the configuration is set up properly
+            // Enable test authentication mode
+            TestAuthenticationProvider.EnableTestMode();
             
-            Debug.Log($"TestHelpers: Auth test environment setup complete with appID: {appID}, orgID: {orgID}, restUrl: {restUrl}");
+            // Set default test responses
+            TestAuthenticationProvider.SetDefaultResponses(
+                pin: "999999",
+                email: "testuser", 
+                text: "EmpID1234"
+            );
+            
+            // Use the existing configuration from the demo app
+            if (Configuration.Instance != null)
+            {
+                // Enable auto-start authentication for tests with test mode
+                Configuration.Instance.disableAutoStartAuthentication = false;
+                Configuration.Instance.authenticationStartDelay = 0.1f; // Small delay for test stability
+                
+                Debug.Log($"TestHelpers: Using existing configuration - appID: {Configuration.Instance.appID}, orgID: {Configuration.Instance.orgID}, restUrl: {Configuration.Instance.restUrl}");
+                Debug.Log("TestHelpers: Test authentication mode enabled - will use programmatic responses");
+                
+                // Validate that the configuration has the required fields
+                if (!Configuration.Instance.IsValid())
+                {
+                    Debug.LogError("TestHelpers: Existing configuration is invalid - check your AbxrLib.asset file");
+                }
+            }
+            else
+            {
+                Debug.LogError("TestHelpers: Configuration.Instance is null - make sure AbxrLib.asset exists in Resources folder");
+            }
         }
         
         /// <summary>
@@ -83,6 +120,9 @@ namespace AbxrLib.Tests.Runtime.Utilities
             
             // Clear timers
             ClearTimedEvents();
+            
+            // Disable test authentication mode
+            TestAuthenticationProvider.DisableTestMode();
             
             Debug.Log("TestHelpers: Test environment cleanup complete");
         }
@@ -223,6 +263,24 @@ namespace AbxrLib.Tests.Runtime.Utilities
         {
             yield return WaitForCondition(() => capture.WasEventCaptured(eventName), timeoutSeconds);
             Assert.IsTrue(capture.WasEventCaptured(eventName), $"Event '{eventName}' should be captured");
+        }
+        
+        /// <summary>
+        /// Waits for a specific log to be captured
+        /// </summary>
+        public static IEnumerator WaitForLog(TestDataCapture capture, string logLevel, float timeoutSeconds = 5.0f)
+        {
+            yield return WaitForCondition(() => capture.WasLogCaptured(logLevel), timeoutSeconds);
+            Assert.IsTrue(capture.WasLogCaptured(logLevel), $"Log with level '{logLevel}' should be captured");
+        }
+        
+        /// <summary>
+        /// Waits for a specific telemetry to be captured
+        /// </summary>
+        public static IEnumerator WaitForTelemetry(TestDataCapture capture, string telemetryName, float timeoutSeconds = 5.0f)
+        {
+            yield return WaitForCondition(() => capture.WasTelemetryCaptured(telemetryName), timeoutSeconds);
+            Assert.IsTrue(capture.WasTelemetryCaptured(telemetryName), $"Telemetry '{telemetryName}' should be captured");
         }
         
         /// <summary>

@@ -8,7 +8,7 @@
  * - Objective tracking (EventObjectiveStart/Complete)
  * - Interaction tracking (EventInteractionStart/Complete)
  * - Automatic duration calculation
- * - EventStatus and InteractionType enumerations
+ * - EventStatus and Abxr.InteractionType enumerations
  * - Nested objectives within assessments
  */
 
@@ -32,7 +32,9 @@ namespace AbxrLib.Tests.Runtime
         [SetUp]
         public void Setup()
         {
-            TestHelpers.SetupTestEnvironment();
+            // Use existing configuration from the demo app
+            TestHelpers.SetupTestEnvironmentWithExistingConfig();
+            
             _dataCapture = new TestDataCapture();
         }
         
@@ -42,6 +44,40 @@ namespace AbxrLib.Tests.Runtime
             TestHelpers.CleanupTestEnvironment();
             _dataCapture?.Clear();
         }
+        
+        #region Real Server Integration Tests
+        
+        [UnityTest]
+        public IEnumerator Test_RealServerAuthentication_CompletesSuccessfully()
+        {
+            // This test verifies that authentication with the real server works
+            // using test authentication provider to provide programmatic responses
+            
+            Debug.Log("AnalyticsEventTests: Waiting for real server authentication to complete...");
+            
+            // Wait for authentication to complete (with timeout)
+            float timeout = 30f; // 30 second timeout
+            float elapsed = 0f;
+            
+            while (!Abxr.ConnectionActive() && elapsed < timeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                elapsed += 0.1f;
+            }
+            
+            if (Abxr.ConnectionActive())
+            {
+                Debug.Log("AnalyticsEventTests: Real server authentication completed successfully!");
+                Assert.IsTrue(true, "Authentication should complete successfully");
+            }
+            else
+            {
+                Debug.LogError("AnalyticsEventTests: Real server authentication timed out or failed");
+                Assert.Fail($"Authentication did not complete within {timeout} seconds. Check your credentials and server connectivity.");
+            }
+        }
+        
+        #endregion
         
         #region Assessment Tests
         
@@ -71,7 +107,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string assessmentName = "final_exam";
             int score = 92;
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             
             // Act
             Abxr.EventAssessmentComplete(assessmentName, score, status);
@@ -94,7 +130,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string assessmentName = "final_exam";
             int score = 88;
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             var metadata = TestHelpers.CreateTestMetadata(
                 ("subject", "mathematics"),
                 ("difficulty", "advanced"),
@@ -119,7 +155,7 @@ namespace AbxrLib.Tests.Runtime
         {
             // Arrange
             string[] assessmentNames = { "test_pass", "test_fail", "test_complete", "test_incomplete", "test_browsed", "test_not_attempted" };
-            EventStatus[] statuses = { EventStatus.Pass, EventStatus.Fail, EventStatus.Complete, EventStatus.Incomplete, EventStatus.Browsed, EventStatus.NotAttempted };
+            Abxr.EventStatus[] statuses = { Abxr.EventStatus.Pass, Abxr.EventStatus.Fail, Abxr.EventStatus.Complete, Abxr.EventStatus.Incomplete, Abxr.EventStatus.Browsed, Abxr.EventStatus.NotAttempted };
             int score = 75;
             
             // Act
@@ -146,7 +182,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string assessmentName = "timed_assessment";
             int score = 95;
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             
             // Act
             Abxr.EventAssessmentStart(assessmentName);
@@ -194,7 +230,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string objectiveName = "open_valve";
             int score = 100;
-            var status = EventStatus.Complete;
+            var status = Abxr.EventStatus.Complete;
             
             // Act
             Abxr.EventObjectiveComplete(objectiveName, score, status);
@@ -216,7 +252,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string objectiveName = "timed_objective";
             int score = 90;
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             
             // Act
             Abxr.EventObjectiveStart(objectiveName);
@@ -241,7 +277,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string objectiveName = "complex_objective";
             int score = 85;
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             var metadata = TestHelpers.CreateTestMetadata(
                 ("complexity", "high"),
                 ("attempts", "3"),
@@ -289,8 +325,8 @@ namespace AbxrLib.Tests.Runtime
         {
             // Arrange
             string interactionName = "button_click";
-            var type = InteractionType.Select;
-            var result = InteractionResult.Correct;
+            var type = Abxr.InteractionType.Select;
+            var result = Abxr.InteractionResult.Correct;
             string response = "option_a";
             
             // Act
@@ -313,8 +349,8 @@ namespace AbxrLib.Tests.Runtime
         {
             // Arrange
             string[] interactionNames = { "test_null", "test_bool", "test_select", "test_text", "test_rating", "test_number", "test_matching", "test_performance", "test_sequencing" };
-            InteractionType[] types = { InteractionType.Null, InteractionType.Bool, InteractionType.Select, InteractionType.Text, InteractionType.Rating, InteractionType.Number, InteractionType.Matching, InteractionType.Performance, InteractionType.Sequencing };
-            var result = InteractionResult.Correct;
+            Abxr.InteractionType[] types = { Abxr.InteractionType.Null, Abxr.InteractionType.Bool, Abxr.InteractionType.Select, Abxr.InteractionType.Text, Abxr.InteractionType.Rating, Abxr.InteractionType.Number, Abxr.InteractionType.Matching, Abxr.InteractionType.Performance, Abxr.InteractionType.Sequencing };
+            var result = Abxr.InteractionResult.Correct;
             string response = "test_response";
             
             // Act
@@ -340,8 +376,8 @@ namespace AbxrLib.Tests.Runtime
         {
             // Arrange
             string[] interactionNames = { "test_correct", "test_incorrect", "test_neutral" };
-            InteractionResult[] results = { InteractionResult.Correct, InteractionResult.Incorrect, InteractionResult.Neutral };
-            var type = InteractionType.Select;
+            Abxr.InteractionResult[] results = { Abxr.InteractionResult.Correct, Abxr.InteractionResult.Incorrect, Abxr.InteractionResult.Neutral };
+            var type = Abxr.InteractionType.Select;
             string response = "test_response";
             
             // Act
@@ -367,8 +403,8 @@ namespace AbxrLib.Tests.Runtime
         {
             // Arrange
             string interactionName = "timed_interaction";
-            var type = InteractionType.Select;
-            var result = InteractionResult.Correct;
+            var type = Abxr.InteractionType.Select;
+            var result = Abxr.InteractionResult.Correct;
             string response = "timed_response";
             
             // Act
@@ -393,8 +429,8 @@ namespace AbxrLib.Tests.Runtime
         {
             // Arrange
             string interactionName = "complex_interaction";
-            var type = InteractionType.Text;
-            var result = InteractionResult.Correct;
+            var type = Abxr.InteractionType.Text;
+            var result = Abxr.InteractionResult.Correct;
             string response = "user_input";
             var metadata = TestHelpers.CreateTestMetadata(
                 ("input_length", "15"),
@@ -441,15 +477,15 @@ namespace AbxrLib.Tests.Runtime
             yield return TestHelpers.WaitForEvent(_dataCapture, interactionName);
             
             // Complete interaction
-            Abxr.EventInteractionComplete(interactionName, InteractionType.Select, InteractionResult.Correct, "completed");
+            Abxr.EventInteractionComplete(interactionName, Abxr.InteractionType.Select, Abxr.InteractionResult.Correct, "completed");
             yield return TestHelpers.WaitForEvent(_dataCapture, interactionName);
             
             // Complete objective
-            Abxr.EventObjectiveComplete(objectiveName, 90, EventStatus.Pass);
+            Abxr.EventObjectiveComplete(objectiveName, 90, Abxr.EventStatus.Pass);
             yield return TestHelpers.WaitForEvent(_dataCapture, objectiveName);
             
             // Complete assessment
-            Abxr.EventAssessmentComplete(assessmentName, 88, EventStatus.Pass);
+            Abxr.EventAssessmentComplete(assessmentName, 88, Abxr.EventStatus.Pass);
             yield return TestHelpers.WaitForEvent(_dataCapture, assessmentName);
             
             // Assert
@@ -485,7 +521,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string assessmentName = "assessment_without_start";
             int score = 75;
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             
             // Act
             Abxr.EventAssessmentComplete(assessmentName, score, status);
@@ -506,7 +542,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string objectiveName = "objective_without_start";
             int score = 80;
-            var status = EventStatus.Complete;
+            var status = Abxr.EventStatus.Complete;
             
             // Act
             Abxr.EventObjectiveComplete(objectiveName, score, status);
@@ -526,8 +562,8 @@ namespace AbxrLib.Tests.Runtime
         {
             // Arrange
             string interactionName = "interaction_without_start";
-            var type = InteractionType.Bool;
-            var result = InteractionResult.Neutral;
+            var type = Abxr.InteractionType.Bool;
+            var result = Abxr.InteractionResult.Neutral;
             string response = "true";
             
             // Act
@@ -550,7 +586,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string assessmentName = "negative_score_assessment";
             int score = -10; // Negative score
-            var status = EventStatus.Fail;
+            var status = Abxr.EventStatus.Fail;
             
             // Act
             Abxr.EventAssessmentComplete(assessmentName, score, status);
@@ -570,7 +606,7 @@ namespace AbxrLib.Tests.Runtime
             // Arrange
             string assessmentName = "large_score_assessment";
             int score = 999999; // Large score
-            var status = EventStatus.Pass;
+            var status = Abxr.EventStatus.Pass;
             
             // Act
             Abxr.EventAssessmentComplete(assessmentName, score, status);

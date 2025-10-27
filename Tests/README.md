@@ -82,56 +82,84 @@ Unity -batchmode -quit -projectPath /path/to/project -runTests -testPlatform pla
 - **Performance Tests**: High-frequency operations and memory usage
 - **Thread Safety Tests**: Concurrent operations
 
-## Required Configuration
+## Configuration
 
-### Authentication Credentials
+### Using Existing Configuration
 
-All authentication tests require the following credentials to be configured:
+The test suite automatically uses the existing configuration from the demo app's `Assets/Resources/AbxrLib.asset` file. This includes:
 
-- **appID**: Application identifier (required)
-- **orgID**: Organization identifier (required) 
-- **authSecret**: Authentication secret (required)
-- **restUrl**: REST API endpoint URL (required)
-
-### Test Configuration
-
-The test suite uses `MockConfiguration` to provide test credentials:
-
-```csharp
-// Default test credentials
-var config = MockConfiguration.CreateForAuthTesting();
-// appID: "auth_test_app"
-// orgID: "auth_test_org" 
-// authSecret: "auth_test_secret"
-// restUrl: "https://auth-test-api.example.com"
-
-// Custom credentials
-TestHelpers.SetupAuthTestEnvironment(
-    appID: "your_app_id",
-    orgID: "your_org_id",
-    authSecret: "your_auth_secret", 
-    restUrl: "https://your-api.example.com"
-);
-```
+- **appID**: Application identifier (already configured)
+- **orgID**: Organization identifier (already configured) 
+- **authSecret**: Authentication secret (already configured)
+- **restUrl**: REST API endpoint URL (already configured)
 
 ### Configuration Validation
 
-The test suite validates that all required credentials are present:
+The tests automatically validate that the configuration is properly set up:
+
+```csharp
+// Tests automatically check configuration validity
+if (!Configuration.Instance.IsValid())
+{
+    Debug.LogError("Configuration is invalid - check your AbxrLib.asset file");
+}
+```
+
+### Real Server Integration Testing
+
+The test suite uses **real server integration testing** with the existing configuration:
+
+#### **Benefits of Real Server Testing**
+- ✅ **End-to-end validation**: Tests complete authentication flow with real server
+- ✅ **Real-world conditions**: Validates network conditions and server responses
+- ✅ **Server compatibility**: Ensures client works with actual server
+- ✅ **Real data**: Tests with actual user data and module configurations
+- ✅ **No setup required**: Uses existing configuration from demo app
+
+#### **Authentication Flow**
+
+The tests automatically:
+1. **Connect** to your configured server
+2. **Authenticate** with existing credentials
+3. **Handle AuthMechanism** responses from the server
+4. **Validate** authentication completion
+
+#### **Test Execution**
 
 ```csharp
 [UnityTest]
-public IEnumerator Test_Authentication_RequiredCredentials_AreConfigured()
+public IEnumerator Test_RealServerAuthentication_CompletesSuccessfully()
 {
-    var mockConfig = MockConfiguration.CreateForAuthTesting();
+    // Wait for authentication to complete
+    float timeout = 30f;
+    float elapsed = 0f;
     
-    Assert.IsNotNull(mockConfig.appID, "appID is required");
-    Assert.IsNotNull(mockConfig.orgID, "orgID is required");
-    Assert.IsNotNull(mockConfig.authSecret, "authSecret is required");
-    Assert.IsNotNull(mockConfig.restUrl, "restUrl is required");
+    while (!Abxr.ConnectionActive() && elapsed < timeout)
+    {
+        yield return new WaitForSeconds(0.1f);
+        elapsed += 0.1f;
+    }
     
-    Assert.IsTrue(mockConfig.IsValid(), "Configuration must be valid");
+    Assert.IsTrue(Abxr.ConnectionActive(), "Authentication should complete");
 }
 ```
+
+### Troubleshooting
+
+#### **Configuration Issues**
+- Ensure `Assets/Resources/AbxrLib.asset` exists and is properly configured
+- Check that all required fields (appID, orgID, authSecret, restUrl) are set
+- Verify the configuration is valid using `Configuration.Instance.IsValid()`
+
+#### **Authentication Timeout**
+- Check server connectivity
+- Verify credentials in `AbxrLib.asset` are correct
+- Ensure server is accessible from your network
+
+#### **Network Errors**
+- Ensure stable internet connection
+- Check firewall settings
+- Verify server URL in configuration is accessible
 
 ## Test Configuration
 

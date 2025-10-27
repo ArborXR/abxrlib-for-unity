@@ -298,7 +298,7 @@ namespace AbxrLib.Tests.Runtime.Utilities
         public static void AssertModuleTargetProvided(MockAuthenticationProvider mockAuth, string expectedTarget)
         {
             Assert.IsNotNull(mockAuth.MockModuleData, "Module data should not be null");
-            Assert.IsTrue(mockAuth.MockModuleData.Exists(m => m.moduleTarget == expectedTarget),
+            Assert.IsTrue(mockAuth.MockModuleData.Exists(m => m.target == expectedTarget),
                 $"Module target '{expectedTarget}' should be provided");
         }
         
@@ -337,6 +337,26 @@ namespace AbxrLib.Tests.Runtime.Utilities
             {
                 Assert.AreEqual(expectedResponse, mockAuth.MockAuthMechanismResponse, "Auth mechanism response should match");
             }
+        }
+        
+        /// <summary>
+        /// Cleans up authentication test environment
+        /// </summary>
+        public static void CleanupAuthTestEnvironment(MockAuthenticationProvider mockAuth)
+        {
+            if (mockAuth != null)
+            {
+                mockAuth.Reset();
+            }
+            Debug.Log("AuthenticationTestHelper: Authentication test environment cleanup complete");
+        }
+        
+        /// <summary>
+        /// Cleans up authentication test environment (overload without parameter)
+        /// </summary>
+        public static void CleanupAuthTestEnvironment()
+        {
+            Debug.Log("AuthenticationTestHelper: Authentication test environment cleanup complete");
         }
     }
 }

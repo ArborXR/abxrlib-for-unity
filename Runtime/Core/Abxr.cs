@@ -246,6 +246,16 @@ public static partial class Abxr
 	/// </summary>
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
+		// Check for test mode first - if in test mode, handle authentication programmatically
+#if UNITY_EDITOR
+		if (IsTestMode())
+		{
+			Debug.Log($"AbxrLib: Test mode detected - handling authentication programmatically for type: {keyboardType}");
+			CoroutineRunner.Instance.StartCoroutine(HandleTestAuthentication(promptText, keyboardType, emailDomain));
+			return;
+		}
+#endif
+		
 		if (keyboardType is "text" or null)
 		{
 			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
@@ -264,6 +274,44 @@ public static partial class Abxr
 				$"Enter your email username\n(<u>username</u>@{emailDomain})");
 		}
 	}
+	
+#if UNITY_EDITOR
+	/// <summary>
+	/// Check if we're in test mode by looking for the test authentication provider
+	/// </summary>
+	private static bool IsTestMode()
+	{
+		// Use reflection to check if TestAuthenticationProvider exists and is enabled
+		// This avoids adding a direct dependency on test code in the main library
+		var testProviderType = System.Type.GetType("AbxrLib.Tests.Runtime.TestDoubles.TestAuthenticationProvider");
+		if (testProviderType != null)
+		{
+			var isTestModeProperty = testProviderType.GetProperty("IsTestMode", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+			if (isTestModeProperty != null)
+			{
+				return (bool)isTestModeProperty.GetValue(null);
+			}
+		}
+		return false;
+	}
+	
+	/// <summary>
+	/// Handle test authentication by calling the test provider
+	/// </summary>
+	private static IEnumerator HandleTestAuthentication(string promptText, string keyboardType, string emailDomain)
+	{
+		var testProviderType = System.Type.GetType("AbxrLib.Tests.Runtime.TestDoubles.TestAuthenticationProvider");
+		if (testProviderType != null)
+		{
+			var handleMethod = testProviderType.GetMethod("HandleTestAuthentication", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+			if (handleMethod != null)
+			{
+				var coroutine = (IEnumerator)handleMethod.Invoke(null, new object[] { promptText, keyboardType, emailDomain });
+				yield return coroutine;
+			}
+		}
+	}
+#endif
 
 	#endregion
 
