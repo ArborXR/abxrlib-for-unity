@@ -144,6 +144,40 @@ public IEnumerator Test_RealServerAuthentication_CompletesSuccessfully()
 }
 ```
 
+## Platform Limitations
+
+### Unity Editor Testing Limitations
+
+Some ABXRLib features depend on platform-specific native SDK calls that are not available when running tests in the Unity Editor:
+
+#### **ArborServiceClient Methods**
+The following methods require Android platform-specific native SDK calls and will not work in Unity Editor tests:
+
+- `Abxr.GetDeviceId()` - Returns device UUID from ArborXR
+- `Abxr.GetDeviceSerial()` - Returns device serial number
+- `Abxr.GetDeviceTitle()` - Returns device title from ArborXR portal
+- `Abxr.GetDeviceTags()` - Returns device tags
+- `Abxr.GetOrgId()` - Returns organization UUID (fallback to config available)
+- `Abxr.GetOrgTitle()` - Returns organization title
+- `Abxr.GetOrgSlug()` - Returns organization slug
+- `Abxr.GetMacAddressFixed()` - Returns fixed MAC address
+- `Abxr.GetMacAddressRandom()` - Returns randomized MAC address
+- `Abxr.GetIsAuthenticated()` - Returns SSO authentication status
+- `Abxr.GetAccessToken()` - Returns SSO access token
+- `Abxr.GetRefreshToken()` - Returns SSO refresh token
+- `Abxr.GetExpiresDateUtc()` - Returns token expiration
+- `Abxr.GetFingerprint()` - Returns device fingerprint
+
+#### **Testing Strategy**
+- **Unity Editor Tests**: Focus on core functionality that doesn't require native SDK calls
+- **Android Device Tests**: Test platform-specific features on actual Android devices
+- **Mock Testing**: Use test doubles for platform-specific functionality when needed
+
+#### **Affected Test Categories**
+- Session Management Tests (removed from Unity Editor test suite)
+- Device Information Tests (should be tested on Android devices)
+- SSO Authentication Tests (should be tested on Android devices)
+
 ### Troubleshooting
 
 #### **Configuration Issues**

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using UnityEngine;
 using AbxrLib.Runtime.Authentication;
+using AbxrLib.Runtime.Core;
 
 namespace AbxrLib.Tests.Runtime.TestDoubles
 {
@@ -22,7 +23,11 @@ namespace AbxrLib.Tests.Runtime.TestDoubles
         public static void EnableTestMode()
         {
             _isTestMode = true;
-            Debug.Log("TestAuthenticationProvider: Test mode enabled - authentication will use programmatic responses");
+            Debug.Log("TestAuthenticationProvider: Test mode ENABLED - authentication will use programmatic responses");
+            Debug.Log($"TestAuthenticationProvider: Current test mode status: {_isTestMode}");
+            
+            // Register this provider with the main ABXRLib
+            TestAuthenticationRegistry.RegisterProvider(new TestAuthProviderImpl());
         }
         
         /// <summary>
@@ -32,6 +37,9 @@ namespace AbxrLib.Tests.Runtime.TestDoubles
         {
             _isTestMode = false;
             Debug.Log("TestAuthenticationProvider: Test mode disabled - authentication will use normal UI flow");
+            
+            // Unregister the provider from the main ABXRLib
+            TestAuthenticationRegistry.UnregisterProvider();
         }
         
         /// <summary>
@@ -84,7 +92,10 @@ namespace AbxrLib.Tests.Runtime.TestDoubles
                 yield break;
             }
             
-            Debug.Log($"TestAuthenticationProvider: Handling test authentication - Type: {keyboardType}, Domain: {emailDomain}");
+            Debug.Log("TestAuthenticationProvider: HIJACKING authentication!");
+            Debug.Log($"TestAuthenticationProvider: Server requested AuthMechanism type: '{keyboardType}'");
+            Debug.Log($"TestAuthenticationProvider: Server prompt: '{promptText}'");
+            Debug.Log($"TestAuthenticationProvider: Email domain: '{emailDomain}'");
             
             // Get the test response
             string testResponse = GetTestResponse(keyboardType, emailDomain);
@@ -95,10 +106,25 @@ namespace AbxrLib.Tests.Runtime.TestDoubles
                 yield break;
             }
             
-            Debug.Log($"TestAuthenticationProvider: Providing test response: {testResponse}");
+            Debug.Log($"TestAuthenticationProvider: Providing test response: '{testResponse}' for auth type: '{keyboardType}'");
             
             // Call KeyboardAuthenticate with the test response
             yield return Authentication.KeyboardAuthenticate(testResponse);
+            
+            Debug.Log($"TestAuthenticationProvider: Authentication attempt completed with response: '{testResponse}'");
+        }
+    }
+    
+    /// <summary>
+    /// Implementation of ITestAuthenticationProvider for the static TestAuthenticationProvider
+    /// </summary>
+    internal class TestAuthProviderImpl : ITestAuthenticationProvider
+    {
+        public bool IsTestMode => TestAuthenticationProvider.IsTestMode;
+        
+        public IEnumerator HandleTestAuthentication(string promptText, string keyboardType, string emailDomain)
+        {
+            return TestAuthenticationProvider.HandleTestAuthentication(promptText, keyboardType, emailDomain);
         }
     }
 }

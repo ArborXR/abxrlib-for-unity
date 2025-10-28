@@ -31,8 +31,13 @@ namespace AbxrLib.Runtime.UI
 
         private void Start()
         {
-            cam = Camera.main.transform;
-            if (!cam) return;
+            cam = Camera.main?.transform;
+            if (!cam) 
+            {
+                Debug.LogWarning("AbxrLib - FaceCamera: No main camera found, FaceCamera component will be disabled");
+                enabled = false;
+                return;
+            }
             
             config = Configuration.Instance;
             

@@ -79,9 +79,11 @@ namespace AbxrLib.Tests.Runtime.Utilities
             CleanupTestEnvironment();
             
             // Enable test authentication mode
+            Debug.Log("TestHelpers: Enabling test authentication mode...");
             TestAuthenticationProvider.EnableTestMode();
             
             // Set default test responses
+            Debug.Log("TestHelpers: Setting default test responses...");
             TestAuthenticationProvider.SetDefaultResponses(
                 pin: "999999",
                 email: "testuser", 

@@ -246,15 +246,35 @@ public static partial class Abxr
 	/// </summary>
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
+		Debug.Log($"Abxr.PresentKeyboard called - Type: '{keyboardType}', Prompt: '{promptText}', Domain: '{emailDomain}'");
+		
 		// Check for test mode first - if in test mode, handle authentication programmatically
 #if UNITY_EDITOR
-		if (IsTestMode())
+		bool isTestMode = IsTestMode();
+		Debug.Log($"Abxr.PresentKeyboard: Test mode check result: {isTestMode}");
+		
+		if (isTestMode)
 		{
-			Debug.Log($"AbxrLib: Test mode detected - handling authentication programmatically for type: {keyboardType}");
+			Debug.Log($"Abxr.PresentKeyboard: Test mode detected - handling authentication programmatically for type: {keyboardType}");
 			CoroutineRunner.Instance.StartCoroutine(HandleTestAuthentication(promptText, keyboardType, emailDomain));
 			return;
 		}
+		else
+		{
+			Debug.Log($"Abxr.PresentKeyboard: Test mode NOT detected - proceeding with normal UI flow");
+		}
 #endif
+		
+		// In test environment, prevent UI creation to avoid NullReferenceException
+		// This prevents FaceCamera from trying to access Camera.main when there's no camera
+		if (Application.isEditor && !IsTestMode())
+		{
+			Debug.LogWarning($"Abxr.PresentKeyboard: Preventing UI creation in test environment for type: {keyboardType}");
+			Debug.LogWarning("Abxr.PresentKeyboard: This may indicate that authentication is being triggered unexpectedly in tests");
+			return;
+		}
+		
+		Debug.Log($"Abxr.PresentKeyboard: Creating UI keyboard for type: {keyboardType}");
 		
 		if (keyboardType is "text" or null)
 		{
@@ -281,18 +301,12 @@ public static partial class Abxr
 	/// </summary>
 	private static bool IsTestMode()
 	{
-		// Use reflection to check if TestAuthenticationProvider exists and is enabled
-		// This avoids adding a direct dependency on test code in the main library
-		var testProviderType = System.Type.GetType("AbxrLib.Tests.Runtime.TestDoubles.TestAuthenticationProvider");
-		if (testProviderType != null)
-		{
-			var isTestModeProperty = testProviderType.GetProperty("IsTestMode", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-			if (isTestModeProperty != null)
-			{
-				return (bool)isTestModeProperty.GetValue(null);
-			}
-		}
-		return false;
+		Debug.Log("Abxr.IsTestMode: Starting test mode detection...");
+		
+		bool result = TestAuthenticationRegistry.IsTestModeActive;
+		Debug.Log($"Abxr.IsTestMode: Final result: {result}");
+		
+		return result;
 	}
 	
 	/// <summary>
@@ -300,15 +314,20 @@ public static partial class Abxr
 	/// </summary>
 	private static IEnumerator HandleTestAuthentication(string promptText, string keyboardType, string emailDomain)
 	{
-		var testProviderType = System.Type.GetType("AbxrLib.Tests.Runtime.TestDoubles.TestAuthenticationProvider");
-		if (testProviderType != null)
+		Debug.Log($"Abxr.HandleTestAuthentication: Starting test authentication handling...");
+		
+		var provider = TestAuthenticationRegistry.GetProvider();
+		if (provider != null)
 		{
-			var handleMethod = testProviderType.GetMethod("HandleTestAuthentication", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-			if (handleMethod != null)
-			{
-				var coroutine = (IEnumerator)handleMethod.Invoke(null, new object[] { promptText, keyboardType, emailDomain });
-				yield return coroutine;
-			}
+			Debug.Log("Abxr.HandleTestAuthentication: Test provider found, calling...");
+			
+			yield return provider.HandleTestAuthentication(promptText, keyboardType, emailDomain);
+			
+			Debug.Log("Abxr.HandleTestAuthentication: Test authentication handling completed");
+		}
+		else
+		{
+			Debug.LogError("Abxr.HandleTestAuthentication: No test provider registered");
 		}
 	}
 #endif
