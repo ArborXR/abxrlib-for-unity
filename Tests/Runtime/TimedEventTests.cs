@@ -23,7 +23,10 @@ namespace AbxrLib.Tests.Runtime
 {
     /// <summary>
     /// Tests for timed event functionality
+    /// 
+    /// IMPORTANT: This test class runs AFTER AuthenticationTests to use the shared authentication session.
     /// </summary>
+    [TestFixture, Category("PostAuth")]
     public class TimedEventTests
     {
         private TestDataCapture _dataCapture;

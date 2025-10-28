@@ -14,8 +14,12 @@ namespace AbxrLib.Tests.Runtime
     /// 
     /// These tests verify that authentication works correctly with real servers,
     /// including connection status, authentication completion, and post-authentication functionality.
+    /// 
+    /// IMPORTANT: This test class should run FIRST to establish the shared authentication session
+    /// for all other test classes that depend on authentication.
     /// </summary>
-    public class AuthenticationTests
+    [TestFixture, Category("Authentication")]
+    public class _AuthenticationTests
     {
         private TestDataCapture _dataCapture;
         
@@ -51,7 +55,7 @@ namespace AbxrLib.Tests.Runtime
         
         #region Real Server Integration Tests
         
-        [UnityTest]
+        [UnityTest, Order(1)]
         public IEnumerator Test_RealServerAuthentication_CompletesSuccessfully()
         {
             // This test verifies that the shared authentication session is working
@@ -69,7 +73,7 @@ namespace AbxrLib.Tests.Runtime
             yield return null;
         }
         
-        [UnityTest]
+        [UnityTest, Order(2)]
         public IEnumerator Test_TestMode_IsEnabledCorrectly()
         {
             // This test verifies that test mode is properly enabled

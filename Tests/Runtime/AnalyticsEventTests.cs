@@ -24,10 +24,14 @@ namespace AbxrLib.Tests.Runtime
 {
     /// <summary>
     /// Tests for analytics event wrapper functionality
+    /// 
+    /// IMPORTANT: This test class runs AFTER AuthenticationTests to use the shared authentication session.
     /// </summary>
+    [TestFixture, Category("PostAuth")]
     public class AnalyticsEventTests
     {
         private TestDataCapture _dataCapture;
+        
         
         [SetUp]
         public void Setup()
@@ -106,21 +110,45 @@ namespace AbxrLib.Tests.Runtime
         public IEnumerator Test_EventAssessmentComplete_WithValidScore_CompletesAssessment()
         {
             // Arrange
-            string assessmentName = "final_exam";
+            string assessmentName = TestHelpers.GenerateRandomName("assessment");
             int score = 92;
             var status = Abxr.EventStatus.Pass;
             
-            // Act
+            // Act - Start assessment first
+            Abxr.EventAssessmentStart(assessmentName);
+            yield return new WaitForSeconds(0.5f); // Wait between start and complete
+            
+            Abxr.EventAssessmentComplete(assessmentName, score, status);
+            
+            // Wait for events to be processed and sent
+            yield return new WaitForSeconds(1.0f);
+            
+            // Assert - Verify no exceptions were thrown and events were processed
+            Debug.Log($"AnalyticsEventTests: Assessment start/complete '{assessmentName}' with score {score} and status {status} sent successfully");
+            
+            // Verify that the event calls completed without throwing exceptions
+            Assert.IsTrue(true, "Assessment start/complete should be sent without throwing exceptions");
+        }
+        
+        [UnityTest]
+        public IEnumerator Test_EventAssessmentComplete_WithoutStart_HandlesGracefully()
+        {
+            // Arrange
+            string assessmentName = TestHelpers.GenerateRandomName("orphan_assessment");
+            int score = 75;
+            var status = Abxr.EventStatus.Fail;
+            
+            // Act - Complete assessment without starting it (this can happen in real scenarios)
             Abxr.EventAssessmentComplete(assessmentName, score, status);
             
             // Wait for event to be processed and sent
             yield return new WaitForSeconds(1.0f);
             
             // Assert - Verify no exceptions were thrown and event was processed
-            Debug.Log($"AnalyticsEventTests: Assessment complete '{assessmentName}' with score {score} and status {status} sent successfully");
+            Debug.Log($"AnalyticsEventTests: Orphan assessment complete '{assessmentName}' with score {score} and status {status} sent successfully");
             
             // Verify that the event call completed without throwing exceptions
-            Assert.IsTrue(true, "Assessment complete should be sent without throwing exceptions");
+            Assert.IsTrue(true, "Orphan assessment complete should be sent without throwing exceptions");
         }
         
         [UnityTest]
@@ -225,48 +253,65 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator Test_EventObjectiveComplete_WithValidScore_CompletesObjective()
         {
-            // Arrange
-            string objectiveName = "open_valve";
+            // Arrange - SCORM hierarchy: Objectives happen within Assessments
+            string assessmentName = TestHelpers.GenerateRandomName("assessment");
+            string objectiveName = TestHelpers.GenerateRandomName("objective");
             int score = 100;
             var status = Abxr.EventStatus.Complete;
             
-            // Act
-            Abxr.EventObjectiveComplete(objectiveName, score, status);
+            // Act - Start assessment first, then objective
+            Abxr.EventAssessmentStart(assessmentName);
+            yield return new WaitForSeconds(0.2f);
             
-            // Wait for event to be processed and sent
+            Abxr.EventObjectiveStart(objectiveName);
+            yield return new WaitForSeconds(0.5f); // Wait between start and complete
+            
+            Abxr.EventObjectiveComplete(objectiveName, score, status);
+            yield return new WaitForSeconds(0.2f);
+            
+            Abxr.EventAssessmentComplete(assessmentName, 95, Abxr.EventStatus.Pass);
+            
+            // Wait for events to be processed and sent
             yield return new WaitForSeconds(1.0f);
             
-            // Assert - Verify no exceptions were thrown and event was processed
-            Debug.Log($"AnalyticsEventTests: Objective complete '{objectiveName}' with score {score} and status {status} sent successfully");
+            // Assert - Verify no exceptions were thrown and events were processed
+            Debug.Log($"AnalyticsEventTests: Assessment/Objective complete '{assessmentName}'/'{objectiveName}' with score {score} and status {status} sent successfully");
             
-            // Verify that the event call completed without throwing exceptions
-            Assert.IsTrue(true, "Objective complete should be sent without throwing exceptions");
+            // Verify that the event calls completed without throwing exceptions
+            Assert.IsTrue(true, "Assessment/Objective complete should be sent without throwing exceptions");
         }
         
         [UnityTest]
         public IEnumerator Test_EventObjectiveStartComplete_WithDuration_CalculatesDuration()
         {
-            // Arrange
-            string objectiveName = "timed_objective";
+            // Arrange - SCORM hierarchy: Objectives happen within Assessments
+            string assessmentName = TestHelpers.GenerateRandomName("assessment");
+            string objectiveName = TestHelpers.GenerateRandomName("timed_objective");
             int score = 90;
             var status = Abxr.EventStatus.Pass;
             
-            // Act
+            // Act - Start assessment first, then objective
+            Abxr.EventAssessmentStart(assessmentName);
+            yield return new WaitForSeconds(0.2f);
+            
             Abxr.EventObjectiveStart(objectiveName);
             
             // Wait a bit to simulate objective duration
             yield return new WaitForSeconds(0.1f);
             
             Abxr.EventObjectiveComplete(objectiveName, score, status);
+            yield return new WaitForSeconds(0.2f);
             
-            // Wait for completion event to be processed and sent
+            Abxr.EventAssessmentComplete(assessmentName, 88, Abxr.EventStatus.Pass);
+            
+            // Wait for completion events to be processed and sent
             yield return new WaitForSeconds(1.0f);
             
-            // Assert - Verify no exceptions were thrown and event was processed
-            Debug.Log($"AnalyticsEventTests: Objective with duration '{objectiveName}' sent successfully");
+            // Assert - Verify no exceptions were thrown and events were processed
+            Debug.Log($"AnalyticsEventTests: Assessment/Objective with duration '{assessmentName}'/'{objectiveName}' sent successfully");
             
-            // Verify that the event call completed without throwing exceptions
-            Assert.IsTrue(true, "Objective with duration should be sent without throwing exceptions");
+            // Verify that the event calls completed without throwing exceptions
+            Assert.IsTrue(true, "Assessment/Objective with duration should be sent without throwing exceptions");
         }
         
         [UnityTest]
@@ -321,23 +366,123 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator Test_EventInteractionComplete_WithValidParameters_CompletesInteraction()
         {
-            // Arrange
-            string interactionName = "button_click";
+            // Arrange - SCORM hierarchy: Interactions happen within Assessments
+            string assessmentName = TestHelpers.GenerateRandomName("assessment");
+            string interactionName = TestHelpers.GenerateRandomName("interaction");
             var type = Abxr.InteractionType.Select;
             var result = Abxr.InteractionResult.Correct;
             string response = "option_a";
             
-            // Act
-            Abxr.EventInteractionComplete(interactionName, type, result, response);
+            // Act - Start assessment first, then interaction
+            Abxr.EventAssessmentStart(assessmentName);
+            yield return new WaitForSeconds(0.2f);
             
-            // Wait for event to be processed and sent
+            var interactionMeta = new Dictionary<string, string> { ["interaction_type"] = type.ToString() };
+            Abxr.EventInteractionStart(interactionName, interactionMeta);
+            yield return new WaitForSeconds(0.3f); // Wait between start and complete
+            
+            Abxr.EventInteractionComplete(interactionName, type, result, response);
+            yield return new WaitForSeconds(0.2f);
+            
+            Abxr.EventAssessmentComplete(assessmentName, 85, Abxr.EventStatus.Pass);
+            
+            // Wait for events to be processed and sent
             yield return new WaitForSeconds(1.0f);
             
-            // Assert - Verify no exceptions were thrown and event was processed
-            Debug.Log($"AnalyticsEventTests: Interaction complete '{interactionName}' sent successfully");
+            // Assert - Verify no exceptions were thrown and events were processed
+            Debug.Log($"AnalyticsEventTests: Assessment/Interaction complete '{assessmentName}'/'{interactionName}' sent successfully");
             
-            // Verify that the event call completed without throwing exceptions
-            Assert.IsTrue(true, "Interaction complete should be sent without throwing exceptions");
+            // Verify that the event calls completed without throwing exceptions
+            Assert.IsTrue(true, "Assessment/Interaction complete should be sent without throwing exceptions");
+        }
+        
+        [UnityTest]
+        public IEnumerator Test_EventInteraction_WithinObjective_FollowsSCORMHierarchy()
+        {
+            // Arrange - SCORM hierarchy: Interactions can happen within Objectives within Assessments
+            string assessmentName = TestHelpers.GenerateRandomName("assessment");
+            string objectiveName = TestHelpers.GenerateRandomName("objective");
+            string interactionName = TestHelpers.GenerateRandomName("interaction");
+            var type = Abxr.InteractionType.Matching;
+            var result = Abxr.InteractionResult.Correct;
+            string response = "dropped_correctly";
+            
+            // Act - Full SCORM hierarchy: Assessment -> Objective -> Interaction
+            Abxr.EventAssessmentStart(assessmentName);
+            yield return new WaitForSeconds(0.2f);
+            
+            Abxr.EventObjectiveStart(objectiveName);
+            yield return new WaitForSeconds(0.2f);
+            
+            var interactionMeta = new Dictionary<string, string> { ["interaction_type"] = type.ToString() };
+            Abxr.EventInteractionStart(interactionName, interactionMeta);
+            yield return new WaitForSeconds(0.3f);
+            
+            Abxr.EventInteractionComplete(interactionName, type, result, response);
+            yield return new WaitForSeconds(0.2f);
+            
+            Abxr.EventObjectiveComplete(objectiveName, 95, Abxr.EventStatus.Pass);
+            yield return new WaitForSeconds(0.2f);
+            
+            Abxr.EventAssessmentComplete(assessmentName, 90, Abxr.EventStatus.Pass);
+            
+            // Wait for events to be processed and sent
+            yield return new WaitForSeconds(1.0f);
+            
+            // Assert - Verify no exceptions were thrown and events were processed
+            Debug.Log($"AnalyticsEventTests: Full SCORM hierarchy Assessment/Objective/Interaction '{assessmentName}'/'{objectiveName}'/'{interactionName}' sent successfully");
+            
+            // Verify that the event calls completed without throwing exceptions
+            Assert.IsTrue(true, "Full SCORM hierarchy should be sent without throwing exceptions");
+        }
+        
+        [UnityTest]
+        public IEnumerator Test_EventMultipleObjectivesAndInteractions_WithinAssessment_HandlesMultiple()
+        {
+            // Arrange - SCORM hierarchy: Multiple Objectives and Interactions within one Assessment
+            string assessmentName = TestHelpers.GenerateRandomName("assessment");
+            string objective1Name = TestHelpers.GenerateRandomName("objective1");
+            string objective2Name = TestHelpers.GenerateRandomName("objective2");
+            string interaction1Name = TestHelpers.GenerateRandomName("interaction1");
+            string interaction2Name = TestHelpers.GenerateRandomName("interaction2");
+            
+            // Act - Start assessment, then multiple objectives with interactions
+            Abxr.EventAssessmentStart(assessmentName);
+            yield return new WaitForSeconds(0.2f);
+            
+            // First objective with interaction
+            Abxr.EventObjectiveStart(objective1Name);
+            yield return new WaitForSeconds(0.1f);
+            var interaction1Meta = new Dictionary<string, string> { ["interaction_type"] = Abxr.InteractionType.Select.ToString() };
+            Abxr.EventInteractionStart(interaction1Name, interaction1Meta);
+            yield return new WaitForSeconds(0.2f);
+            Abxr.EventInteractionComplete(interaction1Name, Abxr.InteractionType.Select, Abxr.InteractionResult.Correct, "option_b");
+            yield return new WaitForSeconds(0.1f);
+            Abxr.EventObjectiveComplete(objective1Name, 90, Abxr.EventStatus.Pass);
+            yield return new WaitForSeconds(0.2f);
+            
+            // Second objective with interaction
+            Abxr.EventObjectiveStart(objective2Name);
+            yield return new WaitForSeconds(0.1f);
+            var interaction2Meta = new Dictionary<string, string> { ["interaction_type"] = Abxr.InteractionType.Text.ToString() };
+            Abxr.EventInteractionStart(interaction2Name, interaction2Meta);
+            yield return new WaitForSeconds(0.2f);
+            Abxr.EventInteractionComplete(interaction2Name, Abxr.InteractionType.Text, Abxr.InteractionResult.Correct, "user_answer");
+            yield return new WaitForSeconds(0.1f);
+            Abxr.EventObjectiveComplete(objective2Name, 85, Abxr.EventStatus.Pass);
+            yield return new WaitForSeconds(0.2f);
+            
+            // Complete assessment
+            Abxr.EventAssessmentComplete(assessmentName, 87, Abxr.EventStatus.Pass);
+            
+            // Wait for events to be processed and sent
+            yield return new WaitForSeconds(1.0f);
+            
+            // Assert - Verify no exceptions were thrown and events were processed
+            Debug.Log($"AnalyticsEventTests: Multiple Objectives/Interactions within Assessment '{assessmentName}' sent successfully");
+            
+            // Verify that the event calls completed without throwing exceptions
+            Assert.IsTrue(true, "Multiple Objectives/Interactions within Assessment should be sent without throwing exceptions");
         }
         
         [UnityTest]
@@ -487,27 +632,6 @@ namespace AbxrLib.Tests.Runtime
         #endregion
         
         #region Edge Cases and Error Handling
-        
-        [UnityTest]
-        public IEnumerator Test_EventAssessmentComplete_WithoutStart_HandlesGracefully()
-        {
-            // Arrange
-            string assessmentName = "assessment_without_start";
-            int score = 75;
-            var status = Abxr.EventStatus.Pass;
-            
-            // Act
-            Abxr.EventAssessmentComplete(assessmentName, score, status);
-            
-            // Wait for event to be processed and sent
-            yield return new WaitForSeconds(1.0f);
-            
-            // Assert - Verify no exceptions were thrown and event was processed
-            Debug.Log($"AnalyticsEventTests: Assessment without start '{assessmentName}' with score {score} and status {status} sent successfully");
-            
-            // Verify that the event call completed without throwing exceptions
-            Assert.IsTrue(true, "Assessment without start should be sent without throwing exceptions");
-        }
         
         [UnityTest]
         public IEnumerator Test_EventObjectiveComplete_WithoutStart_HandlesGracefully()

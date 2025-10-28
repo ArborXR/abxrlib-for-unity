@@ -24,6 +24,15 @@ namespace AbxrLib.Tests.Runtime.Utilities
     public static class TestHelpers
     {
         /// <summary>
+        /// Generates a randomized name with the given prefix for test isolation
+        /// </summary>
+        /// <param name="prefix">The prefix for the name (e.g., "assessment", "objective", "interaction")</param>
+        /// <returns>A unique name with format: {prefix}_{8-char-guid}</returns>
+        public static string GenerateRandomName(string prefix)
+        {
+            return $"{prefix}_{System.Guid.NewGuid().ToString("N")[..8]}";
+        }
+        /// <summary>
         /// Sets up a clean test environment before each test
         /// </summary>
         public static void SetupTestEnvironment()
