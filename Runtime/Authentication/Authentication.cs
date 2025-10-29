@@ -66,6 +66,7 @@ namespace AbxrLib.Runtime.Authentication
         
         // Auth handoff for external launcher apps
         private static bool _authHandoffCompleted = false;
+        private static bool _sessionUsedAuthHandoff = false;
 
         public static bool Authenticated() 
         {
@@ -76,6 +77,8 @@ namespace AbxrLib.Runtime.Authentication
         }
 
         public static bool FullyAuthenticated() => Authenticated() && _keyboardAuthSuccess == true;
+        
+        public static bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
         
         /// <summary>
         /// Clears authentication state and stops data transmission
@@ -95,6 +98,9 @@ namespace AbxrLib.Runtime.Authentication
             
             // Reset failed authentication attempts counter
             _failedAuthAttempts = 0;
+            
+            // Reset auth handoff tracking
+            _sessionUsedAuthHandoff = false;
             
             Debug.LogWarning("AbxrLib: Authentication state cleared - data transmission stopped");
         }
@@ -696,6 +702,7 @@ namespace AbxrLib.Runtime.Authentication
                 
                 // Mark handoff as completed
                 _authHandoffCompleted = true;
+                _sessionUsedAuthHandoff = true;
                 
                 Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModuleData?.Count ?? 0}");
                 
