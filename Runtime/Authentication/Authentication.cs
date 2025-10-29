@@ -38,6 +38,7 @@ namespace AbxrLib.Runtime.Authentication
         private static string _deviceId;
         private static string _authSecret;
         private static string _appId;
+        private static string _launcherAppId;
         private static Partner _partner = Partner.None;
         private static string _deviceModel;
         private static string[] _deviceTags;
@@ -204,6 +205,8 @@ namespace AbxrLib.Runtime.Authentication
             _appId = Configuration.Instance.appID;
             _orgId = Configuration.Instance.orgID;
             _authSecret = Configuration.Instance.authSecret;
+            _launcherAppId = Configuration.Instance.launcherAppID;
+            
         }
     
         private static void GetArborData()
@@ -627,12 +630,42 @@ namespace AbxrLib.Runtime.Authentication
 #endif
             }
             
+            // Check for test-injected handoff data (for unit testing)
+            if (string.IsNullOrEmpty(handoffJson))
+            {
+                handoffJson = GetTestHandoffData();
+            }
+            
             if (!string.IsNullOrEmpty(handoffJson))
             {
                 yield return ProcessAuthHandoff(handoffJson);
             }
             
             yield return null;
+        }
+
+        // Test support for injecting handoff data
+        private static string _testHandoffData;
+        
+        /// <summary>
+        /// For unit testing: Inject handoff data to simulate launcher app behavior
+        /// </summary>
+        public static void SetTestHandoffData(string handoffJson)
+        {
+            _testHandoffData = handoffJson;
+        }
+        
+        /// <summary>
+        /// For unit testing: Clear injected handoff data
+        /// </summary>
+        public static void ClearTestHandoffData()
+        {
+            _testHandoffData = null;
+        }
+        
+        private static string GetTestHandoffData()
+        {
+            return _testHandoffData;
         }
 
         /// <summary>

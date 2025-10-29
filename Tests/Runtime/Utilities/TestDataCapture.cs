@@ -11,7 +11,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace AbxrLib.Tests.Runtime.TestDoubles
+namespace AbxrLib.Tests.Runtime.Utilities
 {
     /// <summary>
     /// Captures data sent by ABXRLib for test verification

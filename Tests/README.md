@@ -8,15 +8,14 @@ This directory contains comprehensive tests for the ABXRLib Unity package using 
 Tests/
 ├── Runtime/                    # PlayMode tests (run in Unity)
 │   ├── AbxrLib.Tests.Runtime.asmdef
-│   ├── TestDoubles/            # Mock objects and test doubles
-│   │   ├── MockAuthenticationProvider.cs
-│   │   ├── MockNetworkProvider.cs
-│   │   ├── MockConfiguration.cs
-│   │   └── TestDataCapture.cs
-│   ├── Utilities/              # Test helper utilities
+│   ├── Utilities/              # Test utilities and helpers
 │   │   ├── TestHelpers.cs
 │   │   ├── AuthenticationTestHelper.cs
-│   │   └── CoroutineTestHelper.cs
+│   │   ├── SharedAuthenticationHelper.cs
+│   │   ├── CoroutineTestHelper.cs
+│   │   ├── AuthHandoffTestHelper.cs
+│   │   ├── TestDataCapture.cs
+│   │   └── TestAuthenticationProvider.cs
 │   ├── EventTrackingTests.cs
 │   ├── AnalyticsEventTests.cs
 │   ├── TimedEventTests.cs
@@ -50,8 +49,8 @@ Unity -batchmode -quit -projectPath /path/to/project -runTests -testPlatform pla
 
 ### Phase 1: Test Infrastructure ✅
 - **Assembly Definitions**: Proper test assembly setup
-- **Test Doubles**: Mock providers for authentication, network, and configuration
 - **Test Utilities**: Helper functions for common test operations
+- **Real Server Testing**: All tests use actual server authentication
 
 ### Phase 2: Critical Path Tests ✅
 - **Event Tracking Tests**: Basic event logging with various parameters
@@ -144,6 +143,125 @@ public IEnumerator Test_RealServerAuthentication_CompletesSuccessfully()
 }
 ```
 
+## Test Development Guidelines
+
+### Test Name Generation
+- **ALWAYS** use `TestHelpers.GenerateRandomName(prefix)` for generating unique test names
+- **NEVER** use hardcoded names that could cause test conflicts
+- **Examples:**
+  ```csharp
+  string eventName = TestHelpers.GenerateRandomName("event");
+  string assessmentName = TestHelpers.GenerateRandomName("assessment");
+  string objectiveName = TestHelpers.GenerateRandomName("objective");
+  string interactionName = TestHelpers.GenerateRandomName("interaction");
+  ```
+
+### SCORM Educational Content Hierarchy
+When testing educational analytics events, follow SCORM standards:
+
+#### Assessment → Objective → Interaction Hierarchy
+- **Assessments** are the top-level learning containers
+- **Objectives** happen within Assessments
+- **Interactions** can happen within Assessments OR within Objectives
+- **Multiple Objectives** can exist within one Assessment
+- **Multiple Interactions** can exist within one Assessment or one Objective
+
+#### Proper Test Sequencing
+```csharp
+// Correct SCORM hierarchy test pattern:
+Abxr.EventAssessmentStart(assessmentName);
+yield return new WaitForSeconds(0.2f);
+
+Abxr.EventObjectiveStart(objectiveName);
+yield return new WaitForSeconds(0.2f);
+
+Abxr.EventInteractionStart(interactionName, interactionMeta);
+yield return new WaitForSeconds(0.3f);
+
+Abxr.EventInteractionComplete(interactionName, type, result, response);
+yield return new WaitForSeconds(0.2f);
+
+Abxr.EventObjectiveComplete(objectiveName, score, status);
+yield return new WaitForSeconds(0.2f);
+
+Abxr.EventAssessmentComplete(assessmentName, score, status);
+```
+
+#### Event Start/Complete Pairs
+- **AssessmentComplete** should typically have **AssessmentStart** first
+- **ObjectiveComplete** should typically have **ObjectiveStart** first  
+- **InteractionComplete** should typically have **InteractionStart** first
+- **Exception:** Test orphan events (complete without start) for error handling
+
+### Shared Authentication Session
+The test suite uses a shared authentication session for efficiency:
+
+#### Test Execution Order
+- **`_AuthenticationTests`** runs first (alphabetical ordering ensures this)
+- **All other test classes** use `SharedAuthenticationHelper` to reuse the authenticated session
+- **No need to authenticate** in each individual test
+
+#### Setup Pattern
+```csharp
+[UnitySetUp]
+public IEnumerator UnitySetUp()
+{
+    // Ensure shared authentication is completed before running tests
+    yield return SharedAuthenticationHelper.EnsureAuthenticated();
+}
+
+[TearDown]
+public void TearDown()
+{
+    TestHelpers.CleanupTestEnvironment();
+    _dataCapture?.Clear();
+}
+
+[UnityTearDown]
+public void UnityTearDown()
+{
+    // Reset shared authentication state for next test run
+    SharedAuthenticationHelper.ResetAuthenticationState();
+}
+```
+
+#### Benefits
+- **Faster test execution** - Authentication happens once, not per test
+- **Consistent state** - All tests start with the same authenticated session
+- **Real server testing** - Uses actual authentication flow with real credentials
+- **Test isolation** - Each test class resets state appropriately
+
+### Event Interaction Testing
+When testing interaction events, use the correct method signatures:
+
+#### EventInteractionStart Method
+```csharp
+// Correct usage - pass InteractionType in metadata
+var interactionMeta = new Dictionary<string, string> { 
+    ["interaction_type"] = Abxr.InteractionType.Select.ToString() 
+};
+Abxr.EventInteractionStart(interactionName, interactionMeta);
+
+// WRONG - don't pass InteractionType directly as second parameter
+// Abxr.EventInteractionStart(interactionName, type); // This will cause compilation errors
+```
+
+#### Valid InteractionTypes
+- `Null`, `Bool`, `Select`, `Text`, `Rating`, `Number`, `Matching`, `Performance`, `Sequencing`
+- **Note:** `DragAndDrop` is not a valid InteractionType (use `Matching` instead)
+
+### Test Types
+- **Unit Tests**: Test specific API functionality with `TestDataCapture` and meaningful assertions
+- **Integration Tests**: Test end-to-end behavior with `new WaitForSeconds()` and exception-free verification
+- **Use unit tests** for testing specific API behavior (e.g., metadata registration)
+- **Use integration tests** for testing complete workflows and server communication
+
+### Test Isolation
+- Each test should be independent and not rely on state from other tests
+- Use randomized names to prevent test interference
+- Clean up test state in `[TearDown]` methods
+- Reset shared authentication state between test runs
+
 ## Platform Limitations
 
 ### Unity Editor Testing Limitations
@@ -171,7 +289,7 @@ The following methods require Android platform-specific native SDK calls and wil
 #### **Testing Strategy**
 - **Unity Editor Tests**: Focus on core functionality that doesn't require native SDK calls
 - **Android Device Tests**: Test platform-specific features on actual Android devices
-- **Mock Testing**: Use test doubles for platform-specific functionality when needed
+- **Real Server Testing**: All tests authenticate against actual servers to verify end-to-end functionality
 
 #### **Affected Test Categories**
 - Session Management Tests (removed from Unity Editor test suite)
@@ -197,36 +315,9 @@ The following methods require Android platform-specific native SDK calls and wil
 
 ## Test Configuration
 
-### Mock Providers
+### Real Server Testing
 
-The test suite uses configurable mock providers to simulate different scenarios:
-
-#### MockAuthenticationProvider
-```csharp
-// Set up successful authentication
-var mockAuth = AuthenticationTestHelper.SetupSuccessfulAuth();
-
-// Set up failed authentication
-var mockAuth = AuthenticationTestHelper.SetupFailedAuth("Invalid credentials");
-
-// Set up keyboard authentication
-var mockAuth = AuthenticationTestHelper.SetupKeyboardAuth();
-
-// Set up SSO authentication
-var mockAuth = AuthenticationTestHelper.SetupSSOAuth();
-```
-
-#### MockNetworkProvider
-```csharp
-// Set up successful network responses
-mockNetwork.CurrentScenario = MockNetworkProvider.NetworkScenario.Success;
-
-// Set up network errors
-mockNetwork.CurrentScenario = MockNetworkProvider.NetworkScenario.ConnectionError;
-
-// Set up authentication response
-mockNetwork.SetAuthResponse("token", "secret", DateTime.UtcNow.AddHours(1));
-```
+The test suite uses real server authentication to ensure both client and server work together properly. All tests authenticate against actual servers using the configuration from the demo app.
 
 #### TestDataCapture
 ```csharp
@@ -269,15 +360,15 @@ yield return TestHelpers.WaitForEventCount(capture, 5);
 
 #### AuthenticationTestHelper
 ```csharp
-// Setup different auth scenarios
-var mockAuth = AuthenticationTestHelper.SetupSuccessfulAuth();
-var mockAuth = AuthenticationTestHelper.SetupFailedAuth();
-var mockAuth = AuthenticationTestHelper.SetupKeyboardAuth();
-var mockAuth = AuthenticationTestHelper.SetupSSOAuth();
+// Wait for authentication to complete
+yield return AuthenticationTestHelper.WaitForAuthenticationToComplete();
 
 // Assertions
-AuthenticationTestHelper.AssertAuthenticationSuccessful(mockAuth);
-AuthenticationTestHelper.AssertAuthenticationFailed(mockAuth, "Expected error");
+AuthenticationTestHelper.AssertAuthenticationSuccessful();
+AuthenticationTestHelper.AssertConfigurationValid();
+
+// Get status for debugging
+string status = AuthenticationTestHelper.GetAuthenticationStatus();
 ```
 
 #### CoroutineTestHelper
@@ -346,13 +437,13 @@ public void TearDown()
 public IEnumerator Test_CoroutineMethod_Scenario_ExpectedResult()
 {
     // Arrange
-    var mockAuth = AuthenticationTestHelper.SetupSuccessfulAuth();
+    TestHelpers.SetupTestEnvironmentWithExistingConfig();
     
     // Act
-    yield return AuthenticationTestHelper.SimulateAuthentication(mockAuth);
+    yield return AuthenticationTestHelper.WaitForAuthenticationToComplete();
     
     // Assert
-    AuthenticationTestHelper.AssertAuthenticationSuccessful(mockAuth);
+    AuthenticationTestHelper.AssertAuthenticationSuccessful();
 }
 ```
 
@@ -375,7 +466,6 @@ Each test is isolated and cleans up after itself:
 - Super metadata is reset
 - Timers are cleared
 - Captured data is cleared
-- Mock providers are reset
 
 ## CI/CD Integration
 
@@ -399,13 +489,13 @@ The test suite is designed to work with CI/CD pipelines:
 
 2. **Tests failing with timeout**
    - Increase timeout values in `WaitForCondition` calls
-   - Check that mock providers are properly configured
+   - Check that server is accessible and responding
    - Ensure test data capture is working correctly
 
 3. **Authentication tests failing**
-   - Verify mock authentication provider is set up correctly
-   - Check that authentication scenarios match expected behavior
-   - Ensure test helpers are properly configured
+   - Verify server credentials in AbxrLib.asset are correct
+   - Check that server is accessible from your network
+   - Ensure configuration is valid for real server testing
 
 ### Getting Help
 
@@ -419,10 +509,11 @@ The test suite is designed to work with CI/CD pipelines:
 When adding new tests:
 
 1. Follow the existing naming convention
-2. Use the provided test helpers and mock providers
+2. Use the provided test helpers for real server authentication
 3. Include proper setup and teardown
 4. Add debug logging for complex scenarios
 5. Test both success and failure cases
+6. Ensure tests work with real server authentication
 6. Include edge cases and error conditions
 
 ## Future Enhancements

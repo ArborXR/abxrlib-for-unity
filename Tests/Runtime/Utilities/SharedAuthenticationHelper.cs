@@ -13,7 +13,6 @@ using UnityEngine.TestTools;
 using NUnit.Framework;
 using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Core;
-using AbxrLib.Tests.Runtime.TestDoubles;
 using AbxrLib.Tests.Runtime.Utilities;
 
 namespace AbxrLib.Tests.Runtime.Utilities
@@ -55,21 +54,33 @@ namespace AbxrLib.Tests.Runtime.Utilities
             
             try
             {
-                // Set up test environment with authentication enabled
+                // Set up test environment with auto-start DISABLED
                 TestHelpers.SetupTestEnvironmentWithExistingConfig();
                 
-                // Ensure test authentication mode is enabled to prevent UI creation
-                if (Configuration.Instance != null)
-                {
-                    Configuration.Instance.disableAutoStartAuthentication = false; // Enable auto-start
-                }
+                // Enable test mode to hijack authentication UI
+                TestAuthenticationProvider.EnableTestMode();
+                // Use default test responses (no need to override - defaults are already set)
                 
-                // Wait for authentication to complete
-                yield return WaitForAuthenticationToComplete();
+                // Register callback to know when authentication completes
+                bool authCompleted = false;
+                bool authSuccess = false;
+                string authError = null;
                 
-                // Verify authentication was successful
-                bool isConnected = Abxr.ConnectionActive() || Authentication.Authenticated();
-                if (isConnected)
+                Abxr.OnAuthCompleted += (success, error) => {
+                    authCompleted = true;
+                    authSuccess = success;
+                    authError = error;
+                    Debug.Log($"SharedAuthenticationHelper: Auth callback received - Success: {success}, Error: {error}");
+                };
+                
+                // Manually trigger authentication
+                Debug.Log("SharedAuthenticationHelper: Manually triggering authentication...");
+                yield return Authentication.Authenticate();
+                
+                // Wait for authentication to complete via callback
+                yield return WaitForAuthCallback(authCompleted, authSuccess, authError);
+                
+                if (authSuccess)
                 {
                     _isAuthenticated = true;
                     Debug.Log("SharedAuthenticationHelper: Shared authentication completed successfully");
@@ -77,8 +88,8 @@ namespace AbxrLib.Tests.Runtime.Utilities
                 }
                 else
                 {
-                    Debug.LogError("SharedAuthenticationHelper: Shared authentication failed");
-                    Assert.Fail("Shared authentication failed - tests cannot proceed");
+                    Debug.LogError($"SharedAuthenticationHelper: Shared authentication failed - {authError}");
+                    Assert.Fail($"Shared authentication failed - {authError}");
                 }
             }
             finally
@@ -115,6 +126,32 @@ namespace AbxrLib.Tests.Runtime.Utilities
                 Debug.LogError($"SharedAuthenticationHelper: Authentication timed out after {timeout} seconds");
                 Debug.LogError($"SharedAuthenticationHelper: Final status - ConnectionActive: {Abxr.ConnectionActive()}, Authenticated: {Authentication.Authenticated()}");
                 Assert.Fail($"Shared authentication timed out after {timeout} seconds");
+            }
+        }
+        
+        /// <summary>
+        /// Waits for authentication callback to complete with timeout
+        /// </summary>
+        private static IEnumerator WaitForAuthCallback(bool authCompleted, bool authSuccess, string authError)
+        {
+            float timeout = 30f; // 30 second timeout
+            float elapsed = 0f;
+            
+            while (!authCompleted && elapsed < timeout)
+            {
+                yield return new WaitForSeconds(0.1f);
+                elapsed += 0.1f;
+            }
+            
+            if (!authCompleted)
+            {
+                Debug.LogError($"SharedAuthenticationHelper: Authentication callback timed out after {timeout} seconds");
+                Assert.Fail($"Authentication callback timed out after {timeout} seconds");
+            }
+            else if (!authSuccess)
+            {
+                Debug.LogError($"SharedAuthenticationHelper: Authentication failed - {authError}");
+                Assert.Fail($"Authentication failed - {authError}");
             }
         }
         

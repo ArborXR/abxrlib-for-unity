@@ -14,7 +14,6 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using NUnit.Framework;
 using AbxrLib.Runtime.Core;
-using AbxrLib.Tests.Runtime.TestDoubles;
 
 namespace AbxrLib.Tests.Runtime.Utilities
 {
@@ -87,27 +86,15 @@ namespace AbxrLib.Tests.Runtime.Utilities
             // Clear any existing state
             CleanupTestEnvironment();
             
-            // Enable test authentication mode
-            Debug.Log("TestHelpers: Enabling test authentication mode...");
-            TestAuthenticationProvider.EnableTestMode();
-            
-            // Set default test responses
-            Debug.Log("TestHelpers: Setting default test responses...");
-            TestAuthenticationProvider.SetDefaultResponses(
-                pin: "999999",
-                email: "testuser", 
-                text: "EmpID1234"
-            );
-            
             // Use the existing configuration from the demo app
             if (Configuration.Instance != null)
             {
-                // Enable auto-start authentication for tests with test mode
-                Configuration.Instance.disableAutoStartAuthentication = false;
-                Configuration.Instance.authenticationStartDelay = 0.1f; // Small delay for test stability
+                // DISABLE auto-start authentication for tests - we want manual control
+                Configuration.Instance.disableAutoStartAuthentication = true;
+                Configuration.Instance.authenticationStartDelay = 0.0f; // No delay needed for manual auth
                 
                 Debug.Log($"TestHelpers: Using existing configuration - appID: {Configuration.Instance.appID}, orgID: {Configuration.Instance.orgID}, restUrl: {Configuration.Instance.restUrl}");
-                Debug.Log("TestHelpers: Test authentication mode enabled - will use programmatic responses");
+                Debug.Log("TestHelpers: Auto-start authentication DISABLED - will use manual authentication with test callbacks");
                 
                 // Validate that the configuration has the required fields
                 if (!Configuration.Instance.IsValid())
@@ -131,9 +118,6 @@ namespace AbxrLib.Tests.Runtime.Utilities
             
             // Clear timers
             ClearTimedEvents();
-            
-            // Disable test authentication mode
-            TestAuthenticationProvider.DisableTestMode();
             
             Debug.Log("TestHelpers: Test environment cleanup complete");
         }

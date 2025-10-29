@@ -1,0 +1,86 @@
+# ABXRLib Unity Package - Cursor Rules
+
+## Core Design Principles
+
+### Global Abxr Object
+- **Users will ONLY use the globally defined `Abxr` object** - ensure it has everything needed to use the system fully
+- **All public APIs must be accessible through `Abxr`** - avoid requiring users to access internal classes directly
+- **Maintain backwards compatibility** - avoid forcing users to upgrade to newer C# versions
+- **Use wrapper classes** like `Abxr.Dict` over global using directives that require C# 10+
+
+### Console Output and Documentation
+- **NEVER use emojis in console logs or inline documentation** unless explicitly indicated
+- **Use clear, professional language** in all user-facing messages
+- **Follow Unity logging conventions** with appropriate log levels
+
+## Code Style and Patterns
+
+### Metadata Handling
+- **ALWAYS prefer `Abxr.Dict` over `Dictionary<string, string>`** for metadata parameters
+- **Use `Abxr.Dict` to avoid requiring using statements** - this is a key user experience feature
+- **Examples:**
+  ```csharp
+  // Preferred - no using statements required
+  Abxr.Event("user_action", new Abxr.Dict { ["action"] = "jump" });
+  
+  // Avoid - requires using System.Collections.Generic;
+  Abxr.Event("user_action", new Dictionary<string, string> { ["action"] = "jump" });
+  ```
+
+### Event Naming
+- **Use snake_case for event names** for better analytics processing
+- **Examples:** `"button_pressed"`, `"level_complete"`, `"user_interaction"`
+
+### Security Guidelines
+- **NEVER compile sensitive credentials** (Org ID, Auth Secret) into production builds for third-party distribution
+- **Only include App ID** in production builds for general distribution
+- **Use ArborXR-managed devices** or implement runtime credential provisioning for secure deployments
+- **Add security warnings** in documentation for credential handling
+
+### Configuration Management
+- **Prefer applying configuration changes** in main csc.rsp file rather than modifying auto-installed package directories
+- **Use existing configuration** from demo app when possible for testing
+- **Validate configuration** before use with proper error handling
+
+## API Design
+
+### Method Signatures
+- **Use optional parameters** with sensible defaults: `Dictionary<string, string> meta = null`
+- **Provide overloads** for common use cases
+- **Include comprehensive parameter documentation** with examples
+
+### Error Handling
+- **Provide clear error messages** without emojis
+- **Use appropriate log levels** (Debug, Info, Warn, Error, Critical)
+- **Handle edge cases gracefully** with meaningful feedback
+
+### Documentation Standards
+- **Include comprehensive examples** in all public API documentation
+- **Document all parameters** with clear descriptions
+- **Provide usage patterns** for common scenarios
+- **Include security notes** where applicable
+
+## Testing Guidelines
+- **See Tests/.cursorrules** for comprehensive testing guidelines and patterns
+- **Follow SCORM standards** for educational content hierarchy
+- **Use shared authentication sessions** for efficient testing
+- **Generate randomized test names** to prevent conflicts
+- **Test both success and failure scenarios** with proper error handling
+
+## Platform Considerations
+- **Handle Unity Editor limitations** gracefully (e.g., Android-specific calls)
+- **Provide clear platform-specific guidance** in documentation
+- **Use conditional compilation** where appropriate for platform-specific features
+- **Test across different Unity versions** and platforms
+
+## Performance and Scalability
+- **Design for enterprise use cases** - the library must scale
+- **Use efficient data structures** and algorithms
+- **Minimize memory allocations** in hot paths
+- **Provide batching capabilities** for high-frequency events
+
+## Integration Patterns
+- **Support multiple backend services** through the ABXR protocol
+- **Maintain compatibility** with existing systems (Mixpanel, Cognitive3D)
+- **Provide clear migration paths** for users switching between services
+- **Design for extensibility** - allow custom implementations

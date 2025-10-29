@@ -4,15 +4,20 @@ using UnityEngine;
 using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Core;
 
-namespace AbxrLib.Tests.Runtime.TestDoubles
+namespace AbxrLib.Tests.Runtime.Utilities
 {
     /// <summary>
     /// Test authentication provider that can hijack the authentication process
     /// and provide programmatic responses instead of showing UI keyboards
+    /// 
+    /// This is the SINGLE source of truth for test authentication credentials.
+    /// All test authentication uses these default values unless explicitly overridden.
     /// </summary>
     public static class TestAuthenticationProvider
     {
         private static bool _isTestMode = false;
+        
+        // Default test credentials - SINGLE SOURCE OF TRUTH
         private static string _defaultPin = "999999";
         private static string _defaultEmail = "testuser";
         private static string _defaultText = "EmpID1234";
@@ -57,6 +62,14 @@ namespace AbxrLib.Tests.Runtime.TestDoubles
             if (text != null) _defaultText = text;
             
             Debug.Log($"TestAuthenticationProvider: Default responses set - PIN: {_defaultPin}, Email: {_defaultEmail}, Text: {_defaultText}");
+        }
+        
+        /// <summary>
+        /// Get the current default test credentials for debugging
+        /// </summary>
+        public static (string pin, string email, string text) GetDefaultResponses()
+        {
+            return (_defaultPin, _defaultEmail, _defaultText);
         }
         
         /// <summary>

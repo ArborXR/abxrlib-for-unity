@@ -19,7 +19,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.TestTools;
 using NUnit.Framework;
-using AbxrLib.Tests.Runtime.TestDoubles;
 using AbxrLib.Tests.Runtime.Utilities;
 
 namespace AbxrLib.Tests.Runtime
@@ -33,16 +32,14 @@ namespace AbxrLib.Tests.Runtime
     public class EventTrackingTests
     {
         private TestDataCapture _dataCapture;
-        private MockConfiguration _mockConfig;
         
         [SetUp]
         public void Setup()
         {
-            // Use test environment with existing config to enable test authentication mode
+            // Use test environment with existing config for real server authentication
             TestHelpers.SetupTestEnvironmentWithExistingConfig();
             
             _dataCapture = new TestDataCapture();
-            _mockConfig = MockConfiguration.CreateDefault();
         }
         
         [UnitySetUp]
