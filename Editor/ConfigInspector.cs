@@ -73,23 +73,25 @@ namespace AbxrLib.Editor
             EditorGUILayout.LabelField("Player Tracking", EditorStyles.boldLabel);
         
             // Disable headset tracking UI if telemetry is disabled
-            config.disableAutomaticTelemetry = EditorGUILayout.Toggle("Disable Automatic Telemetry", config.disableAutomaticTelemetry);
+            config.disableAutomaticTelemetry = !EditorGUILayout.Toggle("Enable Automatic Telemetry", !config.disableAutomaticTelemetry);
             EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
                 config.headsetTracking = EditorGUILayout.Toggle(new GUIContent(
                     "Headset/Controller Tracking", "Track the Headset and Controllers"), config.headsetTracking);
                 config.positionTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
                     "Position Capture Period (seconds)", config.positionTrackingPeriodSeconds), 0.1f, 60f);
-                config.disableSceneEvents = EditorGUILayout.Toggle("Disable Scene Events", config.disableSceneEvents);
+                config.disableSceneEvents = !EditorGUILayout.Toggle("Enable Scene Events", !config.disableSceneEvents);
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Control", EditorStyles.boldLabel);
-            config.disableAutoStartAuthentication = EditorGUILayout.Toggle(new GUIContent(
-                "Disable Auto Start Authentication", "When enabled, authentication will NOT start automatically on app launch. You must manually call Abxr.StartAuthentication()"), config.disableAutoStartAuthentication);
+            config.disableAutoStartAuthentication = !EditorGUILayout.Toggle(new GUIContent(
+                "Enable Auto Start Authentication", "When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()"), !config.disableAutoStartAuthentication);
             
             EditorGUI.BeginDisabledGroup(config.disableAutoStartAuthentication);
                 config.authenticationStartDelay = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
                     "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay), 0f, 60f);
             EditorGUI.EndDisabledGroup();
+            config.returnToLauncherAfterAssessmentComplete = !EditorGUILayout.Toggle(new GUIContent(
+                "Return to LL after Assessment Complete", "When enabled, the app will return to the Learner Launcher after an assessment is complete. When disabled, the app will stay open after an assessment is complete. Specifically used with Learner Launcher."), !config.returnToLauncherAfterAssessmentComplete);
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Prefabs", EditorStyles.boldLabel);
@@ -151,6 +153,7 @@ namespace AbxrLib.Editor
                 // Authentication Control
                 config.disableAutoStartAuthentication = defaultConfig.disableAutoStartAuthentication;
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
+                config.returnToLauncherAfterAssessmentComplete = defaultConfig.returnToLauncherAfterAssessmentComplete;
                 
                 // Authentication Prefabs
                 config.KeyboardPrefab = defaultConfig.KeyboardPrefab;

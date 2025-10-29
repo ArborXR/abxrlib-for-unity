@@ -486,12 +486,35 @@ public static partial class Abxr
 		meta["status"] = status.ToString().ToLower();
 		AddDuration(_assessmentStartTimes, assessmentName, meta);
 		Event(assessmentName, meta);
+		
+		// Check if we should return to launcher after assessment completion
+		if (Authentication.SessionUsedAuthHandoff() && Configuration.Instance.returnToLauncherAfterAssessmentComplete)
+		{
+			CoroutineRunner.Instance.StartCoroutine(ExitAfterAssessmentComplete());
+		}
 	}
 	// backwards compatibility for old method signature
 	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		EventAssessmentComplete(assessmentName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
         EventAssessmentComplete(assessmentName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
+
+	/// <summary>
+	/// Coroutine to exit the application after a 2-second delay when assessment is complete
+	/// and the session used auth handoff with return to launcher enabled
+	/// </summary>
+	private static System.Collections.IEnumerator ExitAfterAssessmentComplete()
+	{
+		Debug.Log("AbxrLib: Assessment complete with auth handoff - returning to launcher in 2 seconds");
+		yield return new WaitForSeconds(2f);
+		
+		Debug.Log("AbxrLib: Exiting application to return to launcher");
+#if UNITY_EDITOR
+		UnityEditor.EditorApplication.isPlaying = false;
+#else
+		Application.Quit();
+#endif
+	}
 
 	/// <summary>
 	/// Start tracking an objective - individual learning goals within assessments

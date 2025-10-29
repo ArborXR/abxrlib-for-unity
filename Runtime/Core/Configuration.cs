@@ -50,6 +50,8 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("Required")] public string appID;
         [Tooltip("Optional")] public string orgID;
         [Tooltip("Optional")] public string authSecret;
+        [HideInInspector]
+        [Tooltip("Optional")] public string launcherAppID;
         
         /// <summary>
         /// Validates that the configuration has the required fields set properly.
@@ -228,6 +230,9 @@ namespace AbxrLib.Runtime.Core
         
         [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
         public float authenticationStartDelay = 0f;
+        
+        [Tooltip("When enabled, the app will return to the launcher after an assessment is complete. When disabled, the app will stay open after an assessment is complete. Specifically used with Learner Launcher.")]
+        public bool returnToLauncherAfterAssessmentComplete = true;
 
         [Header("Authentication Prefabs")]
         public GameObject KeyboardPrefab;
