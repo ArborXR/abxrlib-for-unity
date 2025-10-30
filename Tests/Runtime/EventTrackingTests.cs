@@ -31,36 +31,31 @@ namespace AbxrLib.Tests.Runtime
     [TestFixture, Category("PostAuth")]
     public class EventTrackingTests
     {
-        private TestDataCapture _dataCapture;
-        
         [SetUp]
         public void Setup()
         {
             // Use test environment with existing config for real server authentication
             TestHelpers.SetupTestEnvironmentWithExistingConfig();
-            
-            _dataCapture = new TestDataCapture();
         }
         
         [UnitySetUp]
         public IEnumerator UnitySetUp()
         {
             // Ensure shared authentication is completed before running tests
-            yield return SharedAuthenticationHelper.EnsureAuthenticated();
+            yield return AuthenticationTestHelper.EnsureAuthenticated();
         }
         
         [TearDown]
         public void TearDown()
         {
             TestHelpers.CleanupTestEnvironment();
-            _dataCapture?.Clear();
         }
         
         [UnityTearDown]
         public void UnityTearDown()
         {
             // Reset shared authentication state for next test run
-            SharedAuthenticationHelper.ResetAuthenticationState();
+            AuthenticationTestHelper.ResetAuthenticationState();
         }
         
         [UnityTest]

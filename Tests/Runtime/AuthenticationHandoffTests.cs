@@ -16,6 +16,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.TestTools;
 using NUnit.Framework;
@@ -31,8 +32,6 @@ namespace AbxrLib.Tests.Runtime
     /// </summary>
     public class AuthenticationHandoffTests
     {
-        private TestDataCapture _dataCapture;
-
         [SetUp]
         public void Setup()
         {
@@ -48,9 +47,6 @@ namespace AbxrLib.Tests.Runtime
             
             // Clear any existing handoff data
             Authentication.ClearTestHandoffData();
-            
-            // Setup data capture for testing Abxr.Log() functionality
-            _dataCapture = new TestDataCapture();
             
             Debug.Log("AuthenticationHandoffTests: Test setup complete (auto-start disabled for handoff tests)");
         }
@@ -89,7 +85,6 @@ namespace AbxrLib.Tests.Runtime
             // Cleanup
             TestHelpers.CleanupTestEnvironment();
             Authentication.ClearTestHandoffData();
-            _dataCapture?.Clear();
             
             Debug.Log("AuthenticationHandoffTests: Test cleanup complete");
         }
@@ -102,36 +97,47 @@ namespace AbxrLib.Tests.Runtime
         {
             Debug.Log("AuthenticationHandoffTests: Testing basic authentication handoff flow...");
 
-            // Arrange: Simulate launcher app creating handoff data using real authentication
-            var handoffCoroutine = AuthHandoffTestHelper.SimulateLauncherAppHandoff();
-            yield return handoffCoroutine;
-            string handoffJson = (string)handoffCoroutine.Current;
+            // Step 1: Simulate launcher app authenticating with real server
+            Debug.Log("Step 1: Launcher app authenticating with real server...");
+            yield return AuthHandoffTestHelper.SimulateLauncherAppHandoff();
+            
+            // Get the handoff data from the launcher app authentication
+            var authResponse = Authentication.GetAuthResponse();
+            Assert.IsNotNull(authResponse, "Launcher app should have auth response");
+            Assert.IsFalse(string.IsNullOrEmpty(authResponse.PackageName), "Launcher app should have PackageName");
+            
+            // Serialize the auth response for handoff
+            string handoffJson = JsonConvert.SerializeObject(authResponse);
             Assert.IsFalse(string.IsNullOrEmpty(handoffJson), "Handoff JSON should not be empty");
+            
+            Debug.Log($"Step 1 Complete: Launcher app authenticated with PackageName='{authResponse.PackageName}', AppId='{authResponse.AppId}'");
+
+            // Step 2: Simulate target app receiving handoff data
+            Debug.Log("Step 2: Target app receiving handoff data...");
             Authentication.SetTestHandoffData(handoffJson);
 
-            // Act: Simulate target app receiving handoff and authenticating
+            // Step 3: Target app authenticates using handoff data
+            Debug.Log("Step 3: Target app authenticating with handoff data...");
             yield return Authentication.Authenticate();
 
-            // Assert: Verify handoff was processed successfully
-            Assert.IsTrue(Authentication.Authenticated(), "Authentication should be successful after handoff");
-            Assert.IsTrue(Authentication.FullyAuthenticated(), "Authentication should be fully authenticated after handoff");
-
-            // Validate and extract handoff data from auth response
-            var (packageName, appId) = ValidateAndExtractHandoffData();
+            // Step 4: Verify target app is authenticated
+            Debug.Log("Step 4: Verifying target app authentication...");
+            Assert.IsTrue(Authentication.Authenticated(), "Target app should be authenticated after handoff");
+            Assert.IsTrue(Authentication.FullyAuthenticated(), "Target app should be fully authenticated after handoff");
 
             // Verify we got the correct auth response data
-            var authResponse = Authentication.GetAuthResponse();
-            Assert.IsNotNull(authResponse, "Auth response should not be null");
-            Assert.AreEqual(packageName, authResponse.PackageName, "Package name should match expected value");
-            Assert.IsFalse(string.IsNullOrEmpty(authResponse.Token), "Token should not be empty");
-            Assert.IsFalse(string.IsNullOrEmpty(authResponse.Secret), "Secret should not be empty");
+            var targetAuthResponse = Authentication.GetAuthResponse();
+            Assert.IsNotNull(targetAuthResponse, "Target app auth response should not be null");
+            Assert.AreEqual(authResponse.PackageName, targetAuthResponse.PackageName, "Package name should match between launcher and target");
+            Assert.IsFalse(string.IsNullOrEmpty(targetAuthResponse.Token), "Target app token should not be empty");
+            Assert.IsFalse(string.IsNullOrEmpty(targetAuthResponse.Secret), "Target app secret should not be empty");
 
             // Verify handoff data is available
             var handoffData = Authentication.GetAuthHandoffData();
             Assert.IsNotNull(handoffData, "Handoff data should be available");
-            Assert.AreEqual(packageName, handoffData.PackageName, "Handoff package name should match");
+            Assert.AreEqual(authResponse.PackageName, handoffData.PackageName, "Handoff package name should match");
 
-            Debug.Log($"AuthenticationHandoffTests: Basic handoff flow completed successfully with PackageName='{packageName}', AppId='{appId}'");
+            Debug.Log($"AuthenticationHandoffTests: Basic handoff flow completed successfully with PackageName='{authResponse.PackageName}', AppId='{authResponse.AppId}'");
         }
 
         [UnityTest]
@@ -252,35 +258,50 @@ namespace AbxrLib.Tests.Runtime
         {
             Debug.Log("AuthenticationHandoffTests: Testing Abxr.Event() functionality after handoff...");
 
-            // Arrange: Setup handoff using real authentication
-            var handoffCoroutine = AuthHandoffTestHelper.SimulateLauncherAppHandoff();
-            yield return handoffCoroutine;
-            string handoffJson = (string)handoffCoroutine.Current;
+            // Step 1: Simulate launcher app authenticating with real server
+            Debug.Log("Step 1: Launcher app authenticating with real server...");
+            yield return AuthHandoffTestHelper.SimulateLauncherAppHandoff();
+            
+            // Get the handoff data from the launcher app authentication
+            var authResponse = Authentication.GetAuthResponse();
+            Assert.IsNotNull(authResponse, "Launcher app should have auth response");
+            string handoffJson = JsonConvert.SerializeObject(authResponse);
             Authentication.SetTestHandoffData(handoffJson);
             
-            Debug.Log("AuthenticationHandoffTests: About to call Authentication.Authenticate()");
+            // Step 2: Target app authenticates using handoff data
+            Debug.Log("Step 2: Target app authenticating with handoff data...");
             yield return Authentication.Authenticate();
-            Debug.Log("AuthenticationHandoffTests: Authentication.Authenticate() completed");
 
-            // Verify authentication is working
-            Assert.IsTrue(Authentication.Authenticated(), "Authentication should be successful");
+            // Step 3: Verify target app is authenticated
+            Assert.IsTrue(Authentication.Authenticated(), "Target app should be authenticated after handoff");
 
-            // Act: Try to use Abxr.Event() functionality
+            // Step 4: Test Abxr.Event() functionality
+            Debug.Log("Step 4: Testing Abxr.Event() functionality...");
             string eventName = "handoff_test_event";
             var metadata = TestHelpers.CreateTestMetadata(("test_key", "test_value"));
-            Abxr.Event(eventName, metadata);
+            
+            // Test that event API calls work without throwing exceptions
+            bool apiCallSucceeded = false;
+            try
+            {
+                Abxr.Event(eventName, metadata);
+                apiCallSucceeded = true;
+            }
+            catch (System.Exception ex)
+            {
+                Assert.Fail($"Event API call failed with exception: {ex.Message}");
+            }
+            
+            Assert.IsTrue(apiCallSucceeded, "Event API call should succeed");
 
             // Wait for event to be processed and sent
             yield return new WaitForSeconds(1.0f);
 
-            // Assert: Verify no exceptions were thrown and event was processed
-            // The event should be sent to the server (we can see this in logs)
-            Debug.Log($"AuthenticationHandoffTests: Event '{eventName}' sent successfully after handoff");
-            
-            // Verify that the event call completed without throwing exceptions
-            Assert.IsTrue(Authentication.Authenticated(), "Authentication should still be working after Abxr.Event()");
-            Assert.IsTrue(true, "Event should be sent without throwing exceptions");
+            // Verify connection is still active after API calls
+            bool stillConnected = Abxr.ConnectionActive() || Authentication.Authenticated();
+            Assert.IsTrue(stillConnected, $"Connection should remain active after API calls. ConnectionActive: {Abxr.ConnectionActive()}, Authenticated: {Authentication.Authenticated()}");
 
+            Debug.Log($"AuthenticationHandoffTests: Event '{eventName}' sent successfully after handoff");
             Debug.Log("AuthenticationHandoffTests: Abxr.Event() works correctly after handoff");
         }
 

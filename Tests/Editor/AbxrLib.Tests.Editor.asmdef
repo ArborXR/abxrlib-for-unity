@@ -4,7 +4,6 @@
     "references": [
         "AbxrLib.Runtime",
         "AbxrLib.Editor",
-        "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
     "includePlatforms": [

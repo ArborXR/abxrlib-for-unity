@@ -29,37 +29,31 @@ namespace AbxrLib.Tests.Runtime
     [TestFixture, Category("PostAuth")]
     public class AnalyticsEventTests
     {
-        private TestDataCapture _dataCapture;
-        
-        
         [SetUp]
         public void Setup()
         {
             // Use existing configuration from the demo app
             TestHelpers.SetupTestEnvironmentWithExistingConfig();
-            
-            _dataCapture = new TestDataCapture();
         }
         
         [UnitySetUp]
         public IEnumerator UnitySetUp()
         {
             // Ensure shared authentication is completed before running tests
-            yield return SharedAuthenticationHelper.EnsureAuthenticated();
+            yield return AuthenticationTestHelper.EnsureAuthenticated();
         }
         
         [TearDown]
         public void TearDown()
         {
             TestHelpers.CleanupTestEnvironment();
-            _dataCapture?.Clear();
         }
         
         [UnityTearDown]
         public void UnityTearDown()
         {
             // Reset shared authentication state for next test run
-            SharedAuthenticationHelper.ResetAuthenticationState();
+            AuthenticationTestHelper.ResetAuthenticationState();
         }
         
         #region Real Server Integration Tests
@@ -73,11 +67,11 @@ namespace AbxrLib.Tests.Runtime
             Debug.Log("AnalyticsEventTests: Verifying shared authentication session...");
             
             // Verify that shared authentication is active
-            bool isAuthenticated = SharedAuthenticationHelper.IsAuthenticated();
-            Assert.IsTrue(isAuthenticated, $"Shared authentication should be active. Status: {SharedAuthenticationHelper.GetAuthenticationStatus()}");
+            bool isAuthenticated = AuthenticationTestHelper.IsAuthenticated();
+            Assert.IsTrue(isAuthenticated, $"Shared authentication should be active. Status: {AuthenticationTestHelper.GetAuthenticationStatus()}");
             
             Debug.Log("AnalyticsEventTests: Shared authentication session verified successfully!");
-            Debug.Log($"AnalyticsEventTests: {SharedAuthenticationHelper.GetAuthenticationStatus()}");
+            Debug.Log($"AnalyticsEventTests: {AuthenticationTestHelper.GetAuthenticationStatus()}");
             
             yield return null;
         }

@@ -3,8 +3,7 @@
     "rootNamespace": "AbxrLib.Tests.Runtime",
     "references": [
         "AbxrLib.Runtime",
-        "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEngine.TestRunner"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
