@@ -62,14 +62,12 @@ namespace AbxrLib.Tests.Runtime.Utilities
                 // Use default test responses (no need to override - defaults are already set)
                 
                 // Register callback to know when authentication completes
-                bool authCompleted = false;
-                bool authSuccess = false;
-                string authError = null;
+                var authState = new AuthCallbackState();
                 
                 Abxr.OnAuthCompleted += (success, error) => {
-                    authCompleted = true;
-                    authSuccess = success;
-                    authError = error;
+                    authState.Completed = true;
+                    authState.Success = success;
+                    authState.Error = error;
                     Debug.Log($"SharedAuthenticationHelper: Auth callback received - Success: {success}, Error: {error}");
                 };
                 
@@ -78,9 +76,9 @@ namespace AbxrLib.Tests.Runtime.Utilities
                 yield return Authentication.Authenticate();
                 
                 // Wait for authentication to complete via callback
-                yield return WaitForAuthCallback(authCompleted, authSuccess, authError);
+                yield return WaitForAuthCallback(authState);
                 
-                if (authSuccess)
+                if (authState.Success)
                 {
                     _isAuthenticated = true;
                     Debug.Log("SharedAuthenticationHelper: Shared authentication completed successfully");
@@ -88,8 +86,8 @@ namespace AbxrLib.Tests.Runtime.Utilities
                 }
                 else
                 {
-                    Debug.LogError($"SharedAuthenticationHelper: Shared authentication failed - {authError}");
-                    Assert.Fail($"Shared authentication failed - {authError}");
+                    Debug.LogError($"SharedAuthenticationHelper: Shared authentication failed - {authState.Error}");
+                    Assert.Fail($"Shared authentication failed - {authState.Error}");
                 }
             }
             finally
@@ -132,26 +130,26 @@ namespace AbxrLib.Tests.Runtime.Utilities
         /// <summary>
         /// Waits for authentication callback to complete with timeout
         /// </summary>
-        private static IEnumerator WaitForAuthCallback(bool authCompleted, bool authSuccess, string authError)
+        private static IEnumerator WaitForAuthCallback(AuthCallbackState authState)
         {
             float timeout = 30f; // 30 second timeout
             float elapsed = 0f;
             
-            while (!authCompleted && elapsed < timeout)
+            while (!authState.Completed && elapsed < timeout)
             {
                 yield return new WaitForSeconds(0.1f);
                 elapsed += 0.1f;
             }
             
-            if (!authCompleted)
+            if (!authState.Completed)
             {
                 Debug.LogError($"SharedAuthenticationHelper: Authentication callback timed out after {timeout} seconds");
                 Assert.Fail($"Authentication callback timed out after {timeout} seconds");
             }
-            else if (!authSuccess)
+            else if (!authState.Success)
             {
-                Debug.LogError($"SharedAuthenticationHelper: Authentication failed - {authError}");
-                Assert.Fail($"Authentication failed - {authError}");
+                Debug.LogError($"SharedAuthenticationHelper: Authentication failed - {authState.Error}");
+                Assert.Fail($"Authentication failed - {authState.Error}");
             }
         }
         
@@ -180,5 +178,16 @@ namespace AbxrLib.Tests.Runtime.Utilities
         {
             return $"SharedAuth: {_isAuthenticated}, ConnectionActive: {Abxr.ConnectionActive()}, Authenticated: {Authentication.Authenticated()}";
         }
+    }
+    
+    /// <summary>
+    /// Helper class to hold authentication callback state by reference
+    /// This fixes the closure variable issue where local variables are captured by value
+    /// </summary>
+    public class AuthCallbackState
+    {
+        public bool Completed { get; set; } = false;
+        public bool Success { get; set; } = false;
+        public string Error { get; set; } = null;
     }
 }

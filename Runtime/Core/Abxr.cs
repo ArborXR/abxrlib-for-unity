@@ -267,12 +267,14 @@ public static partial class Abxr
 		
 		// In test environment, prevent UI creation to avoid NullReferenceException
 		// This prevents FaceCamera from trying to access Camera.main when there's no camera
-		if (Application.isEditor && !IsTestMode())
+#if UNITY_EDITOR
+		if (Application.isEditor && isTestMode)
 		{
 			Debug.LogWarning($"Abxr.PresentKeyboard: Preventing UI creation in test environment for type: {keyboardType}");
 			Debug.LogWarning("Abxr.PresentKeyboard: This may indicate that authentication is being triggered unexpectedly in tests");
 			return;
 		}
+#endif
 		
 		Debug.Log($"Abxr.PresentKeyboard: Creating UI keyboard for type: {keyboardType}");
 		

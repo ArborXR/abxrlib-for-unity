@@ -110,7 +110,7 @@ namespace AbxrLib.Tests.Runtime.Utilities
             Debug.Log($"TestAuthenticationProvider: Server prompt: '{promptText}'");
             Debug.Log($"TestAuthenticationProvider: Email domain: '{emailDomain}'");
             
-            // Get the test response
+            // Get the test response based on the authentication mechanism type
             string testResponse = GetTestResponse(keyboardType, emailDomain);
             
             if (string.IsNullOrEmpty(testResponse))
@@ -121,7 +121,10 @@ namespace AbxrLib.Tests.Runtime.Utilities
             
             Debug.Log($"TestAuthenticationProvider: Providing test response: '{testResponse}' for auth type: '{keyboardType}'");
             
-            // Call KeyboardAuthenticate with the test response
+            // Simulate a brief delay to mimic user input time
+            yield return new WaitForSeconds(0.1f);
+            
+            // Call KeyboardAuthenticate with the test response - this will make the actual server request
             yield return Authentication.KeyboardAuthenticate(testResponse);
             
             Debug.Log($"TestAuthenticationProvider: Authentication attempt completed with response: '{testResponse}'");
