@@ -34,6 +34,9 @@ namespace AbxrLib.Tests.Runtime
         [SetUp]
         public void Setup()
         {
+            // Clean up any state from previous tests (defensive - in case previous test failed)
+            TestHelpers.CleanupTestEnvironment();
+            
             // Use test environment with existing config for real server authentication
             TestHelpers.SetupTestEnvironmentWithExistingConfig();
         }

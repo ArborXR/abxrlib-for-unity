@@ -35,20 +35,19 @@ namespace AbxrLib.Tests.Runtime
         [SetUp]
         public void Setup()
         {
+            // Clean up any state from previous tests (defensive - in case previous test failed)
+            TestHelpers.CleanupTestEnvironment();
+            
             // Setup test environment with existing config to enable test authentication mode
             TestHelpers.SetupTestEnvironmentWithExistingConfig();
             
-            // Disable auto-start authentication for handoff tests
-            // This prevents DeferredAuthenticationSystem from running before we set handoff data
-            if (Configuration.Instance != null)
-            {
-                Configuration.Instance.disableAutoStartAuthentication = true;
-            }
+            // Auto-start authentication is controlled by editor check in Authentication.cs
+            // No need to modify disableAutoStartAuthentication setting
             
             // Clear any existing handoff data
             Authentication.ClearTestHandoffData();
             
-            Debug.Log("AuthenticationHandoffTests: Test setup complete (auto-start disabled for handoff tests)");
+            Debug.Log("AuthenticationHandoffTests: Test setup complete (auto-start controlled by editor check)");
         }
 
         /// <summary>

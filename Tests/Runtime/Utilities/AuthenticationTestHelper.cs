@@ -65,12 +65,7 @@ namespace AbxrLib.Tests.Runtime.Utilities
             
             try
             {
-                // Set up test environment with auto-start DISABLED
-                TestHelpers.SetupTestEnvironmentWithExistingConfig();
-                
-                // Enable test mode to hijack authentication UI
-                EnableTestMode();
-                
+                // Environment is already set up by test [SetUp] methods
                 // Register callback to know when authentication completes
                 var authState = new AuthCallbackState();
                 
@@ -78,7 +73,7 @@ namespace AbxrLib.Tests.Runtime.Utilities
                     authState.Completed = true;
                     authState.Success = success;
                     authState.Error = error;
-                    Debug.Log($"AuthenticationTestHelper: Auth callback received - Success: {success}, Error: {error}");
+                    Debug.Log($"AuthenticationTestHelper: OnAuthCompleted - Success: {success}, Error: {error}");
                 };
                 
                 // Manually trigger authentication
@@ -209,11 +204,12 @@ namespace AbxrLib.Tests.Runtime.Utilities
                 yield break;
             }
             
-            Debug.Log("AuthenticationTestHelper: HIJACKING authentication!");
-            Debug.Log($"AuthenticationTestHelper: Server requested AuthMechanism type: '{keyboardType}'");
-            Debug.Log($"AuthenticationTestHelper: Server prompt: '{promptText}'");
-            Debug.Log($"AuthenticationTestHelper: Email domain: '{emailDomain}'");
-            
+            Debug.Log($"AuthenticationTestHelper: Requested AuthMechanism: '{keyboardType}' and Prompt: '{promptText}'");
+            if(emailDomain != null)
+            {
+                Debug.Log($"AuthenticationTestHelper: Email domain: '{emailDomain}'");
+            }
+
             // Get the test response based on the authentication mechanism type
             string testResponse = GetTestResponse(keyboardType, emailDomain);
             
@@ -223,7 +219,7 @@ namespace AbxrLib.Tests.Runtime.Utilities
                 yield break;
             }
             
-            Debug.Log($"AuthenticationTestHelper: Providing test response: '{testResponse}' for auth type: '{keyboardType}'");
+            Debug.Log($"AuthenticationTestHelper: Providing test response: '{testResponse}'");
             
             // Simulate a brief delay to mimic user input time
             yield return new WaitForSeconds(0.1f);
@@ -231,7 +227,7 @@ namespace AbxrLib.Tests.Runtime.Utilities
             // Call KeyboardAuthenticate with the test response - this will make the actual server request
             yield return Authentication.KeyboardAuthenticate(testResponse);
             
-            Debug.Log($"AuthenticationTestHelper: Authentication attempt completed with response: '{testResponse}'");
+            Debug.Log($"AuthenticationTestHelper: Authentication attempt completed.");
         }
         
         #endregion

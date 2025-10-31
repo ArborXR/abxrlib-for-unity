@@ -37,12 +37,7 @@ namespace AbxrLib.Tests.Runtime.Utilities
             // Clear any existing authentication state
             Authentication.ClearTestHandoffData();
             
-            // Set up test environment with auto-start DISABLED for launcher app
-            TestHelpers.SetupTestEnvironmentWithExistingConfig();
-            
-            // Enable test mode to hijack authentication UI
-            AuthenticationTestHelper.EnableTestMode();
-            
+            // Environment is already set up by test [SetUp] methods
             // Register callback to know when authentication completes
             var authState = new AuthCallbackState();
             

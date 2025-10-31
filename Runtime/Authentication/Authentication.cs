@@ -105,6 +105,34 @@ namespace AbxrLib.Runtime.Authentication
             
             Debug.LogWarning("AbxrLib: Authentication state cleared - data transmission stopped");
         }
+        
+#if UNITY_EDITOR
+        /// <summary>
+        /// Public testing wrapper for ClearAuthenticationState() that only works in testing mode
+        /// This allows test cleanup and isolation without exposing internal state management
+        /// </summary>
+        public static void TestingClearAuthenticationState()
+        {
+            // Only allow this in testing mode to prevent accidental misuse
+            if (!IsTestMode())
+            {
+                Debug.LogWarning("AbxrLib: TestingClearAuthenticationState() called outside of test mode - ignoring");
+                return;
+            }
+            
+            Debug.Log("AbxrLib.Authentication.TestingClearAuthenticationState: Testing mode detected - clearing authentication state for test cleanup");
+            ClearAuthenticationState();
+        }
+
+        /// <summary>
+        /// Check if we're in test mode by looking for the test authentication provider
+        /// </summary>
+        private static bool IsTestMode()
+        {	
+            bool result = TestAuthenticationRegistry.IsTestModeActive;
+            return result;
+        }
+#endif
 
         private void Start()
         {
@@ -120,9 +148,24 @@ namespace AbxrLib.Runtime.Authentication
 
             SetSessionData();
             
-            // Start the deferred authentication system
-            StartCoroutine(DeferredAuthenticationSystem());
-            StartCoroutine(PollForReAuth());
+            bool automaticAuthentication = true;
+
+            // Check test mode in both editor (for tests) and builds
+#if UNITY_EDITOR
+            if (IsTestMode())
+            {
+                automaticAuthentication = false;
+                Debug.Log($"AbxrLib.Authentication.AutomaticAuthentication: Automatic authentication system bypassed in test mode");
+            }
+#endif
+
+            if (automaticAuthentication)
+            {
+                Debug.Log($"AbxrLib.Authentication.AutomaticAuthentication: Starting automatic authentication system");
+                // Start the deferred authentication system
+                StartCoroutine(DeferredAuthenticationSystem());
+                StartCoroutine(PollForReAuth());
+            }
         }
 
         private IEnumerator DeferredAuthenticationSystem()

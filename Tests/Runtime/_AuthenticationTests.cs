@@ -20,16 +20,16 @@ namespace AbxrLib.Tests.Runtime
     [TestFixture, Category("Authentication")]
     public class _AuthenticationTests
     {
-        [SetUp]
-        public void Setup()
-        {
-            // Use existing configuration from the demo app
-            TestHelpers.SetupTestEnvironmentWithExistingConfig();
-        }
-        
         [UnitySetUp]
         public IEnumerator UnitySetUp()
         {
+            // Clean up any state from previous tests (defensive - in case previous test failed)
+            // Do this FIRST before authentication so we start fresh
+            TestHelpers.CleanupTestEnvironment();
+            
+            // Use existing configuration from the demo app
+            TestHelpers.SetupTestEnvironmentWithExistingConfig();
+            
             // Ensure shared authentication is completed before running tests
             yield return AuthenticationTestHelper.EnsureAuthenticated();
         }

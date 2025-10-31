@@ -246,22 +246,17 @@ public static partial class Abxr
 	/// </summary>
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
-		Debug.Log($"Abxr.PresentKeyboard called - Type: '{keyboardType}', Prompt: '{promptText}', Domain: '{emailDomain}'");
+		//Debug.Log($"Abxr.PresentKeyboard called - Type: '{keyboardType}', Prompt: '{promptText}', Domain: '{emailDomain}'");
 		
 		// Check for test mode first - if in test mode, handle authentication programmatically
 #if UNITY_EDITOR
 		bool isTestMode = IsTestMode();
-		Debug.Log($"Abxr.PresentKeyboard: Test mode check result: {isTestMode}");
 		
 		if (isTestMode)
 		{
 			Debug.Log($"Abxr.PresentKeyboard: Test mode detected - handling authentication programmatically for type: {keyboardType}");
 			CoroutineRunner.Instance.StartCoroutine(HandleTestAuthentication(promptText, keyboardType, emailDomain));
 			return;
-		}
-		else
-		{
-			Debug.Log($"Abxr.PresentKeyboard: Test mode NOT detected - proceeding with normal UI flow");
 		}
 #endif
 		
@@ -271,7 +266,6 @@ public static partial class Abxr
 		if (Application.isEditor && isTestMode)
 		{
 			Debug.LogWarning($"Abxr.PresentKeyboard: Preventing UI creation in test environment for type: {keyboardType}");
-			Debug.LogWarning("Abxr.PresentKeyboard: This may indicate that authentication is being triggered unexpectedly in tests");
 			return;
 		}
 #endif
@@ -302,12 +296,8 @@ public static partial class Abxr
 	/// Check if we're in test mode by looking for the test authentication provider
 	/// </summary>
 	private static bool IsTestMode()
-	{
-		Debug.Log("Abxr.IsTestMode: Starting test mode detection...");
-		
+	{	
 		bool result = TestAuthenticationRegistry.IsTestModeActive;
-		Debug.Log($"Abxr.IsTestMode: Final result: {result}");
-		
 		return result;
 	}
 	
@@ -321,10 +311,7 @@ public static partial class Abxr
 		var provider = TestAuthenticationRegistry.GetProvider();
 		if (provider != null)
 		{
-			Debug.Log("Abxr.HandleTestAuthentication: Test provider found, calling...");
-			
 			yield return provider.HandleTestAuthentication(promptText, keyboardType, emailDomain);
-			
 			Debug.Log("Abxr.HandleTestAuthentication: Test authentication handling completed");
 		}
 		else

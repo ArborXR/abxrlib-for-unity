@@ -14,6 +14,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using NUnit.Framework;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Authentication;
 
 namespace AbxrLib.Tests.Runtime.Utilities
 {
@@ -34,21 +35,18 @@ namespace AbxrLib.Tests.Runtime.Utilities
         
         /// <summary>
         /// Sets up test environment using existing configuration from the demo app
+        /// Note: Cleanup should be done separately via CleanupTestEnvironment() in [UnitySetUp] or [TearDown]
         /// </summary>
         public static void SetupTestEnvironmentWithExistingConfig()
         {
-            // Clear any existing state
-            CleanupTestEnvironment();
-            
             // Use the existing configuration from the demo app
             if (Configuration.Instance != null)
             {
-                // DISABLE auto-start authentication for tests - we want manual control
-                Configuration.Instance.disableAutoStartAuthentication = true;
+                // Auto-start authentication is controlled by editor check in Authentication.cs
+                // No need to modify disableAutoStartAuthentication setting
                 Configuration.Instance.authenticationStartDelay = 0.0f; // No delay needed for manual auth
                 
                 Debug.Log($"TestHelpers: Using existing configuration - appID: {Configuration.Instance.appID}, orgID: {Configuration.Instance.orgID}, restUrl: {Configuration.Instance.restUrl}");
-                Debug.Log("TestHelpers: Auto-start authentication DISABLED - will use manual authentication with test callbacks");
                 
                 // Validate that the configuration has the required fields
                 if (!Configuration.Instance.IsValid())
@@ -70,7 +68,8 @@ namespace AbxrLib.Tests.Runtime.Utilities
             // Clear super metadata
             Abxr.Reset();
             
-            // Clear any existing timers (placeholder for future implementation)
+            // Clear authentication state (only works in testing mode)
+            Authentication.TestingClearAuthenticationState();
             
             Debug.Log("TestHelpers: Test environment cleanup complete");
         }
