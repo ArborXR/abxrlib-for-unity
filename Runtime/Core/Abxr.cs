@@ -477,6 +477,30 @@ public static partial class Abxr
         EventAssessmentComplete(assessmentName, int.Parse(score), ToEventStatus(result), meta);  // just here for backwards compatibility
 
 	/// <summary>
+	/// Start tracking an experience - developer-friendly wrapper for EventAssessmentStart
+	/// This method provides a more intuitive API for VR experiences that don't feel like traditional assessments
+	/// but still need assessment tracking behind the scenes for LMS integration
+	/// </summary>
+	/// <param name="experienceName">Name of the experience to start</param>
+	/// <param name="meta">Optional metadata with experience details</param>
+	public static void EventExperienceStart(string experienceName, Dictionary<string, string> meta = null)
+	{
+		EventAssessmentStart(experienceName, meta);
+	}
+
+	/// <summary>
+	/// Complete an experience - developer-friendly wrapper for EventAssessmentComplete
+	/// This method automatically uses score=100 and status=Complete, making it perfect for VR experiences
+	/// where completion itself is the goal rather than a graded assessment
+	/// </summary>
+	/// <param name="experienceName">Name of the experience (must match the start event)</param>
+	/// <param name="meta">Optional metadata with completion details</param>
+	public static void EventExperienceComplete(string experienceName, Dictionary<string, string> meta = null)
+	{
+		EventAssessmentComplete(experienceName, 100, EventStatus.Complete, meta);
+	}
+
+	/// <summary>
 	/// Coroutine to exit the application after a 2-second delay when assessment is complete
 	/// and the session used auth handoff with return to launcher enabled
 	/// </summary>
