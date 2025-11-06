@@ -184,6 +184,13 @@ public static partial class Abxr
 					_hasPendingModules = true;
 				}
 			}
+			
+			// Start default assessment if no assessments are currently running
+			// This ensures duration tracking starts immediately after authentication
+			if (_assessmentStartTimes.Count == 0)
+			{
+				EventAssessmentStart("DEFAULT_ASSESSMENT");
+			}
 		}
 		
 	}
@@ -395,6 +402,13 @@ public static partial class Abxr
 	/// <param name="meta">Optional metadata with assessment details</param>
 	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
 	{
+		// If user is starting their own assessment (not the default), silently remove the default assessment
+		// This removes it as if it never existed - no completion event will be sent
+		if (assessmentName != "DEFAULT_ASSESSMENT" && _assessmentStartTimes.ContainsKey("DEFAULT_ASSESSMENT"))
+		{
+			_assessmentStartTimes.Remove("DEFAULT_ASSESSMENT");
+		}
+		
 		meta ??= new Dictionary<string, string>();
 		meta["type"] = "assessment";
 		meta["verb"] = "started";
