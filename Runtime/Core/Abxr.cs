@@ -187,9 +187,21 @@ public static partial class Abxr
 			
 			// Start default assessment if no assessments are currently running
 			// This ensures duration tracking starts immediately after authentication
-			if (_assessmentStartTimes.Count == 0)
+			// Use lock to prevent race condition with concurrent EventAssessmentStart calls
+			lock (_assessmentStartTimesLock)
 			{
-				EventAssessmentStart("DEFAULT_ASSESSMENT");
+				if (_assessmentStartTimes.Count == 0)
+				{
+					// Call EventAssessmentStart inside lock to ensure atomicity
+					// Note: EventAssessmentStart will acquire the same lock, so we need to set it directly
+					_assessmentStartTimes["DEFAULT_ASSESSMENT"] = DateTime.UtcNow;
+					var defaultMeta = new Dictionary<string, string>
+					{
+						["type"] = "assessment",
+						["verb"] = "started"
+					};
+					Event("DEFAULT_ASSESSMENT", defaultMeta);
+				}
 			}
 		}
 		
@@ -282,6 +294,9 @@ public static partial class Abxr
 	private static readonly Dictionary<string, DateTime> _objectiveStartTimes = new();
 	private static readonly Dictionary<string, DateTime> _interactionStartTimes = new();
 	private static readonly Dictionary<string, DateTime> _levelStartTimes = new();
+	
+	// Lock for thread-safe access to assessment start times
+	private static readonly object _assessmentStartTimesLock = new object();
 
 	// Data structures for result options and event status
 	public static EventStatus ToEventStatus(this ResultOptions options) => options switch // Only here for backwards compatibility
@@ -402,18 +417,22 @@ public static partial class Abxr
 	/// <param name="meta">Optional metadata with assessment details</param>
 	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
 	{
-		// If user is starting their own assessment (not the default), silently remove the default assessment
-		// This removes it as if it never existed - no completion event will be sent
-		if (assessmentName != "DEFAULT_ASSESSMENT" && _assessmentStartTimes.ContainsKey("DEFAULT_ASSESSMENT"))
+		// Use lock to prevent race conditions with concurrent calls and NotifyAuthCompleted
+		lock (_assessmentStartTimesLock)
 		{
-			_assessmentStartTimes.Remove("DEFAULT_ASSESSMENT");
+			// If user is starting their own assessment (not the default), silently remove the default assessment
+			// This removes it as if it never existed - no completion event will be sent
+			if (assessmentName != "DEFAULT_ASSESSMENT" && _assessmentStartTimes.ContainsKey("DEFAULT_ASSESSMENT"))
+			{
+				_assessmentStartTimes.Remove("DEFAULT_ASSESSMENT");
+			}
+			
+			meta ??= new Dictionary<string, string>();
+			meta["type"] = "assessment";
+			meta["verb"] = "started";
+			_assessmentStartTimes[assessmentName] = DateTime.UtcNow;
+			Event(assessmentName, meta);
 		}
-		
-		meta ??= new Dictionary<string, string>();
-		meta["type"] = "assessment";
-		meta["verb"] = "started";
-		_assessmentStartTimes[assessmentName] = DateTime.UtcNow;
-		Event(assessmentName, meta);
 	}
 	
 	/// <summary>
@@ -431,7 +450,18 @@ public static partial class Abxr
 		meta["verb"] = "completed";
 		meta["score"] = score.ToString();
 		meta["status"] = status.ToString().ToLower();
-		AddDuration(_assessmentStartTimes, assessmentName, meta);
+		lock (_assessmentStartTimesLock)
+		{
+			// If user is completing their own assessment (not the default), silently remove the default assessment
+			// This removes it as if it never existed - no completion event will be sent
+			// This handles the case where user completes an assessment without starting it
+			if (assessmentName != "DEFAULT_ASSESSMENT" && _assessmentStartTimes.ContainsKey("DEFAULT_ASSESSMENT"))
+			{
+				_assessmentStartTimes.Remove("DEFAULT_ASSESSMENT");
+			}
+			
+			AddDuration(_assessmentStartTimes, assessmentName, meta);
+		}
 		Event(assessmentName, meta);
 		
 		// Check if we should return to launcher after assessment completion
@@ -608,7 +638,10 @@ public static partial class Abxr
 	/// <returns>Copy of the assessment start times dictionary</returns>
 	internal static Dictionary<string, DateTime> GetAssessmentStartTimes()
 	{
-		return new Dictionary<string, DateTime>(_assessmentStartTimes);
+		lock (_assessmentStartTimesLock)
+		{
+			return new Dictionary<string, DateTime>(_assessmentStartTimes);
+		}
 	}
 	
 	/// <summary>
@@ -647,7 +680,10 @@ public static partial class Abxr
 	/// </summary>
 	internal static void ClearAllStartTimes()
 	{
-		_assessmentStartTimes.Clear();
+		lock (_assessmentStartTimesLock)
+		{
+			_assessmentStartTimes.Clear();
+		}
 		_objectiveStartTimes.Clear();
 		_interactionStartTimes.Clear();
 		_levelStartTimes.Clear();
