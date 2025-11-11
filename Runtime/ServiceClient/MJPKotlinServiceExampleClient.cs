@@ -8,8 +8,8 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 #if true
 	public static class MjpKotlinServiceExampleServiceBridge
 	{
-		private const string		PackageName = "com.example.mjpkotlinserviceexample.unity.UnityServiceClient";
-		//private const string		PackageName = "com.example.mjpkotlinserviceexample";
+		private const string		PackageName = "aar.xrdi.abxrinsightservice.unity.UnityAbxrInsightServiceClient";
+		//private const string		PackageName = "aar.xrdi.abxrinsightservice";
 		static AndroidJavaObject	_client = null;
 
 		static AndroidJavaObject Activity => new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity");
@@ -57,6 +57,7 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		public static string WhatTimeIsIt() => _client.Call<string>("whatTimeIsIt");
 		public static bool IsServiceBound() => _client.Call<bool>("isServiceBound");
 		public static bool IsServiceAvailable() => _client.Call<bool>("isServiceAvailable");
+		public static bool ServiceIsFullyInitialized() => _client.Call<bool>("serviceIsFullyInitialized");
 	}
 
 
@@ -67,7 +68,7 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 	/// </remarks>
 	public class MJPKotlinServiceExampleClient : MonoBehaviour
 	{
-		private const string				PackageName = "com.example.mjpkotlinserviceexample";
+		//private const string				PackageName = "aar.xrdi.abxrinsightservice";
 		//private AndroidJavaObject			_mjpsdk = null;
 		//private MJPNativeConnectionCallback	_nativeCallback = null;
 
@@ -83,6 +84,10 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		public static bool IsServiceAvailable()
 		{
 			return MjpKotlinServiceExampleServiceBridge.IsServiceAvailable();
+		}
+		public static bool ServiceIsFullyInitialized()
+		{
+			return MjpKotlinServiceExampleServiceBridge.ServiceIsFullyInitialized();
 		}
 		private void Awake()
 		{
@@ -134,7 +139,7 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 	/// </remarks>
 	public class MJPKotlinServiceExampleClient : MonoBehaviour
 	{
-		private const string PackageName = "com.example.mjpkotlinserviceexample";
+		private const string PackageName = "aar.xrdi.abxrinsightservice";
 		private AndroidJavaObject?				_mjpsdk;
 		private MJPNativeConnectionCallback?	_nativeCallback;
 		public static MjpSdkServiceWrapper?		MjpServiceWrapper;

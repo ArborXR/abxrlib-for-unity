@@ -1176,6 +1176,14 @@ public static class Abxr
 		return MJPKotlinServiceExampleClient.IsServiceAvailable();
 		//return ArborServiceClient.IsConnected();	// VS2022 AI suggested this... might be a better way to go in the final version.
 	}
+	/// <summary>
+	/// Stronger form of IsServiceAvailable()... also insists that the SQLiteJDBC.Initialize() has been called by AbxrInsightService.OnCreate().
+	/// </summary>
+	/// <returns></returns>
+	public static bool ServiceIsFullyInitialized()
+	{
+		return MJPKotlinServiceExampleClient.ServiceIsFullyInitialized();
+	}
 
 	#region Module Target and User Data Methods
 
