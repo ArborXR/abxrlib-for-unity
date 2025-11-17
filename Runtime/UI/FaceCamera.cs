@@ -37,12 +37,17 @@ namespace AbxrLib.Runtime.UI
             config = Configuration.Instance;
             
             // Use configuration values if enabled
-            if (useConfigurationValues)
+            if (useConfigurationValues && config != null)
             {
+                faceCamera = config.authUIFollowCamera;
                 // Use default positioning values - no longer configurable
                 distanceFromCamera = DEFAULT_DISTANCE_FROM_CAMERA;
                 verticalOffset = DEFAULT_VERTICAL_OFFSET;
                 xPosition = DEFAULT_X_POSITION;
+            }
+            else
+            {
+                faceCamera = Abxr.AuthUIFollowCamera;
             }
             
 #if UNITY_EDITOR
@@ -54,6 +59,10 @@ namespace AbxrLib.Runtime.UI
             Vector3 newPos = new Vector3(targetPos.x + xPosition + BUILD_X_OFFSET, cam.position.y + verticalOffset, targetPos.z);
             transform.position = newPos;
 #endif
+            
+            // Always set initial rotation to face the camera, regardless of follow setting
+            // This ensures the dialog faces the user initially, then stays locked if faceCamera is false
+            transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
         }
    
         private void Update()
