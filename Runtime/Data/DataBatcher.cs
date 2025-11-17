@@ -227,7 +227,6 @@ namespace AbxrLib.Runtime.Data
 				{
 					if (request.result == UnityWebRequest.Result.Success)
 					{
-						Debug.Log($"AbxrLib: Data POST Request successful (sent {eventsToSend.Count} events, {telemetriesToSend.Count} telemetries, {logsToSend.Count} logs)");
 						responseSuccess = true;
 						success = true;
 					}

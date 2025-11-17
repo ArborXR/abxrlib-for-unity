@@ -109,7 +109,6 @@ namespace AbxrLib.Runtime.AI
                 {
                     response = request.downloadHandler.text;
                     _pastMessages.Add(prompt);
-                    Debug.Log("AbxrLib: AI POST Request successful");
                     responseSuccess = true;
                     success = true;
                 }
