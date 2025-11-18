@@ -164,7 +164,6 @@ namespace AbxrLib.Runtime.Authentication
             yield return GetConfiguration();
             if (!string.IsNullOrEmpty(_authMechanism?.prompt))
             {
-                Debug.Log("AbxrLib: Additional user authentication required (PIN/credentials)");
                 yield return KeyboardAuthenticate();
                 // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
             }
@@ -306,7 +305,6 @@ namespace AbxrLib.Runtime.Authentication
                 {
                     KeyboardHandler.Destroy();
                     _failedAuthAttempts = 0;
-                    Debug.Log("AbxrLib: Final authentication successful");
                     
                     // Notify completion for keyboard authentication success
                     Abxr.NotifyAuthCompleted(true);
@@ -436,8 +434,7 @@ namespace AbxrLib.Runtime.Authentication
 
                         if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
                         
-                        // Log initial success - but don't notify completion yet since additional auth may be required
-                        Debug.Log("AbxrLib: API connection established");
+                        // Don't notify completion yet since additional auth may be required
                         success = true;
                         break;
                     }
@@ -540,7 +537,6 @@ namespace AbxrLib.Runtime.Authentication
                         {
                             SetConfigFromPayload(config);
                             _authMechanism = config.authMechanism;
-                            Debug.Log("AbxrLib: Configuration loaded successfully");
                         }
                     }
                 }

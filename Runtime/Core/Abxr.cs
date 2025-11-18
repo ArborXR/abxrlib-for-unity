@@ -509,7 +509,6 @@ public static partial class Abxr
 		Debug.Log("AbxrLib: Assessment complete with auth handoff - returning to launcher in 2 seconds");
 		yield return new WaitForSeconds(2f);
 		
-		Debug.Log("AbxrLib: Exiting application to return to launcher");
 #if UNITY_EDITOR
 		UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -1390,8 +1389,6 @@ public static partial class Abxr
 		
 		while (nextModuleData != null)
 		{
-			Debug.Log($"AbxrLib - Triggering OnModuleTarget event for module: {nextModuleData.moduleTarget}");
-			
 			try
 			{
 				_onModuleTarget.Invoke(nextModuleData.moduleTarget);
@@ -1409,7 +1406,6 @@ public static partial class Abxr
 			nextModuleData = GetModuleTarget();
 		}
 		
-		Debug.Log($"AbxrLib - Module sequence completed. {executedModuleCount} modules executed.");
 		return executedModuleCount;
 	}
 

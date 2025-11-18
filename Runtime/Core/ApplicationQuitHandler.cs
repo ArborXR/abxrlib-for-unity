@@ -96,8 +96,6 @@ namespace AbxrLib.Runtime.Core
 
             if (totalClosed > 0)
             {
-                Debug.Log($"AbxrLib: Automatically closed {totalClosed} running events due to application quit");
-                
                 // Clear all start times since we've processed them
                 Abxr.ClearAllStartTimes();
                 
