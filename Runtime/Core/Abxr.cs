@@ -504,8 +504,9 @@ public static partial class Abxr
 	/// Coroutine to exit the application after a 2-second delay when assessment is complete
 	/// and the session used auth handoff with return to launcher enabled
 	/// </summary>
-	private static System.Collections.IEnumerator ExitAfterAssessmentComplete()
+	private static IEnumerator ExitAfterAssessmentComplete()
 	{
+		CoroutineRunner.Instance.StartCoroutine(DataBatcher.Send());
 		Debug.Log("AbxrLib: Assessment complete with auth handoff - returning to launcher in 2 seconds");
 		yield return new WaitForSeconds(2f);
 		
