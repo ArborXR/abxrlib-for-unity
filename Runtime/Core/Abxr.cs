@@ -464,10 +464,20 @@ public static partial class Abxr
 		}
 		Event(assessmentName, meta);
 		
-		// Check if we should return to launcher after assessment completion
-		if (Authentication.SessionUsedAuthHandoff() && Configuration.Instance.returnToLauncherAfterAssessmentComplete)
+		// Check if we're in a module sequence
+		var currentModuleData = GetModuleTargetWithoutAdvance();
+		if (currentModuleData != null)
 		{
-			CoroutineRunner.Instance.StartCoroutine(ExitAfterAssessmentComplete());
+			// We're in a module sequence - advance to next module
+			AdvanceToNextModule();
+		}
+		else
+		{
+			// Not in a module sequence - use original exit logic
+			if (Authentication.SessionUsedAuthHandoff() && Configuration.Instance.returnToLauncherAfterAssessmentComplete)
+			{
+				CoroutineRunner.Instance.StartCoroutine(ExitAfterAssessmentComplete());
+			}
 		}
 	}
 	// backwards compatibility for old method signature
@@ -508,7 +518,6 @@ public static partial class Abxr
 	{
 		Debug.Log("AbxrLib: Assessment complete with auth handoff - returning to launcher in 2 seconds");
 		yield return new WaitForSeconds(2f);
-		
 #if UNITY_EDITOR
 		UnityEditor.EditorApplication.isPlaying = false;
 #else
@@ -1228,7 +1237,7 @@ public static partial class Abxr
 	{
 		meta ??= new Dictionary<string, string>();
 		
-		// Add current module information if available
+		// Add current module information if available from auth-provided modules
 		var currentSessionData = GetModuleTargetWithoutAdvance();
 		if (currentSessionData != null)
 		{
@@ -1237,34 +1246,35 @@ public static partial class Abxr
 			{
 				meta["module"] = currentSessionData.moduleTarget;
 			}
-		// For additional module metadata, we need to get it from the modules list
-		var moduleData = Authentication.GetModuleData();
-		if (moduleData != null && moduleData.Count > 0)
-		{
-			LoadModuleIndex();
-			if (_currentModuleIndex < moduleData.Count)
+			// For additional module metadata, we need to get it from the modules list
+			var moduleData = Authentication.GetModuleData();
+			if (moduleData != null && moduleData.Count > 0)
 			{
-				ModuleData currentModuleData = moduleData[_currentModuleIndex];
-				if (!meta.ContainsKey("moduleName") && !string.IsNullOrEmpty(currentModuleData.name))
+				LoadModuleIndex();
+				if (_currentModuleIndex < moduleData.Count)
 				{
-					meta["moduleName"] = currentModuleData.name;
-				}
-				if (!meta.ContainsKey("moduleId") && !string.IsNullOrEmpty(currentModuleData.id))
-				{
-					meta["moduleId"] = currentModuleData.id;
-				}
-				if (!meta.ContainsKey("moduleOrder"))
-				{
-					meta["moduleOrder"] = currentModuleData.order.ToString();
+					ModuleData currentModuleData = moduleData[_currentModuleIndex];
+					if (!meta.ContainsKey("moduleName") && !string.IsNullOrEmpty(currentModuleData.name))
+					{
+						meta["moduleName"] = currentModuleData.name;
+					}
+					if (!meta.ContainsKey("moduleId") && !string.IsNullOrEmpty(currentModuleData.id))
+					{
+						meta["moduleId"] = currentModuleData.id;
+					}
+					if (!meta.ContainsKey("moduleOrder"))
+					{
+						meta["moduleOrder"] = currentModuleData.order.ToString();
+					}
 				}
 			}
 		}
-		}
 		
-		// Add super metadata to metadata
+		// Add super metadata to metadata (includes manually-set moduleName/moduleId/moduleOrder when no LMS modules)
+		// Auth-provided module metadata takes precedence, so manually-set values only appear when no LMS modules exist
 		foreach (var superMetaDataKeyValue in _superMetaData)
 		{
-			// super metadata don't overwrite data-specific metadata or module info
+			// super metadata don't overwrite data-specific metadata or auth-provided module info
 			if (!meta.ContainsKey(superMetaDataKeyValue.Key))
 			{
 				meta[superMetaDataKeyValue.Key] = superMetaDataKeyValue.Value;
@@ -1371,42 +1381,90 @@ public static partial class Abxr
 
 
 	/// <summary>
-	/// Execute module sequence by triggering the OnModuleTarget event for each available module.
+	/// Execute the current module in the sequence by triggering the OnModuleTarget event.
 	/// Developers should subscribe to OnModuleTarget to handle module targets with their own logic.
+	/// Module progression happens automatically when EventAssessmentComplete() is called.
 	/// This approach gives developers full control over how to handle each module target.
 	/// </summary>
-	/// <returns>Number of modules successfully executed</returns>
-	public static int ExecuteModuleSequence()
+	/// <returns>True if a module was executed, false if no modules available or no subscribers</returns>
+	public static bool ExecuteModuleSequence()
 	{
 		if (_onModuleTarget == null)
 		{
 			Debug.LogWarning("AbxrLib - ExecuteModuleSequence: No subscribers to OnModuleTarget event. Subscribe to OnModuleTarget to handle module targets.");
-			return 0;
+			return false;
 		}
 
-		int executedModuleCount = 0;
-		var nextModuleData = GetModuleTarget();
-		
-		while (nextModuleData != null)
+		// Get current module without advancing (advancement happens in EventAssessmentComplete)
+		var currentModuleData = GetModuleTargetWithoutAdvance();
+		if (currentModuleData == null)
 		{
-			try
-			{
-				_onModuleTarget.Invoke(nextModuleData.moduleTarget);
-				//Debug.Log($"AbxrLib - Module {nextModuleData.moduleTarget} executed via OnModuleTarget event");
-				executedModuleCount++;
-			}
-			catch (Exception ex)
-			{
-				// Log error with consistent format and include module context
-				Debug.LogError($"AbxrLib: Error executing OnModuleTarget event for module {nextModuleData.moduleTarget}: {ex.Message}\n" +
-							  $"Exception Type: {ex.GetType().Name}\n" +
-							  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-			}
-			
-			nextModuleData = GetModuleTarget();
+			Debug.Log("AbxrLib - ExecuteModuleSequence: No modules available to execute.");
+			return false;
 		}
+
+		Debug.Log($"AbxrLib - Triggering OnModuleTarget event for module: {currentModuleData.moduleTarget}");
 		
-		return executedModuleCount;
+		try
+		{
+			_onModuleTarget.Invoke(currentModuleData.moduleTarget);
+			return true;
+		}
+		catch (Exception ex)
+		{
+			// Log error with consistent format and include module context
+			Debug.LogError($"AbxrLib: Error executing OnModuleTarget event for module {currentModuleData.moduleTarget}: {ex.Message}\n" +
+						  $"Exception Type: {ex.GetType().Name}\n" +
+						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// Advance to the next module in the sequence after current module completion.
+	/// Called automatically from EventAssessmentComplete() when in a module sequence.
+	/// Advances the module index and triggers the next module, or exits if all modules are complete.
+	/// </summary>
+	private static void AdvanceToNextModule()
+	{
+		var moduleData = Authentication.GetModuleData();
+		if (moduleData == null || moduleData.Count == 0)
+		{
+			return;
+		}
+
+		LoadModuleIndex();
+		if (_currentModuleIndex >= moduleData.Count)
+		{
+			return;
+		}
+
+		ModuleData currentModule = moduleData[_currentModuleIndex];
+		
+		// Advance to next module
+		_currentModuleIndex++;
+		SaveModuleIndex();
+		
+		// Check if there are more modules
+		if (_currentModuleIndex < moduleData.Count)
+		{
+			// More modules remain - get next module and trigger it
+			ModuleData nextModule = moduleData[_currentModuleIndex];
+			Debug.Log($"AbxrLib: Module '{currentModule.name}' completed. Advancing to next module: {nextModule.target}");
+			if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
+			{
+				_onModuleTarget.Invoke(nextModule.target);
+			}
+		}
+		else
+		{
+			// All modules completed - check exit conditions
+			Debug.Log("AbxrLib: All modules completed.");
+			if (Authentication.SessionUsedAuthHandoff() && Configuration.Instance.returnToLauncherAfterAssessmentComplete)
+			{
+				CoroutineRunner.Instance.StartCoroutine(ExitAfterAssessmentComplete());
+			}
+		}
 	}
 
 	/// <summary>
@@ -1481,6 +1539,60 @@ public static partial class Abxr
 		LoadModuleIndex();
 		int remainingModuleCount = Authentication.GetModuleData().Count - _currentModuleIndex;
 		return Math.Max(0, remainingModuleCount);
+	}
+
+	/// <summary>
+	/// Manually set module metadata when no modules are provided in authentication.
+	/// This method allows developers to track module information even when the LMS doesn't provide a module list.
+	/// Only works when NOT using auth-provided module targets - returns safely if auth modules exist.
+	/// Sets moduleName, moduleId, and moduleOrder in super metadata for automatic inclusion in all events.
+	/// </summary>
+	/// <param name="moduleName">The name of the module</param>
+	/// <param name="moduleId">Optional module identifier</param>
+	/// <param name="moduleOrder">Optional module order/sequence number</param>
+	public static void SetModule(string moduleName, string moduleId = null)
+	{
+		// Check if we're using auth-provided module targets
+		var moduleData = Authentication.GetModuleData();
+		if (moduleData != null && moduleData.Count > 0)
+		{
+			// Auth-provided modules exist - don't allow manual setting to prevent breaking module sequence
+			//Debug.LogWarning("AbxrLib: Manual module setting is disabled when using module targets from authentication.");
+			return;
+		}
+
+		// No auth-provided modules - safe to set manually
+		if (string.IsNullOrEmpty(moduleName))
+		{
+			return;
+		}
+
+		// Directly set module metadata in super metadata, bypassing Register() check
+		_superMetaData["moduleName"] = moduleName;
+		
+		if (!string.IsNullOrEmpty(moduleId))
+		{
+			_superMetaData["moduleId"] = moduleId;
+		}
+		
+		// When using SetModule, we should not use moduleOrder - unset it if it was set elsewhere
+		if (_superMetaData.ContainsKey("moduleOrder"))
+		{
+			_superMetaData.Remove("moduleOrder");
+		}
+
+		SaveSuperMetaData();
+		//Debug.Log($"AbxrLib: Module manually set - Name: {moduleName}, ID: {moduleId ?? "none"}");
+	}
+
+	/// <summary>
+	/// Get the current module target string (convenience wrapper for GetModuleTargetWithoutAdvance)
+	/// </summary>
+	/// <returns>Current module target string, or null if no module available</returns>
+	public static string GetCurrentModuleTarget()
+	{
+		var currentModule = GetModuleTargetWithoutAdvance();
+		return currentModule?.moduleTarget;
 	}
 
 	/// <summary>
