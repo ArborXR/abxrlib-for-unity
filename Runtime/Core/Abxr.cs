@@ -194,13 +194,14 @@ public static partial class Abxr
 				{
 					// Call EventAssessmentStart inside lock to ensure atomicity
 					// Note: EventAssessmentStart will acquire the same lock, so we need to set it directly
-					_assessmentStartTimes["DEFAULT_ASSESSMENT"] = DateTime.UtcNow;
+					_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
 					var defaultMeta = new Dictionary<string, string>
 					{
 						["type"] = "assessment",
 						["verb"] = "started"
 					};
-					Event("DEFAULT_ASSESSMENT", defaultMeta);
+					Event("DEFAULT", defaultMeta);
+					SetModule("DEFAULT");
 				}
 			}
 		}
@@ -422,10 +423,13 @@ public static partial class Abxr
 		{
 			// If user is starting their own assessment (not the default), silently remove the default assessment
 			// This removes it as if it never existed - no completion event will be sent
-			if (assessmentName != "DEFAULT_ASSESSMENT" && _assessmentStartTimes.ContainsKey("DEFAULT_ASSESSMENT"))
+			if (assessmentName != "DEFAULT" && _assessmentStartTimes.ContainsKey("DEFAULT"))
 			{
-				_assessmentStartTimes.Remove("DEFAULT_ASSESSMENT");
+				_assessmentStartTimes.Remove("DEFAULT");
 			}
+			
+			// Set module metadata using the assessment name (only if no auth-provided modules exist)
+			SetModule(assessmentName);
 			
 			meta ??= new Dictionary<string, string>();
 			meta["type"] = "assessment";
@@ -455,9 +459,9 @@ public static partial class Abxr
 			// If user is completing their own assessment (not the default), silently remove the default assessment
 			// This removes it as if it never existed - no completion event will be sent
 			// This handles the case where user completes an assessment without starting it
-			if (assessmentName != "DEFAULT_ASSESSMENT" && _assessmentStartTimes.ContainsKey("DEFAULT_ASSESSMENT"))
+			if (assessmentName != "DEFAULT" && _assessmentStartTimes.ContainsKey("DEFAULT"))
 			{
-				_assessmentStartTimes.Remove("DEFAULT_ASSESSMENT");
+				_assessmentStartTimes.Remove("DEFAULT");
 			}
 			
 			AddDuration(_assessmentStartTimes, assessmentName, meta);
@@ -1542,15 +1546,14 @@ public static partial class Abxr
 	}
 
 	/// <summary>
-	/// Manually set module metadata when no modules are provided in authentication.
+	/// Set module metadata when no modules are provided in authentication.
 	/// This method allows developers to track module information even when the LMS doesn't provide a module list.
 	/// Only works when NOT using auth-provided module targets - returns safely if auth modules exist.
 	/// Sets moduleName, moduleId, and moduleOrder in super metadata for automatic inclusion in all events.
 	/// </summary>
-	/// <param name="moduleName">The name of the module</param>
-	/// <param name="moduleId">Optional module identifier</param>
-	/// <param name="moduleOrder">Optional module order/sequence number</param>
-	public static void SetModule(string moduleName, string moduleId = null)
+	/// <param name="module">The target name of the module</param>
+	/// <param name="moduleName">Optional user friendly name of the module</param>
+	private static void SetModule(string module, string moduleName = null)
 	{
 		// Check if we're using auth-provided module targets
 		var moduleData = Authentication.GetModuleData();
@@ -1562,17 +1565,19 @@ public static partial class Abxr
 		}
 
 		// No auth-provided modules - safe to set manually
-		if (string.IsNullOrEmpty(moduleName))
+		if (string.IsNullOrEmpty(module))
 		{
 			return;
 		}
 
 		// Directly set module metadata in super metadata, bypassing Register() check
-		_superMetaData["moduleName"] = moduleName;
+		_superMetaData["module"] = module;
 		
-		if (!string.IsNullOrEmpty(moduleId))
+		if (!string.IsNullOrEmpty(moduleName))
 		{
-			_superMetaData["moduleId"] = moduleId;
+			_superMetaData["moduleName"] = moduleName;
+		} else {
+			_superMetaData["moduleName"] = FormatModuleNameForDisplay(module);
 		}
 		
 		// When using SetModule, we should not use moduleOrder - unset it if it was set elsewhere
@@ -1768,6 +1773,52 @@ public static partial class Abxr
 	/// <returns>The device fingerprint.</returns>
 	public static string GetFingerprint() =>
 		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
+
+	#endregion
+
+	#region Helper Methods
+
+	/// <summary>
+	/// Formats a module name to be more human-readable by adding spaces between words.
+	/// Converts camelCase and PascalCase to space-separated format.
+	/// Example: "ModuleName" -> "Module Name", "myModule" -> "my Module"
+	/// </summary>
+	/// <param name="moduleName">The module name to format</param>
+	/// <returns>The formatted module name with spaces between words</returns>
+	private static string FormatModuleNameForDisplay(string moduleName)
+	{
+		if (string.IsNullOrEmpty(moduleName))
+		{
+			return moduleName;
+		}
+
+		// Replace underscores with spaces
+		string withSpaces = moduleName.Replace('_', ' ');
+		
+		// Split by spaces to get individual words
+		string[] words = withSpaces.Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+		
+		// Capitalize first letter of each word, lowercase the rest
+		System.Text.StringBuilder result = new System.Text.StringBuilder();
+		for (int i = 0; i < words.Length; i++)
+		{
+			if (i > 0)
+			{
+				result.Append(' ');
+			}
+			
+			if (words[i].Length > 0)
+			{
+				result.Append(char.ToUpper(words[i][0]));
+				if (words[i].Length > 1)
+				{
+					result.Append(words[i].Substring(1).ToLower());
+				}
+			}
+		}
+
+		return result.ToString();
+	}
 
 	#endregion
 
