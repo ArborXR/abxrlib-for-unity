@@ -202,16 +202,32 @@ namespace AbxrLib.Runtime.Authentication
                 yield break;
             }
             
+            // Initialize PXR Enterprise Service
+            bool initSuccess = false;
             try
             {
-                // Initialize PXR Enterprise Service
                 _initEnterpriseServiceMethod?.Invoke(null, new object[] { true });
-                
-                // Wait a frame to ensure initialization completes
-                yield return null;
-                
-                // Bind Enterprise Service with callback
-                // The callback signature is: void BindEnterpriseService(Action<int> callback)
+                initSuccess = true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Failed to initialize PXR Enterprise Service: {ex.Message}");
+                _isScanning = false;
+                yield break;
+            }
+            
+            if (!initSuccess)
+            {
+                yield break;
+            }
+            
+            // Wait a frame to ensure initialization completes
+            yield return null;
+            
+            // Bind Enterprise Service with callback
+            // The callback signature is: void BindEnterpriseService(Action<int> callback)
+            try
+            {
                 if (_bindEnterpriseServiceMethod != null)
                 {
                     // Create callback delegate using Action<int>
@@ -222,7 +238,7 @@ namespace AbxrLib.Runtime.Authentication
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: Failed to initialize PXR Enterprise Service: {ex.Message}");
+                Debug.LogError($"AbxrLib: Failed to bind PXR Enterprise Service: {ex.Message}");
                 _isScanning = false;
             }
         }
