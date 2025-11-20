@@ -39,6 +39,36 @@ namespace AbxrLib.Runtime.Authentication
         private static MethodInfo _scanQRCodeMethod = null;
         
         /// <summary>
+        /// Debug helper to list all types containing "PXR" or "Enterprise" in loaded assemblies
+        /// Call this from a Pico device to help diagnose SDK configuration issues
+        /// </summary>
+        [System.Diagnostics.Conditional("UNITY_ANDROID")]
+        public static void DebugListPXRTypes()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Debug.Log("AbxrLib: Searching for PXR-related types in loaded assemblies...");
+            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    var types = assembly.GetTypes();
+                    foreach (var type in types)
+                    {
+                        if (type.Name.Contains("PXR") || type.Name.Contains("Enterprise"))
+                        {
+                            Debug.Log($"AbxrLib: Found type: {type.FullName} in assembly: {assembly.GetName().Name}");
+                        }
+                    }
+                }
+                catch
+                {
+                    // Skip assemblies we can't inspect
+                }
+            }
+#endif
+        }
+        
+        /// <summary>
         /// Check if PXR_Enterprise is available on this device
         /// </summary>
         public static bool IsPXRAvailable()
@@ -51,10 +81,28 @@ namespace AbxrLib.Runtime.Authentication
             // Check if we're on Android (Pico headsets run Android)
 #if UNITY_ANDROID && !UNITY_EDITOR
             // Try to find PXR_Enterprise class using reflection
+            // Try multiple possible namespace/assembly combinations
+            string[] possibleNames = new string[]
+            {
+                "Unity.XR.PXR.PXR_Enterprise, Assembly-CSharp",
+                "Unity.XR.PXR.PXR_Enterprise",
+                "PXR_Enterprise, Assembly-CSharp",
+                "PXR_Enterprise",
+                "Pico.PXR_Enterprise, Assembly-CSharp",
+                "Pico.PXR_Enterprise"
+            };
+            
             try
             {
-                // First try the most common assembly name
-                _pxrEnterpriseType = Type.GetType("Unity.XR.PXR.PXR_Enterprise, Assembly-CSharp");
+                // First try direct type lookups with assembly names
+                foreach (string typeName in possibleNames)
+                {
+                    _pxrEnterpriseType = Type.GetType(typeName, false);
+                    if (_pxrEnterpriseType != null)
+                    {
+                        break;
+                    }
+                }
                 
                 // If not found, search through all loaded assemblies
                 if (_pxrEnterpriseType == null)
@@ -63,7 +111,23 @@ namespace AbxrLib.Runtime.Authentication
                     {
                         try
                         {
-                            _pxrEnterpriseType = assembly.GetType("Unity.XR.PXR.PXR_Enterprise");
+                            // Try different namespace variations
+                            string[] namespacesToTry = new string[]
+                            {
+                                "Unity.XR.PXR.PXR_Enterprise",
+                                "PXR_Enterprise",
+                                "Pico.PXR_Enterprise"
+                            };
+                            
+                            foreach (string ns in namespacesToTry)
+                            {
+                                _pxrEnterpriseType = assembly.GetType(ns);
+                                if (_pxrEnterpriseType != null)
+                                {
+                                    break;
+                                }
+                            }
+                            
                             if (_pxrEnterpriseType != null)
                             {
                                 break;
@@ -97,14 +161,23 @@ namespace AbxrLib.Runtime.Authentication
                         _scanQRCodeMethod != null)
                     {
                         _isPXRAvailable = true;
-                        Debug.Log("AbxrLib: PXR_Enterprise SDK detected and available");
+                        Debug.Log($"AbxrLib: PXR_Enterprise SDK detected and available (found in {_pxrEnterpriseType.Assembly.GetName().Name})");
                         return true;
+                    }
+                    else
+                    {
+                        // Log which methods are missing for debugging
+                        Debug.LogWarning($"AbxrLib: PXR_Enterprise class found but methods missing - InitEnterpriseService: {_initEnterpriseServiceMethod != null}, BindEnterpriseService: {_bindEnterpriseServiceMethod != null}, ScanQRCode: {_scanQRCodeMethod != null}");
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Silently fail - PXR_Enterprise not available (expected for non-Pico devices)
+                // Only log on Pico headsets to help with debugging
+                if (IsPicoHeadset())
+                {
+                    Debug.LogWarning($"AbxrLib: Failed to check PXR_Enterprise availability on Pico device: {ex.Message}");
+                }
             }
 #endif
             
@@ -142,9 +215,12 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             // Check if PXR_Enterprise is available
+            // Note: If this fails, ensure Pico SDK is properly imported and PXR_Enterprise API is enabled
             if (!IsPXRAvailable())
             {
-                return; // Silently skip - PXR_Enterprise not available
+                // Log warning on Pico devices to help with debugging
+                Debug.LogWarning("AbxrLib: PXR_Enterprise not available on Pico device. Ensure Pico SDK is imported and Enterprise API is enabled in Pico SDK settings.");
+                return;
             }
             
             // Create the component instance
