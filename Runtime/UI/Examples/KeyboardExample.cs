@@ -109,12 +109,12 @@ namespace AbxrLib.Runtime.UI.Examples
         {
             if (_keyboardActive)
             {
-                Debug.LogWarning("AbxrLib - KeyboardExample: Keyboard already active. Destroy current keyboard first.");
+                Debug.LogWarning("AbxrLib: KeyboardExample - Keyboard already active. Destroy current keyboard first.");
                 UpdateStatusText("Keyboard already active - Destroy current keyboard first");
                 return;
             }
             
-            Debug.Log("AbxrLib - KeyboardExample: Creating full keyboard");
+            Debug.Log("AbxrLib: KeyboardExample - Creating full keyboard");
             
             // Log analytics event
             Abxr.EventInteractionComplete("keyboard_example_full_keyboard_created", 
@@ -142,12 +142,12 @@ namespace AbxrLib.Runtime.UI.Examples
         {
             if (_keyboardActive)
             {
-                Debug.LogWarning("AbxrLib - KeyboardExample: Keyboard already active. Destroy current keyboard first.");
+                Debug.LogWarning("AbxrLib: KeyboardExample - Keyboard already active. Destroy current keyboard first.");
                 UpdateStatusText("Keyboard already active - Destroy current keyboard first");
                 return;
             }
             
-            Debug.Log("AbxrLib - KeyboardExample: Creating PIN pad");
+            Debug.Log("AbxrLib: KeyboardExample - Creating PIN pad");
             
             // Log analytics event
             Abxr.EventInteractionComplete("keyboard_example_pin_pad_created", 
@@ -175,12 +175,12 @@ namespace AbxrLib.Runtime.UI.Examples
         {
             if (!_keyboardActive)
             {
-                Debug.LogWarning("AbxrLib - KeyboardExample: No keyboard to destroy");
+                Debug.LogWarning("AbxrLib: KeyboardExample - No keyboard to destroy");
                 UpdateStatusText("No keyboard to destroy");
                 return;
             }
             
-            Debug.Log("AbxrLib - KeyboardExample: Destroying keyboard");
+            Debug.Log("AbxrLib: KeyboardExample - Destroying keyboard");
             
             // Log analytics event
             Abxr.EventInteractionComplete("keyboard_example_keyboard_destroyed", 
@@ -200,7 +200,7 @@ namespace AbxrLib.Runtime.UI.Examples
         private void OnKeyboardCreated()
         {
             _keyboardActive = true;
-            Debug.Log("AbxrLib - KeyboardExample: Keyboard created successfully");
+            Debug.Log("AbxrLib: KeyboardExample - Keyboard created successfully");
             
             // Log analytics event
             Abxr.EventInteractionComplete("keyboard_example_keyboard_created_success", 
@@ -224,7 +224,7 @@ namespace AbxrLib.Runtime.UI.Examples
         private void OnKeyboardDestroyed()
         {
             _keyboardActive = false;
-            Debug.Log("AbxrLib - KeyboardExample: Keyboard destroyed successfully");
+            Debug.Log("AbxrLib: KeyboardExample - Keyboard destroyed successfully");
             
             // Log analytics event
             Abxr.EventInteractionComplete("keyboard_example_keyboard_destroyed_success", 
@@ -304,7 +304,7 @@ namespace AbxrLib.Runtime.UI.Examples
             {
                 statusText.text = message;
             }
-            Debug.Log($"AbxrLib - KeyboardExample: {message}");
+            Debug.Log($"AbxrLib: KeyboardExample - {message}");
         }
         
         /// <summary>
@@ -347,7 +347,7 @@ namespace AbxrLib.Runtime.UI.Examples
         /// </summary>
         public void DemonstrateAuthenticationFlow()
         {
-            Debug.Log("AbxrLib - KeyboardExample: Demonstrating authentication flow");
+            Debug.Log("AbxrLib: KeyboardExample - Demonstrating authentication flow");
             
             // This would typically be called by the authentication system
             // but we can demonstrate the flow here
@@ -369,7 +369,7 @@ namespace AbxrLib.Runtime.UI.Examples
         /// </summary>
         public void DemonstratePinPadFlow()
         {
-            Debug.Log("AbxrLib - KeyboardExample: Demonstrating PIN pad flow");
+            Debug.Log("AbxrLib: KeyboardExample - Demonstrating PIN pad flow");
             
             if (!_keyboardActive)
             {
@@ -391,7 +391,7 @@ namespace AbxrLib.Runtime.UI.Examples
         /// </summary>
         public void DemonstrateIndependentPanelUsage()
         {
-            Debug.Log("AbxrLib - KeyboardExample: Demonstrating independent panel usage");
+            Debug.Log("AbxrLib: KeyboardExample - Demonstrating independent panel usage");
             
             // Load independent panel prefab for custom messages
             GameObject panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
@@ -409,11 +409,11 @@ namespace AbxrLib.Runtime.UI.Examples
                 // Auto-destroy after 5 seconds
                 Destroy(panelInstance, 5f);
                 
-                Debug.Log("AbxrLib - KeyboardExample: Independent panel created and will auto-destroy in 5 seconds");
+                Debug.Log("AbxrLib: KeyboardExample - Independent panel created and will auto-destroy in 5 seconds");
             }
             else
             {
-                Debug.LogWarning("AbxrLib - KeyboardExample: Could not load AbxrDarkPanelWithText prefab");
+                Debug.LogWarning("AbxrLib: KeyboardExample - Could not load AbxrDarkPanelWithText prefab");
             }
             
             // Log analytics event

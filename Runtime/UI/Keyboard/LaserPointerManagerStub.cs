@@ -52,7 +52,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void EnableLaserPointersForInteraction()
         {
-            Debug.Log("AbxrLib - LaserPointerManagerStub: XR Interaction Toolkit not available, laser pointer management disabled");
+            // No-op for stub implementation
         }
 
         /// <summary>

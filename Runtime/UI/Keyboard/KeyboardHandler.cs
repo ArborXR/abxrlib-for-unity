@@ -46,33 +46,25 @@ namespace AbxrLib.Runtime.UI.Keyboard
             if (!_keyboardPrefab)
             {
                 _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard" + RigDetector.PrefabSuffix());
-                if (_keyboardPrefab)
-                {
-                    Debug.Log("AbxrLib - KeyboardHandler: Using default keyboard prefab from Resources");
-                }
             }
             else
             {
-                Debug.Log("AbxrLib - KeyboardHandler: Using custom keyboard prefab from configuration");
+                Debug.Log("AbxrLib: KeyboardHandler - Using custom keyboard prefab from configuration");
             }
             
             if (!_pinPadPrefab)
             {
                 _pinPadPrefab = Resources.Load<GameObject>("Prefabs/AbxrPinPad" + RigDetector.PrefabSuffix());
-                if (_pinPadPrefab)
-                {
-                    Debug.Log("AbxrLib - KeyboardHandler: Using default PIN pad prefab from Resources");
-                }
             }
             else
             {
-                Debug.Log("AbxrLib - KeyboardHandler: Using custom PIN pad prefab from configuration");
+                Debug.Log("AbxrLib: KeyboardHandler - Using custom PIN pad prefab from configuration");
             }
             
             
             if (!_keyboardPrefab)
             {
-                Debug.LogError("AbxrLib - KeyboardHandler: Failed to load keyboard prefab from both configuration and Resources");
+                Debug.LogError("AbxrLib: KeyboardHandler - Failed to load keyboard prefab from both configuration and Resources");
             }
         }
     
@@ -103,7 +95,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             if (keyboardHandler != null)
             {
                 keyboardHandler.LoadPrefabs();
-                Debug.Log("AbxrLib - KeyboardHandler: Prefabs refreshed from configuration");
+                Debug.Log("AbxrLib: KeyboardHandler - Prefabs refreshed from configuration");
             }
         }
 

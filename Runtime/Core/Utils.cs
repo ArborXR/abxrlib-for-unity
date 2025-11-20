@@ -339,7 +339,7 @@ namespace AbxrLib.Runtime.Core
             catch (Exception ex)
             {
                 // Log error with consistent format and include data conversion context
-                Debug.LogError($"Failed to convert module data: {ex.Message}\n" +
+                Debug.LogError($"AbxrLib: Failed to convert module data: {ex.Message}\n" +
                               $"Exception Type: {ex.GetType().Name}\n" +
                               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
