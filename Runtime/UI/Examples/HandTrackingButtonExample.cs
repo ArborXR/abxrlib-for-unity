@@ -108,7 +108,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleStartButton()
         {
-            Debug.Log("AbxrLib - HandTrackingButtonExample: Start button activated by hand tracking - Starting application");
+            Debug.Log("AbxrLib: HandTrackingButtonExample - Start button activated by hand tracking - Starting application");
             
             // Log a level start event
             Abxr.EventLevelStart("hand_tracking_example", new Abxr.Dict
@@ -121,7 +121,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleSettingsButton()
         {
-            Debug.Log("AbxrLib - HandTrackingButtonExample: Settings button activated by hand tracking - Opening settings");
+            Debug.Log("AbxrLib: HandTrackingButtonExample - Settings button activated by hand tracking - Opening settings");
             
             // Log an interaction event
             Abxr.EventInteractionComplete("settings_button_hand_activated", 
@@ -132,7 +132,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleExitButton()
         {
-            Debug.Log("AbxrLib - HandTrackingButtonExample: Exit button activated by hand tracking - Exiting application");
+            Debug.Log("AbxrLib: HandTrackingButtonExample - Exit button activated by hand tracking - Exiting application");
             
             // Log an interaction event
             Abxr.EventInteractionComplete("exit_button_hand_activated", 
@@ -150,7 +150,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleHelpButton()
         {
-            Debug.Log("AbxrLib - HandTrackingButtonExample: Help button activated by hand tracking - Showing help");
+            Debug.Log("AbxrLib: HandTrackingButtonExample - Help button activated by hand tracking - Showing help");
             
             // Log an interaction event
             Abxr.EventInteractionComplete("help_button_hand_activated", 
@@ -161,7 +161,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleGenericButton(string buttonName)
         {
-            Debug.Log($"AbxrLib - HandTrackingButtonExample: Generic hand tracking button '{buttonName}' activated");
+            Debug.Log($"AbxrLib: HandTrackingButtonExample - Generic hand tracking button '{buttonName}' activated");
             
             // Log a generic interaction event
             Abxr.EventInteractionComplete($"generic_hand_button_activated", 
@@ -214,7 +214,7 @@ namespace AbxrLib.Runtime.UI.Examples
             
             // This would require more complex implementation to toggle at runtime
             // For now, just log the change
-            Debug.Log($"AbxrLib - HandTrackingButtonExample: Face camera toggled to {!currentSetting}");
+            Debug.Log($"AbxrLib: HandTrackingButtonExample - Face camera toggled to {!currentSetting}");
             
             if (feedbackText != null)
             {

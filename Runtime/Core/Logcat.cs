@@ -21,7 +21,7 @@ namespace AbxrLib.Runtime.Core
     public static void Info(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
 #if UNITY_EDITOR
-        UnityEngine.Debug.Log($"{message} {lineNumber} {memberName} {filePath} ");
+        UnityEngine.Debug.Log($"AbxrLib: {message} {lineNumber} {memberName} {filePath} ");
 #endif
         Logcat.Log ("i", message, lineNumber, memberName, filePath);
     }
@@ -30,7 +30,7 @@ namespace AbxrLib.Runtime.Core
     public static void Debug(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
 #if UNITY_EDITOR
-        UnityEngine.Debug.Log($"{message} {lineNumber} {memberName} {filePath} ");
+        UnityEngine.Debug.Log($"AbxrLib: {message} {lineNumber} {memberName} {filePath} ");
 #endif
         Logcat.Log ("d", message, lineNumber, memberName, filePath);
     }
@@ -39,7 +39,7 @@ namespace AbxrLib.Runtime.Core
     public static void Warning(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
 #if UNITY_EDITOR
-        UnityEngine.Debug.LogWarning($"{message} {lineNumber} {memberName} {filePath} ");
+        UnityEngine.Debug.LogWarning($"AbxrLib: {message} {lineNumber} {memberName} {filePath} ");
 #endif
         Logcat.Log ("w", message, lineNumber, memberName, filePath);
     }
@@ -48,7 +48,7 @@ namespace AbxrLib.Runtime.Core
     public static void Error(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
 #if UNITY_EDITOR
-        UnityEngine.Debug.LogError($"{message} {lineNumber} {memberName} {filePath} ");
+        UnityEngine.Debug.LogError($"AbxrLib: {message} {lineNumber} {memberName} {filePath} ");
 #endif
         Logcat.Log ("e", message, lineNumber, memberName, filePath);
     }

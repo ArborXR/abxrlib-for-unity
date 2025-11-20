@@ -82,7 +82,7 @@ namespace AbxrLib.Runtime.UI
             
             isInitialized = true;
             
-            Debug.Log($"AbxrLib - CustomButtonSystem: Initialized with {(useConfigurationSettings ? "configuration" : "custom")} settings");
+            Debug.Log($"AbxrLib: CustomButtonSystem - Initialized with {(useConfigurationSettings ? "configuration" : "custom")} settings");
         }
         
         private void SetupInteractionMethod(bool useDirectTouch)
@@ -90,11 +90,11 @@ namespace AbxrLib.Runtime.UI
             if (useDirectTouch && LaserPointerManager.IsXRInteractionToolkitAvailable())
             {
                 LaserPointerManager.EnableLaserPointersForInteraction();
-                Debug.Log("AbxrLib - CustomButtonSystem: Direct touch interaction enabled");
+                Debug.Log("AbxrLib: CustomButtonSystem - Direct touch interaction enabled");
             }
             else
             {
-                Debug.Log("AbxrLib - CustomButtonSystem: Ray casting interaction enabled");
+                Debug.Log("AbxrLib: CustomButtonSystem - Ray casting interaction enabled");
             }
         }
         
@@ -109,12 +109,12 @@ namespace AbxrLib.Runtime.UI
                     faceCameraComponent = gameObject.AddComponent<FaceCamera>();
                     faceCameraComponent.useConfigurationValues = useConfigurationSettings;
                 }
-                Debug.Log("AbxrLib - CustomButtonSystem: Face camera behavior enabled");
+                Debug.Log("AbxrLib: CustomButtonSystem - Face camera behavior enabled");
             }
             else if (useCustomPositioning)
             {
                 transform.position = customPosition;
-                Debug.Log($"AbxrLib - CustomButtonSystem: Custom positioning set to {customPosition}");
+                Debug.Log($"AbxrLib: CustomButtonSystem - Custom positioning set to {customPosition}");
             }
         }
         
@@ -122,7 +122,7 @@ namespace AbxrLib.Runtime.UI
         {
             if (customButtons == null || customButtons.Length == 0)
             {
-                Debug.LogWarning("AbxrLib - CustomButtonSystem: No buttons assigned to customButtons array");
+                Debug.LogWarning("AbxrLib: CustomButtonSystem - No buttons assigned to customButtons array");
                 return;
             }
             
@@ -132,7 +132,7 @@ namespace AbxrLib.Runtime.UI
                 {
                     int buttonIndex = i; // Capture for closure
                     customButtons[i].onClick.AddListener(() => OnButtonClicked(buttonIndex));
-                    Debug.Log($"AbxrLib - CustomButtonSystem: Set up listener for button {i}");
+                    Debug.Log($"AbxrLib: CustomButtonSystem - Set up listener for button {i}");
                 }
             }
         }
@@ -141,7 +141,7 @@ namespace AbxrLib.Runtime.UI
         {
             if (buttonIndex < 0 || buttonIndex >= customButtons.Length || customButtons[buttonIndex] == null)
             {
-                Debug.LogError($"AbxrLib - CustomButtonSystem: Invalid button index {buttonIndex}");
+                Debug.LogError($"AbxrLib: CustomButtonSystem - Invalid button index {buttonIndex}");
                 return;
             }
             
@@ -154,7 +154,7 @@ namespace AbxrLib.Runtime.UI
                 Abxr.InteractionResult.Neutral, 
                 buttonName);
             
-            Debug.Log($"AbxrLib - CustomButtonSystem: Button '{buttonName}' clicked, logged as '{eventName}'");
+            Debug.Log($"AbxrLib: CustomButtonSystem - Button '{buttonName}' clicked, logged as '{eventName}'");
             
             // Call custom button handler
             OnCustomButtonClick(buttonIndex, buttonName);
@@ -168,7 +168,7 @@ namespace AbxrLib.Runtime.UI
         protected virtual void OnCustomButtonClick(int buttonIndex, string buttonName)
         {
             // Override in derived classes for custom behavior
-            Debug.Log($"AbxrLib - CustomButtonSystem: Custom button click handler - Button {buttonIndex}: {buttonName}");
+            Debug.Log($"AbxrLib: CustomButtonSystem - Custom button click handler - Button {buttonIndex}: {buttonName}");
         }
         
         /// <summary>
@@ -196,7 +196,7 @@ namespace AbxrLib.Runtime.UI
                 LaserPointerManager.RestoreLaserPointerStates();
             }
             
-            Debug.Log($"AbxrLib - CustomButtonSystem: Direct touch interaction {(enable ? "enabled" : "disabled")}");
+            Debug.Log($"AbxrLib: CustomButtonSystem - Direct touch interaction {(enable ? "enabled" : "disabled")}");
         }
         
         private void OnDestroy()
@@ -217,7 +217,7 @@ namespace AbxrLib.Runtime.UI
                 {
                     if (customButtons[i] == null)
                     {
-                        Debug.LogWarning($"AbxrLib - CustomButtonSystem: Button at index {i} is null");
+                        Debug.LogWarning($"AbxrLib: CustomButtonSystem - Button at index {i} is null");
                     }
                 }
             }

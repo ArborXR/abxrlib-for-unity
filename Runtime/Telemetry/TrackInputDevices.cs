@@ -33,7 +33,7 @@ namespace AbxrLib.Runtime.Telemetry
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrLib - TrackInputDevices: Failed to initialize XR device tracking: {ex.Message}");
+                Debug.LogWarning($"AbxrLib: TrackInputDevices - Failed to initialize XR device tracking: {ex.Message}");
             }
         }
     

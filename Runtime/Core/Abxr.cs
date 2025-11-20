@@ -1396,7 +1396,7 @@ public static partial class Abxr
 	{
 		if (_onModuleTarget == null)
 		{
-			Debug.LogWarning("AbxrLib - ExecuteModuleSequence: No subscribers to OnModuleTarget event. Subscribe to OnModuleTarget to handle module targets.");
+			Debug.LogWarning("AbxrLib: ExecuteModuleSequence - No subscribers to OnModuleTarget event. Subscribe to OnModuleTarget to handle module targets.");
 			return false;
 		}
 
@@ -1404,11 +1404,11 @@ public static partial class Abxr
 		var currentModuleData = GetModuleTargetWithoutAdvance();
 		if (currentModuleData == null)
 		{
-			Debug.Log("AbxrLib - ExecuteModuleSequence: No modules available to execute.");
+			Debug.Log("AbxrLib: ExecuteModuleSequence - No modules available to execute.");
 			return false;
 		}
 
-		Debug.Log($"AbxrLib - Triggering OnModuleTarget event for module: {currentModuleData.moduleTarget}");
+		Debug.Log($"AbxrLib: Triggering OnModuleTarget event for module - {currentModuleData.moduleTarget}");
 		
 		try
 		{
@@ -1455,7 +1455,7 @@ public static partial class Abxr
 		{
 			// More modules remain - get next module and trigger it
 			ModuleData nextModule = moduleData[_currentModuleIndex];
-			Debug.Log($"AbxrLib: Module '{currentModule.name}' completed. Advancing to next module: {nextModule.target}");
+			Debug.Log($"AbxrLib: Module '{currentModule.name}' completed. Advancing to next module - {nextModule.target}");
 			if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
 			{
 				_onModuleTarget.Invoke(nextModule.target);
