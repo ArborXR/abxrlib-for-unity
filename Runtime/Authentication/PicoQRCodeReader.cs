@@ -20,6 +20,7 @@ using System.Text.RegularExpressions;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 using UnityEngine.XR.Management;
+using Unity.XR.PICO.TOBSupport;
 
 namespace AbxrLib.Runtime.Authentication
 {
@@ -78,82 +79,12 @@ namespace AbxrLib.Runtime.Authentication
             {
                 return false;
             }
-            
-            // Try to find PXR_Enterprise class using reflection
-            // This works whether Pico SDK is directly referenced or not
-            try
-            {
-                Type pxrEnterpriseType = null;
-                
-                // Try direct type lookup first (when Pico SDK is available)
-                pxrEnterpriseType = Type.GetType("Unity.XR.PICO.TOBSupport.PXR_Enterprise, PICOXR.TOBSupport");
-                if (pxrEnterpriseType == null)
-                {
-                    // Try alternative namespaces
-                    string[] possibleNames = new string[]
-                    {
-                        "Unity.XR.PICO.TOBSupport.PXR_Enterprise",
-                        "Unity.XR.PXR.PXR_Enterprise",
-                        "PXR_Enterprise"
-                    };
-                    
-                    // Search through all loaded assemblies
-                    foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
-                    {
-                        try
-                        {
-                            foreach (string typeName in possibleNames)
-                            {
-                                pxrEnterpriseType = assembly.GetType(typeName);
-                                if (pxrEnterpriseType != null)
-                                {
-                                    break;
-                                }
-                            }
-                            if (pxrEnterpriseType != null)
-                            {
-                                break;
-                            }
-                        }
-                        catch
-                        {
-                            continue;
-                        }
-                    }
-                }
-                
-                if (pxrEnterpriseType != null)
-                {
-                    // Get the methods we need
-                    _initEnterpriseServiceMethod = pxrEnterpriseType.GetMethod("InitEnterpriseService", 
-                        BindingFlags.Public | BindingFlags.Static, 
-                        null, 
-                        new Type[] { typeof(bool) }, 
-                        null);
-                    
-                    _bindEnterpriseServiceMethod = pxrEnterpriseType.GetMethod("BindEnterpriseService", 
-                        BindingFlags.Public | BindingFlags.Static);
-                    
-                    _scanQRCodeMethod = pxrEnterpriseType.GetMethod("ScanQRCode", 
-                        BindingFlags.Public | BindingFlags.Static);
-                    
-                    if (_initEnterpriseServiceMethod != null && 
-                        _bindEnterpriseServiceMethod != null && 
-                        _scanQRCodeMethod != null)
-                    {
-                        _isPXRAvailable = true;
-                        Debug.Log($"AbxrLib: PXR_Enterprise SDK detected and available (found in {pxrEnterpriseType.Assembly.GetName().Name})");
-                        return true;
-                    }
-                }
+            else {
+                return true;
             }
-            catch
-            {
-                // Silently fail - PXR_Enterprise not available
-            }
-#endif
-            
+#else
             return false;
+#endif
         }
         
         /// <summary>
@@ -217,10 +148,12 @@ namespace AbxrLib.Runtime.Authentication
             {
                 return; // Already scanning
             }
-            
-            _instance.StartCoroutine(_instance.CreateQRReader());
+
+            _instance.createQRReader = true;
         }
         
+        public bool createQRReader = false;
+
         /// <summary>
         /// Stop QR code scanning
         /// </summary>
@@ -229,10 +162,21 @@ namespace AbxrLib.Runtime.Authentication
             _isScanning = false;
         }
         
-        private void Start()
+        private void Update()
         {
-            // Subscribe to keyboard events to stop scanning when keyboard is destroyed
-            KeyboardHandler.OnKeyboardDestroyed += OnKeyboardDestroyed;
+            if (createQRReader)
+            {
+                createQRReader = false;
+                // Subscribe to keyboard events to stop scanning when keyboard is destroyed
+                KeyboardHandler.OnKeyboardDestroyed += OnKeyboardDestroyed;
+                PXR_Enterprise.InitEnterpriseService(true);
+                PXR_Enterprise.BindEnterpriseService((res) =>
+                {
+                    Debug.Log("Abxr: Bind result: " + res);
+                    PXR_Enterprise.ScanQRCode(OnQRCodeScanned);
+                }
+                );
+            }
         }
         
         private void OnKeyboardDestroyed()
