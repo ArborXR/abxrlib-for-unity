@@ -20,6 +20,7 @@ using System.Text.RegularExpressions;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 using UnityEngine.XR.Management;
+using Unity.XR.PICO.TOBSupport;
 
 namespace AbxrLib.Runtime.Authentication
 {
@@ -78,59 +79,12 @@ namespace AbxrLib.Runtime.Authentication
             {
                 return false;
             }
-            
-            // Try to find and cache PXR_Enterprise methods using reflection
-            if (_initEnterpriseServiceMethod == null || _bindEnterpriseServiceMethod == null || _scanQRCodeMethod == null)
-            {
-                try
-                {
-                    Type pxrEnterpriseType = Type.GetType("Unity.XR.PICO.TOBSupport.PXR_Enterprise, PICOXR.TOBSupport");
-                    if (pxrEnterpriseType == null)
-                    {
-                        // Try searching through all assemblies
-                        foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
-                        {
-                            try
-                            {
-                                pxrEnterpriseType = assembly.GetType("Unity.XR.PICO.TOBSupport.PXR_Enterprise");
-                                if (pxrEnterpriseType != null) break;
-                            }
-                            catch { continue; }
-                        }
-                    }
-                    
-                    if (pxrEnterpriseType != null)
-                    {
-                        _initEnterpriseServiceMethod = pxrEnterpriseType.GetMethod("InitEnterpriseService", 
-                            BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(bool) }, null);
-                        _bindEnterpriseServiceMethod = pxrEnterpriseType.GetMethod("BindEnterpriseService", 
-                            BindingFlags.Public | BindingFlags.Static);
-                        _scanQRCodeMethod = pxrEnterpriseType.GetMethod("ScanQRCode", 
-                            BindingFlags.Public | BindingFlags.Static);
-                        
-                        if (_initEnterpriseServiceMethod != null && 
-                            _bindEnterpriseServiceMethod != null && 
-                            _scanQRCodeMethod != null)
-                        {
-                            _isPXRAvailable = true;
-                            Debug.Log($"AbxrLib: PXR_Enterprise SDK detected and available");
-                            return true;
-                        }
-                    }
-                }
-                catch
-                {
-                    // Silently fail - PXR_Enterprise not available
-                }
-            }
-            else
-            {
-                _isPXRAvailable = true;
+            else {
                 return true;
             }
-#endif
-
+#else
             return false;
+#endif
         }
         
         /// <summary>
@@ -208,89 +162,21 @@ namespace AbxrLib.Runtime.Authentication
             _isScanning = false;
         }
         
-        private void Start()
-        {
-            // Subscribe to keyboard events to stop scanning when keyboard is destroyed
-            KeyboardHandler.OnKeyboardDestroyed += OnKeyboardDestroyed;
-        }
-        
         private void Update()
         {
             if (createQRReader)
             {
                 createQRReader = false;
-                StartCoroutine(CreateQRReaderDirect());
-            }
-        }
-        
-        private IEnumerator CreateQRReaderDirect()
-        {
-            if (!IsPXRAvailable())
-            {
-                yield break;
-            }
-            
-            // Initialize PXR Enterprise Service using reflection
-            try
-            {
-                _initEnterpriseServiceMethod?.Invoke(null, new object[] { true });
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to initialize PXR Enterprise Service: {ex.Message}");
-                yield break;
-            }
-            
-            // Wait a frame to ensure initialization completes
-            yield return null;
-            
-            // Bind Enterprise Service with callback using reflection
-            try
-            {
-                if (_bindEnterpriseServiceMethod != null)
+                // Subscribe to keyboard events to stop scanning when keyboard is destroyed
+                KeyboardHandler.OnKeyboardDestroyed += OnKeyboardDestroyed;
+                PXR_Enterprise.InitEnterpriseService(true);
+                PXR_Enterprise.BindEnterpriseService((res) =>
                 {
-                    Action<int> callback = (res) =>
-                    {
-                        Debug.Log($"AbxrLib: PXR Enterprise Service bind result: {res}");
-                        if (res == 0) // Success
-                        {
-                            StartCoroutine(ScanCodeDirect());
-                        }
-                        else
-                        {
-                            Debug.LogWarning($"AbxrLib: PXR Enterprise Service bind failed with result: {res}");
-                        }
-                    };
-                    _bindEnterpriseServiceMethod.Invoke(null, new object[] { callback });
+                    Debug.Log("Abxr: Bind result: " + res);
+                    PXR_Enterprise.ScanQRCode(OnQRCodeScanned);
                 }
+                );
             }
-            catch (Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to bind PXR Enterprise Service: {ex.Message}");
-            }
-        }
-        
-        private IEnumerator ScanCodeDirect()
-        {
-            if (!IsPXRAvailable() || _scanQRCodeMethod == null)
-            {
-                yield break;
-            }
-            
-            _isScanning = true;
-            
-            try
-            {
-                Action<string> callback = OnQRCodeScanned;
-                _scanQRCodeMethod.Invoke(null, new object[] { callback });
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to start QR code scanning: {ex.Message}");
-                _isScanning = false;
-            }
-            
-            yield return null;
         }
         
         private void OnKeyboardDestroyed()
