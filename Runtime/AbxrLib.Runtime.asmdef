@@ -24,6 +24,10 @@
         {
             "name": "com.meta.xr.sdk.core",
             "define": "META_SDK_AVAILABLE"
+        },
+        {
+            "name": "PICOXR.TOBSupport",
+            "define": "PICO_SDK_AVAILABLE"
         }
     ],
     "noEngineReferences": false

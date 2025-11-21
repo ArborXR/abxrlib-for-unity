@@ -20,7 +20,9 @@ using System.Text.RegularExpressions;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 using UnityEngine.XR.Management;
+#if PICO_SDK_AVAILABLE
 using Unity.XR.PICO.TOBSupport;
+#endif
 
 namespace AbxrLib.Runtime.Authentication
 {
@@ -162,21 +164,93 @@ namespace AbxrLib.Runtime.Authentication
             _isScanning = false;
         }
         
+        private void Start()
+        {
+            // Subscribe to keyboard events to stop scanning when keyboard is destroyed
+            KeyboardHandler.OnKeyboardDestroyed += OnKeyboardDestroyed;
+        }
+        
         private void Update()
         {
             if (createQRReader)
             {
                 createQRReader = false;
-                // Subscribe to keyboard events to stop scanning when keyboard is destroyed
-                KeyboardHandler.OnKeyboardDestroyed += OnKeyboardDestroyed;
+                StartCoroutine(CreateQRReaderDirect());
+            }
+        }
+        
+        private IEnumerator CreateQRReaderDirect()
+        {
+            if (!IsPXRAvailable())
+            {
+                yield break;
+            }
+            
+#if PICO_SDK_AVAILABLE
+            // Direct calls when Pico SDK is available
+            try
+            {
                 PXR_Enterprise.InitEnterpriseService(true);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Failed to initialize PXR Enterprise Service: {ex.Message}");
+                yield break;
+            }
+            
+            // Wait a frame to ensure initialization completes
+            yield return null;
+            
+            try
+            {
                 PXR_Enterprise.BindEnterpriseService((res) =>
                 {
-                    Debug.Log("Abxr: Bind result: " + res);
-                    PXR_Enterprise.ScanQRCode(OnQRCodeScanned);
-                }
-                );
+                    Debug.Log($"AbxrLib: PXR Enterprise Service bind result: {res}");
+                    if (res == 0) // Success
+                    {
+                        StartCoroutine(ScanCodeDirect());
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"AbxrLib: PXR Enterprise Service bind failed with result: {res}");
+                    }
+                });
             }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Failed to bind PXR Enterprise Service: {ex.Message}");
+            }
+#else
+            Debug.LogWarning("AbxrLib: Pico SDK not available. QR code scanning requires PICOXR.TOBSupport assembly reference.");
+            yield break;
+#endif
+        }
+        
+        private IEnumerator ScanCodeDirect()
+        {
+            if (!IsPXRAvailable())
+            {
+                yield break;
+            }
+            
+            _isScanning = true;
+            
+#if PICO_SDK_AVAILABLE
+            try
+            {
+                PXR_Enterprise.ScanQRCode(OnQRCodeScanned);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Failed to start QR code scanning: {ex.Message}");
+                _isScanning = false;
+            }
+#else
+            Debug.LogWarning("AbxrLib: Pico SDK not available. QR code scanning requires PICOXR.TOBSupport assembly reference.");
+            _isScanning = false;
+#endif
+            
+            yield return null;
         }
         
         private void OnKeyboardDestroyed()
