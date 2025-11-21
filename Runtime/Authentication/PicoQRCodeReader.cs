@@ -14,10 +14,12 @@
 
 using System;
 using System.Collections;
+using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
+using UnityEngine.XR.Management;
 
 namespace AbxrLib.Runtime.Authentication
 {
@@ -32,39 +34,31 @@ namespace AbxrLib.Runtime.Authentication
         private static bool _isScanning = false;
         private static bool _isPXRAvailable = false;
         
-        // Reflection references to PXR_Enterprise class
-        private static Type _pxrEnterpriseType = null;
+        // Reflection references to PXR_Enterprise methods (used when Pico SDK not directly available)
         private static MethodInfo _initEnterpriseServiceMethod = null;
         private static MethodInfo _bindEnterpriseServiceMethod = null;
         private static MethodInfo _scanQRCodeMethod = null;
         
         /// <summary>
-        /// Debug helper to list all types containing "PXR" or "Enterprise" in loaded assemblies
-        /// Call this from a Pico device to help diagnose SDK configuration issues
+        /// Check if PXR loader is enabled in XR Management
         /// </summary>
-        [System.Diagnostics.Conditional("UNITY_ANDROID")]
-        public static void DebugListPXRTypes()
+        public static bool IsPXRLoaderEnabled()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            Debug.Log("AbxrLib: Searching for PXR-related types in loaded assemblies...");
-            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            try
             {
-                try
-                {
-                    var types = assembly.GetTypes();
-                    foreach (var type in types)
-                    {
-                        if (type.Name.Contains("PXR") || type.Name.Contains("Enterprise"))
-                        {
-                            Debug.Log($"AbxrLib: Found type: {type.FullName} in assembly: {assembly.GetName().Name}");
-                        }
-                    }
-                }
-                catch
-                {
-                    // Skip assemblies we can't inspect
-                }
+                var settings = XRGeneralSettings.Instance?.Manager;
+                if (settings == null) return false;
+
+                return settings.activeLoaders.Any(loader =>
+                    loader != null && loader.name.Contains("PXR", StringComparison.OrdinalIgnoreCase));
             }
+            catch
+            {
+                return false;
+            }
+#else
+            return false;
 #endif
         }
         
@@ -73,87 +67,74 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         public static bool IsPXRAvailable()
         {
-            if (_isPXRAvailable && _pxrEnterpriseType != null)
+            if (_isPXRAvailable)
             {
                 return true;
             }
             
-            // Check if we're on Android (Pico headsets run Android)
 #if UNITY_ANDROID && !UNITY_EDITOR
-            // Try to find PXR_Enterprise class using reflection
-            // Try multiple possible namespace/assembly combinations
-            string[] possibleNames = new string[]
+            // First check if PXR loader is enabled
+            if (!IsPXRLoaderEnabled())
             {
-                "Unity.XR.PXR.PXR_Enterprise, Assembly-CSharp",
-                "Unity.XR.PXR.PXR_Enterprise",
-                "PXR_Enterprise, Assembly-CSharp",
-                "PXR_Enterprise",
-                "Pico.PXR_Enterprise, Assembly-CSharp",
-                "Pico.PXR_Enterprise"
-            };
+                return false;
+            }
             
+            // Try to find PXR_Enterprise class using reflection
+            // This works whether Pico SDK is directly referenced or not
             try
             {
-                // First try direct type lookups with assembly names
-                foreach (string typeName in possibleNames)
-                {
-                    _pxrEnterpriseType = Type.GetType(typeName, false);
-                    if (_pxrEnterpriseType != null)
-                    {
-                        break;
-                    }
-                }
+                Type pxrEnterpriseType = null;
                 
-                // If not found, search through all loaded assemblies
-                if (_pxrEnterpriseType == null)
+                // Try direct type lookup first (when Pico SDK is available)
+                pxrEnterpriseType = Type.GetType("Unity.XR.PICO.TOBSupport.PXR_Enterprise, PICOXR.TOBSupport");
+                if (pxrEnterpriseType == null)
                 {
+                    // Try alternative namespaces
+                    string[] possibleNames = new string[]
+                    {
+                        "Unity.XR.PICO.TOBSupport.PXR_Enterprise",
+                        "Unity.XR.PXR.PXR_Enterprise",
+                        "PXR_Enterprise"
+                    };
+                    
+                    // Search through all loaded assemblies
                     foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
                     {
                         try
                         {
-                            // Try different namespace variations
-                            string[] namespacesToTry = new string[]
+                            foreach (string typeName in possibleNames)
                             {
-                                "Unity.XR.PXR.PXR_Enterprise",
-                                "PXR_Enterprise",
-                                "Pico.PXR_Enterprise"
-                            };
-                            
-                            foreach (string ns in namespacesToTry)
-                            {
-                                _pxrEnterpriseType = assembly.GetType(ns);
-                                if (_pxrEnterpriseType != null)
+                                pxrEnterpriseType = assembly.GetType(typeName);
+                                if (pxrEnterpriseType != null)
                                 {
                                     break;
                                 }
                             }
-                            
-                            if (_pxrEnterpriseType != null)
+                            if (pxrEnterpriseType != null)
                             {
                                 break;
                             }
                         }
                         catch
                         {
-                            // Continue searching other assemblies
                             continue;
                         }
                     }
                 }
                 
-                if (_pxrEnterpriseType != null)
+                if (pxrEnterpriseType != null)
                 {
                     // Get the methods we need
-                    _initEnterpriseServiceMethod = _pxrEnterpriseType.GetMethod("InitEnterpriseService", 
+                    _initEnterpriseServiceMethod = pxrEnterpriseType.GetMethod("InitEnterpriseService", 
                         BindingFlags.Public | BindingFlags.Static, 
                         null, 
                         new Type[] { typeof(bool) }, 
                         null);
                     
-                    _bindEnterpriseServiceMethod = _pxrEnterpriseType.GetMethod("BindEnterpriseService", 
+                    _bindEnterpriseServiceMethod = pxrEnterpriseType.GetMethod("BindEnterpriseService", 
                         BindingFlags.Public | BindingFlags.Static);
                     
-                    _scanQRCodeMethod = _pxrEnterpriseType.GetMethod("ScanQRCode", 
+                    _scanQRCodeMethod = pxrEnterpriseType.GetMethod("ScanQRCode", 
                         BindingFlags.Public | BindingFlags.Static);
                     
                     if (_initEnterpriseServiceMethod != null && 
@@ -161,23 +142,14 @@ namespace AbxrLib.Runtime.Authentication
                         _scanQRCodeMethod != null)
                     {
                         _isPXRAvailable = true;
-                        Debug.Log($"AbxrLib: PXR_Enterprise SDK detected and available (found in {_pxrEnterpriseType.Assembly.GetName().Name})");
+                        Debug.Log($"AbxrLib: PXR_Enterprise SDK detected and available (found in {pxrEnterpriseType.Assembly.GetName().Name})");
                         return true;
-                    }
-                    else
-                    {
-                        // Log which methods are missing for debugging
-                        Debug.LogWarning($"AbxrLib: PXR_Enterprise class found but methods missing - InitEnterpriseService: {_initEnterpriseServiceMethod != null}, BindEnterpriseService: {_bindEnterpriseServiceMethod != null}, ScanQRCode: {_scanQRCodeMethod != null}");
                     }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                // Only log on Pico headsets to help with debugging
-                if (IsPicoHeadset())
-                {
-                    Debug.LogWarning($"AbxrLib: Failed to check PXR_Enterprise availability on Pico device: {ex.Message}");
-                }
+                // Silently fail - PXR_Enterprise not available
             }
 #endif
             
@@ -215,11 +187,10 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             // Check if PXR_Enterprise is available
-            // Note: If this fails, ensure Pico SDK is properly imported and PXR_Enterprise API is enabled
             if (!IsPXRAvailable())
             {
                 // Log warning on Pico devices to help with debugging
-                Debug.LogWarning("AbxrLib: PXR_Enterprise not available on Pico device. Ensure Pico SDK is imported and Enterprise API is enabled in Pico SDK settings.");
+                Debug.LogWarning("AbxrLib: PXR_Enterprise not available on Pico device. Ensure Pico SDK is imported and Enterprise API is enabled.");
                 return;
             }
             
@@ -260,7 +231,6 @@ namespace AbxrLib.Runtime.Authentication
         
         private void Start()
         {
-            // Component is created via InitializeIfAvailable, don't auto-start here
             // Subscribe to keyboard events to stop scanning when keyboard is destroyed
             KeyboardHandler.OnKeyboardDestroyed += OnKeyboardDestroyed;
         }
@@ -278,12 +248,10 @@ namespace AbxrLib.Runtime.Authentication
                 yield break;
             }
             
-            // Initialize PXR Enterprise Service
-            bool initSuccess = false;
+            // Initialize PXR Enterprise Service using reflection
             try
             {
                 _initEnterpriseServiceMethod?.Invoke(null, new object[] { true });
-                initSuccess = true;
             }
             catch (Exception ex)
             {
@@ -292,23 +260,16 @@ namespace AbxrLib.Runtime.Authentication
                 yield break;
             }
             
-            if (!initSuccess)
-            {
-                yield break;
-            }
-            
             // Wait a frame to ensure initialization completes
             yield return null;
             
             // Bind Enterprise Service with callback
-            // The callback signature is: void BindEnterpriseService(Action<int> callback)
             try
             {
                 if (_bindEnterpriseServiceMethod != null)
                 {
                     // Create callback delegate using Action<int>
                     Action<int> callback = OnEnterpriseServiceBound;
-                    
                     _bindEnterpriseServiceMethod.Invoke(null, new object[] { callback });
                 }
             }
@@ -349,9 +310,7 @@ namespace AbxrLib.Runtime.Authentication
             try
             {
                 // Create callback delegate for QR code scan result
-                // The callback signature is: void ScanQRCode(Action<string> callback)
                 Action<string> callback = OnQRCodeScanned;
-                
                 _scanQRCodeMethod.Invoke(null, new object[] { callback });
             }
             catch (Exception ex)
@@ -455,4 +414,3 @@ namespace AbxrLib.Runtime.Authentication
         }
     }
 }
-
