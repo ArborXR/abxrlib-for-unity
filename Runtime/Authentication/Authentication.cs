@@ -164,12 +164,6 @@ namespace AbxrLib.Runtime.Authentication
             yield return GetConfiguration();
             if (!string.IsNullOrEmpty(_authMechanism?.prompt))
             {
-                // Initialize QR code reader if this is assessmentPin authentication on Pico headset
-                if (_authMechanism.type == "assessmentPin")
-                {
-                    PicoQRCodeReader.InitializeIfAvailable();
-                }
-                
                 yield return KeyboardAuthenticate();
                 // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
             }
@@ -298,7 +292,7 @@ namespace AbxrLib.Runtime.Authentication
             return true;
         }
 
-        public static IEnumerator KeyboardAuthenticate(string keyboardInput = null)
+        public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)
         {
             _keyboardAuthSuccess = false;
             
@@ -309,12 +303,6 @@ namespace AbxrLib.Runtime.Authentication
                 yield return AuthRequest(false);
                 if (_keyboardAuthSuccess == true)
                 {
-                    // Stop QR code scanning if it was active
-                    if (_authMechanism.type == "assessmentPin")
-                    {
-                        PicoQRCodeReader.StopScanning();
-                    }
-                    
                     KeyboardHandler.Destroy();
                     _failedAuthAttempts = 0;
                     
@@ -328,14 +316,9 @@ namespace AbxrLib.Runtime.Authentication
             }
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
+            if (invalidQrCode) prompt = "Invalid QR Code\n";
             prompt += _authMechanism.prompt;
             Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
-            
-            // Start QR code scanning if this is assessmentPin authentication
-            if (_authMechanism.type == "assessmentPin")
-            {
-                PicoQRCodeReader.StartScanning();
-            }
             
             _failedAuthAttempts++;
         }
