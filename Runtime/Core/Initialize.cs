@@ -32,6 +32,9 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
 #if UNITY_ANDROID && !UNITY_EDITOR
             ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
+#if PICO_ENTERPRISE_SDK
+            ObjectAttacher.Attach<PicoQRCodeReader>("PicoQRCodeReader");
+#endif
 #endif
             ObjectAttacher.Attach<Authentication.Authentication>("Authentication");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");

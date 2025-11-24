@@ -292,7 +292,7 @@ namespace AbxrLib.Runtime.Authentication
             return true;
         }
 
-        public static IEnumerator KeyboardAuthenticate(string keyboardInput = null)
+        public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)
         {
             _keyboardAuthSuccess = false;
             
@@ -316,6 +316,7 @@ namespace AbxrLib.Runtime.Authentication
             }
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
+            if (invalidQrCode) prompt = "Invalid QR Code\n";
             prompt += _authMechanism.prompt;
             Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
             _failedAuthAttempts++;
