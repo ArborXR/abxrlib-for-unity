@@ -1,3 +1,4 @@
+using AbxrLib.Runtime.Authentication;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -13,6 +14,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public Button deleteButton;
         public Button spaceButton;
         public Button submitButton;
+        public Button qrCodeButton;
 
         public TMP_InputField inputField;
     
@@ -30,6 +32,14 @@ namespace AbxrLib.Runtime.UI.Keyboard
             AddPointerDownHandler(spaceButton, Space);
             AddPointerDownHandler(deleteButton, Delete);
             AddPointerDownHandler(submitButton, Submit);
+            AddPointerDownHandler(qrCodeButton, QRCode);
+        }
+
+        private void Start()
+        {
+#if PICO_ENTERPRISE_SDK
+            if (PicoQRCodeReader.Instance != null) qrCodeButton.gameObject.SetActive(true);
+#endif
         }
 
         private void AddPointerDownHandler(Button button, UnityEngine.Events.UnityAction action)
@@ -100,6 +110,14 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 // Stop processing visual and clear input on error
                 inputField.text = "";
             }
+        }
+        
+        private void QRCode()
+        {
+#if PICO_ENTERPRISE_SDK
+            PicoQRCodeReader.Instance?.ScanQRCode();
+#endif
+            inputField.text = "";
         }
 
         private void HandleShift()
