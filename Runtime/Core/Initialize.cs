@@ -53,14 +53,4 @@ namespace AbxrLib.Runtime.Core
             Debug.Log($"AbxrLib: Version {AbxrLibVersion.Version} Initialized.");
         }
     }
-
-    public class ObjectAttacher : MonoBehaviour
-    {
-        public static T Attach<T>(string componentName) where T : MonoBehaviour
-        {
-            var gameObject = new GameObject(componentName);
-            DontDestroyOnLoad(gameObject);
-            return gameObject.AddComponent<T>();
-        }
-    }
 }
