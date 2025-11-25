@@ -54,6 +54,9 @@ namespace AbxrLib.Runtime.Authentication
         private static AuthResponse _responseData;
         public static AuthResponse GetAuthResponse() => _responseData;
         
+        // Store entered email/text value for email and text auth methods
+        private static string _enteredAuthValue;
+        
         private static AuthHandoffData _authHandoffData;
         public static AuthHandoffData GetAuthHandoffData() => _authHandoffData;
         
@@ -95,6 +98,9 @@ namespace AbxrLib.Runtime.Authentication
             // Clear cached user data
             _responseData = null;
             _authResponseModuleData = null;
+            
+            // Clear stored auth value
+            _enteredAuthValue = null;
             
             // Reset failed authentication attempts counter
             _failedAuthAttempts = 0;
@@ -298,8 +304,30 @@ namespace AbxrLib.Runtime.Authentication
             
             if (keyboardInput != null)
             {
-                string originalPrompt = _authMechanism.prompt;
-                _authMechanism.prompt = keyboardInput;
+                string originalPrompt = _authMechanism?.prompt;
+                if (_authMechanism != null)
+                {
+                    _authMechanism.prompt = keyboardInput;
+                }
+                
+                // Store the entered value for email and text auth methods so we can add it to UserData
+                if (_authMechanism != null && (_authMechanism.type == "email" || _authMechanism.type == "text"))
+                {
+                    // For email type, combine with domain if provided
+                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
+                    {
+                        _enteredAuthValue = $"{keyboardInput}@{_authMechanism.domain}";
+                    }
+                    else
+                    {
+                        _enteredAuthValue = keyboardInput;
+                    }
+                }
+                else
+                {
+                    _enteredAuthValue = null; // Clear for non-email/text auth methods
+                }
+                
                 yield return AuthRequest(false);
                 if (_keyboardAuthSuccess == true)
                 {
@@ -312,7 +340,11 @@ namespace AbxrLib.Runtime.Authentication
                     yield break;
                 }
 
-                _authMechanism.prompt = originalPrompt;
+                if (_authMechanism != null)
+                {
+                    _authMechanism.prompt = originalPrompt;
+                }
+                _enteredAuthValue = null; // Clear on failure
             }
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
@@ -431,6 +463,20 @@ namespace AbxrLib.Runtime.Authentication
                         
                         _responseData = postResponse;
                         _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
+                        
+                        // Add entered email/text value to UserData if we have one stored
+                        if (!string.IsNullOrEmpty(_enteredAuthValue))
+                        {
+                            // Initialize UserData if it's null
+                            if (_responseData.UserData == null)
+                            {
+                                _responseData.UserData = new Dictionary<string, object>();
+                            }
+                            
+                            // Determine the key name based on auth type
+                            string keyName = _authMechanism?.type == "email" ? "email" : "text";
+                            _responseData.UserData[keyName] = _enteredAuthValue;
+                        }
 
                         if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
                         
