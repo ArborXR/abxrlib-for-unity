@@ -10,8 +10,9 @@ namespace AbxrLib.Editor
     {
         static PicoDefineManager()
         {
-            bool hasPico = AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == "PICO.TobSupport");
-            if (hasPico)
+            bool hasPicoIntegrationSDK =
+                AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == "Unity.XR.PICO");
+            if (hasPicoIntegrationSDK)
             {
                 AddDefine("PICO_ENTERPRISE_SDK");
             }
