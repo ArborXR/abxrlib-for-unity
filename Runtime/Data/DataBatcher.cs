@@ -129,7 +129,7 @@ namespace AbxrLib.Runtime.Data
 
 			_lastCallTime = Time.time;
 			_timer = Configuration.Instance.sendNextBatchWaitSeconds; // reset timer
-			if (!Authentication.Authentication.FullyAuthenticated()) yield break;
+			if (!Authentication.Authentication.Authenticated()) yield break;
 			
 			lock (_lock)
 			{

@@ -71,15 +71,14 @@ namespace AbxrLib.Runtime.Authentication
         private static bool _authHandoffCompleted = false;
         private static bool _sessionUsedAuthHandoff = false;
 
-        public static bool Authenticated() 
+        public static bool Authenticated()
         {
             // Check if we have a valid token and it hasn't expired
             return !string.IsNullOrEmpty(_authToken) && 
                    !string.IsNullOrEmpty(_apiSecret) && 
-                   DateTime.UtcNow <= _tokenExpiry;
+                   DateTime.UtcNow <= _tokenExpiry &&
+                   _keyboardAuthSuccess == true;
         }
-
-        public static bool FullyAuthenticated() => Authenticated() && _keyboardAuthSuccess == true;
         
         public static bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
         
