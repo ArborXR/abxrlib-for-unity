@@ -223,12 +223,7 @@ public static partial class Abxr
 	/// </summary>
 	public static void StartAuthentication()
 	{
-		CoroutineRunner.Instance.StartCoroutine(StartAuthenticationCoroutine());
-	}
-
-	private static IEnumerator StartAuthenticationCoroutine()
-	{
-		yield return Authentication.Authenticate();
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 	}
 
 	/// <summary>
