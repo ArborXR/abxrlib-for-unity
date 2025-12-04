@@ -45,9 +45,7 @@ namespace AbxrLib.Runtime.Authentication
         private static string _ipAddress;
         private static string _sessionId;
         private static int _failedAuthAttempts;
-
-        private static string _authToken;
-        private static string _apiSecret;
+        
         private static AuthMechanism _authMechanism;
         private static DateTime _tokenExpiry = DateTime.MinValue;
         
@@ -74,8 +72,8 @@ namespace AbxrLib.Runtime.Authentication
         public static bool Authenticated()
         {
             // Check if we have a valid token and it hasn't expired
-            return !string.IsNullOrEmpty(_authToken) && 
-                   !string.IsNullOrEmpty(_apiSecret) && 
+            return !string.IsNullOrEmpty(_responseData.Token) && 
+                   !string.IsNullOrEmpty(_responseData.Secret) && 
                    DateTime.UtcNow <= _tokenExpiry &&
                    _keyboardAuthSuccess == true;
         }
@@ -87,8 +85,6 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         private static void ClearAuthenticationState()
         {
-            _authToken = null;
-            _apiSecret = null;
             _tokenExpiry = DateTime.MinValue;
             _keyboardAuthSuccess = null;
             _sessionId = null;
@@ -437,11 +433,8 @@ namespace AbxrLib.Runtime.Authentication
                             throw new Exception("Invalid authentication response: missing token");
                         }
                         
-                        _authToken = postResponse.Token;
-                        _apiSecret = postResponse.Secret;
-                        
                         // Decode JWT with error handling
-                        Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
+                        Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
                         if (decodedJwt == null)
                         {
                             throw new Exception("Failed to decode JWT token - authentication cannot proceed");
@@ -468,10 +461,7 @@ namespace AbxrLib.Runtime.Authentication
                         if (!string.IsNullOrEmpty(_enteredAuthValue))
                         {
                             // Initialize UserData if it's null
-                            if (_responseData.UserData == null)
-                            {
-                                _responseData.UserData = new Dictionary<string, object>();
-                            }
+                            _responseData.UserData ??= new Dictionary<string, object>();
                             
                             // Determine the key name based on auth type
                             string keyName = _authMechanism?.type == "email" ? "email" : "text";
@@ -604,18 +594,18 @@ namespace AbxrLib.Runtime.Authentication
         public static void SetAuthHeaders(UnityWebRequest request, string json = "")
         {
             // Check if we have valid authentication tokens
-            if (string.IsNullOrEmpty(_authToken) || string.IsNullOrEmpty(_apiSecret))
+            if (string.IsNullOrEmpty(_responseData.Token) || string.IsNullOrEmpty(_responseData.Secret))
             {
                 Debug.LogError("AbxrLib: Cannot set auth headers - authentication tokens are missing");
                 return;
             }
             
-            request.SetRequestHeader("Authorization", "Bearer " + _authToken);
+            request.SetRequestHeader("Authorization", "Bearer " + _responseData.Token);
         
             string unixTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
             request.SetRequestHeader("x-abxrlib-timestamp", unixTimeSeconds);
         
-            string hashString = _authToken + _apiSecret + unixTimeSeconds;
+            string hashString = _responseData.Token + _responseData.Secret + unixTimeSeconds;
             if (!string.IsNullOrEmpty(json))
             {
                 uint crc = Utils.ComputeCRC(json);
@@ -716,15 +706,11 @@ namespace AbxrLib.Runtime.Authentication
                     yield break;
                 }
                 
-                // Set authentication state from handoff data
-                _authToken = handoffData.Token;
-                _apiSecret = handoffData.Secret;
-                
                 // Cache user data from handoff
                 _responseData = new AuthResponse
                 {
-                    Token = _authToken,
-                    Secret = _apiSecret,
+                    Token = handoffData.Token,
+                    Secret = handoffData.Secret,
                     UserId = handoffData.UserId,
                     AppId = handoffData.AppId,
                     PackageName = handoffData.PackageName,
