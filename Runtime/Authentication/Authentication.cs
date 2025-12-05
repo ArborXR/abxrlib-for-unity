@@ -183,7 +183,7 @@ namespace AbxrLib.Runtime.Authentication
             }
         }
 
-        public static void ReAuthenticate(string userId = null)
+        public static void ReAuthenticate()
         {
             // Clear authentication state to stop data transmission
             ClearAuthenticationState();
@@ -219,10 +219,7 @@ namespace AbxrLib.Runtime.Authentication
             // Merge additionalUserData into existing UserData
             if (additionalUserData != null && additionalUserData.Count > 0)
             {
-                if (_responseData.UserData == null)
-                {
-                    _responseData.UserData = new Dictionary<string, string>();
-                }
+                _responseData.UserData ??= new Dictionary<string, string>();
                 foreach (var kvp in additionalUserData)
                 {
                     _responseData.UserData[kvp.Key] = kvp.Value;
@@ -705,31 +702,34 @@ namespace AbxrLib.Runtime.Authentication
         private static Dictionary<string, string> CreateAuthMechanismDict(string userId = null, Dictionary<string, string> additionalUserData = null)
         {
             var dict = new Dictionary<string, string>();
-            if (_authMechanism == null && string.IsNullOrEmpty(userId)) {
-                return dict;
-            } else if (_authMechanism == null && !string.IsNullOrEmpty(userId)) {
+            if (_authMechanism == null && string.IsNullOrEmpty(userId)) return dict;
+
+            if (_authMechanism == null && !string.IsNullOrEmpty(userId))
+            {
                 dict["type"] = "custom";
                 dict["prompt"] = userId;
-                if (additionalUserData != null) 
+                if (additionalUserData != null)
                 {
                     foreach (var item in additionalUserData)
                     {
-                        if(item.Key != "type" && item.Key != "prompt")
+                        if (item.Key != "type" && item.Key != "prompt")
                         {
                             dict[item.Key] = item.Value;
                         }
                     }
                 }
+
                 // For custom auth, use "user" as default inputSource if not provided
                 dict["inputSource"] = "user";
                 return dict;
-            } else {
-                if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
-                if (!string.IsNullOrEmpty(_authMechanism.prompt)) dict["prompt"] = _authMechanism.prompt;
-                if (!string.IsNullOrEmpty(_authMechanism.domain)) dict["domain"] = _authMechanism.domain;
-                if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
-                return dict;
             }
+
+            if (_authMechanism == null) return dict;
+            if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
+            if (!string.IsNullOrEmpty(_authMechanism.prompt)) dict["prompt"] = _authMechanism.prompt;
+            if (!string.IsNullOrEmpty(_authMechanism.domain)) dict["domain"] = _authMechanism.domain;
+            if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
+            return dict;
         }
     
         private static void SetConfigFromPayload(ConfigPayload payload)
