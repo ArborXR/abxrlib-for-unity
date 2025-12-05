@@ -15,9 +15,211 @@ using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Core
 {
+	/// <summary>
+	/// Extension methods for string serialization and deserialization
+	/// </summary>
+	public static class StringExtensions
+	{
+		/// <summary>
+		/// Extension method for escaping strings in StringList and AbxrDictStrings for serializing into comma-separated single string.
+		/// </summary>
+		/// <param name="str">The string to escape</param>
+		/// <returns>Escaped string</returns>
+		public static string EscapeForSerialization(this string str)
+		{
+			StringBuilder	sOut = new StringBuilder();
+
+			foreach (char c in str)
+			{
+				switch (c)
+				{
+					case '\\':
+						sOut.Append("\\\\");
+						break;
+					case '\"':
+						sOut.Append("\\\"");
+						break;
+					case ',':
+						sOut.Append(',');
+						break;
+					case '=':
+						sOut.Append('=');
+						break;
+					default:
+						sOut.Append(c);
+						break;
+				}
+			}
+			return sOut.ToString();
+		}
+		/// <summary>
+		/// Extension method for de-escaping strings into StringList from serialized comma-separated single string.
+		/// </summary>
+		/// <param name="str">The string to deserialize</param>
+		/// <param name="addStringAction">Action to add each deserialized string</param>
+		public static void UnescapeAndDeserialize(this string str, Action<string> addStringAction)
+		{
+			StringBuilder	sOut = new StringBuilder();
+			bool			bEscapedState = false;
+
+			foreach (char c in str)
+			{
+				switch (c)
+				{
+					case '\\':
+						if (bEscapedState)
+						{
+							sOut.Append(c);
+							bEscapedState = false;
+						}
+						else
+						{
+							bEscapedState = true;
+						}
+						break;
+					case ',':
+						if (bEscapedState)
+						{
+							sOut.Append(c);
+						}
+						else
+						{
+							addStringAction(sOut.ToString());
+							sOut.Clear();
+						}
+						bEscapedState = false;
+						break;
+					default:
+						sOut.Append(c);
+						bEscapedState = false;
+						break;
+				}
+			}
+			if (sOut.Length > 0)
+			{
+				addStringAction(sOut.ToString());
+			}
+		}
+		/// <summary>
+		/// Extension method for de-escaping strings into AbxrDictStrings from serialized comma-separated single string.
+		/// </summary>
+		/// <param name="str">The string to deserialize</param>
+		/// <param name="addKeyValueAction">Action to add each deserialized key-value pair</param>
+		public static void UnescapeAndDeserialize(this string str, Action<string, string> addKeyValueAction)
+		{
+			StringBuilder	sFirst = new StringBuilder();
+			StringBuilder	sSecond = new StringBuilder();
+			bool			bEscapedState = false;
+			bool			bOnFirst = true;
+
+			foreach (char c in str)
+			{
+				switch (c)
+				{
+				case '\\':
+					if (bEscapedState)
+					{
+						if (bOnFirst) sFirst.Append(c); else sSecond.Append(c);
+						bEscapedState = false;
+					}
+					else
+					{
+						bEscapedState = true;
+					}
+					break;
+				case '=':
+					if (bEscapedState)
+					{
+						if (bOnFirst) sFirst.Append(c); else sSecond.Append(c);
+					}
+					else
+					{
+						bOnFirst = false;
+					}
+					bEscapedState = false;
+					break;
+				case ',':
+					if (bEscapedState)
+					{
+						if (bOnFirst) sFirst.Append(c); else sSecond.Append(c);
+					}
+					else
+					{
+						addKeyValueAction(sFirst.ToString(), sSecond.ToString());
+						sFirst.Clear();
+						sSecond.Clear();
+						bOnFirst = true;
+					}
+					bEscapedState = false;
+					break;
+				default:
+					if (bOnFirst) sFirst.Append(c); else sSecond.Append(c);
+					bEscapedState = false;
+					break;
+				}
+			}
+			if (sFirst.Length > 0 && sSecond.Length > 0 && !bOnFirst)
+			{
+				addKeyValueAction(sFirst.ToString(), sSecond.ToString());
+			}
+		}
+	}
     public static class Utils
     {
-        public static string ComputeSha256Hash(string rawData)
+		// --- Dewonkification helpers for enabling C# layer to present/accept nice clean C# types.
+		public static string StringListToString(List<string> lsz)
+		{
+			string result = "";
+
+			foreach (string sz in lsz)
+			{
+				if (!string.IsNullOrEmpty(result))
+				{
+					result += ",";
+				}
+				result += sz.EscapeForSerialization();
+			}
+			return result;
+		}
+		public static List<string> StringToStringList(string szList)
+		{
+			List<string> lszRet = new List<string>();
+
+			szList.UnescapeAndDeserialize((s) => { lszRet.Add(s); });
+			// ---
+			return lszRet;
+		}
+		public static string DictToString(Dictionary<string, string> dict)
+		{
+			string result = "";
+
+			foreach (KeyValuePair<string, string> kvp in dict)
+			{
+				if (!string.IsNullOrEmpty(result))
+				{
+					result += ",";
+				}
+				result += $"{kvp.Key.EscapeForSerialization()}={kvp.Value.EscapeForSerialization()}";
+			}
+			return result;
+		}
+		public static Dictionary<string, string> StringToDict(string szdict)
+		{
+			Dictionary<string, string> dictRet = new Dictionary<string, string>();
+
+			szdict.UnescapeAndDeserialize((k, v) => dictRet.Add(k, v));
+			// ---
+			return dictRet;
+		}
+		public static long filetime_to_timet(long ft)
+		{
+			return ft / 10000000L - 11644473600L;
+		}
+		public static long timet_to_filetime(long tt)
+		{
+			return (tt + 11644473600L) * 10000000L;
+		}
+		public static string ComputeSha256Hash(string rawData)
         {
             using var sha256 = SHA256.Create();
             byte[] bytes = Encoding.UTF8.GetBytes(rawData);
