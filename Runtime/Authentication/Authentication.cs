@@ -55,8 +55,8 @@ namespace AbxrLib.Runtime.Authentication
         // Store entered email/text value for email and text auth methods
         private static string _enteredAuthValue;
         
-        private static AuthHandoffData _authHandoffData;
-        public static AuthHandoffData GetAuthHandoffData() => _authHandoffData;
+        private static AuthResponse _authHandoffData;
+        public static AuthResponse GetAuthHandoffData() => _authHandoffData;
         
         // Complete authentication response data
         private static List<Abxr.ModuleData> _authResponseModuleData;
@@ -685,10 +685,10 @@ namespace AbxrLib.Runtime.Authentication
                 Debug.Log("AbxrLib: Processing authentication handoff from external launcher");
                 
                 // Parse the handoff JSON
-                AuthHandoffData handoffData = null;
+                AuthResponse handoffData = null;
                 try 
                 {
-                    handoffData = JsonConvert.DeserializeObject<AuthHandoffData>(handoffJson);
+                    handoffData = JsonConvert.DeserializeObject<AuthResponse>(handoffJson);
                 }
                 catch (Exception ex)
                 {
@@ -830,38 +830,6 @@ namespace AbxrLib.Runtime.Authentication
         {
             None,
             ArborXR
-        }
-
-        /// <summary>
-        /// Data structure for authentication handoff JSON from external launcher apps
-        /// Now matches AuthResponse format with case-insensitive property mapping
-        /// </summary>
-        [Preserve]
-        public class AuthHandoffData
-        {
-            [JsonProperty("Token")]
-            public string Token;
-            
-            [JsonProperty("Secret")]
-            public string Secret;
-            
-            [JsonProperty("UserData")]
-            public Dictionary<string, object> UserData;
-            
-            [JsonProperty("UserId")]
-            public object UserId;
-            
-            [JsonProperty("AppId")]
-            public string AppId;
-            
-            [JsonProperty("PackageName")]
-            public string PackageName;
-            
-            [JsonProperty("Modules")]
-            public List<Dictionary<string, object>> Modules;
-
-            [Preserve]
-            public AuthHandoffData() { }
         }
     }
 }
