@@ -1091,7 +1091,8 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="key">Metadata name</param>
 	/// <param name="value">Metadata value</param>
-	public static void Register(string key, string value)
+	/// <param name="overwrite">Overwrite existing super metadata (optional)</param>
+	public static void Register(string key, string value, bool overwrite = true)
 	{
 		if (IsReservedSuperMetaDataKey(key))
 		{
@@ -1105,8 +1106,11 @@ public static partial class Abxr
 			return;
 		}
 
-		_superMetaData[key] = value;
-		SaveSuperMetaData();
+		if (overwrite || !_superMetaData.ContainsKey(key))
+		{
+			_superMetaData[key] = value;
+			SaveSuperMetaData();
+		}
 	}
 
 	/// <summary>
@@ -1115,26 +1119,7 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="key">Metadata name</param>
 	/// <param name="value">Metadata value</param>
-	public static void RegisterOnce(string key, string value)
-	{
-		if (IsReservedSuperMetaDataKey(key))
-		{
-			string errorMessage = $"AbxrLib: Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
-			Debug.LogWarning(errorMessage);
-			LogInfo(errorMessage, new Dictionary<string, string> { 
-				{ "attempted_key", key }, 
-				{ "attempted_value", value },
-				{ "error_type", "reserved_super_metadata_key" }
-			});
-			return;
-		}
-
-		if (!_superMetaData.ContainsKey(key))
-		{
-			_superMetaData[key] = value;
-			SaveSuperMetaData();
-		}
-	}
+	public static void RegisterOnce(string key, string value) => Register(key, value, false);
 
 	/// <summary>
 	/// Remove a super metadata entry
