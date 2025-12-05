@@ -214,7 +214,19 @@ public static partial class Abxr
 	/// Returns null if no authentication has completed yet
 	/// </summary>
 	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
-	public static Dictionary<string, object> GetUserData() => Authentication.GetAuthResponse().UserData;
+	public static Dictionary<string, string> GetUserData() => Authentication.GetAuthResponse().UserData;
+
+	/// <summary>
+	/// Update user data (UserId and UserData) and reauthenticate to sync with server
+	/// Updates the authentication response with new user information without clearing authentication state
+	/// The server API allows reauthenticate to update these values
+	/// </summary>
+	/// <param name="userId">Optional user ID to update</param>
+	/// <param name="additionalUserData">Optional additional user data dictionary to merge with existing UserData</param>
+	public static void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null)
+	{
+		Authentication.SetUserData(userId, additionalUserData);
+	}
 
 	/// <summary>
 	/// Manually start the authentication process

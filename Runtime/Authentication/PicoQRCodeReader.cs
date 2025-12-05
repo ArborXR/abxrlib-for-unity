@@ -70,11 +70,15 @@ namespace AbxrLib.Runtime.Authentication
             {
                 string pin = match.Value;
                 Debug.Log($"AbxrLib: Extracted PIN from QR code: {pin}");
-                StartCoroutine(Authentication.KeyboardAuthenticate(pin));
+                // Set inputSource to "QRlms" for QR code authentication
+                Authentication.SetInputSource("QRlms");
+                StartCoroutine(Authentication.KeyboardAuthenticate(pin, false));
             }
             else
             {
                 Debug.LogWarning($"AbxrLib: Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
+                // Set inputSource to "QRlms" even for invalid QR codes
+                Authentication.SetInputSource("QRlms");
                 StartCoroutine(Authentication.KeyboardAuthenticate(null, true));
             }
         }

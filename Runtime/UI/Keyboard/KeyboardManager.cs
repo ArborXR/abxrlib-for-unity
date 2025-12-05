@@ -101,6 +101,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
             try
             {
                 StartCoroutine(KeyboardHandler.ProcessingVisual());
+                // Ensure inputSource is set to "user" for manual keyboard input
+                Authentication.Authentication.SetInputSource("user");
                 StartCoroutine(Authentication.Authentication.KeyboardAuthenticate(inputField.text));
                 inputField.text = "";
             }
