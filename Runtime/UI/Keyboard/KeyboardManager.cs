@@ -40,6 +40,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
 #if PICO_ENTERPRISE_SDK
             if (PicoQRCodeReader.Instance != null) qrCodeButton.gameObject.SetActive(true);
 #endif
+#if META_QR_AVAILABLE
+            if (MetaQRCodeReader.Instance != null) qrCodeButton.gameObject.SetActive(true);
+#endif
         }
 
         private void AddPointerDownHandler(Button button, UnityEngine.Events.UnityAction action)
@@ -118,6 +121,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
 #if PICO_ENTERPRISE_SDK
             PicoQRCodeReader.Instance?.ScanQRCode();
+#endif
+#if META_QR_AVAILABLE
+            MetaQRCodeReader.Instance?.ScanQRCode();
 #endif
             inputField.text = "";
         }
