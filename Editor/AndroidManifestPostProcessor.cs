@@ -162,6 +162,9 @@ namespace AbxrLib.Editor
             string enabledFlagPattern = @"<meta-data\s+android:name=""com\.arborxr\.abxrlib\.enabled""\s+android:value=""[^""]*""\s*/>\s*";
             manifestContent = Regex.Replace(manifestContent, enabledFlagPattern, "", RegexOptions.IgnoreCase);
 
+            // Add camera permission for Meta Quest QR code reading
+            manifestContent = AddCameraPermission(manifestContent);
+
             // Check if version metadata already exists
             if (manifestContent.Contains(MetaDataVersionName))
             {
@@ -187,6 +190,41 @@ namespace AbxrLib.Editor
 
             // Version doesn't exist, add it
             return AddVersionMetadata(manifestContent);
+        }
+
+        /// <summary>
+        /// Adds camera permission to the manifest if it doesn't already exist.
+        /// Required for Meta Quest QR code reading functionality.
+        /// </summary>
+        private static string AddCameraPermission(string manifestContent)
+        {
+            // Check if camera permission already exists
+            if (manifestContent.Contains("android.permission.CAMERA"))
+            {
+                return manifestContent;
+            }
+
+            // Find the <manifest> tag and add permission after it
+            string manifestPattern = @"(<manifest[\s\S]*?>)";
+            Match match = Regex.Match(manifestContent, manifestPattern, RegexOptions.IgnoreCase);
+            
+            if (match.Success)
+            {
+                int insertPosition = match.Index + match.Length;
+                int newlineAfter = manifestContent.IndexOf('\n', insertPosition);
+                if (newlineAfter > 0)
+                {
+                    insertPosition = newlineAfter + 1;
+                }
+                
+                // Add camera permission
+                string cameraPermission = "    <uses-permission android:name=\"android.permission.CAMERA\" />\n";
+                manifestContent = manifestContent.Insert(insertPosition, cameraPermission);
+                return manifestContent;
+            }
+
+            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Camera permission not added.");
+            return manifestContent;
         }
 
         /// <summary>
