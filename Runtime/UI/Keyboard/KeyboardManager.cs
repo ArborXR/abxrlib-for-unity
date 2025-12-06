@@ -120,10 +120,26 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private void QRCode()
         {
 #if PICO_ENTERPRISE_SDK
-            PicoQRCodeReader.Instance?.ScanQRCode();
+            // Toggle: if already scanning, cancel; otherwise start scanning
+            if (PicoQRCodeReader.Instance != null)
+            {
+                // PICO doesn't have cancel, so just start scanning
+                PicoQRCodeReader.Instance.ScanQRCode();
+            }
 #endif
 #if META_QR_AVAILABLE
-            MetaQRCodeReader.Instance?.ScanQRCode();
+            // Toggle: if already scanning, cancel; otherwise start scanning
+            if (MetaQRCodeReader.Instance != null)
+            {
+                if (MetaQRCodeReader.Instance.IsScanning())
+                {
+                    MetaQRCodeReader.Instance.CancelScanning();
+                }
+                else
+                {
+                    MetaQRCodeReader.Instance.ScanQRCode();
+                }
+            }
 #endif
             inputField.text = "";
         }

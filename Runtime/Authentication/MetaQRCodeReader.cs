@@ -15,7 +15,9 @@
 using System.Collections;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using UnityEngine.UI;
 using ZXing;
+using AbxrLib.Runtime.UI;
 
 namespace AbxrLib.Runtime.Authentication
 {
@@ -49,6 +51,10 @@ namespace AbxrLib.Runtime.Authentication
         
         // ZXing barcode reader instance
         private BarcodeReader barcodeReader;
+        
+        // Overlay UI for passthrough mode
+        private GameObject overlayCanvas;
+        private Button cancelButton;
         
         private void Awake()
         {
@@ -90,6 +96,7 @@ namespace AbxrLib.Runtime.Authentication
         private void OnDestroy()
         {
             StopScanning();
+            DestroyOverlayUI();
             if (webCamTexture != null)
             {
                 if (webCamTexture.isPlaying)
@@ -152,6 +159,28 @@ namespace AbxrLib.Runtime.Authentication
             {
                 StartScanning();
             }
+        }
+        
+        /// <summary>
+        /// Cancel/stop QR code scanning
+        /// </summary>
+        public void CancelScanning()
+        {
+            if (!isScanning)
+            {
+                return;
+            }
+            
+            StopScanning();
+            Debug.Log("AbxrLib: QR code scanning cancelled by user");
+        }
+        
+        /// <summary>
+        /// Check if currently scanning for QR codes
+        /// </summary>
+        public bool IsScanning()
+        {
+            return isScanning;
         }
         
         /// <summary>
@@ -238,6 +267,7 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             isScanning = true;
+            CreateOverlayUI();
             scanningCoroutine = StartCoroutine(ScanForQRCode());
         }
         
@@ -252,6 +282,7 @@ namespace AbxrLib.Runtime.Authentication
                 StopCoroutine(scanningCoroutine);
                 scanningCoroutine = null;
             }
+            DestroyOverlayUI();
         }
         
         /// <summary>
@@ -273,10 +304,19 @@ namespace AbxrLib.Runtime.Authentication
                     
                     if (!string.IsNullOrEmpty(result))
                     {
-                        // Process the QR code result
-                        OnQRCodeScanned(result);
-                        Destroy(snapshot);
-                        yield break; // Stop scanning after successful read
+                        // Only process QR codes that start with "ABXR:"
+                        if (result.StartsWith("ABXR:", System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Process the QR code result
+                            OnQRCodeScanned(result);
+                            Destroy(snapshot);
+                            yield break; // Stop scanning after successful read
+                        }
+                        else
+                        {
+                            // QR code found but doesn't have ABXR: prefix - ignore it and continue scanning
+                            Debug.Log($"AbxrLib: Ignoring QR code without ABXR: prefix: {result}");
+                        }
                     }
                     
                     Destroy(snapshot);
@@ -346,6 +386,135 @@ namespace AbxrLib.Runtime.Authentication
                 // Set inputSource to "QRlms" even for invalid QR codes
                 Authentication.SetInputSource("QRlms");
                 StartCoroutine(Authentication.KeyboardAuthenticate(null, true));
+            }
+        }
+        
+        /// <summary>
+        /// Create overlay UI for passthrough mode with cancel button
+        /// </summary>
+        private void CreateOverlayUI()
+        {
+            if (overlayCanvas != null)
+            {
+                return; // Already created
+            }
+            
+            // Ensure EventSystem exists for UI button interaction
+            if (UnityEngine.EventSystems.EventSystem.current == null)
+            {
+                GameObject eventSystemObj = new GameObject("EventSystem");
+                eventSystemObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                eventSystemObj.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+            }
+            
+            // Create canvas root
+            overlayCanvas = new GameObject("MetaQRScanOverlay");
+            overlayCanvas.transform.SetParent(transform);
+            
+            // Add Canvas component (World Space)
+            Canvas canvas = overlayCanvas.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = Camera.main;
+            
+            // Add CanvasScaler for proper sizing
+            CanvasScaler scaler = overlayCanvas.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.matchWidthOrHeight = 0.5f;
+            
+            // Add GraphicRaycaster for button interaction
+            overlayCanvas.AddComponent<GraphicRaycaster>();
+            
+            // Set canvas size and position (1 meter in front, scaled appropriately)
+            RectTransform canvasRect = overlayCanvas.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(0.5f, 0.3f); // 50cm x 30cm in world space
+            canvasRect.localScale = Vector3.one;
+            
+            // Add FaceCamera component to position it in front of user
+            FaceCamera faceCamera = overlayCanvas.AddComponent<FaceCamera>();
+            faceCamera.faceCamera = true;
+            faceCamera.distanceFromCamera = 1.0f;
+            faceCamera.verticalOffset = 0.2f; // Slightly above center
+            faceCamera.useConfigurationValues = false;
+            
+            // Create background panel
+            GameObject panel = new GameObject("Panel");
+            panel.transform.SetParent(overlayCanvas.transform, false);
+            Image panelImage = panel.AddComponent<Image>();
+            panelImage.color = new Color(0, 0, 0, 0.7f); // Semi-transparent black
+            
+            RectTransform panelRect = panel.GetComponent<RectTransform>();
+            panelRect.anchorMin = Vector2.zero;
+            panelRect.anchorMax = Vector2.one;
+            panelRect.sizeDelta = Vector2.zero;
+            panelRect.anchoredPosition = Vector2.zero;
+            
+            // Create text label
+            GameObject label = new GameObject("Label");
+            label.transform.SetParent(panel.transform, false);
+            Text labelText = label.AddComponent<Text>();
+            labelText.text = "Scanning QR Code...\nPoint camera at QR code";
+            labelText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            labelText.fontSize = 24;
+            labelText.color = Color.white;
+            labelText.alignment = TextAnchor.MiddleCenter;
+            
+            RectTransform labelRect = label.GetComponent<RectTransform>();
+            labelRect.anchorMin = new Vector2(0, 0.5f);
+            labelRect.anchorMax = new Vector2(1, 1);
+            labelRect.sizeDelta = Vector2.zero;
+            labelRect.anchoredPosition = Vector2.zero;
+            
+            // Create cancel button
+            GameObject buttonObj = new GameObject("CancelButton");
+            buttonObj.transform.SetParent(panel.transform, false);
+            
+            Image buttonImage = buttonObj.AddComponent<Image>();
+            buttonImage.color = new Color(0.8f, 0.2f, 0.2f, 1f); // Red button
+            
+            Button button = buttonObj.AddComponent<Button>();
+            button.targetGraphic = buttonImage;
+            
+            RectTransform buttonRect = buttonObj.GetComponent<RectTransform>();
+            buttonRect.anchorMin = new Vector2(0.25f, 0);
+            buttonRect.anchorMax = new Vector2(0.75f, 0.4f);
+            buttonRect.sizeDelta = Vector2.zero;
+            buttonRect.anchoredPosition = Vector2.zero;
+            
+            // Create button text
+            GameObject buttonTextObj = new GameObject("Text");
+            buttonTextObj.transform.SetParent(buttonObj.transform, false);
+            Text buttonText = buttonTextObj.AddComponent<Text>();
+            buttonText.text = "Cancel Scanning";
+            buttonText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            buttonText.fontSize = 20;
+            buttonText.color = Color.white;
+            buttonText.alignment = TextAnchor.MiddleCenter;
+            
+            RectTransform buttonTextRect = buttonTextObj.GetComponent<RectTransform>();
+            buttonTextRect.anchorMin = Vector2.zero;
+            buttonTextRect.anchorMax = Vector2.one;
+            buttonTextRect.sizeDelta = Vector2.zero;
+            buttonTextRect.anchoredPosition = Vector2.zero;
+            
+            // Add click listener
+            button.onClick.AddListener(() => CancelScanning());
+            
+            cancelButton = button;
+            
+            Debug.Log("AbxrLib: Created QR scanning overlay UI for passthrough mode");
+        }
+        
+        /// <summary>
+        /// Destroy overlay UI
+        /// </summary>
+        private void DestroyOverlayUI()
+        {
+            if (overlayCanvas != null)
+            {
+                Destroy(overlayCanvas);
+                overlayCanvas = null;
+                cancelButton = null;
             }
         }
     }
