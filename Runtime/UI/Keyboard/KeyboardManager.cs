@@ -37,7 +37,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         private void Start()
         {
-#if PICO_ENTERPRISE_SDK
+#if PICO_ENTERPRISE_SDK_3
             if (PicoQRCodeReader.Instance != null) qrCodeButton.gameObject.SetActive(true);
 #endif
         }
@@ -114,7 +114,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         
         private void QRCode()
         {
-#if PICO_ENTERPRISE_SDK
+#if PICO_ENTERPRISE_SDK_3
             PicoQRCodeReader.Instance?.ScanQRCode();
 #endif
             inputField.text = "";
