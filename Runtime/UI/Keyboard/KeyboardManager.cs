@@ -37,6 +37,31 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         private void Start()
         {
+            // Check for QR reader instances immediately
+            CheckAndEnableQRButton();
+            
+            // Also check after a short delay in case initialization hasn't completed yet
+            StartCoroutine(DelayedQRButtonCheck());
+            
+            // Start coroutine to update button text based on scanning state
+            StartCoroutine(UpdateQRButtonText());
+        }
+        
+        private System.Collections.IEnumerator DelayedQRButtonCheck()
+        {
+            // Wait a frame to ensure all Awake() methods have completed
+            yield return null;
+            
+            // Check again after a short delay
+            yield return new WaitForSeconds(0.5f);
+            
+            CheckAndEnableQRButton();
+        }
+        
+        private void CheckAndEnableQRButton()
+        {
+            if (qrCodeButton == null) return;
+            
 #if PICO_ENTERPRISE_SDK
             if (PicoQRCodeReader.Instance != null)
             {
