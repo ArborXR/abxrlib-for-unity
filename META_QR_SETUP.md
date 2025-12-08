@@ -150,5 +150,5 @@ If logs show `Camera subsystem permission status: False`:
 - Camera feed is displayed in a world-space overlay visible in passthrough mode
 - adb logcat | grep -i "AbxrLib\|Unity"
 
-- clear; adb logcat -c && adb logcat  | grep -i "AbxrLib\|Unity"
-- clear; adb logcat -c && adb logcat | grep -i "AbxrLib"
+- clear; adb logcat -c && adb logcat | grep -i "AbxrLib:"
+- clear; adb logcat | grep -i "AbxrLib:"

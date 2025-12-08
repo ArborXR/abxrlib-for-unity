@@ -12,7 +12,6 @@
       "com.unity.textmeshpro": "3.0.6",
       "com.unity.inputsystem": "1.8.1",
       "com.unity.nuget.newtonsoft-json": "3.2.1",
-      "com.unity.xr.meta-openxr": "2.3.0",
-      "com.unity.xr.openxr": "1.15.1"
+      "com.unity.xr.meta-openxr": "2.3.0"
     }
 }

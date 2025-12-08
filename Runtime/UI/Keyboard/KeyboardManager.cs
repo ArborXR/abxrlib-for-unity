@@ -17,6 +17,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public Button qrCodeButton;
 
         public TMP_InputField inputField;
+        
+        // Cache button state to avoid repeated logs
+        private bool? lastQRButtonState = null;
     
         private void Awake()
         {
@@ -56,6 +59,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
             yield return new WaitForSeconds(0.5f);
             
             CheckAndEnableQRButton();
+            
+            // Periodically recheck in case permissions are granted later
+            while (true)
+            {
+                yield return new WaitForSeconds(2.0f); // Check every 2 seconds
+                CheckAndEnableQRButton();
+            }
         }
         
         private void CheckAndEnableQRButton()
@@ -65,19 +75,45 @@ namespace AbxrLib.Runtime.UI.Keyboard
 #if PICO_ENTERPRISE_SDK
             if (PicoQRCodeReader.Instance != null)
             {
-                qrCodeButton.gameObject.SetActive(true);
-                Debug.Log("AbxrLib: QR Code button enabled for PICO");
+                bool shouldShow = true;
+                if (lastQRButtonState != shouldShow)
+                {
+                    qrCodeButton.gameObject.SetActive(shouldShow);
+                    Debug.Log("AbxrLib: QR Code button enabled for PICO");
+                    lastQRButtonState = shouldShow;
+                }
             }
 #endif
 #if META_QR_AVAILABLE
             if (MetaQRCodeReader.Instance != null)
             {
-                qrCodeButton.gameObject.SetActive(true);
-                Debug.Log("AbxrLib: QR Code button enabled for Meta");
+                // Only show button if QR scanning is available (device supported, features enabled, permissions granted)
+                bool isAvailable = MetaQRCodeReader.Instance.IsQRScanningAvailable();
+                
+                // Only log and update if state changed
+                if (lastQRButtonState != isAvailable)
+                {
+                    qrCodeButton.gameObject.SetActive(isAvailable);
+                    
+                    if (isAvailable)
+                    {
+                        Debug.Log("AbxrLib: QR Code button enabled for Meta (device supported, features enabled, permissions granted)");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("AbxrLib: QR Code button hidden - QR scanning not available. Check device support, OpenXR features, and camera permissions.");
+                    }
+                    lastQRButtonState = isAvailable;
+                }
             }
             else
             {
-                Debug.LogWarning("AbxrLib: MetaQRCodeReader.Instance is null. Button will remain hidden.");
+                if (lastQRButtonState != false)
+                {
+                    qrCodeButton.gameObject.SetActive(false);
+                    Debug.LogWarning("AbxrLib: MetaQRCodeReader.Instance is null. Button will remain hidden.");
+                    lastQRButtonState = false;
+                }
             }
 #endif
         }
@@ -207,6 +243,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             if (buttonText == null) return;
             
             bool isScanning = false;
+            bool isInitializing = false;
             
 #if PICO_ENTERPRISE_SDK
             // PICO doesn't have IsScanning, so we can't toggle text for it
@@ -215,13 +252,18 @@ namespace AbxrLib.Runtime.UI.Keyboard
             if (MetaQRCodeReader.Instance != null)
             {
                 isScanning = MetaQRCodeReader.Instance.IsScanning();
+                isInitializing = MetaQRCodeReader.Instance.IsInitializing();
             }
 #endif
             
-            // Update text based on scanning state
+            // Update text based on state (priority: scanning > initializing > idle)
             if (isScanning)
             {
                 buttonText.text = "Stop Scanning";
+            }
+            else if (isInitializing)
+            {
+                buttonText.text = "Initializing...";
             }
             else
             {

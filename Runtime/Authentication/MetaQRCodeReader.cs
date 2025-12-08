@@ -69,9 +69,9 @@ namespace AbxrLib.Runtime.Authentication
         private Component ovrPassthroughLayer; // OVRPassthroughLayer accessed via reflection
         private object cameraSubsystem; // Camera subsystem (if using subsystem-based API)
         private RenderTexture passthroughRenderTexture; // RenderTexture to capture passthrough camera feed
-        private Texture2D passthroughTexture; // Texture2D snapshot from passthrough
         
         private bool isScanning = false;
+        private bool isInitializing = false; // True when camera is being initialized
         private bool cameraInitialized = false;
         private Coroutine scanningCoroutine;
         private bool usingWebCamTexture = false; // True when using WebCamTexture (primary method)
@@ -81,9 +81,8 @@ namespace AbxrLib.Runtime.Authentication
         private static System.Type openXRPassthroughCameraType;
         private static PropertyInfo passthroughTextureProperty;
         private static MethodInfo requestPassthroughMethod;
-        private static MethodInfo getCameraFrameMethod;
         private static bool ovrTypesInitialized = false;
-        private static bool usingOpenXR = false;
+        private static bool usingOpenXR = false; // Track if using OpenXR (for logging/debugging)
         
         // ZXing barcode reader instance
         private BarcodeReader barcodeReader;
@@ -93,6 +92,10 @@ namespace AbxrLib.Runtime.Authentication
         
         // Decode attempt counter for logging
         private int decodeAttemptCount = 0;
+        
+        // Cached device support result (doesn't change during runtime)
+        private static bool? cachedDeviceSupported = null;
+        private static string cachedDeviceModel = null;
         
         private void Awake()
         {
@@ -173,12 +176,6 @@ namespace AbxrLib.Runtime.Authentication
                 webCamRenderTexture = null;
             }
             
-            if (passthroughTexture != null)
-            {
-                Destroy(passthroughTexture);
-                passthroughTexture = null;
-            }
-            
             if (webCamTexture != null)
             {
                 if (webCamTexture.isPlaying)
@@ -213,7 +210,6 @@ namespace AbxrLib.Runtime.Authentication
             {
                 // Search through all loaded assemblies for OVR types
                 System.Reflection.Assembly[] assemblies = System.AppDomain.CurrentDomain.GetAssemblies();
-                Debug.Log($"AbxrLib: Searching {assemblies.Length} loaded assemblies for OVRPassthroughLayer...");
                 
                 // Try different type names for OVR SDK
                 string[] ovrTypeNames = {
@@ -259,32 +255,8 @@ namespace AbxrLib.Runtime.Authentication
                         continue;
                     }
                     
-                    // Log assemblies that might contain passthrough camera types
-                    if (assemblyName.Contains("XR") || assemblyName.Contains("Meta") || assemblyName.Contains("Oculus") || assemblyName.Contains("Passthrough"))
-                    {
-                        Debug.Log($"AbxrLib: Searching assembly: {assemblyName}");
-                        
-                        // If this is the MetaOpenXR assembly, log all types for debugging
-                        if (assemblyName == "Unity.XR.MetaOpenXR")
-                        {
-                            try
-                            {
-                                System.Type[] allTypes = assembly.GetTypes();
-                                Debug.Log($"AbxrLib: Unity.XR.MetaOpenXR assembly contains {allTypes.Length} types:");
-                                foreach (System.Type type in allTypes)
-                                {
-                                    if (type.Name.Contains("Camera") || type.Name.Contains("Passthrough") || type.Name.Contains("Meta"))
-                                    {
-                                        Debug.Log($"AbxrLib:   - {type.FullName}");
-                                    }
-                                }
-                            }
-                            catch (System.Exception ex)
-                            {
-                                Debug.LogWarning($"AbxrLib: Could not enumerate types in Unity.XR.MetaOpenXR: {ex.Message}");
-                            }
-                        }
-                    }
+                    // Search assemblies that might contain passthrough camera types
+                    // (No verbose logging - only log when types are found)
                     
                     // Try OVR types first
                     if (ovrPassthroughLayerType == null)
@@ -296,7 +268,7 @@ namespace AbxrLib.Runtime.Authentication
                                 ovrPassthroughLayerType = assembly.GetType(typeName);
                                 if (ovrPassthroughLayerType != null)
                                 {
-                                    Debug.Log($"AbxrLib: Found OVR {typeName} in assembly: {assemblyName}");
+                                    Debug.Log($"AbxrLib: Found OVR passthrough layer type: {typeName}");
                                     usingOpenXR = false;
                                     break;
                                 }
@@ -315,7 +287,6 @@ namespace AbxrLib.Runtime.Authentication
                         System.Type cameraSubsystemType = assembly.GetType("UnityEngine.XR.OpenXR.Features.Meta.MetaOpenXRCameraSubsystem");
                         if (cameraSubsystemType != null)
                         {
-                            Debug.Log($"AbxrLib: Found OpenXR MetaOpenXRCameraSubsystem in assembly: {assemblyName}");
                             openXRPassthroughCameraType = cameraSubsystemType;
                             usingOpenXR = true;
                         }
@@ -332,14 +303,12 @@ namespace AbxrLib.Runtime.Authentication
                                         // Only use if it's a CameraSubsystem, or if we haven't found anything yet
                                         if (foundType.Name.Contains("CameraSubsystem"))
                                         {
-                                            Debug.Log($"AbxrLib: Found OpenXR {typeName} (CameraSubsystem) in assembly: {assemblyName}");
                                             openXRPassthroughCameraType = foundType;
                                             usingOpenXR = true;
                                             break;
                                         }
                                         else if (openXRPassthroughCameraType == null)
                                         {
-                                            Debug.Log($"AbxrLib: Found OpenXR {typeName} in assembly: {assemblyName} (will use if no CameraSubsystem found)");
                                             openXRPassthroughCameraType = foundType;
                                             usingOpenXR = true;
                                         }
@@ -370,18 +339,9 @@ namespace AbxrLib.Runtime.Authentication
                                         if (typeName.Contains("CameraSubsystem") && !typeName.Contains("Provider"))
                                         {
                                             // Prioritize CameraSubsystem - use it immediately
-                                            Debug.Log($"AbxrLib: Found camera subsystem type: {type.FullName} in assembly: {assemblyName}");
                                             openXRPassthroughCameraType = type;
                                             usingOpenXR = true;
                                             break; // Use subsystem immediately, don't look for PassthroughLayer
-                                        }
-                                        else if (typeName.Contains("CameraSubsystem") && !typeName.Contains("Provider"))
-                                        {
-                                            // Found CameraSubsystem - use it immediately
-                                            Debug.Log($"AbxrLib: Found camera subsystem type: {type.FullName} in assembly: {assemblyName}");
-                                            openXRPassthroughCameraType = type;
-                                            usingOpenXR = true;
-                                            break; // Use subsystem immediately
                                         }
                                         else if ((typeName.Contains("ARCameraFeature") && !typeName.Contains("Provider")) ||
                                                  (typeName.Contains("Passthrough") && typeName.Contains("Layer")))
@@ -389,7 +349,6 @@ namespace AbxrLib.Runtime.Authentication
                                             // Only use these if we haven't found a subsystem yet
                                             if (openXRPassthroughCameraType == null || !openXRPassthroughCameraType.Name.Contains("CameraSubsystem"))
                                             {
-                                                Debug.Log($"AbxrLib: Found potential passthrough camera type: {type.FullName} in assembly: {assemblyName} (will use if no subsystem found)");
                                                 // Store as fallback, but continue searching for CameraSubsystem
                                                 if (openXRPassthroughCameraType == null)
                                                 {
@@ -403,7 +362,6 @@ namespace AbxrLib.Runtime.Authentication
                                     else if ((typeName.Contains("Passthrough") && typeName.Contains("Camera")) ||
                                              (typeName.Contains("Camera") && typeName.Contains("Passthrough")))
                                     {
-                                        Debug.Log($"AbxrLib: Found potential passthrough camera type: {type.FullName} in assembly: {assemblyName}");
                                         openXRPassthroughCameraType = type;
                                         usingOpenXR = true;
                                         break;
@@ -425,7 +383,6 @@ namespace AbxrLib.Runtime.Authentication
                     // If we found a CameraSubsystem, use it immediately (don't continue searching)
                     if (openXRPassthroughCameraType != null && openXRPassthroughCameraType.Name.Contains("CameraSubsystem"))
                     {
-                        Debug.Log($"AbxrLib: CameraSubsystem found, stopping search. Using: {openXRPassthroughCameraType.FullName}");
                         break;
                     }
                     
@@ -501,23 +458,6 @@ namespace AbxrLib.Runtime.Authentication
                 
                 if (passthroughType != null)
                 {
-                    Debug.Log($"AbxrLib: Found passthrough type: {passthroughType.FullName} (OpenXR: {usingOpenXR})");
-                    
-                    // Log ALL properties and methods for debugging
-                    System.Reflection.PropertyInfo[] allProperties = passthroughType.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
-                    System.Reflection.MethodInfo[] allMethods = passthroughType.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
-                    
-                    Debug.Log($"AbxrLib: {passthroughType.Name} has {allProperties.Length} properties and {allMethods.Length} methods:");
-                    foreach (var prop in allProperties)
-                    {
-                        Debug.Log($"AbxrLib:   Property: {prop.Name} (Type: {prop.PropertyType.Name}, Static: {prop.GetGetMethod()?.IsStatic ?? false})");
-                    }
-                    Debug.Log($"AbxrLib: All methods on {passthroughType.Name}:");
-                    foreach (var method in allMethods)
-                    {
-                        string paramList = string.Join(", ", method.GetParameters().Select(p => $"{p.ParameterType.Name} {p.Name}"));
-                        Debug.Log($"AbxrLib:   Method: {method.Name}({paramList}) (Static: {method.IsStatic}, Return: {method.ReturnType.Name})");
-                    }
                     
                     // Get the texture property (try multiple possible names, including case variations)
                     string[] texturePropertyNames = { 
@@ -535,7 +475,6 @@ namespace AbxrLib.Runtime.Authentication
                                 passthroughTextureProperty.PropertyType == typeof(Texture2D) ||
                                 passthroughTextureProperty.PropertyType == typeof(RenderTexture))
                             {
-                                Debug.Log($"AbxrLib: Found texture property: {propName} (Type: {passthroughTextureProperty.PropertyType.Name})");
                                 break;
                             }
                             else
@@ -551,65 +490,10 @@ namespace AbxrLib.Runtime.Authentication
                     {
                         requestPassthroughMethod = passthroughType.GetMethod("EnablePassthrough", BindingFlags.Public | BindingFlags.Instance);
                     }
-                    
-                    // For OpenXR, try GetCameraFrame method (both instance and static)
-                    if (usingOpenXR)
-                    {
-                        getCameraFrameMethod = passthroughType.GetMethod("GetCameraFrame", BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance);
-                        if (getCameraFrameMethod == null)
-                        {
-                            getCameraFrameMethod = passthroughType.GetMethod("GetCameraTexture", BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance);
-                        }
-                        if (getCameraFrameMethod == null)
-                        {
-                            getCameraFrameMethod = passthroughType.GetMethod("TryGetCameraFrame", BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance);
-                        }
-                    }
-                    
-                    Debug.Log($"AbxrLib: Passthrough types initialized. Texture property: {passthroughTextureProperty != null}, " +
-                             $"Request method: {requestPassthroughMethod != null}, GetCameraFrame: {getCameraFrameMethod != null}");
                 }
                 else
                 {
-                    Debug.LogWarning("AbxrLib: Passthrough camera type not found in any loaded assembly. Meta Passthrough Camera API may not be available.");
-                    Debug.LogWarning("AbxrLib: Available assemblies containing 'OVR' or 'Meta':");
-                    foreach (System.Reflection.Assembly assembly in assemblies)
-                    {
-                        string assemblyName = assembly.GetName().Name;
-                        if (assemblyName.Contains("OVR") || assemblyName.Contains("Meta") || assemblyName.Contains("Oculus") || assemblyName.Contains("OpenXR"))
-                        {
-                            Debug.LogWarning($"AbxrLib:   - {assemblyName}");
-                            
-                            // List ALL types in MetaQuestSupport assembly to see what's available
-                            if (assemblyName.Contains("MetaQuestSupport") || assemblyName.Contains("Meta.OpenXR"))
-                            {
-                                try
-                                {
-                                    System.Type[] types = assembly.GetTypes();
-                                    Debug.LogWarning($"AbxrLib: ALL types in {assemblyName} ({types.Length} total):");
-                                    foreach (System.Type type in types)
-                                    {
-                                        Debug.LogWarning($"AbxrLib:     - {type.FullName}");
-                                    }
-                                }
-                                catch (System.Reflection.ReflectionTypeLoadException ex)
-                                {
-                                    Debug.LogWarning($"AbxrLib: Could not load all types from {assemblyName}: {ex.Message}");
-                                    if (ex.Types != null)
-                                    {
-                                        Debug.LogWarning($"AbxrLib: Loadable types ({ex.Types.Length}):");
-                                        foreach (System.Type type in ex.Types)
-                                        {
-                                            if (type != null)
-                                            {
-                                                Debug.LogWarning($"AbxrLib:     - {type.FullName}");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    Debug.LogWarning("AbxrLib: Passthrough camera type not found. Meta Passthrough Camera API may not be available.");
                 }
             }
             catch (System.Exception ex)
@@ -621,51 +505,52 @@ namespace AbxrLib.Runtime.Authentication
         }
         
         /// <summary>
-        /// Delayed device check coroutine
+        /// Delayed device check coroutine - waits for device model to be available
         /// </summary>
         private IEnumerator DelayedDeviceCheck()
         {
-            for (int attempt = 1; attempt <= 3; attempt++)
+            // Wait a short time for device model to be populated
+            yield return new WaitForSeconds(0.5f);
+            
+            if (!string.IsNullOrEmpty(DeviceModel.deviceModel))
             {
-                yield return new WaitForSeconds(0.5f * attempt); // Increasing delays: 0.5s, 1s, 1.5s
-                
-                Debug.Log($"AbxrLib: Delayed device check attempt {attempt}/3. Device model: '{DeviceModel.deviceModel}'");
-                
-                if (!string.IsNullOrEmpty(DeviceModel.deviceModel))
+                if (IsDeviceSupported())
                 {
-                    if (IsDeviceSupported())
+                    Debug.Log($"AbxrLib: Device '{DeviceModel.deviceModel}' is now detected as supported. Initializing...");
+                    
+                    // Initialize OVR types
+                    InitializeOVRTypes();
+                    
+                    // Initialize ZXing if not already done
+                    if (barcodeReader == null)
                     {
-                        Debug.Log($"AbxrLib: Device '{DeviceModel.deviceModel}' is now detected as supported. Initializing...");
-                        
-                        // Initialize OVR types
-                        InitializeOVRTypes();
-                        
-                        // Initialize ZXing if not already done
-                        if (barcodeReader == null)
+                        try
                         {
-                            try
-                            {
-                                barcodeReader = new BarcodeReader();
-                                barcodeReader.Options.PossibleFormats = new System.Collections.Generic.List<BarcodeFormat> { BarcodeFormat.QR_CODE };
-                            }
-                            catch (System.Exception ex)
-                            {
-                                Debug.LogError($"AbxrLib: Failed to initialize ZXing in delayed check: {ex.Message}");
-                                yield break;
-                            }
+                            barcodeReader = new BarcodeReader();
+                            barcodeReader.Options.PossibleFormats = new System.Collections.Generic.List<BarcodeFormat> { BarcodeFormat.QR_CODE };
                         }
-                        
-                        if (Instance == null)
+                        catch (System.Exception ex)
                         {
-                            Instance = this;
-                            Debug.Log("AbxrLib: MetaQRCodeReader.Instance set successfully after delayed check.");
+                            Debug.LogError($"AbxrLib: Failed to initialize ZXing in delayed check: {ex.Message}");
+                            yield break;
                         }
-                        yield break;
+                    }
+                    
+                    if (Instance == null)
+                    {
+                        Instance = this;
+                        Debug.Log("AbxrLib: MetaQRCodeReader.Instance set successfully after delayed check.");
                     }
                 }
+                else
+                {
+                    Debug.LogWarning($"AbxrLib: Device '{DeviceModel.deviceModel}' is not supported. QR code scanning will not be available.");
+                }
             }
-            
-            Debug.LogWarning("AbxrLib: Device check failed after 3 attempts. QR code scanning will not be available.");
+            else
+            {
+                Debug.LogWarning("AbxrLib: Device model not available after delay. QR code scanning will not be available.");
+            }
         }
         
         /// <summary>
@@ -675,11 +560,18 @@ namespace AbxrLib.Runtime.Authentication
         {
             string deviceModel = DeviceModel.deviceModel;
             
-            Debug.Log($"AbxrLib: Checking device support for: '{deviceModel}'");
+            // Return cached result if device model hasn't changed
+            if (cachedDeviceSupported.HasValue && deviceModel == cachedDeviceModel)
+            {
+                return cachedDeviceSupported.Value;
+            }
+            
+            // Cache the device model
+            cachedDeviceModel = deviceModel;
             
             if (string.IsNullOrEmpty(deviceModel))
             {
-                Debug.Log("AbxrLib: Device model is empty, device not supported.");
+                cachedDeviceSupported = false;
                 return false;
             }
             
@@ -688,7 +580,7 @@ namespace AbxrLib.Runtime.Authentication
             {
                 if (deviceModel.Equals(excludedDevice, System.StringComparison.OrdinalIgnoreCase))
                 {
-                    Debug.Log($"AbxrLib: Device '{deviceModel}' is explicitly excluded.");
+                    cachedDeviceSupported = false;
                     return false;
                 }
             }
@@ -698,19 +590,20 @@ namespace AbxrLib.Runtime.Authentication
             {
                 if (deviceModel.Equals(supportedDevice, System.StringComparison.OrdinalIgnoreCase))
                 {
-                    Debug.Log($"AbxrLib: Device '{deviceModel}' is supported (matches '{supportedDevice}').");
+                    cachedDeviceSupported = true;
                     return true;
                 }
             }
             
-            Debug.Log($"AbxrLib: Device '{deviceModel}' is not in the supported list.");
+            cachedDeviceSupported = false;
             return false;
         }
         
         /// <summary>
         /// Check if required OpenXR features are enabled in Project Settings
         /// </summary>
-        private bool CheckOpenXRFeatures()
+        /// <param name="verbose">If true, logs success messages. If false, only logs errors.</param>
+        private bool CheckOpenXRFeatures(bool verbose = true)
         {
             try
             {
@@ -733,7 +626,6 @@ namespace AbxrLib.Runtime.Authentication
                             if (settingsType != null)
                             {
                                 openXRSettingsType = settingsType;
-                                Debug.Log($"AbxrLib: Found OpenXRSettings in assembly: {assemblyName}");
                             }
                             
                             // Try to find Meta feature types
@@ -823,7 +715,7 @@ namespace AbxrLib.Runtime.Authentication
                                     allFeaturesEnabled = false;
                                     missingFeatures += "Meta Quest: Session, ";
                                 }
-                                else
+                                else if (verbose)
                                 {
                                     Debug.Log("AbxrLib: OpenXR feature 'Meta Quest: Session' is enabled.");
                                 }
@@ -841,7 +733,7 @@ namespace AbxrLib.Runtime.Authentication
                 }
                 else
                 {
-                    Debug.LogWarning("AbxrLib: MetaSessionFeature type not found. Cannot verify if 'Meta Quest: Session' is enabled.");
+                            // MetaSessionFeature type not found - this is expected in some Unity versions, continue without verification
                 }
                 
                 // Check Meta Quest: Camera (Passthrough) feature
@@ -863,7 +755,7 @@ namespace AbxrLib.Runtime.Authentication
                                     allFeaturesEnabled = false;
                                     missingFeatures += "Meta Quest: Camera (Passthrough), ";
                                 }
-                                else
+                                else if (verbose)
                                 {
                                     Debug.Log("AbxrLib: OpenXR feature 'Meta Quest: Camera (Passthrough)' is enabled.");
                                 }
@@ -881,7 +773,7 @@ namespace AbxrLib.Runtime.Authentication
                 }
                 else
                 {
-                    Debug.LogWarning("AbxrLib: MetaCameraFeature type not found. Cannot verify if 'Meta Quest: Camera (Passthrough)' is enabled.");
+                            // MetaCameraFeature type not found - this is expected in some Unity versions, continue without verification
                 }
                 
                 if (!allFeaturesEnabled)
@@ -891,7 +783,6 @@ namespace AbxrLib.Runtime.Authentication
                     return false;
                 }
                 
-                Debug.Log("AbxrLib: All required OpenXR features are enabled.");
                 return true;
             }
             catch (System.Exception ex)
@@ -906,21 +797,23 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         public void ScanQRCode()
         {
-            if (isScanning)
+            if (isScanning || isInitializing)
             {
-                Debug.Log("AbxrLib: QR code scanning already in progress");
+                Debug.Log("AbxrLib: QR code scanning or initialization already in progress");
                 return;
             }
             
             // Check if camera needs to be initialized or reinitialized
             if (!cameraInitialized || (ovrPassthroughLayer == null && webCamTexture == null))
             {
-                Debug.Log("AbxrLib: Camera not initialized. Initializing...");
+                isInitializing = true; // Set initializing state so button shows "Initializing..."
                 cameraInitialized = false;
                 StartCoroutine(InitializeCamera());
             }
             else
             {
+                // Camera already initialized, start scanning immediately
+                isScanning = true;
                 StartScanning();
             }
         }
@@ -930,11 +823,13 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         public void CancelScanning()
         {
-            if (!isScanning)
+            if (!isScanning && !isInitializing)
             {
                 return;
             }
             
+            // Reset both states
+            isInitializing = false;
             StopScanning();
             Debug.Log("AbxrLib: QR code scanning cancelled by user");
         }
@@ -945,6 +840,42 @@ namespace AbxrLib.Runtime.Authentication
         public bool IsScanning()
         {
             return isScanning;
+        }
+        
+        /// <summary>
+        /// Check if camera is currently being initialized
+        /// </summary>
+        public bool IsInitializing()
+        {
+            return isInitializing;
+        }
+        
+        /// <summary>
+        /// Check if QR code scanning is available (device supported, features enabled, permissions granted)
+        /// </summary>
+        public bool IsQRScanningAvailable()
+        {
+            // Check if device is supported
+            if (!IsDeviceSupported())
+            {
+                return false;
+            }
+            
+            // Check if OpenXR features are enabled (silent check - only logs errors)
+            if (!CheckOpenXRFeatures(verbose: false))
+            {
+                return false;
+            }
+            
+            // Check camera permissions
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
+            {
+                return false;
+            }
+#endif
+            
+            return true;
         }
         
         /// <summary>
@@ -960,6 +891,7 @@ namespace AbxrLib.Runtime.Authentication
                 Debug.LogError("AbxrLib:   - Meta Quest Support");
                 Debug.LogError("AbxrLib:   - Meta Quest: Camera (Passthrough)");
                 Debug.LogError("AbxrLib:   - Meta Quest: Session");
+                isInitializing = false; // Reset on failure
                 yield break;
             }
             
@@ -973,31 +905,32 @@ namespace AbxrLib.Runtime.Authentication
                 if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
                 {
                     Debug.LogError("AbxrLib: Camera permission denied. Cannot scan QR codes.");
+                    isInitializing = false; // Reset on failure
                     yield break;
                 }
             }
 #endif
             
             // PRIORITY 1: Try WebCamTexture first (Meta's Passthrough Camera API is accessed via WebCamTexture on Quest)
-            Debug.Log("AbxrLib: Attempting WebCamTexture (Meta's recommended Passthrough Camera API access method)...");
             yield return StartCoroutine(InitializeWebCamTexture());
             if (cameraInitialized && webCamTexture != null && webCamTexture.isPlaying)
             {
                 // TEST PHASE: Verify we're getting non-black frames using dedicated test method
-                Debug.Log("AbxrLib: [TEST PHASE] Testing WebCamTexture validity before display...");
                 yield return new WaitForSeconds(0.5f);
                 bool hasValidFrames = false;
                 for (int check = 0; check < 10; check++)
                 {
                     if (webCamTexture.width > 0 && webCamTexture.height > 0)
                     {
-                        // Use dedicated test method
-                        hasValidFrames = TestCameraValidity(webCamTexture, sampleSize: 1000, threshold: 0.01f);
+                        // Use dedicated test method (silent - no logs during loop)
+                        hasValidFrames = TestCameraValidity(webCamTexture, sampleSize: 1000, threshold: 0.01f, verbose: false);
                         
                         if (hasValidFrames)
                         {
-                            Debug.Log("AbxrLib: [TEST PHASE] WebCamTexture validity test PASSED. Proceeding to display and scanning.");
+                            Debug.Log("AbxrLib: Camera initialized successfully - valid frames detected");
                             usingWebCamTexture = true;
+                            isInitializing = false; // Initialization complete
+                            isScanning = true; // Now actually scanning
                             StartScanning();
                             yield break;
                         }
@@ -1036,6 +969,7 @@ namespace AbxrLib.Runtime.Authentication
                 Debug.LogError("AbxrLib: 3. Ensure Meta XR Core SDK v74+ is installed");
                 Debug.LogError("AbxrLib: 4. Grant camera permission in Quest Settings > Privacy > Camera Access");
                 Debug.LogError("AbxrLib: 5. WebCamTexture may work without Passthrough Camera API, but requires HEADSET_CAMERA permission");
+                isInitializing = false; // Reset on failure
                 yield break;
             }
             
@@ -1065,13 +999,10 @@ namespace AbxrLib.Runtime.Authentication
                 else if (passthroughType.Name.Contains("CameraSubsystem"))
                 {
                     // It's a subsystem - access via XRSubsystemManager using reflection
-                    Debug.Log($"AbxrLib: Found camera subsystem type: {passthroughType.Name}. Attempting to access via XRSubsystemManager...");
-                    
                     // Try to get the subsystem using XRSubsystemManager or SubsystemManager via reflection
                     try
                     {
-                        // Log all assemblies that might contain subsystem managers
-                        Debug.Log("AbxrLib: Searching for XRSubsystemManager or SubsystemManager...");
+                        // Search for subsystem managers
                         foreach (System.Reflection.Assembly assembly in System.AppDomain.CurrentDomain.GetAssemblies())
                         {
                             string assemblyName = assembly.GetName().Name;
@@ -1084,7 +1015,6 @@ namespace AbxrLib.Runtime.Authentication
                                     {
                                         if (type.Name == "XRSubsystemManager" || type.Name == "SubsystemManager")
                                         {
-                                            Debug.Log($"AbxrLib: Found {type.Name} in assembly: {assemblyName}, full name: {type.FullName}");
                                             if (subsystemManagerType == null)
                                             {
                                                 subsystemManagerType = type;
@@ -1106,7 +1036,6 @@ namespace AbxrLib.Runtime.Authentication
                                     subsystemManagerType = assembly.GetType("UnityEngine.XR.XRSubsystemManager");
                                     if (subsystemManagerType != null)
                                     {
-                                        Debug.Log($"AbxrLib: Found XRSubsystemManager in assembly: {assembly.GetName().Name}");
                                         break;
                                     }
                                 }
@@ -1124,7 +1053,6 @@ namespace AbxrLib.Runtime.Authentication
                                     subsystemManagerType = assembly.GetType("UnityEngine.SubsystemsImplementation.SubsystemManager");
                                     if (subsystemManagerType != null)
                                     {
-                                        Debug.Log($"AbxrLib: Found SubsystemManager in assembly: {assembly.GetName().Name}");
                                         break;
                                     }
                                 }
@@ -1256,12 +1184,6 @@ namespace AbxrLib.Runtime.Authentication
                     {
                         Debug.LogWarning($"AbxrLib: Error accessing XRSubsystemManager: {ex.Message}");
                     }
-                }
-                else if (usingOpenXR && getCameraFrameMethod != null)
-                {
-                    // OpenXR might use static methods, try that first
-                    Debug.Log("AbxrLib: Using OpenXR Passthrough Camera API (static methods)");
-                    // For OpenXR, we might not need to create a component
                 }
                 else
                 {
@@ -1809,6 +1731,8 @@ namespace AbxrLib.Runtime.Authentication
             // If we're using TryAcquireLatestCpuImage, start scanning now
             if (cameraInitialized && passthroughTex == null && cameraSubsystem != null && passthroughTextureProperty == null)
             {
+                isInitializing = false; // Initialization complete
+                isScanning = true; // Now actually scanning
                 StartScanning();
                 yield break; // Exit early - we don't need a texture property
             }
@@ -1832,6 +1756,8 @@ namespace AbxrLib.Runtime.Authentication
                 
                 cameraInitialized = true;
                 Debug.Log("AbxrLib: Passthrough camera initialized successfully.");
+                isInitializing = false; // Initialization complete
+                isScanning = true; // Now actually scanning
                 StartScanning();
             }
             else if (cameraSubsystem == null)
@@ -1868,12 +1794,15 @@ namespace AbxrLib.Runtime.Authentication
                         }
                         
                         cameraInitialized = true;
+                        isInitializing = false; // Initialization complete
+                        isScanning = true; // Now actually scanning
                         StartScanning();
                         yield break;
                     }
                 }
                 
                 Debug.LogError("AbxrLib: Passthrough texture never became available.");
+                isInitializing = false; // Reset on failure
             }
             
             if (passthroughTextureProperty == null)
@@ -1887,7 +1816,6 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         private IEnumerator InitializeWebCamTexture()
         {
-            Debug.Log("AbxrLib: Initializing WebCamTexture (Meta's Passthrough Camera API access method)...");
             usingWebCamTexture = true;
             
             // Request camera permissions on Android
@@ -1901,6 +1829,7 @@ namespace AbxrLib.Runtime.Authentication
                 if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
                 {
                     Debug.LogError("AbxrLib: Camera permission denied. Cannot scan QR codes.");
+                    isInitializing = false; // Reset on failure
                     yield break;
                 }
             }
@@ -1920,7 +1849,6 @@ namespace AbxrLib.Runtime.Authentication
                     
                     if (permissionCheck == 0) // PERMISSION_GRANTED
                     {
-                        Debug.Log("AbxrLib: HEADSET_CAMERA permission is granted.");
                     }
                     else
                     {
@@ -1939,66 +1867,55 @@ namespace AbxrLib.Runtime.Authentication
             }
 #endif
             
-            // Find the forward-facing camera
+            // Find the camera - prioritize based on known working patterns for Quest 3
             WebCamDevice[] devices = WebCamTexture.devices;
-            WebCamDevice? frontCamera = null;
+            WebCamDevice? selectedCamera = null;
             
-            Debug.Log($"AbxrLib: Found {devices.Length} camera device(s):");
-            for (int i = 0; i < devices.Length; i++)
-            {
-                Debug.Log($"AbxrLib:   Camera {i}: '{devices[i].name}' (isFrontFacing: {devices[i].isFrontFacing})");
-            }
-            
-            // Try multiple camera selection strategies based on what worked for other developers
-            // Strategy 1: Try front-facing camera first (for passthrough)
+            // Strategy 1: Try "Camera 1" first (known to work on Quest 3)
             foreach (WebCamDevice device in devices)
             {
-                if (device.isFrontFacing)
+                if (device.name == "Camera 1")
                 {
-                    frontCamera = device;
-                    Debug.Log($"AbxrLib: Found front-facing camera: '{device.name}'");
+                    selectedCamera = device;
                     break;
                 }
             }
             
-            // Strategy 2: If no front-facing, try back-facing (some developers reported this works)
-            if (!frontCamera.HasValue)
+            // Strategy 2: Try front-facing camera (standard Quest 3 passthrough camera)
+            if (!selectedCamera.HasValue)
             {
                 foreach (WebCamDevice device in devices)
                 {
-                    if (!device.isFrontFacing)
+                    if (device.isFrontFacing)
                     {
-                        frontCamera = device;
-                        Debug.Log($"AbxrLib: Found back-facing camera (trying as fallback): '{device.name}'");
+                        selectedCamera = device;
                         break;
                     }
                 }
             }
             
-            // Strategy 3: Look by name patterns
-            if (!frontCamera.HasValue)
+            // Strategy 3: Try name pattern matching (passthrough, front, etc.)
+            if (!selectedCamera.HasValue)
             {
                 foreach (WebCamDevice device in devices)
                 {
                     string deviceName = device.name.ToLower();
-                    if (deviceName.Contains("front") || deviceName.Contains("passthrough") || 
-                        deviceName.Contains("quest") || deviceName.Contains("color"))
+                    if (deviceName.Contains("front") || deviceName.Contains("passthrough"))
                     {
-                        frontCamera = device;
-                        Debug.Log($"AbxrLib: Found camera by name pattern: '{device.name}'");
+                        selectedCamera = device;
                         break;
                     }
                 }
             }
             
-            // Strategy 4: Use first available camera as last resort
-            if (!frontCamera.HasValue && devices.Length > 0)
+            // Strategy 4: Last resort - use first available camera
+            if (!selectedCamera.HasValue && devices.Length > 0)
             {
-                frontCamera = devices[0];
-                Debug.Log($"AbxrLib: Using first available camera: '{devices[0].name}'");
+                selectedCamera = devices[0];
+                Debug.LogWarning($"AbxrLib: No preferred camera found. Using first available camera: '{devices[0].name}'");
             }
             
-            if (!frontCamera.HasValue)
+            if (!selectedCamera.HasValue)
             {
                 Debug.LogError("AbxrLib: No camera found. Cannot scan QR codes.");
                 yield break;
@@ -2010,12 +1927,9 @@ namespace AbxrLib.Runtime.Authentication
             int requestedHeight = 1080;
             int requestedFPS = 30;
             
-            Debug.Log($"AbxrLib: Creating WebCamTexture with explicit settings: {requestedWidth}x{requestedHeight} @ {requestedFPS} FPS");
-            webCamTexture = new WebCamTexture(frontCamera.Value.name, requestedWidth, requestedHeight, requestedFPS);
+            webCamTexture = new WebCamTexture(selectedCamera.Value.name, requestedWidth, requestedHeight, requestedFPS);
             webCamTexture.requestedFPS = requestedFPS; // Explicitly set FPS
             webCamTexture.Play();
-            
-            Debug.Log($"AbxrLib: Starting WebCamTexture: '{frontCamera.Value.name}', isFrontFacing: {frontCamera.Value.isFrontFacing}");
             
             // Wait for camera to start and get valid dimensions
             int waitCount = 0;
@@ -2031,18 +1945,14 @@ namespace AbxrLib.Runtime.Authentication
             
             if (webCamTexture.width > 0 && webCamTexture.height > 0)
             {
-                Debug.Log($"AbxrLib: WebCamTexture dimensions ready: {webCamTexture.width}x{webCamTexture.height}");
-                
                 // Create RenderTexture for WebCamTexture
                 if (webCamRenderTexture == null)
                 {
                     webCamRenderTexture = new RenderTexture(webCamTexture.width, webCamTexture.height, 0, RenderTextureFormat.ARGB32);
                     webCamRenderTexture.Create();
-                    Debug.Log($"AbxrLib: Created RenderTexture for WebCamTexture: {webCamRenderTexture.width}x{webCamRenderTexture.height}");
                 }
                 
                 // TEST PHASE: Wait for camera to start producing non-black frames (separate from display)
-                Debug.Log("AbxrLib: [TEST PHASE] Testing WebCamTexture for valid (non-black) frames...");
                 int waitForFrames = 0;
                 bool gotValidFrame = false;
                 while (waitForFrames < 50 && !gotValidFrame) // Wait up to 5 seconds
@@ -2053,36 +1963,29 @@ namespace AbxrLib.Runtime.Authentication
                     // Use dedicated test method to check camera validity
                     if (webCamTexture.width > 0 && webCamTexture.height > 0 && webCamTexture.isPlaying)
                     {
-                        gotValidFrame = TestCameraValidity(webCamTexture, sampleSize: 1000, threshold: 0.01f);
+                        gotValidFrame = TestCameraValidity(webCamTexture, sampleSize: 1000, threshold: 0.01f, verbose: false);
                         
                         if (gotValidFrame)
                         {
-                            Debug.Log($"AbxrLib: [TEST PHASE] WebCamTexture validity test PASSED after {waitForFrames * 0.1f} seconds");
-                        }
-                        else if (waitForFrames % 10 == 0)
-                        {
-                            Debug.Log($"AbxrLib: [TEST PHASE] Still testing... (attempt {waitForFrames}/50, camera producing black frames)");
+                            Debug.Log($"AbxrLib: Camera initialized successfully after {waitForFrames * 0.1f:F1} seconds");
                         }
                     }
                 }
                 
                 if (!gotValidFrame)
                 {
-                    Debug.LogWarning($"AbxrLib: Front-facing camera did not produce valid frames. Trying back-facing camera as fallback (some developers reported this works)...");
-                    
-                    // Try back-facing camera as fallback (based on working implementation)
-                    WebCamDevice? backCamera = null;
+                    // Try other cameras as fallback (skip the one we already tried)
+                    WebCamDevice? fallbackCamera = null;
                     foreach (WebCamDevice device in devices)
                     {
-                        if (!device.isFrontFacing && device.name != frontCamera.Value.name)
+                        if (device.name != selectedCamera.Value.name)
                         {
-                            backCamera = device;
-                            Debug.Log($"AbxrLib: Found back-facing camera to try: '{device.name}'");
+                            fallbackCamera = device;
                             break;
                         }
                     }
                     
-                    if (backCamera.HasValue)
+                    if (fallbackCamera.HasValue)
                     {
                         // Stop and destroy current camera
                         if (webCamTexture != null)
@@ -2092,9 +1995,8 @@ namespace AbxrLib.Runtime.Authentication
                             webCamTexture = null;
                         }
                         
-                        // Try back-facing camera with same settings
-                        Debug.Log($"AbxrLib: Attempting back-facing camera: '{backCamera.Value.name}'");
-                        webCamTexture = new WebCamTexture(backCamera.Value.name, requestedWidth, requestedHeight, requestedFPS);
+                        // Try fallback camera with same settings
+                        webCamTexture = new WebCamTexture(fallbackCamera.Value.name, requestedWidth, requestedHeight, requestedFPS);
                         webCamTexture.requestedFPS = requestedFPS;
                         webCamTexture.Play();
                         
@@ -2108,35 +2010,24 @@ namespace AbxrLib.Runtime.Authentication
                         
                         if (webCamTexture.width > 0 && webCamTexture.height > 0)
                         {
-                            // Test back-facing camera
-                            Debug.Log("AbxrLib: [TEST PHASE] Testing back-facing camera validity...");
-                            gotValidFrame = TestCameraValidity(webCamTexture, sampleSize: 1000, threshold: 0.01f);
+                            // Test fallback camera - wait a bit longer for it to initialize
+                            int fallbackWait = 0;
+                            while (fallbackWait < 50 && !gotValidFrame)
+                            {
+                                yield return new WaitForSeconds(0.1f);
+                                fallbackWait++;
+                                gotValidFrame = TestCameraValidity(webCamTexture, sampleSize: 1000, threshold: 0.01f, verbose: false);
+                            }
                             
                             if (gotValidFrame)
                             {
-                                Debug.Log($"AbxrLib: Back-facing camera is producing valid frames! Using: '{backCamera.Value.name}'");
-                                frontCamera = backCamera; // Update reference
-                            }
-                            else
-                            {
-                                Debug.LogWarning("AbxrLib: Back-facing camera also produces black frames.");
+                                selectedCamera = fallbackCamera; // Update reference
                             }
                         }
-                    }
-                    
-                    if (!gotValidFrame)
-                    {
-                        Debug.LogWarning($"AbxrLib: WebCamTexture did not produce valid frames after trying both front and back cameras. Camera may not be accessible or may need additional permissions.");
-                        Debug.LogWarning("AbxrLib: TROUBLESHOOTING:");
-                        Debug.LogWarning("AbxrLib: 1. Check Quest Settings > Privacy > Camera Access - ensure app has permission");
-                        Debug.LogWarning("AbxrLib: 2. Enable 'Meta Quest Camera Passthrough' in OpenXR Package Settings");
-                        Debug.LogWarning("AbxrLib: 3. Verify HEADSET_CAMERA permission is in AndroidManifest.xml (should be auto-added)");
-                        Debug.LogWarning("AbxrLib: 4. On Quest 3+, WebCamTexture should route to Passthrough Camera API if properly configured");
                     }
                 }
                 
                 cameraInitialized = true;
-                Debug.Log($"AbxrLib: WebCamTexture initialized: {frontCamera.Value.name}, size: {webCamTexture.width}x{webCamTexture.height}, isPlaying: {webCamTexture.isPlaying}, gotValidFrame: {gotValidFrame}");
                 
                 // Configure camera clear flags for passthrough visibility (based on working implementation)
                 if (gotValidFrame && webCamTexture != null)
@@ -2164,11 +2055,19 @@ namespace AbxrLib.Runtime.Authentication
                     }
                 }
                 
+                isInitializing = false; // Initialization complete
+                isScanning = true; // Now actually scanning
                 StartScanning();
             }
             else
             {
                 Debug.LogError($"AbxrLib: Failed to initialize WebCamTexture. Final state: isPlaying={webCamTexture.isPlaying}, size={webCamTexture.width}x{webCamTexture.height}");
+                Debug.LogError("AbxrLib: TROUBLESHOOTING:");
+                Debug.LogError("AbxrLib: 1. Check Quest Settings > Privacy > Camera Access - ensure app has permission");
+                Debug.LogError("AbxrLib: 2. Enable 'Meta Quest Camera Passthrough' in OpenXR Package Settings");
+                Debug.LogError("AbxrLib: 3. Verify HEADSET_CAMERA permission is in AndroidManifest.xml (should be auto-added)");
+                Debug.LogError("AbxrLib: 4. On Quest 3+, WebCamTexture should route to Passthrough Camera API if properly configured");
+                isInitializing = false; // Reset on failure
                 if (webCamTexture != null)
                 {
                     webCamTexture.Stop();
@@ -2183,22 +2082,6 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         private void StartScanning()
         {
-            // TEST PHASE: Verify camera is producing valid frames before displaying
-            if (usingWebCamTexture && webCamTexture != null && webCamTexture.isPlaying)
-            {
-                Debug.Log("AbxrLib: [TEST PHASE] Testing camera validity before displaying in overlay...");
-                bool isValid = TestCameraValidity(webCamTexture, sampleSize: 1000, threshold: 0.01f);
-                if (!isValid)
-                {
-                    Debug.LogWarning("AbxrLib: [TEST PHASE] Camera validity test FAILED - camera is producing black frames. Display may be black.");
-                    Debug.LogWarning("AbxrLib: This may indicate:");
-                    Debug.LogWarning("AbxrLib: 1. OpenXR features not enabled (Meta Quest: Camera Passthrough, Meta Quest: Session)");
-                    Debug.LogWarning("AbxrLib: 2. Camera permission not granted");
-                    Debug.LogWarning("AbxrLib: 3. AR Camera Manager not configured");
-                    // Continue anyway - user can see the black screen and know something is wrong
-                }
-            }
-            
             // Check if we have a valid camera source
             bool hasWebCam = usingWebCamTexture && webCamTexture != null && webCamTexture.isPlaying && webCamRenderTexture != null;
             
@@ -2207,12 +2090,6 @@ namespace AbxrLib.Runtime.Authentication
             bool hasPassthroughTexture = !usingWebCamTexture && (ovrPassthroughLayer != null || cameraSubsystem != null) && passthroughRenderTexture != null;
             bool hasPassthroughCpuImage = !usingWebCamTexture && cameraSubsystem != null && passthroughTextureProperty == null;
             bool hasPassthrough = hasPassthroughTexture || hasPassthroughCpuImage;
-            
-            // Detailed debug logging
-            Debug.Log($"AbxrLib: StartScanning() check - usingWebCamTexture: {usingWebCamTexture}, " +
-                     $"cameraSubsystem: {cameraSubsystem != null}, passthroughTextureProperty: {passthroughTextureProperty != null}, " +
-                     $"passthroughRenderTexture: {passthroughRenderTexture != null}, " +
-                     $"ovrPassthroughLayer: {ovrPassthroughLayer != null}");
             
             if (!hasWebCam && !hasPassthrough)
             {
@@ -2237,16 +2114,12 @@ namespace AbxrLib.Runtime.Authentication
                         if (usingWebCamTexture && webCamTexture != null)
                         {
                             img.texture = webCamTexture;
-                            Debug.Log($"AbxrLib: Updated WebCamTexture in overlay UI: {webCamTexture.width}x{webCamTexture.height}, isPlaying: {webCamTexture.isPlaying}");
                         }
                         else if (passthroughRenderTexture != null)
                         {
                             img.texture = passthroughRenderTexture;
-                            Debug.Log($"AbxrLib: Updated passthrough texture in overlay UI: {passthroughRenderTexture.width}x{passthroughRenderTexture.height}");
                         }
                         
-                        Debug.Log($"AbxrLib: Texture assigned: {img.texture != null}, " +
-                                 $"RawImage active: {img.gameObject.activeInHierarchy}, Canvas active: {overlayCanvas.activeInHierarchy}");
                         found = true;
                         break;
                     }
@@ -2262,106 +2135,6 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             scanningCoroutine = StartCoroutine(ScanForQRCode());
-            
-            // Start a coroutine to capture a debug screenshot 2 seconds after overlay appears
-            StartCoroutine(CaptureDebugScreenshot());
-        }
-        
-        /// <summary>
-        /// Capture a debug screenshot 2 seconds after overlay appears to verify camera feed
-        /// </summary>
-        private IEnumerator CaptureDebugScreenshot()
-        {
-            yield return new WaitForSeconds(2.0f);
-            
-            Debug.Log("AbxrLib: Capturing debug screenshot to verify camera feed...");
-            
-            try
-            {
-                Texture2D screenshot = null;
-                
-                if (usingWebCamTexture && webCamTexture != null && webCamTexture.isPlaying)
-                {
-                    // Capture from WebCamTexture
-                    if (webCamTexture.width > 0 && webCamTexture.height > 0)
-                    {
-                        try
-                        {
-                            Color32[] pixels = webCamTexture.GetPixels32();
-                            if (pixels != null && pixels.Length > 0)
-                            {
-                                screenshot = new Texture2D(webCamTexture.width, webCamTexture.height, TextureFormat.RGB24, false);
-                                screenshot.SetPixels32(pixels);
-                                screenshot.Apply();
-                            }
-                        }
-                        catch
-                        {
-                            // Fallback to RenderTexture
-                            Graphics.Blit(webCamTexture, webCamRenderTexture);
-                            RenderTexture.active = webCamRenderTexture;
-                            screenshot = new Texture2D(webCamRenderTexture.width, webCamRenderTexture.height, TextureFormat.RGB24, false);
-                            screenshot.ReadPixels(new Rect(0, 0, webCamRenderTexture.width, webCamRenderTexture.height), 0, 0);
-                            screenshot.Apply();
-                            RenderTexture.active = null;
-                        }
-                    }
-                }
-                else if (passthroughRenderTexture != null)
-                {
-                    // Capture from passthrough RenderTexture
-                    RenderTexture.active = passthroughRenderTexture;
-                    screenshot = new Texture2D(passthroughRenderTexture.width, passthroughRenderTexture.height, TextureFormat.RGB24, false);
-                    screenshot.ReadPixels(new Rect(0, 0, passthroughRenderTexture.width, passthroughRenderTexture.height), 0, 0);
-                    screenshot.Apply();
-                    RenderTexture.active = null;
-                }
-                
-                if (screenshot != null)
-                {
-                    // Convert to PNG bytes
-                    byte[] pngData = screenshot.EncodeToPNG();
-                    
-                    // Save to persistent data path
-                    string filename = $"MetaQRDebug_{System.DateTime.Now:yyyyMMdd_HHmmss}.png";
-                    string filepath = System.IO.Path.Combine(Application.persistentDataPath, filename);
-                    
-                    System.IO.File.WriteAllBytes(filepath, pngData);
-                    
-                    // Log pixel statistics
-                    Color32[] pixels = screenshot.GetPixels32();
-                    if (pixels != null && pixels.Length > 0)
-                    {
-                        float totalBrightness = 0f;
-                        int sampleSize = Mathf.Min(1000, pixels.Length);
-                        int nonBlackCount = 0;
-                        for (int i = 0; i < sampleSize; i++)
-                        {
-                            int index = (i * pixels.Length) / sampleSize;
-                            Color32 c = pixels[index];
-                            float brightness = (c.r + c.g + c.b) / 3f / 255f;
-                            totalBrightness += brightness;
-                            if (brightness > 0.01f) nonBlackCount++;
-                        }
-                        float avgBrightness = totalBrightness / sampleSize;
-                        
-                        Debug.Log($"AbxrLib: Debug screenshot saved: {filepath}");
-                        Debug.Log($"AbxrLib: Screenshot stats - Size: {screenshot.width}x{screenshot.height}, " +
-                                 $"Avg brightness: {avgBrightness:F3}, Non-black pixels: {nonBlackCount}/{sampleSize} ({100f * nonBlackCount / sampleSize:F1}%)");
-                        Debug.Log($"AbxrLib: To retrieve screenshot, run: adb pull {filepath}");
-                    }
-                    
-                    Destroy(screenshot);
-                }
-                else
-                {
-                    Debug.LogWarning("AbxrLib: Could not capture debug screenshot - no valid camera source");
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Error capturing debug screenshot: {ex.Message}\n{ex.StackTrace}");
-            }
         }
         
         /// <summary>
@@ -2386,8 +2159,6 @@ namespace AbxrLib.Runtime.Authentication
         private IEnumerator ScanForQRCode()
         {
             int scanCount = 0;
-            string cameraType = usingWebCamTexture ? "WebCamTexture (Meta Passthrough Camera API)" : "Meta Passthrough Camera API (Reflection)";
-            Debug.Log($"AbxrLib: Starting QR code scanning loop using {cameraType}...");
             
             while (isScanning)
             {
@@ -2712,68 +2483,24 @@ namespace AbxrLib.Runtime.Authentication
                 
                 try
                 {
-                    // Log camera state on first scan
-                    if (scanCount == 0)
-                    {
-                        string cameraInfo = usingWebCamTexture 
-                            ? $"WebCamTexture: {webCamTexture.width}x{webCamTexture.height}, isPlaying: {webCamTexture.isPlaying}"
-                            : "Passthrough Camera API (Reflection)";
-                        Debug.Log($"AbxrLib: Camera state - {cameraInfo}, snapshot: {snapshot.width}x{snapshot.height}");
-                        
-                        // Sample pixels to verify we have actual image data
-                        Color32[] pixels32 = snapshot.GetPixels32();
-                        if (pixels32 != null && pixels32.Length > 0)
-                        {
-                            int sampleCount = Mathf.Min(5, pixels32.Length);
-                            string pixelSamples = "";
-                            float totalBrightness = 0f;
-                            for (int i = 0; i < sampleCount; i++)
-                            {
-                                int index = (i * pixels32.Length) / sampleCount;
-                                Color32 c = pixels32[index];
-                                pixelSamples += $"P{i}:({c.r},{c.g},{c.b}) ";
-                                totalBrightness += (c.r + c.g + c.b) / 3f / 255f;
-                            }
-                            float avgBrightness = totalBrightness / sampleCount;
-                            Debug.Log($"AbxrLib: Camera pixel samples (first scan): {pixelSamples}, Avg brightness: {avgBrightness:F3}");
-                        }
-                    }
-                    
                     // Decode QR code using ZXing
                     string result = DecodeQRCode(snapshot);
                     
                     scanCount++;
-                    if (scanCount % 30 == 0) // Log every 30 scans (every ~3 seconds)
-                    {
-                        string cameraInfo = usingWebCamTexture 
-                            ? $"WebCamTexture: {webCamTexture.width}x{webCamTexture.height}"
-                            : "Passthrough Camera API (Reflection)";
-                        Debug.Log($"AbxrLib: Scanning... (scan #{scanCount}, {cameraInfo}, texture valid: {snapshot != null})");
-                    }
                     
                     // Log when QR codes are detected (even if they don't have ABXR: prefix)
                     if (!string.IsNullOrEmpty(result))
                     {
-                        Debug.Log($"AbxrLib: *** QR CODE DETECTED: '{result}' ***");
-                        
                         // Only process QR codes that start with "ABXR:"
                         if (result.StartsWith("ABXR:", System.StringComparison.OrdinalIgnoreCase))
                         {
-                            Debug.Log($"AbxrLib: Valid ABXR QR code found: '{result}'");
+                            Debug.Log($"AbxrLib: QR code detected: '{result}' (scan #{scanCount})");
                             // Process the QR code result
                             OnQRCodeScanned(result);
                             if (snapshot != null) Destroy(snapshot);
                             yield break; // Stop scanning after successful read
                         }
-                        else
-                        {
-                            // QR code found but doesn't have ABXR: prefix - ignore it and continue scanning
-                            Debug.Log($"AbxrLib: QR code detected but doesn't have ABXR: prefix (will ignore): '{result}'");
-                        }
-                    }
-                    else if (scanCount % 60 == 0) // Log every 60 scans (every ~6 seconds) that no QR code found
-                    {
-                        Debug.Log($"AbxrLib: No QR code detected in scan #{scanCount}. Make sure QR code is in camera view and well-lit.");
+                        // QR code found but doesn't have ABXR: prefix - ignore silently
                     }
                 }
                 catch (System.Exception ex)
@@ -2792,7 +2519,7 @@ namespace AbxrLib.Runtime.Authentication
                 yield return new WaitForSeconds(0.1f);
             }
             
-            Debug.Log($"AbxrLib: QR code scanning loop ended. Total scans: {scanCount}");
+            Debug.Log($"AbxrLib: QR code scanning stopped. Total scans: {scanCount}");
         }
         
         /// <summary>
@@ -2802,8 +2529,9 @@ namespace AbxrLib.Runtime.Authentication
         /// <param name="texture">The texture to test (WebCamTexture or Texture2D)</param>
         /// <param name="sampleSize">Number of pixels to sample (default 1000)</param>
         /// <param name="threshold">Brightness threshold to consider non-black (0-1, default 0.01)</param>
+        /// <param name="verbose">Whether to log detailed test results (default false - only logs major milestones)</param>
         /// <returns>True if texture has non-black pixels, false otherwise</returns>
-        private bool TestCameraValidity(Texture texture, int sampleSize = 1000, float threshold = 0.01f)
+        private bool TestCameraValidity(Texture texture, int sampleSize = 1000, float threshold = 0.01f, bool verbose = false)
         {
             if (texture == null)
             {
@@ -2884,25 +2612,23 @@ namespace AbxrLib.Runtime.Authentication
                 float avgBrightness = totalBrightness / actualSampleSize;
                 float nonBlackPercentage = (float)nonBlackCount / actualSampleSize * 100f;
                 
-                // Log detailed test results
-                Debug.Log($"AbxrLib: Camera Validity Test - Texture: {width}x{height}, " +
-                         $"Samples: {actualSampleSize}, Avg brightness: {avgBrightness:F3}, " +
-                         $"Non-black pixels: {nonBlackCount}/{actualSampleSize} ({nonBlackPercentage:F1}%), " +
-                         $"All pixels same: {allSame}");
-                
                 // Consider valid if:
                 // 1. At least 1% of pixels are non-black, OR
                 // 2. Average brightness is above threshold, OR
                 // 3. Pixels are not all the same (indicates variation)
                 bool isValid = nonBlackPercentage > 1f || avgBrightness > threshold || !allSame;
                 
-                if (isValid)
+                // Only log when verbose is true (for major milestones)
+                if (verbose)
                 {
-                    Debug.Log($"AbxrLib: Camera Validity Test PASSED - Camera is producing valid frames");
-                }
-                else
-                {
-                    Debug.LogWarning($"AbxrLib: Camera Validity Test FAILED - Camera appears to be producing black/empty frames");
+                    if (isValid)
+                    {
+                        Debug.Log($"AbxrLib: Camera Validity Test PASSED - Camera is producing valid frames ({width}x{height}, brightness: {avgBrightness:F3})");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"AbxrLib: Camera Validity Test FAILED - Camera appears to be producing black/empty frames ({width}x{height}, brightness: {avgBrightness:F3})");
+                    }
                 }
                 
                 return isValid;
@@ -2942,48 +2668,14 @@ namespace AbxrLib.Runtime.Authentication
                     return null;
                 }
                 
-                // Log pixel statistics on first decode attempt
                 decodeAttemptCount++;
-                if (decodeAttemptCount == 1)
-                {
-                    // Calculate average brightness to verify we have actual image data
-                    float totalBrightness = 0f;
-                    int sampleSize = Mathf.Min(1000, pixels.Length);
-                    for (int i = 0; i < sampleSize; i++)
-                    {
-                        int index = (i * pixels.Length) / sampleSize;
-                        Color32 c = pixels[index];
-                        totalBrightness += (c.r + c.g + c.b) / 3f / 255f;
-                    }
-                    float avgBrightness = totalBrightness / sampleSize;
-                    
-                    // Check if all pixels are the same (likely black/empty)
-                    bool allSame = true;
-                    Color32 firstPixel = pixels[0];
-                    for (int i = 1; i < Mathf.Min(100, pixels.Length); i++)
-                    {
-                        if (!pixels[i].Equals(firstPixel))
-                        {
-                            allSame = false;
-                            break;
-                        }
-                    }
-                    
-                    Debug.Log($"AbxrLib: Decoding attempt #{decodeAttemptCount} - Texture: {texture.width}x{texture.height}, " +
-                             $"Pixels: {pixels.Length}, Avg brightness: {avgBrightness:F3}, All pixels same: {allSame}");
-                }
                 
                 // Decode QR code using ZXing
                 Result result = barcodeReader.Decode(pixels, texture.width, texture.height);
                 
                 if (result != null && !string.IsNullOrEmpty(result.Text))
                 {
-                    Debug.Log($"AbxrLib: QR code decoded successfully: '{result.Text}' (attempt #{decodeAttemptCount})");
                     return result.Text;
-                }
-                else if (decodeAttemptCount % 100 == 0) // Log every 100 attempts
-                {
-                    Debug.Log($"AbxrLib: ZXing decode attempt #{decodeAttemptCount} - No QR code found in frame");
                 }
             }
             catch (System.Exception ex)
@@ -3069,7 +2761,7 @@ namespace AbxrLib.Runtime.Authentication
             // Add FaceCamera component to position it in front of user
             FaceCamera faceCamera = overlayCanvas.AddComponent<FaceCamera>();
             faceCamera.faceCamera = true;
-            faceCamera.distanceFromCamera = 1.2f; // Slightly further away
+            faceCamera.distanceFromCamera = 0.9f; // Closer to camera to appear in front of PIN pad buttons
             faceCamera.verticalOffset = 0.15f; // Slightly above center
             faceCamera.useConfigurationValues = false;
             
@@ -3091,18 +2783,18 @@ namespace AbxrLib.Runtime.Authentication
             RawImage cameraImage = cameraDisplay.AddComponent<RawImage>();
             cameraImage.raycastTarget = false; // Don't block interactions
             
-            // Set texture if available (prefer passthrough, fallback to WebCamTexture)
-            if (passthroughRenderTexture != null)
-            {
-                cameraImage.texture = passthroughRenderTexture;
-                cameraImage.uvRect = new Rect(0, 0, 1, 1);
-                Debug.Log($"AbxrLib: Passthrough texture assigned to overlay: {passthroughRenderTexture.width}x{passthroughRenderTexture.height}");
-            }
-            else if (webCamTexture != null)
+            // Set texture if available (prefer WebCamTexture, fallback to passthrough RenderTexture)
+            if (webCamTexture != null)
             {
                 cameraImage.texture = webCamTexture;
                 cameraImage.uvRect = new Rect(0, 0, 1, 1);
                 Debug.Log($"AbxrLib: WebCamTexture assigned to overlay: {webCamTexture.width}x{webCamTexture.height}, isPlaying: {webCamTexture.isPlaying}");
+            }
+            else if (passthroughRenderTexture != null)
+            {
+                cameraImage.texture = passthroughRenderTexture;
+                cameraImage.uvRect = new Rect(0, 0, 1, 1);
+                Debug.Log($"AbxrLib: Passthrough texture assigned to overlay: {passthroughRenderTexture.width}x{passthroughRenderTexture.height}");
             }
             else
             {
@@ -3117,8 +2809,8 @@ namespace AbxrLib.Runtime.Authentication
             cameraRect.sizeDelta = Vector2.zero;
             cameraRect.anchoredPosition = Vector2.zero;
             
-            // Set sorting order to ensure it's visible
-            canvas.sortingOrder = 100; // High sorting order to ensure visibility
+            // Set sorting order to ensure it's visible in front of PIN pad buttons
+            canvas.sortingOrder = 200; // Very high sorting order to appear in front of PIN pad (which uses default 0)
             
             // Create text label (top portion, over camera feed)
             GameObject label = new GameObject("Label");
@@ -3151,10 +2843,6 @@ namespace AbxrLib.Runtime.Authentication
             labelRect.sizeDelta = Vector2.zero;
             labelRect.anchoredPosition = Vector2.zero;
             
-            Debug.Log($"AbxrLib: Created QR scanning overlay UI for passthrough mode with camera feed. " +
-                     $"Canvas active: {overlayCanvas.activeInHierarchy}, Canvas renderMode: {canvas.renderMode}, " +
-                     $"Canvas sortingOrder: {canvas.sortingOrder}, CameraDisplay RawImage: {cameraImage != null}, " +
-                     $"CameraDisplay texture: {cameraImage.texture != null}");
         }
         
         /// <summary>
