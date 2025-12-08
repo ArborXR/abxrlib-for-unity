@@ -1,0 +1,211 @@
+# AbxrLib for Unity - Meta Quest QR Code Scanner Development Rules
+
+## ⚠️ IMPORTANT: Keep This File Updated
+
+**BEFORE starting any new approach to fix the passthrough camera:**
+1. Read this entire file to understand what has been tried
+2. Check the "What Failed" section - DO NOT repeat those approaches
+3. Review the "Current Status" section to see what's in progress
+
+**AFTER attempting any new approach:**
+1. **IMMEDIATELY update this file** with the results:
+   - If it worked: Add to "What Works" section with details
+   - If it failed: Add to "What Failed" section with:
+     - What was attempted
+     - Why it was tried
+     - What the result was
+     - Why it failed (if known)
+   - Update "Current Status" section with new findings
+2. Include code snippets or file paths if relevant
+3. Note any dependencies, versions, or configuration required
+
+**This file must be a living document** - outdated information wastes time and causes repeated failures.
+
+---
+
+## Meta Quest Passthrough Camera API - Attempted Approaches
+
+This document tracks all attempts to implement QR code scanning using Meta Quest's forward-facing camera. **DO NOT repeat failed approaches.**
+
+### ✅ What Works
+
+1. **Device Detection**
+   - Quest 3 detection via `DeviceModel.deviceModel` - WORKING
+   - Quest 2 exclusion (camera quality insufficient) - WORKING
+   - Delayed device check coroutine handles timing issues - WORKING
+
+2. **Permissions**
+   - `android.permission.CAMERA` - Auto-added to AndroidManifest.xml - WORKING
+   - `horizonos.permission.HEADSET_CAMERA` - Auto-added to AndroidManifest.xml - WORKING
+   - Runtime permission checks - WORKING
+
+3. **OpenXR Configuration**
+   - "Meta Quest: Camera (Passthrough)" feature detection - WORKING
+   - "Meta Quest: Session" feature detection - WORKING
+   - Unity OpenXR Meta package installation detection - WORKING
+   - **OpenXR Feature Validation (2025-12-08)**: Runtime validation of required OpenXR features via reflection
+     - Checks if "Meta Quest: Session" is enabled
+     - Checks if "Meta Quest: Camera (Passthrough)" is enabled
+     - Validates features in `Awake()` and `InitializeCamera()` methods
+     - Uses reflection to access `OpenXRSettings.Instance.GetFeature<T>()` API
+     - Provides clear error messages if features are not enabled
+
+4. **Type Discovery via Reflection**
+   - `MetaOpenXRCameraSubsystem` type found in `Unity.XR.MetaOpenXR` assembly - WORKING
+   - `TryAcquireLatestCpuImage` method exists on subsystem - WORKING
+   - All properties and methods logged for debugging - WORKING
+
+5. **UI Components**
+   - Passthrough-visible overlay UI creation - WORKING
+   - "Scan QR Code" / "Stop Scanning" button toggle - WORKING
+   - World-space Canvas for passthrough visibility - WORKING
+
+### ❌ What Failed (DO NOT RETRY)
+
+1. **WebCamTexture Approach** - FAILED (All variants produce black frames)
+   - **Attempt**: Using `UnityEngine.WebCamTexture` as primary method
+   - **Rationale**: Meta's documentation suggests WebCamTexture routes to Passthrough Camera API on Quest
+   - **Result**: Camera initializes, dimensions are correct (640x480), but all frames are black (0 brightness)
+   - **Variations Tried**:
+     - `GetPixels()` vs `GetPixels32()` - Both black
+     - Explicit FPS parameter (30 FPS) - Still black
+     - RenderTexture intermediate step (`Graphics.Blit`) - Still black
+     - Pre-scan wait loop (up to 5 seconds) checking for non-black frames - Never found valid frames
+     - Camera device selection (front-facing camera found correctly) - Still black
+     - Permission checks (HEADSET_CAMERA granted) - Still black
+   - **Status**: ABANDONED - Do not retry WebCamTexture approach
+
+2. **Native Android Plugin (Camera2 API)** - FAILED (Removed)
+   - **Attempt**: Java plugin using Android Camera2 API to access passthrough camera directly
+   - **Implementation**: `MetaPassthroughCamera.java` with ImageReader callbacks
+   - **Result**: Plugin received frames, but all Y-plane data was zero (black frames)
+   - **Troubleshooting Attempted**:
+     - Multiple camera device enumeration
+     - YUV_420_888 format processing
+     - Capture request configuration (AF/AE modes, FPS ranges)
+     - Frame buffering and thread safety
+   - **Status**: REMOVED - Too complex, no progress, user requested removal
+   - **Files Deleted**: 
+     - `Plugins/Android/com/arborxr/abxrlib/MetaPassthroughCamera.java`
+     - `Runtime/Authentication/MetaPassthroughCameraNative.cs`
+   - **Note**: Do not recreate native plugin approach
+
+3. **Direct Texture Property Access on Camera Subsystem** - FAILED
+   - **Attempt**: Looking for `Texture`, `Texture2D`, or `RenderTexture` properties on `MetaOpenXRCameraSubsystem`
+   - **Result**: No texture properties found on the subsystem
+   - **Status**: XRCameraSubsystem does not expose direct texture properties - Use `TryAcquireLatestCpuImage` instead
+
+4. **XRSubsystemManager Access** - PARTIAL SUCCESS (Found SubsystemManager, but different API)
+   - **Attempt**: Using `UnityEngine.XR.XRSubsystemManager.GetSubsystem<T>()` to get camera subsystem instance
+   - **Result**: `XRSubsystemManager` type not found, but `UnityEngine.SubsystemManager` found in `UnityEngine.SubsystemsModule` assembly
+   - **Finding**: `SubsystemManager` uses different API - `GetSubsystems<T>(List<T>)` instead of `GetSubsystem<T>()`
+   - **Alternative Namespaces Tried**:
+     - `UnityEngine.XR.XRSubsystemManager` - NOT FOUND
+     - `UnityEngine.SubsystemsImplementation.XRSubsystemManager` - NOT FOUND
+     - `UnityEngine.SubsystemsImplementation.SubsystemManager` - NOT FOUND
+     - `Unity.XR.CoreUtils.XRSubsystemManager` - NOT FOUND
+     - `UnityEngine.SubsystemManager` - FOUND (in UnityEngine.SubsystemsModule)
+   - **Status**: Code updated to handle `SubsystemManager.GetSubsystems<T>(List<T>)` - Testing in progress
+
+### 🔄 Current Status / Next Steps
+
+**Current Approach**: Reflection-based access to `MetaOpenXRCameraSubsystem`
+
+**What We Have**:
+- ✅ Subsystem type found: `UnityEngine.XR.OpenXR.Features.Meta.MetaOpenXRCameraSubsystem`
+- ✅ Method exists: `TryAcquireLatestCpuImage(XRCpuImage& cpuImage)` returns `bool`
+- ✅ Subsystem has 19 properties and 44 methods (all logged)
+- ✅ **Subsystem instance retrieved via `SubsystemManager.GetSubsystems<T>(List<T>)`** - WORKING
+- ✅ **Full reflection-based implementation for `TryAcquireLatestCpuImage`** - COMPLETED
+  - Uses reflection to find `XRCpuImage` type from `UnityEngine.XR.ARSubsystems` (AR Foundation not required as dependency)
+  - Uses reflection to call `TryAcquireLatestCpuImage` with out parameter
+  - Uses reflection to access properties (width, height) and methods (Convert, Dispose)
+  - Uses reflection to create and configure `ConversionParams`
+  - Converts `XRCpuImage` to `Texture2D` via `NativeArray<byte>` for ZXing scanning
+
+**What Needs to Be Done**:
+1. ✅ **COMPLETED**: Get `MetaOpenXRCameraSubsystem` instance via `SubsystemManager.GetSubsystems<T>(List<T>)`
+2. ✅ **COMPLETED**: Implement `TryAcquireLatestCpuImage` usage to get `XRCpuImage` frames (via reflection)
+3. ✅ **COMPLETED**: Convert `XRCpuImage` to `Texture2D` for ZXing QR code scanning (via reflection)
+4. ✅ **COMPLETED**: Handle `XRCpuImage` disposal properly (via reflection)
+5. ✅ **COMPLETED**: Fixed `StartScanning()` to allow passthrough when using `TryAcquireLatestCpuImage` (no `passthroughRenderTexture` needed)
+6. ✅ **COMPLETED**: Added subsystem running status check and auto-start functionality
+7. ✅ **COMPLETED**: Added permission check for `permissionGranted` property
+8. **IN PROGRESS**: Verify `TryAcquireLatestCpuImage` actually returns valid frames (not black)
+   - **ISSUE FOUND (2025-12-07)**: `permissionGranted` property is `False` even though HEADSET_CAMERA permission is granted
+   - **ISSUE FOUND (2025-12-07)**: `usingWebCamTexture` flag was not reset when falling back to reflection approach - FIXED
+   - **ISSUE FOUND (2025-12-07)**: `TryAcquireLatestCpuImage` consistently returns `False` because `permissionGranted` is `False`
+   - **ADDED (2025-12-07)**: Detailed debug logging in `StartScanning()` to show subsystem state
+   - **ADDED (2025-12-07)**: Debug logging in scanning loop for `TryAcquireLatestCpuImage` calls (every 30 scans)
+   - **ADDED (2025-12-07)**: Code to set `requestedCamera` property to request camera feature
+   - **ADDED (2025-12-07)**: Comprehensive debugging for `currentCamera` and `requestedCamera` properties
+   - **ADDED (2025-12-07)**: Permission re-check after subsystem starts with detailed error messages
+   - **ADDED (2025-12-08)**: **CRITICAL FINDING FROM DOCUMENTATION**: AR Camera Manager component is REQUIRED
+     - Meta OpenXR Camera documentation states: "To use Passthrough in your scene, you must have an AR Camera Manager component attached to your camera"
+     - Code now automatically checks for and adds AR Camera Manager component via reflection
+     - **REMOVED (2025-12-08)**: Camera background/Clear Flags settings code removed - NOT NEEDED
+       - These settings are only required if rendering passthrough through the scene camera
+       - We're using `TryAcquireLatestCpuImage` to get CPU frames, which is independent of scene camera rendering settings
+       - Scene camera rendering settings don't affect the front-facing camera subsystem
+   - **NEXT**: 
+     - Verify "Meta Quest: Camera (Passthrough)" is enabled in Unity Project Settings > XR Plug-in Management > OpenXR > Features
+     - Verify AR Foundation package is installed (required for AR Camera Manager component)
+     - Test if adding AR Camera Manager component resolves `permissionGranted = false` issue
+     - Check if `requestedCamera` needs to be set to a specific Feature enum value
+
+**Potential Solutions to Try**:
+- Use `SubsystemManager` from `UnityEngine.SubsystemsImplementation` namespace (if available)
+- Check if subsystem can be accessed via `XRCameraSubsystem` base class methods
+- Look for static methods or singleton access patterns in MetaOpenXR assembly
+- Check Unity XR documentation for alternative subsystem access patterns
+
+### 📝 Implementation Notes
+
+**ZXing Integration**:
+- ✅ ZXing.Net source code included in `Runtime/ThirdParty/ZXing/`
+- ✅ `BarcodeReader` with `Color32LuminanceSource` working
+- ✅ QR code filtering (only "ABXR:" prefix) - WORKING
+- ✅ Stub implementations for unsupported barcode types - WORKING
+
+**Code Structure**:
+- Primary method: `InitializeWebCamTexture()` - FAILED (black frames)
+- Fallback method: `InitializePassthroughCamera()` - COMPLETED (subsystem instance retrieved, `TryAcquireLatestCpuImage` implemented via reflection)
+- Scanning loop: `ScanForQRCode()` - IMPLEMENTED (uses `TryAcquireLatestCpuImage` when camera subsystem is available)
+- **FIXED (2025-12-07)**: `StartScanning()` now correctly handles `TryAcquireLatestCpuImage` path (doesn't require `passthroughRenderTexture`)
+- **ADDED (2025-12-07)**: Subsystem running status check and auto-start in `InitializePassthroughCamera()`
+- **ADDED (2025-12-07)**: Permission check for `permissionGranted` property before using subsystem
+- **ADDED (2025-12-08)**: AR Camera Manager component auto-detection and addition (required by Meta documentation)
+- **REMOVED (2025-12-08)**: Camera background/Clear Flags settings code - not needed for CPU image access
+- **ADDED (2025-12-08)**: Camera hierarchy path logging to help identify which camera is being checked
+
+**Key Files**:
+- `Runtime/Authentication/MetaQRCodeReader.cs` - Main implementation
+- `Editor/MetaDefineManager.cs` - Auto-sets `META_QR_AVAILABLE` define
+- `Editor/AndroidManifestPostProcessor.cs` - Auto-adds camera permissions
+- `META_QR_SETUP.md` - User setup guide
+
+### 🚫 Anti-Patterns (What NOT to Do)
+
+1. **DO NOT** try WebCamTexture again - It produces black frames consistently
+2. **DO NOT** create native Android plugins - Too complex, already failed
+3. **DO NOT** look for texture properties on XRCameraSubsystem - They don't exist
+4. **DO NOT** assume XRSubsystemManager is available - It's not found via reflection
+5. **DO NOT** try to access camera via OVR SDK directly - We're using OpenXR, not OVR SDK
+
+### ✅ Best Practices
+
+1. **Always check permissions first** - Both `CAMERA` and `HEADSET_CAMERA`
+2. **AR Camera Manager is REQUIRED** - Meta OpenXR Camera documentation explicitly states AR Camera Manager component must be attached to camera (may be needed to enable the passthrough camera feature)
+3. **Scene camera rendering settings are NOT needed for CPU image access** - Camera background/Clear Flags settings are only needed if rendering passthrough through the scene camera. Since we're using `TryAcquireLatestCpuImage` to get CPU frames from the front-facing camera subsystem, scene camera rendering settings are irrelevant.
+4. **Use reflection for type discovery** - Meta XR packages may vary, and AR Foundation types may not be directly available
+5. **Use reflection for AR Foundation types** - `XRCpuImage` and related types accessed via reflection to avoid AR Foundation package dependency
+6. **Log extensively** - Assembly names, type names, method signatures, reflection operations, camera hierarchy paths
+7. **Handle timing issues** - Use coroutines with delays for initialization
+8. **Test on Quest 3** - Quest 2 is explicitly unsupported
+
+### 📚 References
+
+- Meta Passthrough Camera API: Requires Horizon OS v74+ and Meta XR Core SDK v74+
+- Unity OpenXR Meta package: Provides `Unity.XR.MetaOpenXR` assembly
+- XRCameraSubsystem API: Use `TryAcquireLatestCpuImage` for frame access, not texture properties
+

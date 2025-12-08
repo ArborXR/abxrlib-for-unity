@@ -38,10 +38,22 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private void Start()
         {
 #if PICO_ENTERPRISE_SDK
-            if (PicoQRCodeReader.Instance != null) qrCodeButton.gameObject.SetActive(true);
+            if (PicoQRCodeReader.Instance != null)
+            {
+                qrCodeButton.gameObject.SetActive(true);
+                Debug.Log("AbxrLib: QR Code button enabled for PICO");
+            }
 #endif
 #if META_QR_AVAILABLE
-            if (MetaQRCodeReader.Instance != null) qrCodeButton.gameObject.SetActive(true);
+            if (MetaQRCodeReader.Instance != null)
+            {
+                qrCodeButton.gameObject.SetActive(true);
+                Debug.Log("AbxrLib: QR Code button enabled for Meta");
+            }
+            else
+            {
+                Debug.LogWarning("AbxrLib: MetaQRCodeReader.Instance is null. Button will remain hidden.");
+            }
 #endif
         }
 
@@ -139,9 +151,57 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 {
                     MetaQRCodeReader.Instance.ScanQRCode();
                 }
+                // Update button text immediately after toggling
+                UpdateQRButtonTextImmediate();
             }
 #endif
             inputField.text = "";
+        }
+        
+        /// <summary>
+        /// Coroutine to periodically update QR button text based on scanning state
+        /// </summary>
+        private System.Collections.IEnumerator UpdateQRButtonText()
+        {
+            while (true)
+            {
+                yield return new WaitForSeconds(0.2f); // Check every 0.2 seconds
+                UpdateQRButtonTextImmediate();
+            }
+        }
+        
+        /// <summary>
+        /// Update QR button text based on current scanning state
+        /// </summary>
+        private void UpdateQRButtonTextImmediate()
+        {
+            if (qrCodeButton == null) return;
+            
+            // Find TextMeshProUGUI component in button's children
+            TMPro.TextMeshProUGUI buttonText = qrCodeButton.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+            if (buttonText == null) return;
+            
+            bool isScanning = false;
+            
+#if PICO_ENTERPRISE_SDK
+            // PICO doesn't have IsScanning, so we can't toggle text for it
+#endif
+#if META_QR_AVAILABLE
+            if (MetaQRCodeReader.Instance != null)
+            {
+                isScanning = MetaQRCodeReader.Instance.IsScanning();
+            }
+#endif
+            
+            // Update text based on scanning state
+            if (isScanning)
+            {
+                buttonText.text = "Stop Scanning";
+            }
+            else
+            {
+                buttonText.text = "Scan QR Code";
+            }
         }
 
         private void HandleShift()

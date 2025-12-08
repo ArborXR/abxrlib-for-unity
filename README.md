@@ -64,6 +64,15 @@ Developers can implement their own backend services by following the ABXR protoc
    ```
 4. Once imported, you will see `Analytics for XR` in your Unity toolbar.
 
+### Optional Dependencies
+
+The following packages are optional and only needed for Meta Quest QR code scanning functionality:
+
+- `com.unity.xr.meta-openxr` (2.3.0+)
+- `com.unity.xr.openxr` (1.15.1+)
+
+If you need QR code scanning on Meta Quest 3/3S/Pro devices, install these packages and follow the setup guide in `META_QR_SETUP.md`.
+
 ---
 
 ## Configuration

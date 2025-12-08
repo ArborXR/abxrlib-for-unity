@@ -164,6 +164,9 @@ namespace AbxrLib.Editor
 
             // Add camera permission for Meta Quest QR code reading
             manifestContent = AddCameraPermission(manifestContent);
+            
+            // Add headset camera permission for Meta Quest Passthrough Camera API
+            manifestContent = AddHeadsetCameraPermission(manifestContent);
 
             // Check if version metadata already exists
             if (manifestContent.Contains(MetaDataVersionName))
@@ -224,6 +227,41 @@ namespace AbxrLib.Editor
             }
 
             Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Camera permission not added.");
+            return manifestContent;
+        }
+
+        /// <summary>
+        /// Adds the headset camera permission for Meta Quest Passthrough Camera API.
+        /// </summary>
+        private static string AddHeadsetCameraPermission(string manifestContent)
+        {
+            // Check if headset camera permission already exists
+            if (manifestContent.Contains("horizonos.permission.HEADSET_CAMERA"))
+            {
+                return manifestContent;
+            }
+
+            // Find the <manifest> tag and add permission after it
+            string manifestPattern = @"(<manifest[\s\S]*?>)";
+            Match match = Regex.Match(manifestContent, manifestPattern, RegexOptions.IgnoreCase);
+            
+            if (match.Success)
+            {
+                int insertPosition = match.Index + match.Length;
+                int newlineAfter = manifestContent.IndexOf('\n', insertPosition);
+                if (newlineAfter > 0)
+                {
+                    insertPosition = newlineAfter + 1;
+                }
+                
+                // Add headset camera permission
+                string headsetCameraPermission = "    <uses-permission android:name=\"horizonos.permission.HEADSET_CAMERA\" />\n";
+                manifestContent = manifestContent.Insert(insertPosition, headsetCameraPermission);
+                Debug.Log("AbxrLib: Added horizonos.permission.HEADSET_CAMERA permission to AndroidManifest.xml");
+                return manifestContent;
+            }
+
+            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Headset camera permission not added.");
             return manifestContent;
         }
 
