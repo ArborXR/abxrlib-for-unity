@@ -60,23 +60,25 @@ This document tracks all attempts to implement QR code scanning using Meta Quest
    - "Scan QR Code" / "Stop Scanning" button toggle - WORKING
    - World-space Canvas for passthrough visibility - WORKING
 
-6. **WebCamTexture Implementation (2025-12-08)** - ✅ WORKING
-   - **SUCCESS**: WebCamTexture approach now working after improvements
+6. **WebCamTexture Implementation (2025-12-08)** - ✅ WORKING - **ONLY METHOD**
+   - **SUCCESS**: WebCamTexture approach is the ONLY implementation method (reflection fallback completely removed)
    - **Key Changes That Made It Work**:
      - **Explicit Resolution/FPS**: Using `new WebCamTexture(name, 1920, 1080, 30)` with explicit settings
      - **Extended Testing Period**: 50-attempt wait loop (5 seconds) allows camera to initialize properly
-     - **Camera Selection Strategy**: Tries front-facing camera first, then back-facing as fallback
-     - **Camera Clear Flags**: Setting `CameraClearFlags.SolidColor` with transparent background for passthrough visibility
+     - **Camera Selection Strategy**: Prioritizes "Camera 1" (known working on Quest 3), then front-facing, then name patterns, then first available
+     - **Camera Fallback**: If initial camera produces black frames, automatically tries other available cameras
    - **Important Finding**: Camera takes 5-6 seconds to start producing valid frames after initialization
      - Initial frames are black (0 brightness) for ~5 seconds
      - After initialization period, camera produces valid frames with real color data
      - Test method correctly identifies this transition
    - **Test Results**:
      - Camera validity test: `Avg brightness: 0.388, Non-black pixels: 977/1000 (97.7%)`
-     - QR code successfully decoded: `'ABXR:999999'` after 128 decode attempts
+     - QR code successfully decoded: `'ABXR:999999'` after 23 decode attempts
      - Camera pixel samples show real data: `P0:(93,79,56) P1:(105,92,76)...`
    - **Camera Resolution**: System provides `1280x960` (not the requested 1920x1080, but works fine)
-   - **Status**: PRODUCTION READY - WebCamTexture is the primary working method
+   - **No Scene Modifications**: Code does NOT modify scene camera settings (no clear flags, no background color changes)
+   - **No AR Foundation Required**: WebCamTexture works without AR Foundation package
+   - **Status**: PRODUCTION READY - WebCamTexture is the ONLY method, all fallback code removed
 
 ### ❌ What Failed (DO NOT RETRY)
 
@@ -108,74 +110,49 @@ This document tracks all attempts to implement QR code scanning using Meta Quest
      - `Runtime/Authentication/MetaPassthroughCameraNative.cs`
    - **Note**: Do not recreate native plugin approach
 
-3. **Direct Texture Property Access on Camera Subsystem** - FAILED
+3. **Reflection-Based Passthrough Camera API (TryAcquireLatestCpuImage)** - REMOVED (2025-12-08)
+   - **Attempt**: Using reflection to access `MetaOpenXRCameraSubsystem` and `TryAcquireLatestCpuImage` method
+   - **Result**: Complex implementation that was never successfully used - WebCamTexture works reliably
+   - **Status**: COMPLETELY REMOVED - All reflection-based fallback code deleted (~1,200+ lines)
+   - **Reason for Removal**: WebCamTexture works perfectly, no need for complex fallback
+   - **Note**: Do not recreate reflection-based approach - WebCamTexture is sufficient
+
+4. **Direct Texture Property Access on Camera Subsystem** - FAILED (Removed)
    - **Attempt**: Looking for `Texture`, `Texture2D`, or `RenderTexture` properties on `MetaOpenXRCameraSubsystem`
    - **Result**: No texture properties found on the subsystem
-   - **Status**: XRCameraSubsystem does not expose direct texture properties - Use `TryAcquireLatestCpuImage` instead
+   - **Status**: REMOVED - Not needed since WebCamTexture works
 
-4. **XRSubsystemManager Access** - PARTIAL SUCCESS (Found SubsystemManager, but different API)
+5. **XRSubsystemManager Access** - REMOVED (2025-12-08)
    - **Attempt**: Using `UnityEngine.XR.XRSubsystemManager.GetSubsystem<T>()` to get camera subsystem instance
-   - **Result**: `XRSubsystemManager` type not found, but `UnityEngine.SubsystemManager` found in `UnityEngine.SubsystemsModule` assembly
-   - **Finding**: `SubsystemManager` uses different API - `GetSubsystems<T>(List<T>)` instead of `GetSubsystem<T>()`
-   - **Alternative Namespaces Tried**:
-     - `UnityEngine.XR.XRSubsystemManager` - NOT FOUND
-     - `UnityEngine.SubsystemsImplementation.XRSubsystemManager` - NOT FOUND
-     - `UnityEngine.SubsystemsImplementation.SubsystemManager` - NOT FOUND
-     - `Unity.XR.CoreUtils.XRSubsystemManager` - NOT FOUND
-     - `UnityEngine.SubsystemManager` - FOUND (in UnityEngine.SubsystemsModule)
-   - **Status**: Code updated to handle `SubsystemManager.GetSubsystems<T>(List<T>)` - Testing in progress
+   - **Result**: Complex reflection code that was never successfully used
+   - **Status**: COMPLETELY REMOVED - Not needed since WebCamTexture works
 
-### 🔄 Current Status / Next Steps
+### 🔄 Current Status
 
-**Current Approach**: Reflection-based access to `MetaOpenXRCameraSubsystem`
+**Current Approach**: WebCamTexture ONLY (all fallback code removed)
 
 **What We Have**:
-- ✅ Subsystem type found: `UnityEngine.XR.OpenXR.Features.Meta.MetaOpenXRCameraSubsystem`
-- ✅ Method exists: `TryAcquireLatestCpuImage(XRCpuImage& cpuImage)` returns `bool`
-- ✅ Subsystem has 19 properties and 44 methods (all logged)
-- ✅ **Subsystem instance retrieved via `SubsystemManager.GetSubsystems<T>(List<T>)`** - WORKING
-- ✅ **Full reflection-based implementation for `TryAcquireLatestCpuImage`** - COMPLETED
-  - Uses reflection to find `XRCpuImage` type from `UnityEngine.XR.ARSubsystems` (AR Foundation not required as dependency)
-  - Uses reflection to call `TryAcquireLatestCpuImage` with out parameter
-  - Uses reflection to access properties (width, height) and methods (Convert, Dispose)
-  - Uses reflection to create and configure `ConversionParams`
-  - Converts `XRCpuImage` to `Texture2D` via `NativeArray<byte>` for ZXing scanning
+- ✅ **WebCamTexture implementation** - PRODUCTION READY
+  - Explicit resolution/FPS settings (1920x1080, 30 FPS)
+  - Extended testing period (50 attempts, 5 seconds) to wait for valid frames
+  - Camera prioritization: "Camera 1" → front-facing → name patterns → first available
+  - Automatic fallback to other cameras if initial choice produces black frames
+  - Camera validity testing via `TestCameraValidity()` method
+- ✅ **OpenXR Feature Validation** - Runtime checks for required features
+- ✅ **Permissions** - Auto-added to AndroidManifest, runtime checks
+- ✅ **UI Overlay** - World-space Canvas for passthrough visibility
+- ✅ **No Scene Modifications** - Does not modify developer's camera settings
 
-**What Needs to Be Done**:
-1. ✅ **COMPLETED**: Get `MetaOpenXRCameraSubsystem` instance via `SubsystemManager.GetSubsystems<T>(List<T>)`
-2. ✅ **COMPLETED**: Implement `TryAcquireLatestCpuImage` usage to get `XRCpuImage` frames (via reflection)
-3. ✅ **COMPLETED**: Convert `XRCpuImage` to `Texture2D` for ZXing QR code scanning (via reflection)
-4. ✅ **COMPLETED**: Handle `XRCpuImage` disposal properly (via reflection)
-5. ✅ **COMPLETED**: Fixed `StartScanning()` to allow passthrough when using `TryAcquireLatestCpuImage` (no `passthroughRenderTexture` needed)
-6. ✅ **COMPLETED**: Added subsystem running status check and auto-start functionality
-7. ✅ **COMPLETED**: Added permission check for `permissionGranted` property
-8. **IN PROGRESS**: Verify `TryAcquireLatestCpuImage` actually returns valid frames (not black)
-   - **ISSUE FOUND (2025-12-07)**: `permissionGranted` property is `False` even though HEADSET_CAMERA permission is granted
-   - **ISSUE FOUND (2025-12-07)**: `usingWebCamTexture` flag was not reset when falling back to reflection approach - FIXED
-   - **ISSUE FOUND (2025-12-07)**: `TryAcquireLatestCpuImage` consistently returns `False` because `permissionGranted` is `False`
-   - **ADDED (2025-12-07)**: Detailed debug logging in `StartScanning()` to show subsystem state
-   - **ADDED (2025-12-07)**: Debug logging in scanning loop for `TryAcquireLatestCpuImage` calls (every 30 scans)
-   - **ADDED (2025-12-07)**: Code to set `requestedCamera` property to request camera feature
-   - **ADDED (2025-12-07)**: Comprehensive debugging for `currentCamera` and `requestedCamera` properties
-   - **ADDED (2025-12-07)**: Permission re-check after subsystem starts with detailed error messages
-   - **ADDED (2025-12-08)**: **CRITICAL FINDING FROM DOCUMENTATION**: AR Camera Manager component is REQUIRED
-     - Meta OpenXR Camera documentation states: "To use Passthrough in your scene, you must have an AR Camera Manager component attached to your camera"
-     - Code now automatically checks for and adds AR Camera Manager component via reflection
-     - **REMOVED (2025-12-08)**: Camera background/Clear Flags settings code removed - NOT NEEDED
-       - These settings are only required if rendering passthrough through the scene camera
-       - We're using `TryAcquireLatestCpuImage` to get CPU frames, which is independent of scene camera rendering settings
-       - Scene camera rendering settings don't affect the front-facing camera subsystem
-   - **NEXT**: 
-     - Verify "Meta Quest: Camera (Passthrough)" is enabled in Unity Project Settings > XR Plug-in Management > OpenXR > Features
-     - Verify AR Foundation package is installed (required for AR Camera Manager component)
-     - Test if adding AR Camera Manager component resolves `permissionGranted = false` issue
-     - Check if `requestedCamera` needs to be set to a specific Feature enum value
+**What Was Removed (2025-12-08)**:
+- ❌ All reflection-based passthrough camera code (~1,200+ lines)
+- ❌ `InitializeOVRTypes()` method (~300 lines)
+- ❌ `TryAcquireLatestCpuImage` implementation (~190 lines)
+- ❌ AR Camera Manager component code (~100 lines)
+- ❌ Camera clear flags modification code (caused black background issue)
+- ❌ All passthrough texture handling code
+- ❌ All unused variables: `ovrPassthroughLayer`, `cameraSubsystem`, `passthroughRenderTexture`, `usingWebCamTexture`, etc.
 
-**Potential Solutions to Try**:
-- Use `SubsystemManager` from `UnityEngine.SubsystemsImplementation` namespace (if available)
-- Check if subsystem can be accessed via `XRCameraSubsystem` base class methods
-- Look for static methods or singleton access patterns in MetaOpenXR assembly
-- Check Unity XR documentation for alternative subsystem access patterns
+**Status**: ✅ PRODUCTION READY - Simple, clean WebCamTexture-only implementation
 
 ### 📝 Implementation Notes
 
@@ -186,15 +163,15 @@ This document tracks all attempts to implement QR code scanning using Meta Quest
 - ✅ Stub implementations for unsupported barcode types - WORKING
 
 **Code Structure**:
-- Primary method: `InitializeWebCamTexture()` - ✅ WORKING (after improvements - explicit resolution/FPS, extended testing, camera selection strategy)
-- Fallback method: `InitializePassthroughCamera()` - COMPLETED (subsystem instance retrieved, `TryAcquireLatestCpuImage` implemented via reflection)
-- Scanning loop: `ScanForQRCode()` - IMPLEMENTED (uses WebCamTexture when available, falls back to `TryAcquireLatestCpuImage` when camera subsystem is available)
-- **FIXED (2025-12-07)**: `StartScanning()` now correctly handles `TryAcquireLatestCpuImage` path (doesn't require `passthroughRenderTexture`)
-- **ADDED (2025-12-07)**: Subsystem running status check and auto-start in `InitializePassthroughCamera()`
-- **ADDED (2025-12-07)**: Permission check for `permissionGranted` property before using subsystem
-- **ADDED (2025-12-08)**: AR Camera Manager component auto-detection and addition (required by Meta documentation)
-- **REMOVED (2025-12-08)**: Camera background/Clear Flags settings code - not needed for CPU image access
-- **ADDED (2025-12-08)**: Camera hierarchy path logging to help identify which camera is being checked
+- **ONLY method**: `InitializeWebCamTexture()` - ✅ WORKING
+  - Explicit resolution/FPS settings (1920x1080, 30 FPS)
+  - Extended testing period (50 attempts, 5 seconds)
+  - Camera prioritization: "Camera 1" → front-facing → name patterns → first available
+  - Automatic fallback to other cameras if initial choice produces black frames
+- Scanning loop: `ScanForQRCode()` - Uses WebCamTexture only
+- **REMOVED (2025-12-08)**: All reflection-based fallback code completely removed
+- **REMOVED (2025-12-08)**: Camera clear flags modification code (was causing black background issue)
+- **REMOVED (2025-12-08)**: AR Camera Manager code (not needed for WebCamTexture)
 
 **Key Files**:
 - `Runtime/Authentication/MetaQRCodeReader.cs` - Main implementation
@@ -206,24 +183,25 @@ This document tracks all attempts to implement QR code scanning using Meta Quest
 
 1. **DO NOT** try WebCamTexture without proper initialization wait time - Camera needs 5-6 seconds to start producing valid frames
 2. **DO NOT** create native Android plugins - Too complex, already failed
-3. **DO NOT** look for texture properties on XRCameraSubsystem - They don't exist
-4. **DO NOT** assume XRSubsystemManager is available - It's not found via reflection
-5. **DO NOT** try to access camera via OVR SDK directly - We're using OpenXR, not OVR SDK
+3. **DO NOT** modify scene camera settings - Do not change `Camera.clearFlags` or `Camera.backgroundColor` (causes black background issue)
+4. **DO NOT** recreate reflection-based fallback code - WebCamTexture works reliably, no fallback needed
+5. **DO NOT** require AR Foundation - WebCamTexture works without it
+6. **DO NOT** try to access camera via OVR SDK directly - We're using OpenXR, not OVR SDK
 
 ### ✅ Best Practices
 
 1. **Always check permissions first** - Both `CAMERA` and `HEADSET_CAMERA`
-2. **AR Camera Manager is REQUIRED** - Meta OpenXR Camera documentation explicitly states AR Camera Manager component must be attached to camera (may be needed to enable the passthrough camera feature)
-3. **Scene camera rendering settings are NOT needed for CPU image access** - Camera background/Clear Flags settings are only needed if rendering passthrough through the scene camera. Since we're using `TryAcquireLatestCpuImage` to get CPU frames from the front-facing camera subsystem, scene camera rendering settings are irrelevant.
-4. **Use reflection for type discovery** - Meta XR packages may vary, and AR Foundation types may not be directly available
-5. **Use reflection for AR Foundation types** - `XRCpuImage` and related types accessed via reflection to avoid AR Foundation package dependency
-6. **Log extensively** - Assembly names, type names, method signatures, reflection operations, camera hierarchy paths
-7. **Handle timing issues** - Use coroutines with delays for initialization
-8. **Test on Quest 3** - Quest 2 is explicitly unsupported
+2. **Never modify scene camera settings** - WebCamTexture is displayed in a UI overlay, independent of scene rendering
+3. **Wait for camera initialization** - Use extended testing period (50 attempts, 5 seconds) to allow camera to start producing valid frames
+4. **Prioritize known working cameras** - Try "Camera 1" first (known to work on Quest 3)
+5. **Test camera validity** - Use `TestCameraValidity()` method to verify non-black frames before using camera
+6. **Handle timing issues** - Use coroutines with delays for initialization
+7. **Test on Quest 3** - Quest 2 is explicitly unsupported
+8. **Keep it simple** - WebCamTexture is sufficient, no need for complex reflection-based approaches
 
 ### 📚 References
 
 - Meta Passthrough Camera API: Requires Horizon OS v74+ and Meta XR Core SDK v74+
-- Unity OpenXR Meta package: Provides `Unity.XR.MetaOpenXR` assembly
-- XRCameraSubsystem API: Use `TryAcquireLatestCpuImage` for frame access, not texture properties
+- Unity OpenXR Meta package: Provides OpenXR features (optional dependency - not in package.json to avoid Pico conflicts)
+- WebCamTexture: Routes to Meta's Passthrough Camera API on Quest when OpenXR features are enabled
 
