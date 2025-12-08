@@ -123,11 +123,11 @@ namespace AbxrLib.Runtime.Authentication
             if (Instance == null)
             {
                 Instance = this;
-                Debug.Log("AbxrLib: MetaQRCodeReader.Instance set successfully.");
+                Debug.Log("AbxrLib: MetaQRCodeReader Instance activated successfully.");
             }
             else
             {
-                Debug.LogWarning("AbxrLib: MetaQRCodeReader.Instance already exists. Destroying duplicate.");
+                Debug.LogWarning("AbxrLib: MetaQRCodeReader Instance already exists. Destroying duplicate.");
                 Destroy(gameObject);
             }
         }
@@ -174,7 +174,7 @@ namespace AbxrLib.Runtime.Authentication
             {
                 if (IsDeviceSupported())
                 {
-                    Debug.Log($"AbxrLib: Device '{DeviceModel.deviceModel}' is  detected as supported. Initializing...");
+                    Debug.Log($"AbxrLib: Device '{DeviceModel.deviceModel}' is detected as supported. Initializing...");
                     
                     // Initialize ZXing if not already done
                     if (barcodeReader == null)
@@ -792,32 +792,6 @@ namespace AbxrLib.Runtime.Authentication
                 
                 cameraInitialized = true;
                 
-                // Configure camera clear flags for passthrough visibility (based on working implementation)
-                if (gotValidFrame && webCamTexture != null)
-                {
-                    try
-                    {
-                        Camera mainCamera = Camera.main;
-                        if (mainCamera == null)
-                        {
-                            Camera[] allCameras = FindObjectsOfType<Camera>();
-                            if (allCameras.Length > 0) mainCamera = allCameras[0];
-                        }
-                        
-                        if (mainCamera != null)
-                        {
-                            // Set clear flags for passthrough visibility (may help with WebCamTexture approach)
-                            mainCamera.clearFlags = CameraClearFlags.SolidColor;
-                            mainCamera.backgroundColor = new Color(0, 0, 0, 0); // Transparent background
-                            Debug.Log("AbxrLib: Configured camera clear flags for passthrough visibility (SolidColor with transparent background)");
-                        }
-                    }
-                    catch (System.Exception ex)
-                    {
-                        Debug.LogWarning($"AbxrLib: Could not configure camera clear flags: {ex.Message}");
-                    }
-                }
-                
                 isInitializing = false; // Initialization complete
                 isScanning = true; // Now actually scanning
                 StartScanning();
@@ -1311,7 +1285,7 @@ namespace AbxrLib.Runtime.Authentication
             {
                 cameraImage.texture = webCamTexture;
                 cameraImage.uvRect = new Rect(0, 0, 1, 1);
-                Debug.Log($"AbxrLib: WebCamTexture assigned to overlay: {webCamTexture.width}x{webCamTexture.height}, isPlaying: {webCamTexture.isPlaying}");
+                //Debug.Log($"AbxrLib: WebCamTexture assigned to overlay: {webCamTexture.width}x{webCamTexture.height}, isPlaying: {webCamTexture.isPlaying}");
             }
             else
             {
