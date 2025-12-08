@@ -1949,7 +1949,8 @@ namespace AbxrLib.Runtime.Authentication
                 Debug.Log($"AbxrLib:   Camera {i}: '{devices[i].name}' (isFrontFacing: {devices[i].isFrontFacing})");
             }
             
-            // First, try to find a camera marked as front-facing
+            // Try multiple camera selection strategies based on what worked for other developers
+            // Strategy 1: Try front-facing camera first (for passthrough)
             foreach (WebCamDevice device in devices)
             {
                 if (device.isFrontFacing)
@@ -1960,7 +1961,21 @@ namespace AbxrLib.Runtime.Authentication
                 }
             }
             
-            // If no front-facing camera found, look by name
+            // Strategy 2: If no front-facing, try back-facing (some developers reported this works)
+            if (!frontCamera.HasValue)
+            {
+                foreach (WebCamDevice device in devices)
+                {
+                    if (!device.isFrontFacing)
+                    {
+                        frontCamera = device;
+                        Debug.Log($"AbxrLib: Found back-facing camera (trying as fallback): '{device.name}'");
+                        break;
+                    }
+                }
+            }
+            
+            // Strategy 3: Look by name patterns
             if (!frontCamera.HasValue)
             {
                 foreach (WebCamDevice device in devices)
@@ -1976,7 +1991,7 @@ namespace AbxrLib.Runtime.Authentication
                 }
             }
             
-            // If still no camera found, use the first available camera
+            // Strategy 4: Use first available camera as last resort
             if (!frontCamera.HasValue && devices.Length > 0)
             {
                 frontCamera = devices[0];
@@ -1989,8 +2004,15 @@ namespace AbxrLib.Runtime.Authentication
                 yield break;
             }
             
-            // Create WebCamTexture - let system decide optimal settings
-            webCamTexture = new WebCamTexture(frontCamera.Value.name);
+            // Create WebCamTexture with explicit resolution and FPS (based on working implementation)
+            // Try higher resolution first (1920x1080), fallback to system default if that fails
+            int requestedWidth = 1920;
+            int requestedHeight = 1080;
+            int requestedFPS = 30;
+            
+            Debug.Log($"AbxrLib: Creating WebCamTexture with explicit settings: {requestedWidth}x{requestedHeight} @ {requestedFPS} FPS");
+            webCamTexture = new WebCamTexture(frontCamera.Value.name, requestedWidth, requestedHeight, requestedFPS);
+            webCamTexture.requestedFPS = requestedFPS; // Explicitly set FPS
             webCamTexture.Play();
             
             Debug.Log($"AbxrLib: Starting WebCamTexture: '{frontCamera.Value.name}', isFrontFacing: {frontCamera.Value.isFrontFacing}");
@@ -2046,16 +2068,102 @@ namespace AbxrLib.Runtime.Authentication
                 
                 if (!gotValidFrame)
                 {
-                    Debug.LogWarning($"AbxrLib: WebCamTexture did not produce valid frames after {waitForFrames * 0.1f} seconds. Camera may not be accessible or may need additional permissions.");
-                    Debug.LogWarning("AbxrLib: TROUBLESHOOTING:");
-                    Debug.LogWarning("AbxrLib: 1. Check Quest Settings > Privacy > Camera Access - ensure app has permission");
-                    Debug.LogWarning("AbxrLib: 2. Enable 'Meta Quest Camera Passthrough' in OpenXR Package Settings");
-                    Debug.LogWarning("AbxrLib: 3. Verify HEADSET_CAMERA permission is in AndroidManifest.xml (should be auto-added)");
-                    Debug.LogWarning("AbxrLib: 4. On Quest 3+, WebCamTexture should route to Passthrough Camera API if properly configured");
+                    Debug.LogWarning($"AbxrLib: Front-facing camera did not produce valid frames. Trying back-facing camera as fallback (some developers reported this works)...");
+                    
+                    // Try back-facing camera as fallback (based on working implementation)
+                    WebCamDevice? backCamera = null;
+                    foreach (WebCamDevice device in devices)
+                    {
+                        if (!device.isFrontFacing && device.name != frontCamera.Value.name)
+                        {
+                            backCamera = device;
+                            Debug.Log($"AbxrLib: Found back-facing camera to try: '{device.name}'");
+                            break;
+                        }
+                    }
+                    
+                    if (backCamera.HasValue)
+                    {
+                        // Stop and destroy current camera
+                        if (webCamTexture != null)
+                        {
+                            webCamTexture.Stop();
+                            Destroy(webCamTexture);
+                            webCamTexture = null;
+                        }
+                        
+                        // Try back-facing camera with same settings
+                        Debug.Log($"AbxrLib: Attempting back-facing camera: '{backCamera.Value.name}'");
+                        webCamTexture = new WebCamTexture(backCamera.Value.name, requestedWidth, requestedHeight, requestedFPS);
+                        webCamTexture.requestedFPS = requestedFPS;
+                        webCamTexture.Play();
+                        
+                        // Wait for dimensions
+                        waitCount = 0;
+                        while (waitCount < 30 && (webCamTexture.width <= 0 || webCamTexture.height <= 0))
+                        {
+                            yield return new WaitForSeconds(0.1f);
+                            waitCount++;
+                        }
+                        
+                        if (webCamTexture.width > 0 && webCamTexture.height > 0)
+                        {
+                            // Test back-facing camera
+                            Debug.Log("AbxrLib: [TEST PHASE] Testing back-facing camera validity...");
+                            gotValidFrame = TestCameraValidity(webCamTexture, sampleSize: 1000, threshold: 0.01f);
+                            
+                            if (gotValidFrame)
+                            {
+                                Debug.Log($"AbxrLib: Back-facing camera is producing valid frames! Using: '{backCamera.Value.name}'");
+                                frontCamera = backCamera; // Update reference
+                            }
+                            else
+                            {
+                                Debug.LogWarning("AbxrLib: Back-facing camera also produces black frames.");
+                            }
+                        }
+                    }
+                    
+                    if (!gotValidFrame)
+                    {
+                        Debug.LogWarning($"AbxrLib: WebCamTexture did not produce valid frames after trying both front and back cameras. Camera may not be accessible or may need additional permissions.");
+                        Debug.LogWarning("AbxrLib: TROUBLESHOOTING:");
+                        Debug.LogWarning("AbxrLib: 1. Check Quest Settings > Privacy > Camera Access - ensure app has permission");
+                        Debug.LogWarning("AbxrLib: 2. Enable 'Meta Quest Camera Passthrough' in OpenXR Package Settings");
+                        Debug.LogWarning("AbxrLib: 3. Verify HEADSET_CAMERA permission is in AndroidManifest.xml (should be auto-added)");
+                        Debug.LogWarning("AbxrLib: 4. On Quest 3+, WebCamTexture should route to Passthrough Camera API if properly configured");
+                    }
                 }
                 
                 cameraInitialized = true;
                 Debug.Log($"AbxrLib: WebCamTexture initialized: {frontCamera.Value.name}, size: {webCamTexture.width}x{webCamTexture.height}, isPlaying: {webCamTexture.isPlaying}, gotValidFrame: {gotValidFrame}");
+                
+                // Configure camera clear flags for passthrough visibility (based on working implementation)
+                if (gotValidFrame && webCamTexture != null)
+                {
+                    try
+                    {
+                        Camera mainCamera = Camera.main;
+                        if (mainCamera == null)
+                        {
+                            Camera[] allCameras = FindObjectsOfType<Camera>();
+                            if (allCameras.Length > 0) mainCamera = allCameras[0];
+                        }
+                        
+                        if (mainCamera != null)
+                        {
+                            // Set clear flags for passthrough visibility (may help with WebCamTexture approach)
+                            mainCamera.clearFlags = CameraClearFlags.SolidColor;
+                            mainCamera.backgroundColor = new Color(0, 0, 0, 0); // Transparent background
+                            Debug.Log("AbxrLib: Configured camera clear flags for passthrough visibility (SolidColor with transparent background)");
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Debug.LogWarning($"AbxrLib: Could not configure camera clear flags: {ex.Message}");
+                    }
+                }
+                
                 StartScanning();
             }
             else
