@@ -72,15 +72,25 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (qrCodeButton == null) return;
             
-#if PICO_ENTERPRISE_SDK
+#if PICO_ENTERPRISE_SDK_3
+            // Only enable QR button if PICO Enterprise SDK 3+ is available and instance exists
             if (PicoQRCodeReader.Instance != null)
             {
                 bool shouldShow = true;
                 if (lastQRButtonState != shouldShow)
                 {
                     qrCodeButton.gameObject.SetActive(shouldShow);
-                    Debug.Log("AbxrLib: QR Code button enabled for PICO");
+                    Debug.Log("AbxrLib: QR Code button enabled for PICO (SDK 3+)");
                     lastQRButtonState = shouldShow;
+                }
+            }
+            else
+            {
+                // Instance not available - hide button
+                if (lastQRButtonState != false)
+                {
+                    qrCodeButton.gameObject.SetActive(false);
+                    lastQRButtonState = false;
                 }
             }
 #endif
@@ -192,11 +202,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         
         private void QRCode()
         {
-
-// #if PICO_ENTERPRISE_SDK_3
-//             if (PicoQRCodeReader.Instance != null) qrCodeButton.gameObject.SetActive(true);
-// #endif
-#if PICO_ENTERPRISE_SDK
+#if PICO_ENTERPRISE_SDK_3
             // Toggle: if already scanning, cancel; otherwise start scanning
             if (PicoQRCodeReader.Instance != null)
             {
@@ -250,7 +256,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             bool isInitializing = false;
             bool permissionsDenied = false;
             
-#if PICO_ENTERPRISE_SDK
+#if PICO_ENTERPRISE_SDK_3
             // PICO doesn't have IsScanning, so we can't toggle text for it
 #endif
 #if META_QR_AVAILABLE
