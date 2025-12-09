@@ -173,7 +173,7 @@ namespace AbxrLib.Runtime.Authentication
             {
                 if (IsDeviceSupported())
                 {
-                    Debug.Log($"AbxrLib: Device '{DeviceModel.deviceModel}' is detected as supported. Initializing...");
+                    Debug.Log($"AbxrLib: Device '{DeviceModel.deviceModel}' is QR Code Reader supported. Initializing...");
                     
                     // Initialize ZXing if not already done
                     if (barcodeReader == null)
@@ -193,7 +193,7 @@ namespace AbxrLib.Runtime.Authentication
                     if (Instance == null)
                     {
                         Instance = this;
-                        Debug.Log("AbxrLib: MetaQRCodeReader.Instance set successfully after delayed check.");
+                        //Debug.Log("AbxrLib: MetaQRCodeReader.Instance set successfully after delayed check.");
                     }
                     
                     // Request camera permissions proactively when device is supported
