@@ -84,25 +84,24 @@ namespace AbxrLib.Runtime.Authentication
         
         private void Awake()
         {
-            Debug.Log($"AbxrLib: MetaQRCodeReader.Awake() called. Device model: '{DeviceModel.deviceModel}'");
+            //Debug.Log($"AbxrLib: MetaQRCodeReader.Awake() called. Device model: '{DeviceModel.deviceModel}'");
             
             // Check if device is supported
-            if (!IsDeviceSupported())
+            // Only check if device model is already available (may be empty at startup)
+            if (!string.IsNullOrEmpty(DeviceModel.deviceModel))
             {
-                Debug.LogWarning($"AbxrLib: Disabling QR Code Scanner. Device '{DeviceModel.deviceModel}' is not supported for QR code reading.");
-                return;
+                if (!IsDeviceSupported())
+                {
+                    Debug.LogWarning($"AbxrLib: Disabling QR Code Scanner. Device '{DeviceModel.deviceModel}' is not supported for QR code reading.");
+                    return;
+                }
+                
+                Debug.Log($"AbxrLib: Device '{DeviceModel.deviceModel}' is supported for QR code reading.");
             }
-            
-            Debug.Log($"AbxrLib: Device '{DeviceModel.deviceModel}' is supported for QR code reading.");
-            
-            // Check OpenXR features are enabled
-            if (!CheckOpenXRFeatures())
+            else
             {
-                Debug.LogError("AbxrLib: Required OpenXR features are not enabled. QR code scanning will not work.");
-                Debug.LogError("AbxrLib: Please enable the following in Project Settings > XR Plug-in Management > OpenXR > OpenXR Feature Groups:");
-                Debug.LogError("AbxrLib:   - Meta Quest Support");
-                Debug.LogError("AbxrLib:   - Meta Quest: Camera (Passthrough)");
-                Debug.LogError("AbxrLib:   - Meta Quest: Session");
+                // Device model not available yet - will be checked in DelayedDeviceCheck()
+                // Don't log a warning, this is expected at startup
                 return;
             }
             
@@ -137,7 +136,7 @@ namespace AbxrLib.Runtime.Authentication
             // Always run delayed check if Instance wasn't set in Awake
             if (Instance == null)
             {
-                Debug.Log("AbxrLib: MetaQRCodeReader Instance not set in Awake. Starting delayed device check...");
+                //Debug.Log("AbxrLib: MetaQRCodeReader Instance not set in Awake. Starting delayed device check...");
                 StartCoroutine(DelayedDeviceCheck());
             }
         }
@@ -196,6 +195,17 @@ namespace AbxrLib.Runtime.Authentication
                         Instance = this;
                         Debug.Log("AbxrLib: MetaQRCodeReader.Instance set successfully after delayed check.");
                     }
+                    
+                    // Request camera permissions proactively when device is supported
+#if UNITY_ANDROID && !UNITY_EDITOR
+                    if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
+                    {
+                        //Debug.Log("AbxrLib: Requesting CAMERA permission...");
+                        UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Camera);
+                        // Wait a moment for permission dialog to appear
+                        yield return new WaitForSeconds(0.5f);
+                    }
+#endif
                 }
                 else
                 {
@@ -520,13 +530,16 @@ namespace AbxrLib.Runtime.Authentication
             // Check if device is supported
             if (!IsDeviceSupported())
             {
+                Debug.LogWarning("AbxrLib: QR scanning not available - device not supported");
                 return false;
             }
             
             // Check camera permissions
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
+            bool cameraPermissionGranted = UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera);
+            if (!cameraPermissionGranted)
             {
+                Debug.LogWarning("AbxrLib: QR scanning not available - CAMERA permission not granted");
                 return false;
             }
             
@@ -544,18 +557,67 @@ namespace AbxrLib.Runtime.Authentication
                     // 0 = PERMISSION_GRANTED, -1 = PERMISSION_DENIED
                     if (permissionCheck != 0)
                     {
+                        Debug.LogWarning($"AbxrLib: QR scanning not available - HEADSET_CAMERA permission check failed");
+                        Debug.LogWarning("AbxrLib: To enable HEADSET_CAMERA permission:");
+                        Debug.LogWarning("AbxrLib: 1. Open Quest Settings > Privacy & Safety > App Permissions > Headset Cameras");
+                        Debug.LogWarning("AbxrLib: 2. Find your app and enable camera access");
+                        Debug.LogWarning("AbxrLib: 3. The 'Scan QR Code' button will appear automatically once enabled");
                         return false;
                     }
                 }
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
                 // If we can't check the permission, assume it's not available
+                Debug.LogWarning($"AbxrLib: QR scanning not available - HEADSET_CAMERA permission check failed");
                 return false;
             }
 #endif
             
             return true;
+        }
+        
+        /// <summary>
+        /// Open the app's settings page where users can enable HEADSET_CAMERA permission
+        /// </summary>
+        public void OpenAppSettings()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
+                    string packageName = currentActivity.Call<string>("getPackageName");
+                    
+                    // Create intent to open app settings
+                    using (AndroidJavaClass intentClass = new AndroidJavaClass("android.content.Intent"))
+                    using (AndroidJavaClass uriClass = new AndroidJavaClass("android.net.Uri"))
+                    {
+                        // Create URI for app-specific settings
+                        AndroidJavaObject uri = uriClass.CallStatic<AndroidJavaObject>("parse", "package:" + packageName);
+                        
+                        // Create intent with ACTION_APPLICATION_DETAILS_SETTINGS
+                        AndroidJavaObject intent = new AndroidJavaObject("android.content.Intent", "android.settings.APPLICATION_DETAILS_SETTINGS", uri);
+                        
+                        // Add FLAG_ACTIVITY_NEW_TASK flag
+                        int flagNewTask = 0x10000000; // FLAG_ACTIVITY_NEW_TASK
+                        intent.Call<AndroidJavaObject>("addFlags", flagNewTask);
+                        
+                        // Start the activity
+                        currentActivity.Call("startActivity", intent);
+                        Debug.Log("AbxrLib: Opened app settings. Please enable 'Headset Cameras' permission and return to the app.");
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Failed to open app settings: {ex.Message}");
+                Debug.LogWarning("AbxrLib: Please manually open Quest Settings > Privacy & Safety > App Permissions > Headset Cameras");
+            }
+#else
+            Debug.LogWarning("AbxrLib: OpenAppSettings() is only available on Android devices.");
+#endif
         }
         
         /// <summary>
