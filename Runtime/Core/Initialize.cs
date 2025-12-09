@@ -4,7 +4,7 @@ using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Events;
 using AbxrLib.Runtime.Logs;
 using AbxrLib.Runtime.ServiceClient;
-using AbxrLib.Runtime.ServiceClient.MJPKotlinExample;
+using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
 using AbxrLib.Runtime.UI.ExitPoll;
@@ -36,7 +36,7 @@ namespace AbxrLib.Runtime.Core
 #if UNITY_ANDROID && !UNITY_EDITOR
             Debug.Log("[Initialize] Running on Android device - creating service clients");
             ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
-            ObjectAttacher.Attach<MJPKotlinServiceExampleClient>("MJPKotlinServiceExampleClient");
+            ObjectAttacher.Attach<AbxrInsightServiceClient>("AbxrInsightServiceClient");
 #endif
             ObjectAttacher.Attach<Authentication.Authentication>("Authentication");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");

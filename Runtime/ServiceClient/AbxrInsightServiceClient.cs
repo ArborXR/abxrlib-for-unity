@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 using Unity.XR.CoreUtils;
 using UnityEngine;
 
-namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
+namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 {
 #if true
-	public static class MjpKotlinServiceExampleServiceBridge
+	public static class AbxrInsightServiceBridge
 	{
 		private const string		PackageName = "aar.xrdi.abxrinsightservice.unity.UnityAbxrInsightServiceClient";
 		//private const string		PackageName = "aar.xrdi.abxrinsightservice";
@@ -25,15 +25,15 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		{
 			//using var clientClass = new AndroidJavaClass(PackageName);
 
-			Debug.Log($"[MJPKotlinServiceExampleClient] MjpKotlinServiceExampleServiceBridge.Init() gonna call on {PackageName}");
+			Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceBridge.Init() gonna call on {PackageName}");
 			try
 			{
 				_client = new AndroidJavaObject(PackageName, Activity);
-				Debug.Log($"[MJPKotlinServiceExampleClient] MjpKotlinServiceExampleServiceBridge.Init() succeeded using PackageName {PackageName}");
+				Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceBridge.Init() succeeded using PackageName {PackageName}");
 			}
 			catch (Exception e)
 			{
-				Debug.Log($"[MJPKotlinServiceExampleClient] MjpKotlinServiceExampleServiceBridge.Init() failed using PackageName {PackageName} exception message {e.Message}");
+				Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceBridge.Init() failed using PackageName {PackageName} exception message {e.Message}");
 			}
 		}
 		/// <summary>
@@ -229,32 +229,32 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 	///   Only a single instance of this class should be used per app. The SDK is automatically initialized and shut
 	///   down whenever the instance of this class is enabled/disabled (respectively).
 	/// </remarks>
-	public class MJPKotlinServiceExampleClient : MonoBehaviour
+	public class AbxrInsightServiceClient : MonoBehaviour
 	{
 		//private const string				PackageName = "aar.xrdi.abxrinsightservice";
 		//private AndroidJavaObject			_mjpsdk = null;
 		//private MJPNativeConnectionCallback	_nativeCallback = null;
 
 		// Constructor logging
-		public MJPKotlinServiceExampleClient()
+		public AbxrInsightServiceClient()
 		{
-			Debug.Log("[MJPKotlinServiceExampleClient] Constructor called - MJPKotlinServiceExampleClient instance created");
+			Debug.Log("[AbxrInsightServiceClient] Constructor called - AbxrInsightServiceClient instance created");
 		}
 		public static string WhatTimeIsIt()
 		{
-			return MjpKotlinServiceExampleServiceBridge.WhatTimeIsIt();
+			return AbxrInsightServiceBridge.WhatTimeIsIt();
 		}
 		public static bool IsServiceAvailable()
 		{
-			return MjpKotlinServiceExampleServiceBridge.IsServiceAvailable();
+			return AbxrInsightServiceBridge.IsServiceAvailable();
 		}
 		public static bool ServiceIsFullyInitialized()
 		{
-			return MjpKotlinServiceExampleServiceBridge.ServiceIsFullyInitialized();
+			return AbxrInsightServiceBridge.ServiceIsFullyInitialized();
 		}
 		private void Awake()
 		{
-			Debug.Log($"[MJPKotlinServiceExampleClient] Awake() called on GameObject: {gameObject.name}");
+			Debug.Log($"[AbxrInsightServiceClient] Awake() called on GameObject: {gameObject.name}");
 		}
 		private void Start()
 		{
@@ -262,23 +262,23 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 
 			try
 			{
-				Debug.Log($"[MJPKotlinServiceExampleClient] Start() called on GameObject: {gameObject.name}");
-				MjpKotlinServiceExampleServiceBridge.Init();
-				Debug.Log($"[MJPKotlinServiceExampleClient] about to call MjpKotlinServiceExampleServiceBridge.Bind() on GameObject: {gameObject.name}");
-				bOk = MjpKotlinServiceExampleServiceBridge.Bind();
-				Debug.Log($"[MJPKotlinServiceExampleClient] Bind() result: {bOk}");
+				Debug.Log($"[AbxrInsightServiceClient] Start() called on GameObject: {gameObject.name}");
+				AbxrInsightServiceBridge.Init();
+				Debug.Log($"[AbxrInsightServiceClient] about to call AbxrInsightServiceBridge.Bind() on GameObject: {gameObject.name}");
+				bOk = AbxrInsightServiceBridge.Bind();
+				Debug.Log($"[AbxrInsightServiceClient] Bind() result: {bOk}");
 				// ---
 				//_nativeCallback = new MJPNativeConnectionCallback();
 				// ---
 			}
 			catch (Exception e)
 			{
-				Debug.Log($"[MJPKotlinServiceExampleClient] Bind() blew: {e.Message}");
+				Debug.Log($"[AbxrInsightServiceClient] Bind() blew: {e.Message}");
 			}
 		}
 		private void OnDestroy()
 		{
-			MjpKotlinServiceExampleServiceBridge.Unbind();
+			AbxrInsightServiceBridge.Unbind();
 		}
 	}
 
@@ -300,7 +300,7 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 	///   Only a single instance of this class should be used per app. The SDK is automatically initialized and shut
 	///   down whenever the instance of this class is enabled/disabled (respectively).
 	/// </remarks>
-	public class MJPKotlinServiceExampleClient : MonoBehaviour
+	public class AbxrInsightServiceClient : MonoBehaviour
 	{
 		private const string PackageName = "aar.xrdi.abxrinsightservice";
 		private AndroidJavaObject?				_mjpsdk;
@@ -308,19 +308,19 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		public static MjpSdkServiceWrapper?		MjpServiceWrapper;
 
 		// Constructor logging
-		public MJPKotlinServiceExampleClient()
+		public AbxrInsightServiceClient()
 		{
-			Debug.Log("[MJPKotlinServiceExampleClient] Constructor called - MJPKotlinServiceExampleClient instance created");
+			Debug.Log("[AbxrInsightServiceClient] Constructor called - AbxrInsightServiceClient instance created");
 		}
 
 		private void Awake()
 		{
-			Debug.Log($"[MJPKotlinServiceExampleClient] Awake() called on GameObject: {gameObject.name}");
+			Debug.Log($"[AbxrInsightServiceClient] Awake() called on GameObject: {gameObject.name}");
 		}
 
 		private void Start()
 		{
-			Debug.Log($"[MJPKotlinServiceExampleClient] Start() called on GameObject: {gameObject.name}");
+			Debug.Log($"[AbxrInsightServiceClient] Start() called on GameObject: {gameObject.name}");
 		}
 
 		// Whenever we delay via Task.Delay, there is no guarantee that our current thread would be already attached to Android JNI,
@@ -343,43 +343,43 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 		public static bool IsConnected() 
 		{
 			bool isConnected = MjpServiceWrapper != null;
-			Debug.Log($"[MJPKotlinServiceExampleClient] IsConnected() = {isConnected}");
+			Debug.Log($"[AbxrInsightServiceClient] IsConnected() = {isConnected}");
 			return isConnected;
 		}
 
-		public static MJPKotlinServiceExampleClient? FindInstance()
+		public static AbxrInsightServiceClient? FindInstance()
 		{
-			var instance = FindObjectOfType<MJPKotlinServiceExampleClient>();
-			Debug.Log($"[MJPKotlinServiceExampleClient] FindInstance() - found instance: {(instance != null ? "YES" : "NO")}");
+			var instance = FindObjectOfType<AbxrInsightServiceClient>();
+			Debug.Log($"[AbxrInsightServiceClient] FindInstance() - found instance: {(instance != null ? "YES" : "NO")}");
 			if (instance != null)
 			{
-				Debug.Log($"[MJPKotlinServiceExampleClient] Instance found on GameObject: {instance.gameObject.name}, enabled: {instance.enabled}");
+				Debug.Log($"[AbxrInsightServiceClient] Instance found on GameObject: {instance.gameObject.name}, enabled: {instance.enabled}");
 			}
 			return instance;
 		}
 
 		private void Connect()
 		{
-			Debug.Log("[MJPKotlinServiceExampleClient] Attempting to connect to service");
+			Debug.Log("[AbxrInsightServiceClient] Attempting to connect to service");
 			try
 			{
 				using var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 				using var currentActivity = unityPlayerClass.GetStatic<AndroidJavaObject>("currentActivity");
 				_nativeCallback = new MJPNativeConnectionCallback(this);
-				Debug.Log("[MJPKotlinServiceExampleClient] Calling Sdk.connect() method");
+				Debug.Log("[AbxrInsightServiceClient] Calling Sdk.connect() method");
 				Sdk.Call("connect", currentActivity, _nativeCallback);
-				Debug.Log("[MJPKotlinServiceExampleClient] Sdk.connect() method called successfully");
+				Debug.Log("[AbxrInsightServiceClient] Sdk.connect() method called successfully");
 			}
 			catch (Exception ex)
 			{
-				Debug.LogError($"[MJPKotlinServiceExampleClient] Error in Connect(): {ex.Message}");
-				Debug.LogError($"[MJPKotlinServiceExampleClient] Stack trace: {ex.StackTrace}");
+				Debug.LogError($"[AbxrInsightServiceClient] Error in Connect(): {ex.Message}");
+				Debug.LogError($"[AbxrInsightServiceClient] Stack trace: {ex.StackTrace}");
 			}
 		}
 
 		protected void OnDisable()
 		{
-			Debug.Log("[MJPKotlinServiceExampleClient] OnDisable() called - cleaning up");
+			Debug.Log("[AbxrInsightServiceClient] OnDisable() called - cleaning up");
 			_mjpsdk?.Dispose();
 			_mjpsdk = null;
 			MjpServiceWrapper = null;
@@ -387,21 +387,21 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 
 		protected void OnEnable()
 		{
-			Debug.Log($"[MJPKotlinServiceExampleClient] OnEnable() called - attempting to create SDK for package: {PackageName}");
+			Debug.Log($"[AbxrInsightServiceClient] OnEnable() called - attempting to create SDK for package: {PackageName}");
 			try
 			{
 				// Instantiates our `Sdk.java`.
-				//Debug.Log($"[MJPKotlinServiceExampleClient] about to attempt to create {PackageName}.Sdk");
+				//Debug.Log($"[AbxrInsightServiceClient] about to attempt to create {PackageName}.Sdk");
 				//_mjpsdk = new AndroidJavaObject($"{PackageName}.Sdk");
-				Debug.Log($"[MJPKotlinServiceExampleClient] about to attempt to create {PackageName}.NewService");
+				Debug.Log($"[AbxrInsightServiceClient] about to attempt to create {PackageName}.NewService");
 				_mjpsdk = new AndroidJavaObject($"{PackageName}.NewService");
-				Debug.Log("[MJPKotlinServiceExampleClient] SDK object created successfully");
+				Debug.Log("[AbxrInsightServiceClient] SDK object created successfully");
 				Connect();
 			}
 			catch (Exception ex)
 			{
-				Debug.LogError($"[MJPKotlinServiceExampleClient] Error in OnEnable(): {ex.Message}");
-				Debug.LogError($"[MJPKotlinServiceExampleClient] Stack trace: {ex.StackTrace}");
+				Debug.LogError($"[AbxrInsightServiceClient] Error in OnEnable(): {ex.Message}");
+				Debug.LogError($"[AbxrInsightServiceClient] Stack trace: {ex.StackTrace}");
 			}
 		}
 
@@ -417,17 +417,17 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 			public void StopPlayback() => _native.CallResult<string>("stopPlayback");
 			public string WhatTimeIsIt() 
 			{
-				Debug.Log("[MJPKotlinServiceExampleClient] WhatTimeIsIt() called");
+				Debug.Log("[AbxrInsightServiceClient] WhatTimeIsIt() called");
 				try
 				{
 					var result = _native.CallResult<string>("whatTimeIsIt");
-					Debug.Log($"[MJPKotlinServiceExampleClient] WhatTimeIsIt() returned: {result}");
+					Debug.Log($"[AbxrInsightServiceClient] WhatTimeIsIt() returned: {result}");
 					return result;
 				}
 				catch (Exception ex)
 				{
-					Debug.LogError($"[MJPKotlinServiceExampleClient] Error in WhatTimeIsIt(): {ex.Message}");
-					Debug.LogError($"[MJPKotlinServiceExampleClient] Stack trace: {ex.StackTrace}");
+					Debug.LogError($"[AbxrInsightServiceClient] Error in WhatTimeIsIt(): {ex.Message}");
+					Debug.LogError($"[AbxrInsightServiceClient] Stack trace: {ex.StackTrace}");
 					return "";
 				}
 			}
@@ -441,7 +441,7 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 
 		private async Task NotifyWhenInitializedAsync(AndroidJavaObject? nativeObj)
 		{
-			Debug.Log("[MJPKotlinServiceExampleClient] NotifyWhenInitializedAsync started");
+			Debug.Log("[AbxrInsightServiceClient] NotifyWhenInitializedAsync started");
 			// If the application gets loaded before the XRDM client, the XRDM client may not have time to be initialized.
 			// To avoid this timing issue, we should wait until XRDM client is initialized to fire the event of OnConnected.
 			var delay = 500;
@@ -453,39 +453,39 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 			// nativeObj shouldn't be null, and if it is null, something really bad must have happened already.
 			if (nativeObj == null)
 			{
-				Debug.LogError("[MJPKotlinServiceExampleClient] nativeObj is null in NotifyWhenInitializedAsync!");
+				Debug.LogError("[AbxrInsightServiceClient] nativeObj is null in NotifyWhenInitializedAsync!");
 				return;
 			}
 			var serviceWrapper = new MjpSdkServiceWrapper(nativeObj);
-			Debug.Log("[MJPKotlinServiceExampleClient] Service wrapper created, checking initialization...");
+			Debug.Log("[AbxrInsightServiceClient] Service wrapper created, checking initialization...");
 #pragma warning restore CS8604 // Possible null reference argument.
 #pragma warning restore CA2000 // Dispose objects before losing scope
 			try
 			{
 				for (var attempt = 0; attempt < maximumAttempts; attempt++)
 				{
-					Debug.Log($"[MJPKotlinServiceExampleClient] Initialization attempt {attempt + 1}/{maximumAttempts}");
+					Debug.Log($"[AbxrInsightServiceClient] Initialization attempt {attempt + 1}/{maximumAttempts}");
 					if (serviceWrapper.GetIsInitialized())
 					{
-						Debug.Log("[MJPKotlinServiceExampleClient] Service is initialized! Setting MjpServiceWrapper.");
+						Debug.Log("[AbxrInsightServiceClient] Service is initialized! Setting MjpServiceWrapper.");
 						MjpServiceWrapper = serviceWrapper;
 						return;
 					}
-					Debug.Log($"[MJPKotlinServiceExampleClient] Service not yet initialized, waiting {delay}ms...");
+					Debug.Log($"[AbxrInsightServiceClient] Service not yet initialized, waiting {delay}ms...");
 					await DelayAndReattachThreadToJNI(delay);
 					_ = AndroidJNI.AttachCurrentThread();
 					delay = (int)Math.Floor(delay * delayMultiplier);
 				}
-				Debug.LogWarning("[MJPKotlinServiceExampleClient] Maximum initialization attempts reached, service may not be ready");
+				Debug.LogWarning("[AbxrInsightServiceClient] Maximum initialization attempts reached, service may not be ready");
 #pragma warning disable CA1031
 			}
 			catch (Exception ex)
 			{
-				Debug.LogError($"[MJPKotlinServiceExampleClient] Exception in NotifyWhenInitializedAsync: {ex.Message}");
-				Debug.LogError($"[MJPKotlinServiceExampleClient] Stack trace: {ex.StackTrace}");
+				Debug.LogError($"[AbxrInsightServiceClient] Exception in NotifyWhenInitializedAsync: {ex.Message}");
+				Debug.LogError($"[AbxrInsightServiceClient] Stack trace: {ex.StackTrace}");
 				await DelayAndReattachThreadToJNI(delay);
 				_ = AndroidJNI.AttachCurrentThread();
-				Debug.Log("[MJPKotlinServiceExampleClient] Setting MjpServiceWrapper despite exception (fallback)");
+				Debug.Log("[AbxrInsightServiceClient] Setting MjpServiceWrapper despite exception (fallback)");
 				MjpServiceWrapper = serviceWrapper;
 			}
 #pragma warning restore CA1031
@@ -493,9 +493,9 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 
 		private sealed class MJPNativeConnectionCallback : AndroidJavaProxy
 		{
-			private readonly MJPKotlinServiceExampleClient _sdkBehavior;
+			private readonly AbxrInsightServiceClient _sdkBehavior;
 
-			public MJPNativeConnectionCallback(MJPKotlinServiceExampleClient sdkBehavior) : base(PackageName + ".IConnectionCallback")
+			public MJPNativeConnectionCallback(AbxrInsightServiceClient sdkBehavior) : base(PackageName + ".IConnectionCallback")
 			{
 				_sdkBehavior = sdkBehavior;
 			}
@@ -504,10 +504,10 @@ namespace AbxrLib.Runtime.ServiceClient.MJPKotlinExample
 			// https://github.com/Unity-Technologies/UnityCsReference/blob/61f92bd79ae862c4465d35270f9d1d57befd1761/Modules/AndroidJNI/AndroidJava.cs#L124-L139
 			public override AndroidJavaObject? Invoke(string methodName, AndroidJavaObject[] javaArgs)
 			{
-				Debug.Log($"[MJPKotlinServiceExampleClient] Connection callback invoked: {methodName}");
+				Debug.Log($"[AbxrInsightServiceClient] Connection callback invoked: {methodName}");
 				if (methodName == "onConnected")
 				{
-					Debug.Log("[MJPKotlinServiceExampleClient] onConnected callback triggered - starting initialization");
+					Debug.Log("[AbxrInsightServiceClient] onConnected callback triggered - starting initialization");
 					_ = _sdkBehavior.NotifyWhenInitializedAsync(javaArgs[0]);
 					// `onConnected` is a `void` method.
 					return null;

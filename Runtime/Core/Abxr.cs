@@ -9,7 +9,7 @@ using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Events;
 using AbxrLib.Runtime.Logs;
 using AbxrLib.Runtime.ServiceClient;
-using AbxrLib.Runtime.ServiceClient.MJPKotlinExample;
+using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
 using AbxrLib.Runtime.UI.ExitPoll;
@@ -1132,18 +1132,18 @@ public static class Abxr
 	/// <returns>The current time as a string, or empty string if service is not connected.</returns>
 	public static string WhatTimeIsIt()
 	{
-		Debug.Log("[Abxr][MJPKotlinServiceExampleClient] WhatTimeIsIt() called");
+		Debug.Log("[Abxr][AbxrInsightServiceClient] WhatTimeIsIt() called");
 		
 		//// First check if there's even an instance of the service client in the scene
-		//var instance = MJPKotlinServiceExampleClient.FindInstance();
+		//var instance = AbxrInsightServiceClient.FindInstance();
 		//if (instance == null)
 		//{
-		//	Debug.LogWarning("[Abxr] No MJPKotlinServiceExampleClient instance found in scene! You need to add it to a GameObject.");
+		//	Debug.LogWarning("[Abxr] No AbxrInsightServiceClient instance found in scene! You need to add it to a GameObject.");
 		//	return "";
 		//}
 		
-		//bool isConnected = MJPKotlinServiceExampleClient.IsConnected();
-		//Debug.Log($"[Abxr] MJPKotlinServiceExampleClient.IsConnected() = {isConnected}");
+		//bool isConnected = AbxrInsightServiceClient.IsConnected();
+		//Debug.Log($"[Abxr] AbxrInsightServiceClient.IsConnected() = {isConnected}");
 		
 		//if (!isConnected)
 		//{
@@ -1151,7 +1151,7 @@ public static class Abxr
 		//	return "";
 		//}
 		
-		//if (MJPKotlinServiceExampleClient.IsInitialized())
+		//if (AbxrInsightServiceClient.IsInitialized())
 		//{
 		//	Debug.LogWarning("[Abxr] IsConnected() returned true but MjpServiceWrapper is null!");
 		//	return "";
@@ -1159,21 +1159,21 @@ public static class Abxr
 		
 		try
 		{
-			Debug.Log("[Abxr][MJPKotlinServiceExampleClient] Calling MjpServiceWrapper.WhatTimeIsIt()");
-			string result = MJPKotlinServiceExampleClient.WhatTimeIsIt();
-			Debug.Log($"[Abxr][MJPKotlinServiceExampleClient] WhatTimeIsIt() result: '{result}'");
+			Debug.Log("[Abxr][AbxrInsightServiceClient] Calling MjpServiceWrapper.WhatTimeIsIt()");
+			string result = AbxrInsightServiceClient.WhatTimeIsIt();
+			Debug.Log($"[Abxr][AbxrInsightServiceClient] WhatTimeIsIt() result: '{result}'");
 			return result;
 		}
 		catch (Exception ex)
 		{
-			Debug.LogError($"[Abxr][MJPKotlinServiceExampleClient] Error in WhatTimeIsIt(): {ex.Message}");
-			Debug.LogError($"[Abxr][MJPKotlinServiceExampleClient] Stack trace: {ex.StackTrace}");
+			Debug.LogError($"[Abxr][AbxrInsightServiceClient] Error in WhatTimeIsIt(): {ex.Message}");
+			Debug.LogError($"[Abxr][AbxrInsightServiceClient] Stack trace: {ex.StackTrace}");
 			return "";
 		}
 	}
 	public static bool IsServiceAvailable()
 	{
-		return MJPKotlinServiceExampleClient.IsServiceAvailable();
+		return AbxrInsightServiceClient.IsServiceAvailable();
 		//return ArborServiceClient.IsConnected();	// VS2022 AI suggested this... might be a better way to go in the final version.
 	}
 	/// <summary>
@@ -1182,7 +1182,7 @@ public static class Abxr
 	/// <returns></returns>
 	public static bool ServiceIsFullyInitialized()
 	{
-		return MJPKotlinServiceExampleClient.ServiceIsFullyInitialized();
+		return AbxrInsightServiceClient.ServiceIsFullyInitialized();
 	}
 
 	#region Module Target and User Data Methods
