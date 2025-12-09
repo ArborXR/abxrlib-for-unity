@@ -513,18 +513,12 @@ namespace AbxrLib.Runtime.Authentication
         }
         
         /// <summary>
-        /// Check if QR code scanning is available (device supported, features enabled, permissions granted)
+        /// Check if QR code scanning is available (device supported, permissions granted)
         /// </summary>
         public bool IsQRScanningAvailable()
         {
             // Check if device is supported
             if (!IsDeviceSupported())
-            {
-                return false;
-            }
-            
-            // Check if OpenXR features are enabled (silent check - only logs errors)
-            if (!CheckOpenXRFeatures(verbose: false))
             {
                 return false;
             }
