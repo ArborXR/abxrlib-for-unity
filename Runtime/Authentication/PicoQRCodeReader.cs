@@ -11,7 +11,7 @@
  *
  * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
  */
-#if PICO_ENTERPRISE_SDK
+#if PICO_ENTERPRISE_SDK_3
 using System.Text.RegularExpressions;
 using UnityEngine;
 using Unity.XR.PICO.TOBSupport;
@@ -32,14 +32,6 @@ namespace AbxrLib.Runtime.Authentication
             if (!productName.Contains("enterprise"))
             {
                 Debug.LogWarning("AbxrLib: Disabling QR Code Scanner. Must be run on PICO 4 [Ultra] Enterprise");
-                return;
-            }
-            
-            var sdkVersion = new System.Version(Unity.XR.PXR.PXR_System.GetSDKVersion());
-            var requiredSdkVersion = new System.Version("3.0.0");
-            if (sdkVersion < requiredSdkVersion)
-            {
-                Debug.LogWarning($"AbxrLib: Disabling QR Code Scanner. Must have PICO SDK {requiredSdkVersion}+ installed");
                 return;
             }
             

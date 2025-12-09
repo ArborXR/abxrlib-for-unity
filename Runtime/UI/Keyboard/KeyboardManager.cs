@@ -192,6 +192,10 @@ namespace AbxrLib.Runtime.UI.Keyboard
         
         private void QRCode()
         {
+
+// #if PICO_ENTERPRISE_SDK_3
+//             if (PicoQRCodeReader.Instance != null) qrCodeButton.gameObject.SetActive(true);
+// #endif
 #if PICO_ENTERPRISE_SDK
             // Toggle: if already scanning, cancel; otherwise start scanning
             if (PicoQRCodeReader.Instance != null)
