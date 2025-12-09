@@ -56,6 +56,9 @@ namespace AbxrLib.Runtime.Authentication
         {
             if (string.IsNullOrEmpty(scanResult)) return;
             
+            // Set inputSource to "QRlms" for QR code authentication, even if invalid
+            Authentication.SetInputSource("QRlms");
+            
             // Extract PIN from QR code format "ABXR:123456"
             Match match = Regex.Match(scanResult, @"(?<=ABXR:)\d+");
             if (match.Success)

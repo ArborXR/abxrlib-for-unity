@@ -97,6 +97,12 @@ namespace AbxrLib.Runtime.Authentication
             // Clear stored auth value
             _enteredAuthValue = null;
             
+            // Reset input source in authMechanism
+            if (_authMechanism != null)
+            {
+                _authMechanism.inputSource = "user";
+            }
+            
             // Reset failed authentication attempts counter
             _failedAuthAttempts = 0;
             
@@ -186,6 +192,67 @@ namespace AbxrLib.Runtime.Authentication
             _authHandoffCompleted = false;
         
             CoroutineRunner.Instance.StartCoroutine(Authenticate());
+        }
+
+        /// <summary>
+        /// Update user data (UserId and UserData) and reauthenticate to sync with server
+        /// Updates the authentication response with new user information without clearing authentication state
+        /// The server API allows reauthenticate to update these values
+        /// </summary>
+        /// <param name="userId">Optional user ID to update</param>
+        /// <param name="additionalUserData">Optional additional user data dictionary to merge with existing UserData</param>
+        public static void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null)
+        {
+            // Update _responseData with new values before reauthenticating
+            if (_responseData == null)
+            {
+                Debug.LogWarning("AbxrLib: Cannot set user data - not authenticated. Call Authenticate() first.");
+                return;
+            }
+
+            // Update UserId if provided
+            if (!string.IsNullOrEmpty(userId))
+            {
+                _responseData.UserId = userId;
+            }
+
+            // Merge additionalUserData into existing UserData
+            if (additionalUserData != null && additionalUserData.Count > 0)
+            {
+                _responseData.UserData ??= new Dictionary<string, string>();
+                foreach (var kvp in additionalUserData)
+                {
+                    _responseData.UserData[kvp.Key] = kvp.Value;
+                }
+            }
+
+            // Reauthenticate to sync with server (without clearing authentication state)
+            CoroutineRunner.Instance.StartCoroutine(ReAuthenticateWithUserData(userId, additionalUserData));
+        }
+
+        private static IEnumerator ReAuthenticateWithUserData(string userId, Dictionary<string, string> additionalUserData)
+        {
+            // Reset auth handoff state (but don't clear authentication state)
+            _authHandoffCompleted = false;
+            
+            // Call AuthRequest with user data parameters
+            yield return AuthRequest(true, userId, additionalUserData);
+            
+            // Note: AuthRequest will update _responseData with server response
+            // The server should return the updated UserId and UserData
+        }
+
+        /// <summary>
+        /// Set the input source for authentication (e.g., "user", "QRlms")
+        /// This indicates how the authentication value was provided
+        /// </summary>
+        /// <param name="inputSource">The input source value (defaults to "user" if not set)</param>
+        public static void SetInputSource(string inputSource)
+        {
+            if (_authMechanism != null)
+            {
+                _authMechanism.inputSource = inputSource;
+            }
         }
 
         private static IEnumerator PollForReAuth()
@@ -297,6 +364,12 @@ namespace AbxrLib.Runtime.Authentication
         {
             _keyboardAuthSuccess = false;
             
+            // Ensure inputSource is set in authMechanism (defaults to "user" if not set)
+            if (_authMechanism != null && string.IsNullOrEmpty(_authMechanism.inputSource))
+            {
+                _authMechanism.inputSource = "user";
+            }
+            
             if (keyboardInput != null)
             {
                 string originalPrompt = _authMechanism?.prompt;
@@ -347,6 +420,11 @@ namespace AbxrLib.Runtime.Authentication
             prompt += _authMechanism.prompt;
             Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
             _failedAuthAttempts++;
+            // Reset input source when showing keyboard (user will input manually)
+            if (_authMechanism != null)
+            {
+                _authMechanism.inputSource = "user";
+            }
         }
 
         private static void SetSessionData()
@@ -369,7 +447,7 @@ namespace AbxrLib.Runtime.Authentication
             //TODO Geolocation
         }
 
-        private static IEnumerator AuthRequest(bool withRetry = true)
+        private static IEnumerator AuthRequest(bool withRetry = true, string userId = null, Dictionary<string, string> additionalUserData = null)
         {
             if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
@@ -379,6 +457,7 @@ namespace AbxrLib.Runtime.Authentication
                 orgId = _orgId,
                 authSecret = _authSecret,
                 deviceId = _deviceId,
+                userId = userId, // Include userId in payload if provided
                 tags = _deviceTags,
                 sessionId = _sessionId,
                 partner = _partner.ToString().ToLower(),
@@ -391,7 +470,7 @@ namespace AbxrLib.Runtime.Authentication
                 unityVersion = Application.unityVersion,
                 abxrLibType = "unity",
                 abxrLibVersion = AbxrLibVersion.Version,
-                authMechanism = CreateAuthMechanismDict()
+                authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
             };
         
             string json = JsonConvert.SerializeObject(data);
@@ -461,7 +540,7 @@ namespace AbxrLib.Runtime.Authentication
                         if (!string.IsNullOrEmpty(_enteredAuthValue))
                         {
                             // Initialize UserData if it's null
-                            _responseData.UserData ??= new Dictionary<string, object>();
+                            _responseData.UserData ??= new Dictionary<string, string>();
                             
                             // Determine the key name based on auth type
                             string keyName = _authMechanism?.type == "email" ? "email" : "text";
@@ -573,6 +652,11 @@ namespace AbxrLib.Runtime.Authentication
                         {
                             SetConfigFromPayload(config);
                             _authMechanism = config.authMechanism;
+                            // Ensure inputSource is initialized to "user" if not set
+                            if (_authMechanism != null && string.IsNullOrEmpty(_authMechanism.inputSource))
+                            {
+                                _authMechanism.inputSource = "user";
+                            }
                         }
                     }
                 }
@@ -615,14 +699,36 @@ namespace AbxrLib.Runtime.Authentication
             request.SetRequestHeader("x-abxrlib-hash", Utils.ComputeSha256Hash(hashString));
         }
 
-        private static Dictionary<string, string> CreateAuthMechanismDict()
+        private static Dictionary<string, string> CreateAuthMechanismDict(string userId = null, Dictionary<string, string> additionalUserData = null)
         {
             var dict = new Dictionary<string, string>();
+            if (_authMechanism == null && string.IsNullOrEmpty(userId)) return dict;
+
+            if (_authMechanism == null && !string.IsNullOrEmpty(userId))
+            {
+                dict["type"] = "custom";
+                dict["prompt"] = userId;
+                if (additionalUserData != null)
+                {
+                    foreach (var item in additionalUserData)
+                    {
+                        if (item.Key != "type" && item.Key != "prompt")
+                        {
+                            dict[item.Key] = item.Value;
+                        }
+                    }
+                }
+
+                // For custom auth, use "user" as default inputSource if not provided
+                dict["inputSource"] = "user";
+                return dict;
+            }
+
             if (_authMechanism == null) return dict;
-        
             if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
             if (!string.IsNullOrEmpty(_authMechanism.prompt)) dict["prompt"] = _authMechanism.prompt;
             if (!string.IsNullOrEmpty(_authMechanism.domain)) dict["domain"] = _authMechanism.domain;
+            if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
             return dict;
         }
     
@@ -762,7 +868,8 @@ namespace AbxrLib.Runtime.Authentication
             public string type;
             public string prompt;
             public string domain;
-        
+            public string inputSource = "user";
+
             [Preserve]
             public AuthMechanism() {}
         }
@@ -795,6 +902,7 @@ namespace AbxrLib.Runtime.Authentication
             public string orgId;
             public string authSecret;
             public string deviceId;
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public string userId;
             public string[] tags;
             public string sessionId;
@@ -816,7 +924,7 @@ namespace AbxrLib.Runtime.Authentication
         {
             public string Token;
             public string Secret;
-            public Dictionary<string, object> UserData;
+            public Dictionary<string, string> UserData;
             public object UserId;
             public string AppId;
             public string PackageName;
