@@ -93,7 +93,7 @@ If `HEADSET_CAMERA` permission is denied:
 1. Build and deploy to Quest 3/3S/Pro
 2. Launch the app
 3. **Grant camera permissions** (if not already granted):
-   - Quest Settings > Privacy > Camera Access > Your App > Enable
+   - Settings > Privacy & Safety > App Permissions > Headset Cameras > Your App > Enable
 4. Open the PIN pad
 5. **Verify the "Scan QR Code" button is visible** (if not, see troubleshooting section)
 6. Click "Scan QR Code" button
