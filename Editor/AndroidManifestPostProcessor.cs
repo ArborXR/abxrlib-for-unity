@@ -39,6 +39,8 @@ namespace AbxrLib.Editor
             
             return FallbackVersion;
         }
+        
+        public int callbackOrder => 1;
 
         /// <summary>
         /// Gets the app_id from Configuration, or returns null if not found.
@@ -99,8 +101,6 @@ namespace AbxrLib.Editor
         /// This is the correct place to modify the AndroidManifest.xml for Gradle builds.
         /// </summary>
         /// <param name="path">Path to the generated Gradle project</param>
-        public int callbackOrder => 1;
-
         public void OnPostGenerateGradleAndroidProject(string path)
         {
             ProcessManifest(path);
@@ -230,7 +230,13 @@ namespace AbxrLib.Editor
             // Remove old enabled flag if it exists (from previous versions)
             string enabledFlagPattern = @"<meta-data\s+android:name=""com\.arborxr\.abxrlib\.enabled""\s+android:value=""[^""]*""\s*/>\s*";
             manifestContent = Regex.Replace(manifestContent, enabledFlagPattern, "", RegexOptions.IgnoreCase);
-
+            
+            // Add camera permission for Meta Quest QR code reading
+            manifestContent = AddCameraPermission(manifestContent);
+            
+            // Add headset camera permission for Meta Quest Passthrough Camera API
+            manifestContent = AddHeadsetCameraPermission(manifestContent);
+            
             // Handle version metadata
             manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataVersionName, GetVersion());
 
@@ -324,6 +330,75 @@ namespace AbxrLib.Editor
             return manifestContent;
         }
 
+        /// <summary>
+        /// Adds camera permission to the manifest if it doesn't already exist.
+        /// Required for Meta Quest QR code reading functionality.
+        /// </summary>
+        private static string AddCameraPermission(string manifestContent)
+        {
+            // Check if camera permission already exists
+            if (manifestContent.Contains("android.permission.CAMERA"))
+            {
+                return manifestContent;
+            }
+
+            // Find the <manifest> tag and add permission after it
+            string manifestPattern = @"(<manifest[\s\S]*?>)";
+            Match match = Regex.Match(manifestContent, manifestPattern, RegexOptions.IgnoreCase);
+            
+            if (match.Success)
+            {
+                int insertPosition = match.Index + match.Length;
+                int newlineAfter = manifestContent.IndexOf('\n', insertPosition);
+                if (newlineAfter > 0)
+                {
+                    insertPosition = newlineAfter + 1;
+                }
+                
+                // Add camera permission
+                string cameraPermission = "    <uses-permission android:name=\"android.permission.CAMERA\" />\n";
+                manifestContent = manifestContent.Insert(insertPosition, cameraPermission);
+                return manifestContent;
+            }
+
+            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Camera permission not added.");
+            return manifestContent;
+        }
+
+        /// <summary>
+        /// Adds the headset camera permission for Meta Quest Passthrough Camera API.
+        /// </summary>
+        private static string AddHeadsetCameraPermission(string manifestContent)
+        {
+            // Check if headset camera permission already exists
+            if (manifestContent.Contains("horizonos.permission.HEADSET_CAMERA"))
+            {
+                return manifestContent;
+            }
+
+            // Find the <manifest> tag and add permission after it
+            string manifestPattern = @"(<manifest[\s\S]*?>)";
+            Match match = Regex.Match(manifestContent, manifestPattern, RegexOptions.IgnoreCase);
+            
+            if (match.Success)
+            {
+                int insertPosition = match.Index + match.Length;
+                int newlineAfter = manifestContent.IndexOf('\n', insertPosition);
+                if (newlineAfter > 0)
+                {
+                    insertPosition = newlineAfter + 1;
+                }
+                
+                // Add headset camera permission
+                string headsetCameraPermission = "    <uses-permission android:name=\"horizonos.permission.HEADSET_CAMERA\" />\n";
+                manifestContent = manifestContent.Insert(insertPosition, headsetCameraPermission);
+                Debug.Log("AbxrLib: Added horizonos.permission.HEADSET_CAMERA permission to AndroidManifest.xml");
+                return manifestContent;
+            }
+
+            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Headset camera permission not added.");
+            return manifestContent;
+        }
     }
 }
 
