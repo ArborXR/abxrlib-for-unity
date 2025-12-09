@@ -45,8 +45,9 @@ If you don't see the "Scan QR Code" button on the PIN pad:
    - Quest 2 is not supported (camera quality insufficient)
 
 2. **Check camera permissions**:
-   - Quest Settings > Privacy > Camera Access > Your App
-   - Ensure camera access is **enabled**
+   - Quest Settings > Privacy & Safety > App Permissions > Headset Cameras
+   - Note: "Privacy & Safety" is a bit hidden down low in the list of settings options on the left. 
+   - Ensure camera access is **enabled** for your app
    - The button will automatically appear once permissions are granted (no app restart needed)
 
 3. **Check logs** for details:
