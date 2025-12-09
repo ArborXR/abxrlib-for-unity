@@ -3,6 +3,7 @@ using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Events;
 using AbxrLib.Runtime.Logs;
+using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.ServiceClient;
 using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
 using AbxrLib.Runtime.Storage;
@@ -21,10 +22,10 @@ namespace AbxrLib.Runtime.Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void OnBeforeSceneLoad()
         {
-            var version = typeof(JsonConvert).Assembly.GetName().Version;
-            Debug.Log($"AbxrLib: Using Newtonsoft.Json version: {version}");
+            var jsonVersion = typeof(JsonConvert).Assembly.GetName().Version;
+            Debug.Log($"AbxrLib: Using Newtonsoft.Json version: {jsonVersion}");
 
-            if (version < new Version(13, 0, 0))
+            if (jsonVersion < new Version(13, 0, 0))
             {
                 Debug.LogError("AbxrLib: Incompatible Newtonsoft.Json version loaded.");
             }
@@ -32,19 +33,18 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<CoroutineRunner>("CoroutineRunner");
             ObjectAttacher.Attach<DeviceModel>("DeviceModel");
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
-
 #if UNITY_ANDROID && !UNITY_EDITOR
-            Debug.Log("[Initialize] Running on Android device - creating service clients");
             ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
             ObjectAttacher.Attach<AbxrInsightServiceClient>("AbxrInsightServiceClient");
+#if PICO_ENTERPRISE_SDK_3
+            ObjectAttacher.Attach<PicoQRCodeReader>("PicoQRCodeReader");
+#endif
 #endif
             ObjectAttacher.Attach<Authentication.Authentication>("Authentication");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
             ObjectAttacher.Attach<SceneChangeDetector>("SceneChangeDetector");
-            ObjectAttacher.Attach<EventBatcher>("EventBatcher");
-            ObjectAttacher.Attach<LogBatcher>("LogBatcher");
+            ObjectAttacher.Attach<DataBatcher>("DataBatcher");
             ObjectAttacher.Attach<StorageBatcher>("StorageBatcher");
-            ObjectAttacher.Attach<TelemetryBatcher>("TelemetryBatcher");
             ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
             ObjectAttacher.Attach<ApplicationQuitHandler>("ApplicationQuitHandler");
 #if UNITY_ANDROID && !UNITY_EDITOR

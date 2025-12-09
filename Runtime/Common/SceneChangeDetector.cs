@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -28,6 +29,13 @@ namespace AbxrLib.Runtime.Common
         private static void OnActiveSceneChanged(Scene oldScene, Scene newScene)
         {
             CurrentSceneName = newScene.name;
+            
+            // Clean up laser pointer manager to prevent memory leaks from destroyed objects
+            LaserPointerManager.OnSceneChanged();
+            
+            // Clear RigDetector cache since scene objects have changed
+            RigDetector.ClearCache();
+            
             if (!Configuration.Instance.disableSceneEvents)
             {
                 Abxr.Event("Scene Changed", new Dictionary<string, string> { ["Scene Name"] = newScene.name });

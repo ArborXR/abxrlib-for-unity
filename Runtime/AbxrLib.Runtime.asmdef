@@ -7,7 +7,9 @@
         "Unity.XR.Interaction.Toolkit",
         "Unity.XR.CoreUtils",
         "Unity.XR.Management",
-        "Oculus.VR"
+        "Oculus.VR",
+        "PICO.TobSupport",
+        "Unity.XR.PICO"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

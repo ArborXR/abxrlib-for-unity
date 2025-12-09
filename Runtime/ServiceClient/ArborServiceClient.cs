@@ -7,11 +7,28 @@ namespace AbxrLib.Runtime.ServiceClient
 {
     public static class AndroidJavaObjectExt
     {
-        public static T CallResult<T>(this AndroidJavaObject native, string methodName, params object[] args) =>
-            native.Call<AndroidJavaObject>(methodName, args) is var result
-            && result.Call<bool>("isOk")
-                ? result.Call<T>("getValue")
-                : throw new SdkException(result.Call<string>("getError"));
+        public static T CallResult<T>(this AndroidJavaObject native, string methodName, params object[] args)
+        {
+            try
+            {
+                var result = native.Call<AndroidJavaObject>(methodName, args);
+                if (result != null && result.Call<bool>("isOk"))
+                {
+                    return result.Call<T>("getValue");
+                }
+                else
+                {
+                    var error = result?.Call<string>("getError") ?? "Unknown SDK error";
+                    Debug.LogWarning($"AbxrLib: SDK call {methodName} failed: {error}");
+                    return default(T)!;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: SDK call {methodName} threw exception: {ex.Message}");
+                return default(T)!;
+            }
+        }
     }
 
     /// <summary>Allows interacting with the SDK service.</summary>
@@ -21,105 +38,49 @@ namespace AbxrLib.Runtime.ServiceClient
     /// </remarks>
     public class ArborServiceClient : MonoBehaviour
     {
-        private const string PackageName = "app.xrdm.sdk.external";
+        private const string _packageName = "app.xrdm.sdk.external";
         private AndroidJavaObject? _sdk;
         private NativeConnectionCallback? _nativeCallback;
         public static SdkServiceWrapper? ServiceWrapper;
-
-        // Constructor logging
-        public ArborServiceClient()
-        {
-            Debug.Log("[XRDMServiceExampleClient] Constructor called - ArborServiceClient instance created");
-        }
-
-        private void Awake()
-        {
-            Debug.Log($"[XRDMServiceExampleClient] Awake() called on GameObject: {gameObject.name}");
-        }
-
-        private void Start()
-        {
-            Debug.Log($"[XRDMServiceExampleClient] Start() called on GameObject: {gameObject.name}");
-        }
 
         // Whenever we delay via Task.Delay, there is no guarantee that our current thread would be already attached to Android JNI,
         // so we must reattached the current thread to AndroidJNI right after Task.Delay to ensure we don't run into threading issues.
         private static Task DelayAndReattachThreadToJNI(int delay) => Task.Delay(delay).ContinueWith(_ => AndroidJNI.AttachCurrentThread());
 
-        private AndroidJavaObject Sdk
+        private AndroidJavaObject? Sdk
         {
             get
             {
                 if (_sdk is null)
                 {
-                    throw new InvalidOperationException("This MonoBehaviour is not enabled.");
+                    Debug.LogWarning("AbxrLib: ArborServiceClient SDK is not initialized. This MonoBehaviour may not be enabled.");
                 }
 
                 return _sdk;
             }
         }
 
-		public static bool IsConnected()
-		{
-			bool isConnected = ServiceWrapper != null;
-			Debug.Log($"[XRDMServiceExampleClient] IsConnected() = {isConnected}");
-			return isConnected;
-		}
+        public static bool IsConnected() => ServiceWrapper != null;
 
-		public static ArborServiceClient? FindInstance()
-		{
-			var instance = FindObjectOfType<ArborServiceClient>();
-			Debug.Log($"[XRDMServiceExampleClient] FindInstance() - found instance: {(instance != null ? "YES" : "NO")}");
-			if (instance != null)
-			{
-				Debug.Log($"[XRDMServiceExampleClient] Instance found on GameObject: {instance.gameObject.name}, enabled: {instance.enabled}");
-			}
-			return instance;
-		}
-
-		private void Connect()
+        private void Connect()
         {
-			Debug.Log("[XRDMServiceExampleClient] Attempting to connect to service");
-			try
-			{
-				using var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-				using var currentActivity = unityPlayerClass.GetStatic<AndroidJavaObject>("currentActivity");
-				_nativeCallback = new NativeConnectionCallback(this);
-				Debug.Log("[XRDMServiceExampleClient] Calling Sdk.connect() method");
-				Sdk.Call("connect", currentActivity, _nativeCallback);
-				Debug.Log("[XRDMServiceExampleClient] Sdk.connect() method called successfully");
-			}
-			catch (Exception ex)
-			{
-				Debug.LogError($"[XRDMServiceExampleClient] Error in Connect(): {ex.Message}");
-				Debug.LogError($"[XRDMServiceExampleClient] Stack trace: {ex.StackTrace}");
-			}
+            using var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+            using var currentActivity = unityPlayerClass.GetStatic<AndroidJavaObject>("currentActivity");
+            _nativeCallback = new NativeConnectionCallback(this);
+            Sdk?.Call("connect", currentActivity, _nativeCallback);
         }
     
         protected void OnDisable()
         {
-			Debug.Log("[XRDMServiceExampleClient] OnDisable() called - cleaning up");
-			_sdk?.Dispose();
+            _sdk?.Dispose();
             _sdk = null;
-            ServiceWrapper = null;
         }
 
         protected void OnEnable()
         {
-			Debug.Log($"[XRDMServiceExampleClient] OnEnable() called - attempting to create SDK for package: {PackageName}");
-			try
-			{
-				// Instantiates our `Sdk.java`.
-				Debug.Log($"[XRDMServiceExampleClient] about to attempt to create {PackageName}.Sdk");
-				_sdk = new AndroidJavaObject($"{PackageName}.Sdk");
-				Debug.Log("[XRDMServiceExampleClient] SDK object created successfully");
-				Connect();
-			}
-			catch (Exception ex)
-			{
-				Debug.LogError($"[XRDMServiceExampleClient] Error in OnEnable(): {ex.Message}");
-				Debug.LogError($"[XRDMServiceExampleClient] Stack trace: {ex.StackTrace}");
-			}
+            // Instantiates our `Sdk.java`.
+            _sdk = new AndroidJavaObject($"{_packageName}.Sdk");
+            Connect();
         }
 
         public sealed class SdkServiceWrapper
@@ -177,53 +138,40 @@ namespace AbxrLib.Runtime.ServiceClient
 
         private async Task NotifyWhenInitializedAsync(AndroidJavaObject? nativeObj)
         {
-			Debug.Log("[XRDMServiceExampleClient] NotifyWhenInitializedAsync started");
-			// If the application gets loaded before the XRDM client, the XRDM client may not have time to be initialized.
-			// To avoid this timing issue, we should wait until XRDM client is initialized to fire the event of OnConnected.
-			var delay = 500;
-			var delayMultiplier = 1.5f;
-			var maximumAttempts = 7;
+            // If the application gets loaded before the XRDM client, the XRDM client may not have time to be initialized.
+            // To avoid this timing issue, we should wait until XRDM client is initialized to fire the event of OnConnected.
+            var delay = 500;
+            var delayMultiplier = 1.5f;
+            var maximumAttempts = 7;
 
 #pragma warning disable CA2000 // Dispose objects before losing scope
 #pragma warning disable CS8604 // Possible null reference argument.
-			// nativeObj shouldn't be null, and if it is null, something really bad must have happened already.
-			if (nativeObj == null)
-			{
-				Debug.LogError("[XRDMServiceExampleClient] nativeObj is null in NotifyWhenInitializedAsync!");
-				return;
-			}
-			var serviceWrapper = new SdkServiceWrapper(nativeObj);
-			Debug.Log("[XRDMServiceExampleClient] Service wrapper created, checking initialization...");
+            // nativeObj shouldn't be null, and if it is null, something really bad must have happened already.
+            var serviceWrapper = new SdkServiceWrapper(nativeObj);
 #pragma warning restore CS8604 // Possible null reference argument.
 #pragma warning restore CA2000 // Dispose objects before losing scope
-			try
-			{
-				for (var attempt = 0; attempt < maximumAttempts; attempt++)
-				{
-					Debug.Log($"[XRDMServiceExampleClient] Initialization attempt {attempt + 1}/{maximumAttempts}");
-					if (serviceWrapper.GetIsInitialized())
-					{
-						Debug.Log("[XRDMServiceExampleClient] Service is initialized! Setting ServiceWrapper.");
-						ServiceWrapper = serviceWrapper;
-						return;
-					}
-					Debug.Log($"[XRDMServiceExampleClient] Service not yet initialized, waiting {delay}ms...");
-					await DelayAndReattachThreadToJNI(delay);
-					_ = AndroidJNI.AttachCurrentThread();
-					delay = (int)Math.Floor(delay * delayMultiplier);
-				}
-				Debug.LogWarning("[XRDMServiceExampleClient] Maximum initialization attempts reached, service may not be ready");
+            try
+            {
+                for (var attempt = 0; attempt < maximumAttempts; attempt++)
+                {
+                    if (serviceWrapper.GetIsInitialized())
+                    {
+                        ServiceWrapper = serviceWrapper;
+                        return;
+                    }
+                    await DelayAndReattachThreadToJNI(delay);
+                    _ = AndroidJNI.AttachCurrentThread();
+                    delay = (int)Math.Floor(delay * delayMultiplier);
+                }
 #pragma warning disable CA1031
-			}
-			catch (Exception ex)
-			{
-				Debug.LogError($"[XRDMServiceExampleClient] Exception in NotifyWhenInitializedAsync: {ex.Message}");
-				Debug.LogError($"[XRDMServiceExampleClient] Stack trace: {ex.StackTrace}");
-				await DelayAndReattachThreadToJNI(delay);
-				_ = AndroidJNI.AttachCurrentThread();
-				Debug.Log("[XRDMServiceExampleClient] Setting ServiceWrapper despite exception (fallback)");
-				ServiceWrapper = serviceWrapper;
-			}
+
+            }
+            catch
+            {
+                await DelayAndReattachThreadToJNI(delay);
+                _ = AndroidJNI.AttachCurrentThread();
+                ServiceWrapper = serviceWrapper;
+            }
 #pragma warning restore CA1031
         }
 
@@ -231,7 +179,7 @@ namespace AbxrLib.Runtime.ServiceClient
         {
             private readonly ArborServiceClient _sdkBehavior;
 
-            public NativeConnectionCallback(ArborServiceClient sdkBehavior) : base(PackageName + ".IConnectionCallback")
+            public NativeConnectionCallback(ArborServiceClient sdkBehavior) : base(_packageName + ".IConnectionCallback")
             {
                 _sdkBehavior = sdkBehavior;
             }
@@ -240,16 +188,14 @@ namespace AbxrLib.Runtime.ServiceClient
             // https://github.com/Unity-Technologies/UnityCsReference/blob/61f92bd79ae862c4465d35270f9d1d57befd1761/Modules/AndroidJNI/AndroidJava.cs#L124-L139
             public override AndroidJavaObject? Invoke(string methodName, AndroidJavaObject[] javaArgs)
             {
-				Debug.Log($"[XRDMServiceExampleClient] Connection callback invoked: {methodName}");
-				if (methodName == "onConnected")
-				{
-					Debug.Log("[XRDMServiceExampleClient] onConnected callback triggered - starting initialization");
-					_ = _sdkBehavior.NotifyWhenInitializedAsync(javaArgs[0]);
-					// `onConnected` is a `void` method.
-					return null;
-				}
+                if (methodName == "onConnected")
+                {
+                    _ = _sdkBehavior.NotifyWhenInitializedAsync(javaArgs[0]);
+                    // `onConnected` is a `void` method.
+                    return null;
+                }
 
-				return base.Invoke(methodName, javaArgs);
+                return base.Invoke(methodName, javaArgs);
             }
         }
     }

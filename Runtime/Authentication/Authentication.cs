@@ -1,4 +1,21 @@
-﻿using System;
+﻿/*
+ * Copyright (c) 2024 ArborXR. All rights reserved.
+ * 
+ * AbxrLib for Unity - Authentication System
+ * 
+ * This file handles user authentication, device identification, and session management
+ * for AbxrLib. It provides comprehensive authentication capabilities including:
+ * - Device fingerprinting and identification
+ * - User authentication with LMS integration support
+ * - Authentication handoff mechanisms for seamless user experience
+ * - Session management and token handling
+ * - Keyboard-based authentication UI
+ * 
+ * The authentication system supports both device-level and user-level authentication,
+ * with automatic fallback mechanisms and robust error handling.
+ */
+
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -20,7 +37,6 @@ namespace AbxrLib.Runtime.Authentication
         private static string _orgId;
         private static string _deviceId;
         private static string _authSecret;
-        private static string _userId;
         private static string _appId;
         private static Partner _partner = Partner.None;
         private static string _deviceModel;
@@ -29,21 +45,21 @@ namespace AbxrLib.Runtime.Authentication
         private static string _ipAddress;
         private static string _sessionId;
         private static int _failedAuthAttempts;
-
-        private static string _authToken;
-        private static string _apiSecret;
+        
         private static AuthMechanism _authMechanism;
         private static DateTime _tokenExpiry = DateTime.MinValue;
         
-        // User data from authentication response
-        private static Dictionary<string, object> _userDataCache;
-        private static string _userEmailCache;
-        private static object _userIdCache;
+        private static AuthResponse _responseData;
+        public static AuthResponse GetAuthResponse() => _responseData;
+        
+        // Store entered email/text value for email and text auth methods
+        private static string _enteredAuthValue;
+        
+        private static AuthResponse _authHandoffData;
+        public static AuthResponse GetAuthHandoffData() => _authHandoffData;
         
         // Complete authentication response data
-        private static string _authResponseAppId;
-        private static string _authResponsePackageName;
-        private static List<Dictionary<string, object>> _authResponseModules;
+        private static List<Abxr.ModuleData> _authResponseModuleData;
     
         private const string DeviceIdKey = "abxrlib_device_id";
 
@@ -51,10 +67,44 @@ namespace AbxrLib.Runtime.Authentication
         
         // Auth handoff for external launcher apps
         private static bool _authHandoffCompleted = false;
+        private static bool _sessionUsedAuthHandoff = false;
 
-        public static bool Authenticated() => DateTime.UtcNow <= _tokenExpiry;
-
-        public static bool FullyAuthenticated() => Authenticated() && _keyboardAuthSuccess == true;
+        public static bool Authenticated()
+        {
+            // Check if we have a valid token and it hasn't expired
+            return !string.IsNullOrEmpty(_responseData.Token) && 
+                   !string.IsNullOrEmpty(_responseData.Secret) && 
+                   DateTime.UtcNow <= _tokenExpiry &&
+                   _keyboardAuthSuccess == true;
+        }
+        
+        public static bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
+        
+        /// <summary>
+        /// Clears authentication state and stops data transmission
+        /// </summary>
+        private static void ClearAuthenticationState()
+        {
+            _tokenExpiry = DateTime.MinValue;
+            _keyboardAuthSuccess = null;
+            _sessionId = null;
+            _authMechanism = null;
+            
+            // Clear cached user data
+            _responseData = null;
+            _authResponseModuleData = null;
+            
+            // Clear stored auth value
+            _enteredAuthValue = null;
+            
+            // Reset failed authentication attempts counter
+            _failedAuthAttempts = 0;
+            
+            // Reset auth handoff tracking
+            _sessionUsedAuthHandoff = false;
+            
+            Debug.LogWarning("AbxrLib: Authentication state cleared - data transmission stopped");
+        }
 
         private void Start()
         {
@@ -69,9 +119,36 @@ namespace AbxrLib.Runtime.Authentication
             if (!ValidateConfigValues()) return;
 
             SetSessionData();
-            StartCoroutine(Authenticate());
+            
+            // Start the deferred authentication system
+            StartCoroutine(DeferredAuthenticationSystem());
             StartCoroutine(PollForReAuth());
         }
+
+        private IEnumerator DeferredAuthenticationSystem()
+        {
+            // Wait for the end of the frame to allow all other Start() methods to run
+            yield return new WaitForEndOfFrame();
+            
+            // Wait one more frame to ensure all Awake() and Start() methods have completed
+            yield return null;
+            
+            // Check if auto-start authentication is enabled in configuration
+            if (!Configuration.Instance.disableAutoStartAuthentication)
+            {
+                if (Configuration.Instance.authenticationStartDelay > 0)
+                {
+                    yield return new WaitForSeconds(Configuration.Instance.authenticationStartDelay);
+                }
+                
+                yield return Authenticate();
+            }
+            else
+            {
+                Debug.Log("AbxrLib: Auto-start authentication is disabled. Call Abxr.StartAuthentication() manually when ready.");
+            }
+        }
+
 
         public static void SetSessionId(string sessionId) => _sessionId = sessionId;
 
@@ -85,42 +162,25 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             yield return AuthRequest();
-            if (!string.IsNullOrEmpty(_authToken))
+            yield return GetConfiguration();
+            if (!string.IsNullOrEmpty(_authMechanism?.prompt))
             {
-                yield return GetConfiguration();
-                if (!string.IsNullOrEmpty(_authMechanism?.prompt))
-                {
-                    Debug.Log("AbxrLib: Additional user authentication required (PIN/credentials)");
-                    yield return KeyboardAuthenticate();
-                    // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
-                }
-                else
-                {
-                    Debug.Log("AbxrLib: Authentication fully completed");
-                    // No additional auth needed - notify completion now
-                    List<string> moduleTargets = ExtractModuleTargets(GetModules());
-                    Abxr.NotifyAuthCompleted(true, false, moduleTargets);
-                    _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
-                }
+                yield return KeyboardAuthenticate();
+                // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
+            }
+            else
+            {
+                Debug.Log("AbxrLib: Authentication fully completed");
+                // No additional auth needed - notify completion now
+                Abxr.NotifyAuthCompleted(true);
+                _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
             }
         }
 
         public static void ReAuthenticate()
         {
-            _sessionId = null;
-            _apiSecret = null;
-            _authMechanism = null;
-            _authToken = null;
-            _tokenExpiry = DateTime.MinValue;
-            _keyboardAuthSuccess = null;
-            
-            // Clear cached user data
-            _userDataCache = null;
-            _userIdCache = null;
-            _userEmailCache = null;
-            _authResponseAppId = null;
-            _authResponsePackageName = null;
-            _authResponseModules = null;
+            // Clear authentication state to stop data transmission
+            ClearAuthenticationState();
             
             // Reset auth handoff state
             _authHandoffCompleted = false;
@@ -165,11 +225,13 @@ namespace AbxrLib.Runtime.Authentication
                 var authSecret = Abxr.GetFingerprint();
                 _authSecret = authSecret;
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: {e.Message}");
+                // Log error with consistent format and include authentication context
+                Debug.LogError($"AbxrLib: Authentication initialization failed: {ex.Message}\n" +
+                              $"Exception Type: {ex.GetType().Name}\n" +
+                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
-            // Note: _userId will be properly set from JWT token during authentication
         }
 #if UNITY_WEBGL && !UNITY_EDITOR
         private static void GetQueryData()
@@ -202,10 +264,18 @@ namespace AbxrLib.Runtime.Authentication
 #endif
         private static bool ValidateConfigValues()
         {
-            const string appIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
-            if (string.IsNullOrEmpty(_appId) || !Regex.IsMatch(_appId, appIdPattern))
+            // First check basic configuration validation
+            if (!Configuration.Instance.IsValid())
             {
-                Debug.LogError("AbxrLib: Invalid Application ID. Cannot authenticate.");
+                Debug.LogError("AbxrLib: Configuration validation failed. Cannot authenticate.");
+                return false;
+            }
+            
+            // Additional format validation for appID (UUID format)
+            const string appIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
+            if (!Regex.IsMatch(_appId, appIdPattern))
+            {
+                Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
                 return false;
             }
         
@@ -215,45 +285,65 @@ namespace AbxrLib.Runtime.Authentication
                 const string orgIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
                 if (!Regex.IsMatch(_orgId, orgIdPattern))
                 {
-                    Debug.LogError("AbxrLib: Invalid Organization ID. Cannot authenticate.");
+                    Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
                     return false;
                 }
             }
-        
-            // if (string.IsNullOrEmpty(_authSecret))
-            // {
-            //     Debug.LogError("AbxrLib: Missing Auth Secret. Cannot authenticate.");
-            //     return false;
-            // }
 
             return true;
         }
 
-        public static IEnumerator KeyboardAuthenticate(string keyboardInput = null)
+        public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)
         {
             _keyboardAuthSuccess = false;
+            
             if (keyboardInput != null)
             {
-                string originalPrompt = _authMechanism.prompt;
-                _authMechanism.prompt = keyboardInput;
-                yield return AuthRequest();
+                string originalPrompt = _authMechanism?.prompt;
+                if (_authMechanism != null)
+                {
+                    _authMechanism.prompt = keyboardInput;
+                }
+                
+                // Store the entered value for email and text auth methods so we can add it to UserData
+                if (_authMechanism != null && (_authMechanism.type == "email" || _authMechanism.type == "text"))
+                {
+                    // For email type, combine with domain if provided
+                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
+                    {
+                        _enteredAuthValue = $"{keyboardInput}@{_authMechanism.domain}";
+                    }
+                    else
+                    {
+                        _enteredAuthValue = keyboardInput;
+                    }
+                }
+                else
+                {
+                    _enteredAuthValue = null; // Clear for non-email/text auth methods
+                }
+                
+                yield return AuthRequest(false);
                 if (_keyboardAuthSuccess == true)
                 {
                     KeyboardHandler.Destroy();
                     _failedAuthAttempts = 0;
-                    Debug.Log("AbxrLib: Final authentication successful");
                     
                     // Notify completion for keyboard authentication success
-                    List<string> moduleTargets = ExtractModuleTargets(GetModules());
-                    Abxr.NotifyAuthCompleted(true, false, moduleTargets);
+                    Abxr.NotifyAuthCompleted(true);
                     
                     yield break;
                 }
 
-                _authMechanism.prompt = originalPrompt;
+                if (_authMechanism != null)
+                {
+                    _authMechanism.prompt = originalPrompt;
+                }
+                _enteredAuthValue = null; // Clear on failure
             }
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
+            if (invalidQrCode) prompt = "Invalid QR Code\n";
             prompt += _authMechanism.prompt;
             Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
             _failedAuthAttempts++;
@@ -279,7 +369,7 @@ namespace AbxrLib.Runtime.Authentication
             //TODO Geolocation
         }
 
-        private static IEnumerator AuthRequest()
+        private static IEnumerator AuthRequest(bool withRetry = true)
         {
             if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
@@ -289,7 +379,6 @@ namespace AbxrLib.Runtime.Authentication
                 orgId = _orgId,
                 authSecret = _authSecret,
                 deviceId = _deviceId,
-                userId = _userId,
                 tags = _deviceTags,
                 sessionId = _sessionId,
                 partner = _partner.ToString().ToLower(),
@@ -306,79 +395,217 @@ namespace AbxrLib.Runtime.Authentication
             };
         
             string json = JsonConvert.SerializeObject(data);
-
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
-            using var request = new UnityWebRequest(fullUri.ToString(), "POST");
-            Utils.BuildRequest(request, json);
-        
-            yield return request.SendWebRequest();
-            if (request.result == UnityWebRequest.Result.Success)
+            
+            bool success = false;
+            while (!success)
             {
-                AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(request.downloadHandler.text);
-                _authToken = postResponse.Token;
-                _apiSecret = postResponse.Secret;
-                Dictionary<string, object> decodedJwt = Utils.DecodeJwt(_authToken);
-                _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                // Create request and handle creation errors
+                UnityWebRequest request;
                 
-                // Cache complete authentication response data
-                CacheAuthResponseData(postResponse, decodedJwt);
+                // Request creation with error handling (no yield statements)
+                try
+                {
+                    request = new UnityWebRequest(fullUri.ToString(), "POST");
+                    Utils.BuildRequest(request, json);
+                    
+                    // Set timeout to prevent hanging requests
+                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: Authentication request creation failed: {ex.Message}");
+                    break; // Exit retry loop - this is a non-retryable error
+                }
+                
+                // Send request (yield outside try-catch)
+                yield return request.SendWebRequest();
+                
+                try
+                {
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(request.downloadHandler.text);
+                        
+                        // Validate response data
+                        if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
+                        {
+                            throw new Exception("Invalid authentication response: missing token");
+                        }
+                        
+                        // Decode JWT with error handling
+                        Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
+                        if (decodedJwt == null)
+                        {
+                            throw new Exception("Failed to decode JWT token - authentication cannot proceed");
+                        }
+                        
+                        if (!decodedJwt.ContainsKey("exp"))
+                        {
+                            throw new Exception("Invalid JWT token: missing expiration field");
+                        }
+                        
+                        try
+                        {
+                            _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                        }
+                        catch (Exception ex)
+                        {
+                            throw new Exception($"Invalid JWT token expiration: {ex.Message}");
+                        }
+                        
+                        _responseData = postResponse;
+                        _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
+                        
+                        // Add entered email/text value to UserData if we have one stored
+                        if (!string.IsNullOrEmpty(_enteredAuthValue))
+                        {
+                            // Initialize UserData if it's null
+                            _responseData.UserData ??= new Dictionary<string, object>();
+                            
+                            // Determine the key name based on auth type
+                            string keyName = _authMechanism?.type == "email" ? "email" : "text";
+                            _responseData.UserData[keyName] = _enteredAuthValue;
+                        }
 
-                if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
-                
-                // Extract module targets for notification
-                List<string> moduleTargets = ExtractModuleTargets(postResponse.Modules);
-                
-                // Log initial success - but don't notify completion yet since additional auth may be required
-                Debug.Log("AbxrLib: API connection established");
+                        if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
+                        
+                        // Don't notify completion yet since additional auth may be required
+                        success = true;
+                        break;
+                    }
+                    else
+                    {
+                        string errorMessage = HandleNetworkError(request);
+                        Debug.LogWarning($"AbxrLib: AuthRequest failed: {errorMessage}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: Authentication response handling failed: {ex.Message}");
+                }
+                finally
+                {
+                    // Always dispose of request
+                    request?.Dispose();
+                }
+
+                if (!withRetry) break;
+
+                int retrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
+                Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {retrySeconds} seconds...");
+                yield return new WaitForSeconds(retrySeconds);
             }
-            else
+        }
+        
+        /// <summary>
+        /// Handles network errors and determines appropriate error messages
+        /// </summary>
+        private static string HandleNetworkError(UnityWebRequest request)
+        {
+            string errorMessage;
+            
+            switch (request.result)
             {
-                string error = $"{request.error} - {request.downloadHandler.text}";
-                Debug.LogError($"AbxrLib: Authentication failed : {error}");
-                _sessionId = null;
-                
-                // Clear cached user data on failure
-                _userDataCache = null;
-                _userIdCache = null;
-                _userEmailCache = null;
-                _authResponseAppId = null;
-                _authResponsePackageName = null;
-                _authResponseModules = null;
-                
-                // Notify authentication failure
-                Abxr.NotifyAuthCompleted(false, false);
+                case UnityWebRequest.Result.ConnectionError:
+                    errorMessage = $"Connection error: {request.error}";
+                    break;
+                case UnityWebRequest.Result.DataProcessingError:
+                    errorMessage = $"Data processing error: {request.error}";
+                    break;
+                case UnityWebRequest.Result.ProtocolError:
+                    errorMessage = $"Protocol error ({request.responseCode}): {request.error}";
+                    break;
+                default:
+                    errorMessage = $"Unknown error: {request.error}";
+                    break;
             }
+            
+            if (!string.IsNullOrEmpty(request.downloadHandler.text))
+            {
+                errorMessage += $" - Response: {request.downloadHandler.text}";
+            }
+            
+            return errorMessage;
         }
 
         private static IEnumerator GetConfiguration()
         {
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
-            using UnityWebRequest request = UnityWebRequest.Get(fullUri.ToString());
-            request.SetRequestHeader("Accept", "application/json");
-            SetAuthHeaders(request);
-
+            
+            // Create request and handle creation errors
+            UnityWebRequest request;
+            
+            // Request creation with error handling (no yield statements)
+            try
+            {
+                request = UnityWebRequest.Get(fullUri.ToString());
+                request.SetRequestHeader("Accept", "application/json");
+                request.timeout = Configuration.Instance.requestTimeoutSeconds;
+                SetAuthHeaders(request);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
+                yield break;
+            }
+            
+            // Send request (yield outside try-catch)
             yield return request.SendWebRequest();
-            if (request.result == UnityWebRequest.Result.Success)
+            
+            try
             {
-                string response = request.downloadHandler.text;
-                var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
-                SetConfigFromPayload(config);
-                _authMechanism = config.authMechanism;
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    string response = request.downloadHandler.text;
+                    if (string.IsNullOrEmpty(response))
+                    {
+                        Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
+                    }
+                    else
+                    {
+                        var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
+                        if (config == null)
+                        {
+                            Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
+                        }
+                        else
+                        {
+                            SetConfigFromPayload(config);
+                            _authMechanism = config.authMechanism;
+                        }
+                    }
+                }
+                else
+                {
+                    string errorMessage = HandleNetworkError(request);
+                    Debug.LogWarning($"AbxrLib: GetConfiguration failed: {errorMessage}");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: GetConfiguration failed: {request.error} - {request.downloadHandler.text}");
+                Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
             }
+            
+            // Always dispose of request
+            request?.Dispose();
         }
     
         public static void SetAuthHeaders(UnityWebRequest request, string json = "")
         {
-            request.SetRequestHeader("Authorization", "Bearer " + _authToken);
+            // Check if we have valid authentication tokens
+            if (string.IsNullOrEmpty(_responseData.Token) || string.IsNullOrEmpty(_responseData.Secret))
+            {
+                Debug.LogError("AbxrLib: Cannot set auth headers - authentication tokens are missing");
+                return;
+            }
+            
+            request.SetRequestHeader("Authorization", "Bearer " + _responseData.Token);
         
             string unixTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
             request.SetRequestHeader("x-abxrlib-timestamp", unixTimeSeconds);
         
-            string hashString = _authToken + _apiSecret + unixTimeSeconds;
+            string hashString = _responseData.Token + _responseData.Secret + unixTimeSeconds;
             if (!string.IsNullOrEmpty(json))
             {
                 uint crc = Utils.ComputeCRC(json);
@@ -406,156 +633,14 @@ namespace AbxrLib.Runtime.Authentication
             if (!string.IsNullOrEmpty(payload.sendRetryInterval)) Configuration.Instance.sendRetryIntervalSeconds = Convert.ToInt32(payload.sendRetryInterval);
             if (!string.IsNullOrEmpty(payload.sendNextBatchWait)) Configuration.Instance.sendNextBatchWaitSeconds = Convert.ToInt32(payload.sendNextBatchWait);
             if (!string.IsNullOrEmpty(payload.stragglerTimeout)) Configuration.Instance.stragglerTimeoutSeconds = Convert.ToInt32(payload.stragglerTimeout);
-            if (!string.IsNullOrEmpty(payload.eventsPerSendAttempt)) Configuration.Instance.eventsPerSendAttempt = Convert.ToInt32(payload.eventsPerSendAttempt);
-            if (!string.IsNullOrEmpty(payload.logsPerSendAttempt)) Configuration.Instance.logsPerSendAttempt = Convert.ToInt32(payload.logsPerSendAttempt);
-            if (!string.IsNullOrEmpty(payload.telemetryEntriesPerSendAttempt)) Configuration.Instance.telemetryEntriesPerSendAttempt = Convert.ToInt32(payload.telemetryEntriesPerSendAttempt);
+            if (!string.IsNullOrEmpty(payload.dataEntriesPerSendAttempt)) Configuration.Instance.dataEntriesPerSendAttempt = Convert.ToInt32(payload.dataEntriesPerSendAttempt);
             if (!string.IsNullOrEmpty(payload.storageEntriesPerSendAttempt)) Configuration.Instance.storageEntriesPerSendAttempt = Convert.ToInt32(payload.storageEntriesPerSendAttempt);
             if (!string.IsNullOrEmpty(payload.pruneSentItemsOlderThan)) Configuration.Instance.pruneSentItemsOlderThanHours = Convert.ToInt32(payload.pruneSentItemsOlderThan);
             if (!string.IsNullOrEmpty(payload.maximumCachedItems)) Configuration.Instance.maximumCachedItems = Convert.ToInt32(payload.maximumCachedItems);
             if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) Configuration.Instance.retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
         }
 
-        // User data access methods
-        public static Dictionary<string, object> GetUserData()
-        {
-            return _userDataCache;
-        }
-
-        public static object GetUserId()
-        {
-            return _userIdCache;
-        }
-
-        public static string GetUserEmail()
-        {
-            return _userEmailCache;
-        }
-
-        internal static string GetToken()
-        {
-            return _authToken;
-        }
-
-        internal static string GetSecret()
-        {
-            return _apiSecret;
-        }
-
-        public static string GetAppId()
-        {
-            return _authResponseAppId;
-        }
-
-        public static string GetPackageName()
-        {
-            return _authResponsePackageName;
-        }
-
-        public static List<Dictionary<string, object>> GetModules()
-        {
-            return _authResponseModules;
-        }
-
-        private static void CacheAuthResponseData(AuthResponse authResponse, Dictionary<string, object> decodedJwt)
-        {
-            try
-            {
-                // Cache data from auth response (if available)
-                if (authResponse.UserData != null)
-                {
-                    _userDataCache = authResponse.UserData;
-                    
-                    // Extract user email from userData if available
-                    if (authResponse.UserData.ContainsKey("email"))
-                    {
-                        _userEmailCache = authResponse.UserData["email"]?.ToString();
-                    }
-                }
-                else
-                {
-                    // Fallback to JWT data if no userData in response
-                    _userDataCache = new Dictionary<string, object>(decodedJwt);
-                    
-                    if (decodedJwt.ContainsKey("email"))
-                    {
-                        _userEmailCache = decodedJwt["email"]?.ToString();
-                    }
-                }
-
-                // Cache user ID from auth response or fallback to JWT
-                if (authResponse.UserId != null)
-                {
-                    _userIdCache = authResponse.UserId;
-                }
-                else
-                {
-                    // Extract user ID from JWT (typically 'sub' claim)
-                    if (decodedJwt.ContainsKey("sub"))
-                    {
-                        _userIdCache = decodedJwt["sub"];
-                    }
-                    else if (decodedJwt.ContainsKey("userId"))
-                    {
-                        _userIdCache = decodedJwt["userId"];
-                    }
-                }
-
-                // Cache appId, packageName and modules from auth response
-                _authResponseAppId = authResponse.AppId;
-                _authResponsePackageName = authResponse.PackageName;
-                _authResponseModules = authResponse.Modules ?? new List<Dictionary<string, object>>();
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to cache auth response data: {ex.Message}");
-                _userDataCache = null;
-                _userIdCache = null;
-                _userEmailCache = null;
-                _authResponseAppId = null;
-                _authResponsePackageName = null;
-                _authResponseModules = null;
-            }
-        }
-
-        private static List<string> ExtractModuleTargets(List<Dictionary<string, object>> modules)
-        {
-            var moduleTargets = new List<string>();
-            if (modules == null) return moduleTargets;
-
-            try
-            {
-                // Create a list of modules with their order for sorting
-                var modulesWithOrder = new List<(Dictionary<string, object> module, int order)>();
-                
-                foreach (var module in modules)
-                {
-                    int order = 0;
-                    if (module.ContainsKey("order") && module["order"] != null)
-                    {
-                        int.TryParse(module["order"].ToString(), out order);
-                    }
-                    modulesWithOrder.Add((module, order));
-                }
-
-                // Sort modules by order field
-                modulesWithOrder.Sort((a, b) => a.order.CompareTo(b.order));
-
-                // Extract targets in correct order
-                foreach (var (module, _) in modulesWithOrder)
-                {
-                    if (module.ContainsKey("target") && module["target"] != null)
-                    {
-                        moduleTargets.Add(module["target"].ToString());
-                    }
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to extract module targets: {ex.Message}");
-            }
-
-            return moduleTargets;
-        }
+        public static List<Abxr.ModuleData> GetModuleData() => _authResponseModuleData;
 
         /// <summary>
         /// Check for authentication handoff from external launcher apps
@@ -563,10 +648,8 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         private static IEnumerator CheckAuthHandoff()
         {
-            string handoffJson = "";
-            
             // Check Android intent parameters first
-            handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
+            string handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
 
             // If not found, check command line arguments
             if (string.IsNullOrEmpty(handoffJson))
@@ -602,49 +685,44 @@ namespace AbxrLib.Runtime.Authentication
                 Debug.Log("AbxrLib: Processing authentication handoff from external launcher");
                 
                 // Parse the handoff JSON
-                AuthHandoffData handoffData = null;
+                AuthResponse handoffData = null;
                 try 
                 {
-                    handoffData = JsonConvert.DeserializeObject<AuthHandoffData>(handoffJson);
+                    handoffData = JsonConvert.DeserializeObject<AuthResponse>(handoffJson);
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"AbxrLib: Failed to parse handoff JSON: {ex.Message}");
+                    // Log error with consistent format and include JSON parsing context
+                    Debug.LogError($"AbxrLib: Failed to parse handoff JSON: {ex.Message}\n" +
+                                  $"Exception Type: {ex.GetType().Name}\n" +
+                                  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                     yield break;
                 }
                 
-                if (handoffData?.success != true)
+                // Validate that we have the required fields
+                if (handoffData == null || string.IsNullOrEmpty(handoffData.Token) || string.IsNullOrEmpty(handoffData.Secret))
                 {
-                    Debug.LogWarning($"AbxrLib: Authentication handoff indicates failure (handoffData null: {handoffData == null}, success: {handoffData?.success}), falling back to normal auth");
+                    Debug.LogWarning($"AbxrLib: Authentication handoff missing required fields (handoffData null: {handoffData == null}, Token empty: {string.IsNullOrEmpty(handoffData?.Token)}, Secret empty: {string.IsNullOrEmpty(handoffData?.Secret)}), falling back to normal auth");
                     yield break;
                 }
-                
-                // Set authentication state from handoff data
-                _authToken = handoffData.token;
-                _apiSecret = handoffData.secret;
-                _authResponseAppId = handoffData.appId;
-                _authResponsePackageName = handoffData.packageName;
                 
                 // Cache user data from handoff
-                _userDataCache = handoffData.userData as Dictionary<string, object>;
-                _userIdCache = handoffData.userId;
-                _userEmailCache = handoffData.userEmail;
-                _authResponseModules = new List<Dictionary<string, object>>();
+                _responseData = new AuthResponse
+                {
+                    Token = handoffData.Token,
+                    Secret = handoffData.Secret,
+                    UserId = handoffData.UserId,
+                    AppId = handoffData.AppId,
+                    PackageName = handoffData.PackageName,
+                    UserData = handoffData.UserData,
+                    Modules = handoffData.Modules
+                };
+                _authResponseModuleData = new List<Abxr.ModuleData>();
                 
                 // Convert modules if provided
-                if (handoffData.modules != null)
+                if (handoffData.Modules != null)
                 {
-                    foreach (var module in handoffData.modules)
-                    {
-                        var moduleDict = new Dictionary<string, object>
-                        {
-                            ["id"] = module.id ?? "",
-                            ["name"] = module.name ?? "",
-                            ["target"] = module.target ?? "",
-                            ["order"] = module.order
-                        };
-                        _authResponseModules.Add(moduleDict);
-                    }
+                    _authResponseModuleData = Utils.ConvertToModuleDataList(handoffData.Modules);
                 }
                 
                 // Set token expiry to far in the future since we're trusting the handoff
@@ -652,19 +730,22 @@ namespace AbxrLib.Runtime.Authentication
                 
                 // Mark handoff as completed
                 _authHandoffCompleted = true;
+                _sessionUsedAuthHandoff = true;
                 
-                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModules?.Count ?? 0}");
+                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModuleData?.Count ?? 0}");
                 
-                // Extract module targets and notify completion
-                List<string> moduleTargets = ExtractModuleTargets(_authResponseModules);
-                Abxr.NotifyAuthCompleted(true, handoffData.isReauthentication, moduleTargets);
+                Abxr.NotifyAuthCompleted(true);
                 _keyboardAuthSuccess = true;
                 
                 success = true;
+                _authHandoffData = handoffData;
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: Failed to process authentication handoff: {ex.Message}");
+                // Log error with consistent format and include handoff processing context
+                Debug.LogError($"AbxrLib: Failed to process authentication handoff: {ex.Message}\n" +
+                              $"Exception Type: {ex.GetType().Name}\n" +
+                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 _authHandoffCompleted = false;
             }
             
@@ -672,38 +753,6 @@ namespace AbxrLib.Runtime.Authentication
             if (success)
             {
                 yield return null;
-            }
-        }
-
-        private static void CacheUserDataFromJwt(Dictionary<string, object> decodedJwt)
-        {
-            try
-            {
-                // Extract user ID from JWT (typically 'sub' claim)
-                if (decodedJwt.ContainsKey("sub"))
-                {
-                    _userIdCache = decodedJwt["sub"];
-                }
-                else if (decodedJwt.ContainsKey("userId"))
-                {
-                    _userIdCache = decodedJwt["userId"];
-                }
-
-                // Extract user email from JWT
-                if (decodedJwt.ContainsKey("email"))
-                {
-                    _userEmailCache = decodedJwt["email"]?.ToString();
-                }
-
-                // Cache the entire JWT payload as user data
-                _userDataCache = new Dictionary<string, object>(decodedJwt);
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogError($"AbxrLib: Failed to cache user data from JWT: {ex.Message}");
-                _userDataCache = null;
-                _userIdCache = null;
-                _userEmailCache = null;
             }
         }
     
@@ -729,9 +778,7 @@ namespace AbxrLib.Runtime.Authentication
             public string sendRetryInterval;
             public string sendNextBatchWait;
             public string stragglerTimeout;
-            public string eventsPerSendAttempt;
-            public string logsPerSendAttempt;
-            public string telemetryEntriesPerSendAttempt;
+            public string dataEntriesPerSendAttempt;
             public string storageEntriesPerSendAttempt;
             public string pruneSentItemsOlderThan;
             public string maximumCachedItems;
@@ -765,7 +812,7 @@ namespace AbxrLib.Runtime.Authentication
         }
 
         [Preserve]
-        private class AuthResponse
+        public class AuthResponse
         {
             public string Token;
             public string Secret;
@@ -783,43 +830,6 @@ namespace AbxrLib.Runtime.Authentication
         {
             None,
             ArborXR
-        }
-
-        /// <summary>
-        /// Data structure for authentication handoff JSON from external launcher apps
-        /// </summary>
-        [Preserve]
-        private class AuthHandoffData
-        {
-            public bool success;
-            public string token;
-            public string secret;
-            public object userData;
-            public object userId;
-            public string userEmail;
-            public string appId;
-            public string packageName;
-            public List<AuthHandoffModule> modules;
-            public int moduleCount;
-            public bool isReauthentication;
-
-            [Preserve]
-            public AuthHandoffData() { }
-        }
-
-        /// <summary>
-        /// Module data structure for authentication handoff
-        /// </summary>
-        [Preserve]
-        private class AuthHandoffModule
-        {
-            public string id;
-            public string name;
-            public string target;
-            public int order;
-
-            [Preserve]
-            public AuthHandoffModule() { }
         }
     }
 }
