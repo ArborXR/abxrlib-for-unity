@@ -244,6 +244,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             
             bool isScanning = false;
             bool isInitializing = false;
+            bool permissionsDenied = false;
             
 #if PICO_ENTERPRISE_SDK
             // PICO doesn't have IsScanning, so we can't toggle text for it
@@ -253,11 +254,16 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 isScanning = MetaQRCodeReader.Instance.IsScanning();
                 isInitializing = MetaQRCodeReader.Instance.IsInitializing();
+                permissionsDenied = MetaQRCodeReader.Instance.AreCameraPermissionsDenied();
             }
 #endif
             
-            // Update text based on state (priority: scanning > initializing > idle)
-            if (isScanning)
+            // Update text based on state (priority: permissions denied > scanning > initializing > idle)
+            if (permissionsDenied)
+            {
+                buttonText.text = "Not Available";
+            }
+            else if (isScanning)
             {
                 buttonText.text = "Stop Scanning";
             }

@@ -458,6 +458,13 @@ namespace AbxrLib.Runtime.Authentication
                 return;
             }
             
+            // Check if QR scanning is available (device support, features, permissions)
+            if (!IsQRScanningAvailable())
+            {
+                Debug.LogWarning("AbxrLib: QR code scanning is not available. Check device support, OpenXR features, and camera permissions.");
+                return;
+            }
+            
             // Check if camera needs to be initialized or reinitialized
             if (!cameraInitialized || webCamTexture == null)
             {
@@ -528,9 +535,71 @@ namespace AbxrLib.Runtime.Authentication
             {
                 return false;
             }
+            
+            // Check HEADSET_CAMERA permission (Quest-specific, required for passthrough camera)
+            try
+            {
+                using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (AndroidJavaClass contextClass = new AndroidJavaClass("android.content.Context"))
+                using (AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager"))
+                {
+                    int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA", 
+                        currentActivity.Call<string>("getPackageName"));
+                    
+                    // 0 = PERMISSION_GRANTED, -1 = PERMISSION_DENIED
+                    if (permissionCheck != 0)
+                    {
+                        return false;
+                    }
+                }
+            }
+            catch (System.Exception)
+            {
+                // If we can't check the permission, assume it's not available
+                return false;
+            }
 #endif
             
             return true;
+        }
+        
+        /// <summary>
+        /// Check if camera permissions are denied (for UI feedback)
+        /// </summary>
+        public bool AreCameraPermissionsDenied()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // Check standard camera permission
+            if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
+            {
+                return true;
+            }
+            
+            // Check HEADSET_CAMERA permission
+            try
+            {
+                using (AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                using (AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager"))
+                {
+                    int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA", 
+                        currentActivity.Call<string>("getPackageName"));
+                    
+                    // -1 = PERMISSION_DENIED
+                    if (permissionCheck == -1)
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (System.Exception)
+            {
+                // If we can't check, assume not denied (unknown state)
+                return false;
+            }
+#endif
+            return false;
         }
         
         /// <summary>
