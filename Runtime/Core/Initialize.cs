@@ -1,8 +1,6 @@
 ﻿using System;
 using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
-using AbxrLib.Runtime.Events;
-using AbxrLib.Runtime.Logs;
 using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.ServiceClient;
 using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
@@ -55,19 +53,6 @@ namespace AbxrLib.Runtime.Core
             }
 #endif
             Debug.Log($"AbxrLib: Version {AbxrLibVersion.Version} Initialized.");
-        }
-    }
-
-    public class ObjectAttacher : MonoBehaviour
-    {
-        public static T Attach<T>(string name) where T : MonoBehaviour
-        {
-            Debug.Log($"[ObjectAttacher] Creating GameObject '{name}' with component {typeof(T).Name}");
-            var go = new GameObject(name);
-            DontDestroyOnLoad(go);
-            var component = go.AddComponent<T>();
-            Debug.Log($"[ObjectAttacher] Successfully created '{name}' - GameObject: {go.name}, Component enabled: {component.enabled}");
-            return component;
         }
     }
 }
