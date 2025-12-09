@@ -458,10 +458,10 @@ namespace AbxrLib.Runtime.Authentication
                 return;
             }
             
-            // Check if QR scanning is available (device support, features, permissions)
+            // Check if QR scanning is available (device support, permissions)
             if (!IsQRScanningAvailable())
             {
-                Debug.LogWarning("AbxrLib: QR code scanning is not available. Check device support, OpenXR features, and camera permissions.");
+                Debug.LogWarning("AbxrLib: QR code scanning is not available. Check device support and camera permissions.");
                 return;
             }
             

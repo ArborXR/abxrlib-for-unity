@@ -97,11 +97,11 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     
                     if (isAvailable)
                     {
-                        Debug.Log("AbxrLib: QR Code button enabled for Meta (device supported, features enabled, permissions granted)");
+                        Debug.Log("AbxrLib: QR Code button enabled for Meta (device supported, permissions granted)");
                     }
                     else
                     {
-                        Debug.LogWarning("AbxrLib: QR Code button hidden - QR scanning not available. Check device support, OpenXR features, and camera permissions.");
+                        Debug.LogWarning("AbxrLib: QR Code button hidden - QR scanning not available. Check device support and camera permissions.");
                     }
                     lastQRButtonState = isAvailable;
                 }
