@@ -91,7 +91,7 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
             
-            if (!IsValidUrl(restUrl))
+            if (!Utils.IsValidUrl(restUrl))
             {
                 Debug.LogError($"AbxrLib: Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL");
                 return false;
@@ -190,27 +190,6 @@ namespace AbxrLib.Runtime.Core
             }
             
             return true;
-        }
-        
-        /// <summary>
-        /// Validates that a string is a valid HTTP/HTTPS URL
-        /// </summary>
-        /// <param name="url">The URL string to validate</param>
-        /// <returns>True if the URL is valid, false otherwise</returns>
-        private static bool IsValidUrl(string url)
-        {
-            if (string.IsNullOrWhiteSpace(url))
-                return false;
-                
-            try
-            {
-                var uri = new System.Uri(url);
-                return uri.Scheme == "http" || uri.Scheme == "https";
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         [Header("Service Provider")]

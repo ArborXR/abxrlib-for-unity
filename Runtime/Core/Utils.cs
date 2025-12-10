@@ -346,5 +346,26 @@ namespace AbxrLib.Runtime.Core
 
             return moduleDataList;
         }
+        
+        /// <summary>
+        /// Validates that a string is a valid HTTP/HTTPS URL
+        /// </summary>
+        /// <param name="url">The URL string to validate</param>
+        /// <returns>True if the URL is valid, false otherwise</returns>
+        public static bool IsValidUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+                
+            try
+            {
+                var uri = new Uri(url);
+                return uri.Scheme == "http" || uri.Scheme == "https";
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 }
