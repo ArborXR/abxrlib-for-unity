@@ -19,7 +19,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.ServiceClient;
@@ -72,8 +71,8 @@ namespace AbxrLib.Runtime.Authentication
         public static bool Authenticated()
         {
             // Check if we have a valid token and it hasn't expired
-            return !string.IsNullOrEmpty(_responseData.Token) && 
-                   !string.IsNullOrEmpty(_responseData.Secret) && 
+            return !string.IsNullOrEmpty(_responseData?.Token) && 
+                   !string.IsNullOrEmpty(_responseData?.Secret) && 
                    DateTime.UtcNow <= _tokenExpiry &&
                    _keyboardAuthSuccess == true;
         }
@@ -114,6 +113,7 @@ namespace AbxrLib.Runtime.Authentication
 
         private void Start()
         {
+            if (!Configuration.Instance.IsValid()) return;
             GetConfigData();
             _deviceId = SystemInfo.deviceUniqueIdentifier;
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -122,9 +122,8 @@ namespace AbxrLib.Runtime.Authentication
             GetQueryData();
             _deviceId = GetOrCreateDeviceId();
 #endif
-            if (!ValidateConfigValues()) return;
-
             SetSessionData();
+            if (!ValidateConfigValues()) return;
             
             // Start the deferred authentication system
             StartCoroutine(DeferredAuthenticationSystem());
@@ -331,32 +330,24 @@ namespace AbxrLib.Runtime.Authentication
 #endif
         private static bool ValidateConfigValues()
         {
-            // First check basic configuration validation
-            if (!Configuration.Instance.IsValid())
+            if (string.IsNullOrEmpty(_appId))
             {
-                Debug.LogError("AbxrLib: Configuration validation failed. Cannot authenticate.");
+                Debug.LogError("AbxrLib: Application ID is missing. Cannot authenticate.");
                 return false;
             }
             
-            // Additional format validation for appID (UUID format)
-            const string appIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
-            if (!Regex.IsMatch(_appId, appIdPattern))
+            if (string.IsNullOrEmpty(_orgId))
             {
-                Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
+                Debug.LogError("AbxrLib: Organization ID is missing. Cannot authenticate.");
                 return false;
             }
-        
-            // Allow empty orgId, but validate format if provided
-            if (!string.IsNullOrEmpty(_orgId))
+            
+            if (string.IsNullOrEmpty(_authSecret))
             {
-                const string orgIdPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
-                if (!Regex.IsMatch(_orgId, orgIdPattern))
-                {
-                    Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
-                    return false;
-                }
+                Debug.LogError("AbxrLib: Authentication Secret is missing. Cannot authenticate");
+                return false;
             }
-
+            
             return true;
         }
 

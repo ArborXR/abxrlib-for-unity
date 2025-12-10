@@ -14,6 +14,7 @@
  * through the Unity Inspector or programmatically at runtime.
  */
 
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Core
@@ -60,17 +61,19 @@ namespace AbxrLib.Runtime.Core
         /// <returns>True if configuration is valid, false otherwise</returns>
         public bool IsValid()
         {
-            // appID is required and must not be empty if set
-            if (string.IsNullOrEmpty(appID))
+            const string uuidPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
+            
+            // appID must pass format validation if set (UUID format)
+            if (!Regex.IsMatch(appID, uuidPattern))
             {
-                Debug.LogError("AbxrLib: Configuration validation failed - appID is required but not set");
+                Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
                 return false;
             }
             
-            // orgID is optional but must not be empty if set
-            if (!string.IsNullOrEmpty(orgID) && string.IsNullOrWhiteSpace(orgID))
+            // orgID is optional but must pass format validation if set (UUID format)
+            if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
             {
-                Debug.LogError("AbxrLib: Configuration validation failed - orgID cannot be empty if set");
+                Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
                 return false;
             }
             
