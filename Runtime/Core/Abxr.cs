@@ -256,13 +256,7 @@ public static partial class Abxr
 	public static void StartNewSession()
 	{
 		Authentication.SetSessionId(Guid.NewGuid().ToString());
-		CoroutineRunner.Instance.StartCoroutine(StartNewSessionCoroutine());
-	}
-
-	private static IEnumerator StartNewSessionCoroutine()
-	{
-		yield return Authentication.Authenticate();
-		// Note: Authentication.Authenticate() already calls NotifyAuthCompleted() internally
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 	}
 
 	/// <summary>
