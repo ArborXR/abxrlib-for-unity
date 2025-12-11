@@ -9,12 +9,13 @@ using UnityEngine;
 namespace AbxrLib.Editor
 {
     /// <summary>
-    /// Post-processes the Android manifest to add AbxrLib version metadata.
-    /// This allows the manifest to indicate that AbxrLib is being used and which version.
+    /// Post-processes the Android manifest to add AbxrLib version and app_id metadata.
+    /// This allows the manifest to indicate that AbxrLib is being used, which version, and which app_id.
     /// </summary>
     public class AndroidManifestPostProcessor : IPostGenerateGradleAndroidProject
     {
         private const string MetaDataVersionName = "com.arborxr.abxrlib.version";
+        private const string MetaDataAppIdName = "com.arborxr.abxrlib.app_id";
         private const string FallbackVersion = "1.0.0";
 
         /// <summary>
@@ -35,6 +36,27 @@ namespace AbxrLib.Editor
             }
             
             return FallbackVersion;
+        }
+
+        /// <summary>
+        /// Gets the app_id from Configuration, or returns null if not found.
+        /// </summary>
+        private static string GetAppId()
+        {
+            try
+            {
+                var config = Configuration.Instance;
+                if (config != null && !string.IsNullOrEmpty(config.appID))
+                {
+                    return config.appID;
+                }
+            }
+            catch
+            {
+                // If Configuration is not accessible, return null
+            }
+            
+            return null;
         }
 
         /// <summary>
@@ -154,7 +176,7 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// Injects AbxrLib version metadata into the manifest content.
+        /// Injects AbxrLib version and app_id metadata into the manifest content.
         /// </summary>
         private static string InjectMetadata(string manifestContent)
         {
@@ -162,42 +184,62 @@ namespace AbxrLib.Editor
             string enabledFlagPattern = @"<meta-data\s+android:name=""com\.arborxr\.abxrlib\.enabled""\s+android:value=""[^""]*""\s*/>\s*";
             manifestContent = Regex.Replace(manifestContent, enabledFlagPattern, "", RegexOptions.IgnoreCase);
 
-            // Check if version metadata already exists
-            if (manifestContent.Contains(MetaDataVersionName))
+            // Handle version metadata
+            manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataVersionName, GetVersion());
+
+            // Handle app_id metadata (only if app_id is available)
+            string appId = GetAppId();
+            if (!string.IsNullOrEmpty(appId))
             {
-                // Version exists, check if it needs updating
-                string versionPattern = $@"<meta-data\s+android:name=""{Regex.Escape(MetaDataVersionName)}""\s+android:value=""([^""]*)""\s*/>";
-                Match versionMatch = Regex.Match(manifestContent, versionPattern, RegexOptions.IgnoreCase);
-                
-                if (versionMatch.Success && versionMatch.Groups.Count > 1)
-                {
-                    string currentVersion = versionMatch.Groups[1].Value;
-                    string targetVersion = GetVersion();
-                    if (currentVersion != targetVersion)
-                    {
-                        // Update version
-                        manifestContent = Regex.Replace(manifestContent, versionPattern, 
-                            $@"<meta-data android:name=""{MetaDataVersionName}"" android:value=""{targetVersion}"" />", 
-                            RegexOptions.IgnoreCase);
-                    }
-                }
-                
-                return manifestContent;
+                manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataAppIdName, appId);
             }
 
-            // Version doesn't exist, add it
-            return AddVersionMetadata(manifestContent);
+            return manifestContent;
         }
 
         /// <summary>
-        /// Adds the version metadata if it doesn't exist.
+        /// Injects or updates a metadata entry in the manifest.
         /// </summary>
-        private static string AddVersionMetadata(string manifestContent)
+        /// <param name="manifestContent">The manifest content</param>
+        /// <param name="metadataName">The metadata name</param>
+        /// <param name="metadataValue">The metadata value</param>
+        /// <returns>The modified manifest content</returns>
+        private static string InjectOrUpdateMetadata(string manifestContent, string metadataName, string metadataValue)
         {
-            string version = GetVersion();
-            string versionMetadata = $@"        <meta-data android:name=""{MetaDataVersionName}"" android:value=""{version}"" />";
-            return InsertMetadataAfterApplicationTag(manifestContent, versionMetadata);
+            if (string.IsNullOrEmpty(metadataValue))
+            {
+                return manifestContent;
+            }
+
+            // Check if metadata already exists
+            if (manifestContent.Contains(metadataName))
+            {
+                // Metadata exists, check if it needs updating
+                string metadataPattern = $@"<meta-data\s+android:name=""{Regex.Escape(metadataName)}""\s+android:value=""([^""]*)""\s*/>";
+                Match metadataMatch = Regex.Match(manifestContent, metadataPattern, RegexOptions.IgnoreCase);
+                
+                if (metadataMatch.Success && metadataMatch.Groups.Count > 1)
+                {
+                    string currentValue = metadataMatch.Groups[1].Value;
+                    if (currentValue != metadataValue)
+                    {
+                        // Update metadata value
+                        manifestContent = Regex.Replace(manifestContent, metadataPattern, 
+                            $@"<meta-data android:name=""{metadataName}"" android:value=""{metadataValue}"" />", 
+                            RegexOptions.IgnoreCase);
+                    }
+                }
+            }
+            else
+            {
+                // Metadata doesn't exist, add it
+                string metadata = $@"        <meta-data android:name=""{metadataName}"" android:value=""{metadataValue}"" />";
+                manifestContent = InsertMetadataAfterApplicationTag(manifestContent, metadata);
+            }
+
+            return manifestContent;
         }
+
 
         /// <summary>
         /// Inserts metadata after the <application> tag.
