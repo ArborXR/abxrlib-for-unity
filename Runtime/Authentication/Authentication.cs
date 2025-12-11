@@ -15,19 +15,22 @@
  * with automatic fallback mechanisms and robust error handling.
  */
 
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.ServiceClient;
+using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
+using AbxrLib.Runtime.UI.Keyboard;
+using Newtonsoft.Json;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using AbxrLib.Runtime.Common;
-using AbxrLib.Runtime.Core;
-using AbxrLib.Runtime.ServiceClient;
-using AbxrLib.Runtime.UI.Keyboard;
-using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Scripting;
+using Unity.XR.CoreUtils;
+using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 
 namespace AbxrLib.Runtime.Authentication
 {
@@ -108,21 +111,36 @@ namespace AbxrLib.Runtime.Authentication
 
         private void Start()
         {
-            GetConfigData();
-            _deviceId = SystemInfo.deviceUniqueIdentifier;
+			GetConfigData();
+			_deviceId = SystemInfo.deviceUniqueIdentifier;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            GetArborData();
+	        GetArborData();
 #elif UNITY_WEBGL && !UNITY_EDITOR
-            GetQueryData();
-            _deviceId = GetOrCreateDeviceId();
+			GetQueryData();
+			_deviceId = GetOrCreateDeviceId();
 #endif
-            if (!ValidateConfigValues()) return;
+			if (!ValidateConfigValues()) return;
 
-            SetSessionData();
-            
-            // Start the deferred authentication system
-            StartCoroutine(DeferredAuthenticationSystem());
-            StartCoroutine(PollForReAuth());
+			SetSessionData();
+
+			if (Abxr.IsServiceAvailable())
+			{
+				AbxrInsightServiceClient.set_AppID(_appId);
+				AbxrInsightServiceClient.set_OrgID(_orgId);
+				AbxrInsightServiceClient.set_ApiSecret(_authSecret);
+				AbxrInsightServiceClient.set_Partner((int)_partner);
+				AbxrInsightServiceClient.set_DeviceModel(_deviceId);
+				//_deviceTags;
+				if (AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner) != (int)AbxrResult.OK)
+				{
+				}
+			}
+			else
+			{
+				// Start the deferred authentication system
+				StartCoroutine(DeferredAuthenticationSystem());
+				StartCoroutine(PollForReAuth());
+			}
         }
 
         private IEnumerator DeferredAuthenticationSystem()

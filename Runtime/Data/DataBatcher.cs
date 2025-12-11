@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -37,26 +38,33 @@ namespace AbxrLib.Runtime.Data
 		/// </summary>
 		public static void AddEvent(string name, Dictionary<string, string> meta)
 		{
-			long eventTime = Utils.GetUnityTime();
-			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(eventTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-			var payload = new EventPayload
+			if (Abxr.IsServiceAvailable())
 			{
-				timestamp = isoTime,
-				preciseTimestamp = eventTime,
-				name = name,
-				meta = meta ?? new Dictionary<string, string>()
-			};
+				AbxrInsightServiceClient.EventDeferred(name, meta);
+			}
+			else
+			{
+				long eventTime = Utils.GetUnityTime();
+				string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(eventTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+				var payload = new EventPayload
+				{
+					timestamp = isoTime,
+					preciseTimestamp = eventTime,
+					name = name,
+					meta = meta ?? new Dictionary<string, string>()
+				};
 
-			lock (_lock)
-			{
-				if (IsQueueAtLimit(_eventPayloads, "Event"))
+				lock (_lock)
 				{
-					return; // Reject new event if queue is at limit
-				}
-				_eventPayloads.Add(payload);
-				if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
-				{
-					_timer = 0; // Send on the next update
+					if (IsQueueAtLimit(_eventPayloads, "Event"))
+					{
+						return; // Reject new event if queue is at limit
+					}
+					_eventPayloads.Add(payload);
+					if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
+					{
+						_timer = 0; // Send on the next update
+					}
 				}
 			}
 		}
@@ -66,26 +74,33 @@ namespace AbxrLib.Runtime.Data
 		/// </summary>
 		public static void AddTelemetry(string name, Dictionary<string, string> meta)
 		{
-			long telemetryTime = Utils.GetUnityTime();
-			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(telemetryTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-			var payload = new TelemetryPayload
+			if (Abxr.IsServiceAvailable())
 			{
-				timestamp = isoTime,
-				preciseTimestamp = telemetryTime,
-				name = name,
-				meta = meta ?? new Dictionary<string, string>()
-			};
+				AbxrInsightServiceClient.AddTelemetryEntryDeferred(name, meta);
+			}
+			else
+			{
+				long telemetryTime = Utils.GetUnityTime();
+				string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(telemetryTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+				var payload = new TelemetryPayload
+				{
+					timestamp = isoTime,
+					preciseTimestamp = telemetryTime,
+					name = name,
+					meta = meta ?? new Dictionary<string, string>()
+				};
 
-			lock (_lock)
-			{
-				if (IsQueueAtLimit(_telemetryPayloads, "Telemetry"))
+				lock (_lock)
 				{
-					return; // Reject new telemetry if queue is at limit
-				}
-				_telemetryPayloads.Add(payload);
-				if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
-				{
-					_timer = 0; // Send on the next update
+					if (IsQueueAtLimit(_telemetryPayloads, "Telemetry"))
+					{
+						return; // Reject new telemetry if queue is at limit
+					}
+					_telemetryPayloads.Add(payload);
+					if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
+					{
+						_timer = 0; // Send on the next update
+					}
 				}
 			}
 		}
@@ -95,27 +110,53 @@ namespace AbxrLib.Runtime.Data
 		/// </summary>
 		public static void AddLog(string logLevel, string text, Dictionary<string, string> meta)
 		{
-			long logTime = Utils.GetUnityTime();
-			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(logTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-			var payload = new LogPayload
+			if (Abxr.IsServiceAvailable())
 			{
-				timestamp = isoTime,
-				preciseTimestamp = logTime,
-				logLevel = logLevel,
-				text = text,
-				meta = meta ?? new Dictionary<string, string>()
-			};
-
-			lock (_lock)
-			{
-				if (IsQueueAtLimit(_logPayloads, "Log"))
+				if (logLevel.ToUpper().CompareTo("DEBUG") == 0)
 				{
-					return; // Reject new log if queue is at limit
+					AbxrInsightServiceClient.LogDebugDeferred(text, meta);
 				}
-				_logPayloads.Add(payload);
-				if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
+				else if (logLevel.ToUpper().CompareTo("INFO") == 0)
 				{
-					_timer = 0; // Send on the next update
+					AbxrInsightServiceClient.LogInfoDeferred(text, meta);
+				}
+				else if (logLevel.ToUpper().CompareTo("WARN") == 0)
+				{
+					AbxrInsightServiceClient.LogWarnDeferred(text, meta);
+				}
+				else if (logLevel.ToUpper().CompareTo("ERROR") == 0)
+				{
+					AbxrInsightServiceClient.LogErrorDeferred(text, meta);
+				}
+				else if (logLevel.ToUpper().CompareTo("CRITICAL") == 0)
+				{
+					AbxrInsightServiceClient.LogCriticalDeferred(text, meta);
+				}
+			}
+			else
+			{
+				long logTime = Utils.GetUnityTime();
+				string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(logTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+				var payload = new LogPayload
+				{
+					timestamp = isoTime,
+					preciseTimestamp = logTime,
+					logLevel = logLevel,
+					text = text,
+					meta = meta ?? new Dictionary<string, string>()
+				};
+
+				lock (_lock)
+				{
+					if (IsQueueAtLimit(_logPayloads, "Log"))
+					{
+						return; // Reject new log if queue is at limit
+					}
+					_logPayloads.Add(payload);
+					if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt)
+					{
+						_timer = 0; // Send on the next update
+					}
 				}
 			}
 		}
