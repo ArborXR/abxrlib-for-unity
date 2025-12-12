@@ -16,6 +16,8 @@ namespace AbxrLib.Editor
     {
         private const string MetaDataVersionName = "com.arborxr.abxrlib.version";
         private const string MetaDataAppIdName = "com.arborxr.abxrlib.insights_id";
+        private const string MetaDataBuildTypeName = "com.arborxr.abxrlib.build_type";
+
         private const string FallbackVersion = "1.0.0";
 
         /// <summary>
@@ -57,6 +59,39 @@ namespace AbxrLib.Editor
             }
             
             return null;
+        }
+
+        /// <summary>
+        /// Gets the build type based on Configuration values.
+        /// Returns "production" if orgID and authSecret are both empty, "custom" otherwise.
+        /// </summary>
+        private static string GetBuildType()
+        {
+            try
+            {
+                var config = Configuration.Instance;
+                if (config != null)
+                {
+                    bool orgIdEmpty = string.IsNullOrEmpty(config.orgID);
+                    bool authSecretEmpty = string.IsNullOrEmpty(config.authSecret);
+                    
+                    // Production when both are empty, custom otherwise
+                    if (orgIdEmpty && authSecretEmpty)
+                    {
+                        return "production";
+                    }
+                    else
+                    {
+                        return "custom";
+                    }
+                }
+            }
+            catch
+            {
+                // If Configuration is not accessible, default to production
+            }
+            
+            return "production";
         }
 
         /// <summary>
@@ -176,7 +211,7 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// Injects AbxrLib version and app_id metadata into the manifest content.
+        /// Injects AbxrLib version, app_id, and build_type metadata into the manifest content.
         /// </summary>
         private static string InjectMetadata(string manifestContent)
         {
@@ -193,6 +228,9 @@ namespace AbxrLib.Editor
             {
                 manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataAppIdName, appId);
             }
+
+            // Handle build_type metadata
+            manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataBuildTypeName, GetBuildType());
 
             return manifestContent;
         }
