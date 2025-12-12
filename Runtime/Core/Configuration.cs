@@ -201,6 +201,9 @@ namespace AbxrLib.Runtime.Core
         
         [Tooltip("When enabled, direct touch interaction will be used for UI elements instead of ray casting.")]
         public bool enableDirectTouchInteraction = true;
+        
+        [Tooltip("How far in front of the camera the UI panel should float (in meters).")]
+        public float authUIDistanceFromCamera = 1.0f;
 
         [Header("Player Tracking")]
         public bool headsetTracking = true;
