@@ -15,7 +15,7 @@ namespace AbxrLib.Editor
     public class AndroidManifestPostProcessor : IPostGenerateGradleAndroidProject
     {
         private const string MetaDataVersionName = "com.arborxr.abxrlib.version";
-        private const string MetaDataAppIdName = "com.arborxr.abxrlib.app_id";
+        private const string MetaDataAppIdName = "com.arborxr.abxrlib.insights_id";
         private const string FallbackVersion = "1.0.0";
 
         /// <summary>
