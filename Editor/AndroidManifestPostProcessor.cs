@@ -128,9 +128,17 @@ namespace AbxrLib.Editor
         /// </summary>
         private static void ProcessManifest(string projectPath)
         {
+            // For direct APK builds, the manifest is already packaged and not accessible as a file.
+            // This is expected behavior, so we skip silently.
+            if (!string.IsNullOrEmpty(projectPath) && projectPath.EndsWith(".apk", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             string manifestPath = GetManifestPath(projectPath);
             if (string.IsNullOrEmpty(manifestPath))
             {
+                // Only log warning for Gradle project builds where we expect to find the manifest
                 Debug.LogWarning($"AbxrLib: AndroidManifest.xml not found. Searched in: {projectPath}");
                 return;
             }
@@ -205,8 +213,12 @@ namespace AbxrLib.Editor
                 }
             }
 
-            // Log all paths we tried for debugging
-            Debug.LogWarning($"AbxrLib: Manifest not found. Searched paths:\n{string.Join("\n", possiblePaths)}");
+            // Only log warning if this is a Gradle project build (not an APK build)
+            // For APK builds, the manifest is already packaged and not accessible as a file
+            if (!projectPath.EndsWith(".apk", System.StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.LogWarning($"AbxrLib: Manifest not found. Searched paths:\n{string.Join("\n", possiblePaths)}");
+            }
             return null;
         }
 
