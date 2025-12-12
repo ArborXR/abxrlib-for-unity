@@ -67,6 +67,9 @@ namespace AbxrLib.Editor
             
             config.enableDirectTouchInteraction = EditorGUILayout.Toggle(new GUIContent(
                 "Enable Direct Touch Interaction", "When enabled, direct touch interaction will be used for UI elements instead of ray casting."), config.enableDirectTouchInteraction);
+            
+            config.authUIDistanceFromCamera = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
+                "Auth UI Distance From Camera (meters)", "How far in front of the camera the UI panel should float."), config.authUIDistanceFromCamera), 0.1f, 10f);
 
             EditorGUILayout.Space();
 
@@ -147,6 +150,7 @@ namespace AbxrLib.Editor
                 // UI Behavior Control
                 config.authUIFollowCamera = defaultConfig.authUIFollowCamera;
                 config.enableDirectTouchInteraction = defaultConfig.enableDirectTouchInteraction;
+                config.authUIDistanceFromCamera = defaultConfig.authUIDistanceFromCamera;
                 
                 // Player Tracking
                 config.headsetTracking = defaultConfig.headsetTracking;
