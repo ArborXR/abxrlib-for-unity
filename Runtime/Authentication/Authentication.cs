@@ -117,8 +117,12 @@ namespace AbxrLib.Runtime.Authentication
             _deviceId = GetOrCreateDeviceId();
 #endif
             SetSessionData();
-            if (!ValidateConfigValues()) return;
-            
+            if (!ValidateConfigValues())
+            {
+                Abxr.OnAuthCompleted?.Invoke(false, null);
+                return;
+            }
+
             // Start the deferred authentication system
             StartCoroutine(DeferredAuthenticationSystem());
             StartCoroutine(PollForReAuth());
@@ -532,7 +536,11 @@ namespace AbxrLib.Runtime.Authentication
                     request?.Dispose();
                 }
 
-                if (!withRetry) break;
+                if (!withRetry)
+                {
+                    Abxr.OnAuthCompleted?.Invoke(false, null);
+                    break;
+                }
 
                 int retrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
                 Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {retrySeconds} seconds...");
