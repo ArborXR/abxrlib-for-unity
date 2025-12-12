@@ -111,6 +111,8 @@ namespace AbxrLib.Runtime.Authentication
 
         private void Start()
         {
+			AbxrResult	eRet;
+
 			GetConfigData();
 			_deviceId = SystemInfo.deviceUniqueIdentifier;
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -131,8 +133,10 @@ namespace AbxrLib.Runtime.Authentication
 				AbxrInsightServiceClient.set_Partner((int)_partner);
 				AbxrInsightServiceClient.set_DeviceModel(_deviceId);
 				//_deviceTags;
-				if (AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner) != (int)AbxrResult.OK)
+				eRet = (AbxrResult)AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner);
+				if (eRet != AbxrResult.OK)
 				{
+					Debug.LogError($"[AbxrInsightServiceClient] Authenticate failed with error {eRet.ToString()}");
 				}
 			}
 			else

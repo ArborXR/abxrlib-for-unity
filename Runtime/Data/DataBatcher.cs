@@ -38,14 +38,16 @@ namespace AbxrLib.Runtime.Data
 		/// </summary>
 		public static void AddEvent(string name, Dictionary<string, string> meta)
 		{
+			long	eventTime = Utils.GetUnityTime();
+			string	isoTime = DateTimeOffset.FromUnixTimeMilliseconds(eventTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+
 			if (Abxr.IsServiceAvailable())
 			{
-				AbxrInsightServiceClient.EventDeferred(name, meta);
+				// TODO:  Call an Event method that takes all the fields.
+				AbxrInsightServiceClient.EventDeferred(name, meta ?? new Dictionary<string, string>());
 			}
 			else
 			{
-				long eventTime = Utils.GetUnityTime();
-				string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(eventTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 				var payload = new EventPayload
 				{
 					timestamp = isoTime,

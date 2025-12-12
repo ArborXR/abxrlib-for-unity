@@ -1,11 +1,13 @@
-﻿using System;
+﻿using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
+using Newtonsoft.Json;
+using System;
 using System.Collections;
 using System.Collections.Generic;
-using AbxrLib.Runtime.Common;
-using AbxrLib.Runtime.Core;
-using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
+using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 
 namespace AbxrLib.Runtime.Storage
 {
@@ -32,30 +34,40 @@ namespace AbxrLib.Runtime.Storage
 	
 		public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
 		{
-			long storageTime = Utils.GetUnityTime();
-			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(storageTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-			var payload = new Payload
+			if (Abxr.IsServiceAvailable())
 			{
-				timestamp = isoTime,
-				keepPolicy = policy.ToString(),
-				name = name,
-				data = new List<Dictionary<string, string>>
+				String	szOrigin = "";
+				bool	bSessionData = false;	// TODO:  code actual values when known... this code is different than the API.
+
+				AbxrInsightServiceClient.StorageSetEntryFromString(name, Utils.DictToString(entry), policy == Abxr.StoragePolicy.keepLatest, szOrigin, bSessionData);
+			}
+			else
+			{
+				long storageTime = Utils.GetUnityTime();
+				string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(storageTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+				var payload = new Payload
+				{
+					timestamp = isoTime,
+					keepPolicy = policy.ToString(),
+					name = name,
+					data = new List<Dictionary<string, string>>
 				{
 					entry
 				},
-				scope = scope.ToString()
-			};
-		
-			lock (_lock)
-			{
-				if (IsQueueAtLimit(_payloads, "Storage"))
+					scope = scope.ToString()
+				};
+
+				lock (_lock)
 				{
-					return; // Reject new storage if queue is at limit
-				}
-				_payloads.Add(payload);
-				if (_payloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt)
-				{
-					_timer = 0; // Send on the next update
+					if (IsQueueAtLimit(_payloads, "Storage"))
+					{
+						return; // Reject new storage if queue is at limit
+					}
+					_payloads.Add(payload);
+					if (_payloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt)
+					{
+						_timer = 0; // Send on the next update
+					}
 				}
 			}
 		}
