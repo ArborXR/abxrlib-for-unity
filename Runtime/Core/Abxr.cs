@@ -146,12 +146,10 @@ public static partial class Abxr
 	/// Trigger authentication completion callback
 	/// Internal method - called by authentication system when authentication completes
 	/// </summary>
-	/// <param name="success">Whether authentication was successful</param>
-	/// <param name="error">Optional error message</param>
-	internal static void NotifyAuthCompleted(bool success, string error = null)
+	internal static void NotifyAuthCompleted()
 	{
 		// Update connection status based on authentication success
-		_connectionActive = success;
+		_connectionActive = true;
 		
 		// Reset module index cache for new authentication
 		_moduleIndexLoaded = false;
@@ -163,49 +161,44 @@ public static partial class Abxr
 		SaveModuleIndex();
 		
 		// Invoke authentication completion event first
-		OnAuthCompleted?.Invoke(success, error);
+		OnAuthCompleted?.Invoke(true, null);
 		
-		// Check if we should execute module sequence after authentication completes
-		if (success)
+		// Check if there are modules available to execute
+		var moduleToExecute = GetModuleTargetWithoutAdvance();
+		if (moduleToExecute != null)
 		{
-			// Check if there are modules available to execute
-			var moduleToExecute = GetModuleTargetWithoutAdvance();
-			if (moduleToExecute != null)
+			// Check if there are already subscribers to OnModuleTarget
+			if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
 			{
-				// Check if there are already subscribers to OnModuleTarget
-				if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
-				{
-					// Execute immediately since there are already subscribers
-					ExecuteModuleSequence();
-				}
-				else
-				{
-					// Mark as pending - will execute when first subscriber is added
-					_hasPendingModules = true;
-				}
+				// Execute immediately since there are already subscribers
+				ExecuteModuleSequence();
 			}
-			
-			// Start default assessment if no assessments are currently running
-			// This ensures duration tracking starts immediately after authentication
-			// Use lock to prevent race condition with concurrent EventAssessmentStart calls
-			lock (_assessmentStartTimesLock)
+			else
 			{
-				if (_assessmentStartTimes.Count == 0)
-				{
-					// Call EventAssessmentStart inside lock to ensure atomicity
-					// Note: EventAssessmentStart will acquire the same lock, so we need to set it directly
-					_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
-					var defaultMeta = new Dictionary<string, string>
-					{
-						["type"] = "assessment",
-						["verb"] = "started"
-					};
-					Event("DEFAULT", defaultMeta);
-					SetModule("DEFAULT");
-				}
+				// Mark as pending - will execute when first subscriber is added
+				_hasPendingModules = true;
 			}
 		}
-		
+			
+		// Start default assessment if no assessments are currently running
+		// This ensures duration tracking starts immediately after authentication
+		// Use lock to prevent race condition with concurrent EventAssessmentStart calls
+		lock (_assessmentStartTimesLock)
+		{
+			if (_assessmentStartTimes.Count == 0)
+			{
+				// Call EventAssessmentStart inside lock to ensure atomicity
+				// Note: EventAssessmentStart will acquire the same lock, so we need to set it directly
+				_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
+				var defaultMeta = new Dictionary<string, string>
+				{
+					["type"] = "assessment",
+					["verb"] = "started"
+				};
+				Event("DEFAULT", defaultMeta);
+				SetModule("DEFAULT");
+			}
+		}
 	}
 
 	/// <summary>

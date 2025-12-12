@@ -170,7 +170,7 @@ namespace AbxrLib.Runtime.Authentication
             else
             {
                 // No additional auth needed - notify completion now
-                Abxr.NotifyAuthCompleted(true);
+                Abxr.NotifyAuthCompleted();
                 _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
                 Debug.Log("AbxrLib: Authentication fully completed");
             }
@@ -375,7 +375,7 @@ namespace AbxrLib.Runtime.Authentication
                     _failedAuthAttempts = 0;
                     
                     // Notify completion for keyboard authentication success
-                    Abxr.NotifyAuthCompleted(true);
+                    Abxr.NotifyAuthCompleted();
                     
                     yield break;
                 }
@@ -803,7 +803,7 @@ namespace AbxrLib.Runtime.Authentication
                 
                 Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModuleData?.Count ?? 0}");
                 
-                Abxr.NotifyAuthCompleted(true);
+                Abxr.NotifyAuthCompleted();
                 _keyboardAuthSuccess = true;
                 
                 success = true;
