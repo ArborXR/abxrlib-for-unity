@@ -162,17 +162,17 @@ namespace AbxrLib.Runtime.Authentication
             
             yield return AuthRequest();
             yield return GetConfiguration();
-            if (!string.IsNullOrEmpty(_authMechanism?.prompt))
+            if (_authMechanism != null)
             {
                 yield return KeyboardAuthenticate();
                 // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
             }
             else
             {
-                Debug.Log("AbxrLib: Authentication fully completed");
                 // No additional auth needed - notify completion now
                 Abxr.NotifyAuthCompleted(true);
                 _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
+                Debug.Log("AbxrLib: Authentication fully completed");
             }
         }
 
@@ -348,40 +348,27 @@ namespace AbxrLib.Runtime.Authentication
         public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)
         {
             _keyboardAuthSuccess = false;
-            
-            // Ensure inputSource is set in authMechanism (defaults to "user" if not set)
-            if (_authMechanism != null && string.IsNullOrEmpty(_authMechanism.inputSource))
-            {
-                _authMechanism.inputSource = "user";
-            }
+            _enteredAuthValue = null;
             
             if (keyboardInput != null)
             {
-                string originalPrompt = _authMechanism?.prompt;
-                if (_authMechanism != null)
-                {
-                    _authMechanism.prompt = keyboardInput;
-                }
+                string originalPrompt = _authMechanism.prompt;
+                _authMechanism.prompt = keyboardInput;
                 
                 // Store the entered value for email and text auth methods so we can add it to UserData
-                if (_authMechanism != null && (_authMechanism.type == "email" || _authMechanism.type == "text"))
+                if (_authMechanism.type == "email" || _authMechanism.type == "text")
                 {
+                    _enteredAuthValue = keyboardInput;
+                    
                     // For email type, combine with domain if provided
                     if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
                     {
-                        _enteredAuthValue = $"{keyboardInput}@{_authMechanism.domain}";
+                        _enteredAuthValue += $"@{_authMechanism.domain}";
                     }
-                    else
-                    {
-                        _enteredAuthValue = keyboardInput;
-                    }
-                }
-                else
-                {
-                    _enteredAuthValue = null; // Clear for non-email/text auth methods
                 }
                 
                 yield return AuthRequest(false);
+                _enteredAuthValue = null;  // only need this in AuthRequest
                 if (_keyboardAuthSuccess == true)
                 {
                     KeyboardHandler.Destroy();
@@ -393,11 +380,7 @@ namespace AbxrLib.Runtime.Authentication
                     yield break;
                 }
 
-                if (_authMechanism != null)
-                {
-                    _authMechanism.prompt = originalPrompt;
-                }
-                _enteredAuthValue = null; // Clear on failure
+                _authMechanism.prompt = originalPrompt;
             }
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
@@ -405,11 +388,6 @@ namespace AbxrLib.Runtime.Authentication
             prompt += _authMechanism.prompt;
             Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
             _failedAuthAttempts++;
-            // Reset input source when showing keyboard (user will input manually)
-            if (_authMechanism != null)
-            {
-                _authMechanism.inputSource = "user";
-            }
         }
 
         private static void SetSessionData()

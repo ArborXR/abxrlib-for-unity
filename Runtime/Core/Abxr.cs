@@ -270,7 +270,7 @@ public static partial class Abxr
 		if (keyboardType is "text" or null)
 		{
 			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
-			KeyboardHandler.SetPrompt(promptText ?? "Please Enter Your Login");
+			KeyboardHandler.SetPrompt(promptText ?? "Enter Your Login");
 		}
 		else if (keyboardType == "assessmentPin")
 		{
