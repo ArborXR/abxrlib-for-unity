@@ -96,12 +96,6 @@ namespace AbxrLib.Runtime.Authentication
             // Clear stored auth value
             _enteredAuthValue = null;
             
-            // Reset input source in authMechanism
-            if (_authMechanism != null)
-            {
-                _authMechanism.inputSource = "user";
-            }
-            
             // Reset failed authentication attempts counter
             _failedAuthAttempts = 0;
             
