@@ -107,7 +107,12 @@ namespace AbxrLib.Runtime.Authentication
 
         private void Start()
         {
-            if (!Configuration.Instance.IsValid()) return;
+            if (!Configuration.Instance.IsValid())
+            {
+                Abxr.OnAuthCompleted?.Invoke(false, null);
+                return;
+            }
+
             GetConfigData();
             _deviceId = SystemInfo.deviceUniqueIdentifier;
 #if UNITY_ANDROID && !UNITY_EDITOR
