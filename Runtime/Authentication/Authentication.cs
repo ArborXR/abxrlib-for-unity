@@ -63,6 +63,7 @@ namespace AbxrLib.Runtime.Authentication
         private const string DeviceIdKey = "abxrlib_device_id";
 
         private static bool? _keyboardAuthSuccess;
+        private static bool _initialized;
         
         // Auth handoff for external launcher apps
         private static bool _authHandoffCompleted = false;
@@ -107,12 +108,6 @@ namespace AbxrLib.Runtime.Authentication
 
         private void Start()
         {
-            if (!Configuration.Instance.IsValid())
-            {
-                Abxr.OnAuthCompleted?.Invoke(false, null);
-                return;
-            }
-
             GetConfigData();
             _deviceId = SystemInfo.deviceUniqueIdentifier;
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -122,26 +117,15 @@ namespace AbxrLib.Runtime.Authentication
             _deviceId = GetOrCreateDeviceId();
 #endif
             SetSessionData();
-            if (!ValidateConfigValues())
-            {
-                Abxr.OnAuthCompleted?.Invoke(false, null);
-                return;
-            }
-
+            _initialized = true;
+            
             // Start the deferred authentication system
             StartCoroutine(DeferredAuthenticationSystem());
             StartCoroutine(PollForReAuth());
         }
 
-        private IEnumerator DeferredAuthenticationSystem()
+        private static IEnumerator DeferredAuthenticationSystem()
         {
-            // Wait for the end of the frame to allow all other Start() methods to run
-            yield return new WaitForEndOfFrame();
-            
-            // Wait one more frame to ensure all Awake() and Start() methods have completed
-            yield return null;
-            
-            // Check if auto-start authentication is enabled in configuration
             if (!Configuration.Instance.disableAutoStartAuthentication)
             {
                 if (Configuration.Instance.authenticationStartDelay > 0)
@@ -162,6 +146,15 @@ namespace AbxrLib.Runtime.Authentication
 
         public static IEnumerator Authenticate()
         {
+            // Wait here if Start hasn't finished
+            while (!_initialized) yield return null;
+            
+            if (!ValidateConfigValues())
+            {
+                Abxr.OnAuthCompleted?.Invoke(false, null);
+                yield break;
+            }
+            
             // Check for auth handoff first before doing normal authentication
             yield return CheckAuthHandoff();
             if (_authHandoffCompleted)
@@ -333,6 +326,8 @@ namespace AbxrLib.Runtime.Authentication
 #endif
         private static bool ValidateConfigValues()
         {
+            if (!Configuration.Instance.IsValid()) return false;
+            
             if (string.IsNullOrEmpty(_appId))
             {
                 Debug.LogError("AbxrLib: Application ID is missing. Cannot authenticate.");
