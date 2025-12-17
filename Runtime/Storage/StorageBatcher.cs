@@ -34,7 +34,7 @@ namespace AbxrLib.Runtime.Storage
 	
 		public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
 		{
-			if (Abxr.IsServiceAvailable())
+			if (Abxr.ServiceIsFullyInitialized())
 			{
 				String	szOrigin = "";
 				bool	bSessionData = false;	// TODO:  code actual values when known... this code is different than the API.

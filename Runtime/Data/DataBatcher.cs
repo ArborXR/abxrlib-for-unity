@@ -41,7 +41,7 @@ namespace AbxrLib.Runtime.Data
 			long	eventTime = Utils.GetUnityTime();
 			string	isoTime = DateTimeOffset.FromUnixTimeMilliseconds(eventTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
-			if (Abxr.IsServiceAvailable())
+			if (Abxr.ServiceIsFullyInitialized())
 			{
 				// TODO:  Call an Event method that takes all the fields.
 				AbxrInsightServiceClient.EventDeferred(name, meta ?? new Dictionary<string, string>());
@@ -76,7 +76,7 @@ namespace AbxrLib.Runtime.Data
 		/// </summary>
 		public static void AddTelemetry(string name, Dictionary<string, string> meta)
 		{
-			if (Abxr.IsServiceAvailable())
+			if (Abxr.ServiceIsFullyInitialized())
 			{
 				AbxrInsightServiceClient.AddTelemetryEntryDeferred(name, meta);
 			}
@@ -112,7 +112,7 @@ namespace AbxrLib.Runtime.Data
 		/// </summary>
 		public static void AddLog(string logLevel, string text, Dictionary<string, string> meta)
 		{
-			if (Abxr.IsServiceAvailable())
+			if (Abxr.ServiceIsFullyInitialized())
 			{
 				if (logLevel.ToUpper().CompareTo("DEBUG") == 0)
 				{

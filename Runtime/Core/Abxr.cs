@@ -1799,11 +1799,11 @@ public static partial class Abxr
 			return "";
 		}
 	}
-	public static bool IsServiceAvailable()
-	{
-		return AbxrInsightServiceClient.IsServiceAvailable();
-		//return ArborServiceClient.IsConnected();	// VS2022 AI suggested this... might be a better way to go in the final version.
-	}
+	//public static bool IsServiceAvailable()
+	//{
+	//	return AbxrInsightServiceClient.IsServiceAvailable();
+	//	//return ArborServiceClient.IsConnected();	// VS2022 AI suggested this... might be a better way to go in the final version.
+	//}
 	/// <summary>
 	/// Stronger form of IsServiceAvailable()... also insists that the SQLiteJDBC.Initialize() has been called by AbxrInsightService.OnCreate().
 	/// </summary>

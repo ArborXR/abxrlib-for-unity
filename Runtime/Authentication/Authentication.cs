@@ -112,6 +112,8 @@ namespace AbxrLib.Runtime.Authentication
         private void Start()
         {
 			AbxrResult	eRet;
+			int			i;
+			bool		bServiceInitialized;
 
 			GetConfigData();
 			_deviceId = SystemInfo.deviceUniqueIdentifier;
@@ -125,23 +127,55 @@ namespace AbxrLib.Runtime.Authentication
 
 			SetSessionData();
 
-			if (Abxr.IsServiceAvailable())
+Debug.LogError($"[AbxrInsightServiceClient] Authenticate wait for fully initialized.");
+			for (i = 0, bServiceInitialized = false; !bServiceInitialized || i < 40; i++)
 			{
-				AbxrInsightServiceClient.set_AppID(_appId);
-				AbxrInsightServiceClient.set_OrgID(_orgId);
-				AbxrInsightServiceClient.set_ApiSecret(_authSecret);
-				AbxrInsightServiceClient.set_Partner((int)_partner);
-				AbxrInsightServiceClient.set_DeviceModel(_deviceId);
-				//_deviceTags;
-				eRet = (AbxrResult)AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner);
-				if (eRet != AbxrResult.OK)
+				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
 				{
-					Debug.LogError($"[AbxrInsightServiceClient] Authenticate failed with error {eRet.ToString()}");
+					bServiceInitialized = true;
+				}
+				else
+				{
+					System.Threading.Thread.Sleep(250);
+				}
+			}
+			if (bServiceInitialized)
+			{
+Debug.LogError($"[AbxrInsightServiceClient] Call WhatTimeIsIt(), returned {AbxrInsightServiceClient.WhatTimeIsIt()}.");
+			}
+			else
+			{
+Debug.LogError($"[AbxrInsightServiceClient] Never got the service.");
+			}
+Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt IsServiceFullyInitialized().");
+			if (Abxr.ServiceIsFullyInitialized())
+			{
+Debug.LogError($"[AbxrInsightServiceClient] Authenticate got into IsServiceFullyInitialized() creds:  {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
+				try
+				{
+					AbxrInsightServiceClient.set_RestUrl(Configuration.Instance.restUrl + "v1/");
+					AbxrInsightServiceClient.set_AppID(_appId);
+					AbxrInsightServiceClient.set_OrgID(_orgId);
+					AbxrInsightServiceClient.set_ApiSecret(_authSecret);
+					AbxrInsightServiceClient.set_Partner((int)_partner);
+					AbxrInsightServiceClient.set_DeviceModel(_deviceId);
+					//_deviceTags;
+Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth with service with these creds: {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
+					eRet = (AbxrResult)AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner);
+					if (eRet != AbxrResult.OK)
+					{
+						Debug.LogError($"[AbxrInsightServiceClient] Authenticate failed with error {eRet.ToString()}");
+					}
+				}
+				catch (Exception e)
+				{
+					Debug.LogException(e);
 				}
 			}
 			else
 			{
 				// Start the deferred authentication system
+Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth non-service.");
 				StartCoroutine(DeferredAuthenticationSystem());
 				StartCoroutine(PollForReAuth());
 			}

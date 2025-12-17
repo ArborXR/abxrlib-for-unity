@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.XR.CoreUtils;
-using UnityEditor.PackageManager;
+//using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
