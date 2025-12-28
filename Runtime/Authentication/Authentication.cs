@@ -69,8 +69,12 @@ namespace AbxrLib.Runtime.Authentication
         private static bool _authHandoffCompleted = false;
         private static bool _sessionUsedAuthHandoff = false;
 
+        private static bool _dataSidecarInstalled;
+
         public static bool Authenticated()
         {
+            if (_responseData == null && _dataSidecarInstalled) return true;  // sidecar can deal with authentication
+            
             // Check if we have a valid token and it hasn't expired
             return !string.IsNullOrEmpty(_responseData?.Token) && 
                    !string.IsNullOrEmpty(_responseData?.Secret) && 
@@ -163,6 +167,13 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             yield return AuthRequest();
+            if (_responseData?.Token == null)
+            {
+                Debug.Log("AbxrLib: Unable to authenticate");
+                Abxr.NotifyAuthCompleted();
+                yield break;
+            }
+            
             yield return GetConfiguration();
             if (_authMechanism != null)
             {
@@ -444,7 +455,8 @@ namespace AbxrLib.Runtime.Authentication
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             
             bool success = false;
-            while (!success)
+            int attempts = 0;
+            while (!success && attempts < Configuration.Instance.sendRetriesOnFailure)
             {
                 // Create request and handle creation errors
                 UnityWebRequest request;
@@ -543,9 +555,13 @@ namespace AbxrLib.Runtime.Authentication
                 }
 
                 int retrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
+                attempts++;
                 Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {retrySeconds} seconds...");
                 yield return new WaitForSeconds(retrySeconds);
             }
+            
+            _dataSidecarInstalled = DataCollectorClient.Configure(
+                Configuration.Instance.restUrl, _appId, _orgId, _authSecret, _deviceId, _sessionId, _responseData?.Token, _responseData?.Secret);
         }
         
         /// <summary>
@@ -656,10 +672,10 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             request.SetRequestHeader("Authorization", "Bearer " + _responseData.Token);
-        
+
             string unixTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
             request.SetRequestHeader("x-abxrlib-timestamp", unixTimeSeconds);
-        
+            
             string hashString = _responseData.Token + _responseData.Secret + unixTimeSeconds;
             if (!string.IsNullOrEmpty(json))
             {
