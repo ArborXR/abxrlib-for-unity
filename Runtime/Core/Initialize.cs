@@ -15,6 +15,7 @@ namespace AbxrLib.Runtime.Core
     public static class Initialize
     {
         public static readonly long StartTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        public static readonly bool InsightServiceInstalled = InsightServiceClient.IsProviderAvailable();
     
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void OnBeforeSceneLoad()

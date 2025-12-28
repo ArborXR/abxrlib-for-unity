@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.ServiceClient;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -172,18 +173,26 @@ namespace AbxrLib.Runtime.Data
 				UnityWebRequest request = null;
 				bool requestCreated = false;
 				bool shouldRetry = false;
+				
+				var wrapper = new DataPayloadWrapper
+				{
+					@event = eventsToSend,
+					telemetry = telemetriesToSend,
+					basicLog = logsToSend
+				};
+				string json = JsonConvert.SerializeObject(wrapper);
+				
+				if (Authentication.Authentication.InsightServiceConfigured)
+				{
+					if (InsightServiceClient.SendBatch(json)) yield break;
+
+					lastError = "Insight Service failed";
+					break; // triggers your requeue logic at the end
+				}
 
 				// Request creation with error handling (no yield statements)
 				try
 				{
-					var wrapper = new DataPayloadWrapper
-					{
-						@event = eventsToSend,
-						telemetry = telemetriesToSend,
-						basicLog = logsToSend
-					};
-					string json = JsonConvert.SerializeObject(wrapper);
-
 					request = new UnityWebRequest(_uri, "POST");
 					Utils.BuildRequest(request, json);
 					Authentication.Authentication.SetAuthHeaders(request, json);

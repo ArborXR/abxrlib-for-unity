@@ -171,12 +171,18 @@ namespace AbxrLib.Editor
         /// </summary>
         private static string GetManifestPath(string projectPath)
         {
+            // Unity/Bee Gradle project layout
+            string launcherManifest = Path.Combine(projectPath, "launcher", "src", "main", "AndroidManifest.xml");
+            if (File.Exists(launcherManifest)) return launcherManifest;
+
+            // Fallback (not ideal, but keep as last resort)
+            string unityLibraryManifest = Path.Combine(projectPath, "unityLibrary", "src", "main", "AndroidManifest.xml");
+            if (File.Exists(unityLibraryManifest)) return unityLibraryManifest;
+
+            
             // For Gradle builds (most common), the manifest is in src/main/AndroidManifest.xml
             string gradleManifestPath = Path.Combine(projectPath, "src", "main", "AndroidManifest.xml");
-            if (File.Exists(gradleManifestPath))
-            {
-                return gradleManifestPath;
-            }
+            if (File.Exists(gradleManifestPath)) return gradleManifestPath;
 
             // Get the project root directory (parent of Assets folder)
             string unityProjectPath = Application.dataPath;
@@ -239,6 +245,8 @@ namespace AbxrLib.Editor
             
             // Handle version metadata
             manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataVersionName, GetVersion());
+            
+            manifestContent = AddQueriesPackage(manifestContent, "com.arborxr.insightservice");
 
             // Handle app_id metadata (only if app_id is available)
             string appId = GetAppId();
@@ -327,6 +335,42 @@ namespace AbxrLib.Editor
             }
 
             Debug.LogWarning("AbxrLib: Could not find <application> tag. Metadata not added.");
+            return manifestContent;
+        }
+        
+        private static string AddQueriesPackage(string manifestContent, string packageName)
+        {
+            if (string.IsNullOrEmpty(packageName)) return manifestContent;
+
+            // Already present?
+            if (manifestContent.Contains($"<package android:name=\"{packageName}\""))
+                return manifestContent;
+
+            // If <queries> exists, insert <package .../> right before </queries>
+            var closeMatch = Regex.Match(manifestContent, @"</queries>", RegexOptions.IgnoreCase);
+            if (closeMatch.Success)
+            {
+                string line = $"        <package android:name=\"{packageName}\" />\n";
+                return manifestContent.Insert(closeMatch.Index, line);
+            }
+
+            // Otherwise insert a full <queries> block right after the opening <manifest ...> tag
+            var manifestMatch = Regex.Match(manifestContent, @"(<manifest[\s\S]*?>)", RegexOptions.IgnoreCase);
+            if (manifestMatch.Success)
+            {
+                int insertPos = manifestMatch.Index + manifestMatch.Length;
+                int newlineAfter = manifestContent.IndexOf('\n', insertPos);
+                if (newlineAfter > 0) insertPos = newlineAfter + 1;
+
+                string block =
+                    "    <queries>\n" +
+                    $"        <package android:name=\"{packageName}\" />\n" +
+                    "    </queries>\n";
+
+                return manifestContent.Insert(insertPos, block);
+            }
+
+            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. <queries> not added.");
             return manifestContent;
         }
 

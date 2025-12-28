@@ -46,6 +46,7 @@ namespace AbxrLib.Runtime.Authentication
         private static int _failedAuthAttempts;
         
         private static AuthMechanism _authMechanism;
+        private static string _authMechanismKey;
         private static DateTime _tokenExpiry = DateTime.MinValue;
         
         private static AuthResponse _responseData;
@@ -79,6 +80,7 @@ namespace AbxrLib.Runtime.Authentication
         }
         
         public static bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
+        public static bool InsightServiceConfigured;
         
         /// <summary>
         /// Clears authentication state and stops data transmission
@@ -163,19 +165,40 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             yield return AuthRequest();
+            if (_responseData?.Token == null)
+            {
+                Debug.Log("AbxrLib: Unable to authenticate");
+                _authMechanism = JsonConvert.DeserializeObject<AuthMechanism>(PlayerPrefs.GetString(_authMechanismKey, ""));
+                if (_authMechanism != null)
+                {
+                    // Unable to authenticate but assume the insight service still needs the keyboard input for auth later
+                    yield return KeyboardAuthenticate();
+                }
+                
+                yield break;
+            }
+            
             yield return GetConfiguration();
             if (_authMechanism != null)
             {
                 yield return KeyboardAuthenticate();
-                // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
             }
             else
             {
-                // No additional auth needed - notify completion now
-                Abxr.NotifyAuthCompleted();
-                _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
-                Debug.Log("AbxrLib: Authentication fully completed");
+                _keyboardAuthSuccess = true;  // So Authenticated() returns true
+                AuthCompleted();
             }
+        }
+
+        private static void AuthCompleted()
+        {
+            Debug.Log("AbxrLib: Authentication fully completed");
+            Abxr.NotifyAuthCompleted();
+            if (!Initialize.InsightServiceInstalled) return;
+            
+            string authMechanism = _authMechanism == null ? null : JsonConvert.SerializeObject(_authMechanism);
+            InsightServiceConfigured = InsightServiceClient.Configure(Configuration.Instance.restUrl, _appId, _orgId,
+                _authSecret, _deviceId, _sessionId, authMechanism, _responseData?.Token, _responseData?.Secret);
         }
 
         public static void ReAuthenticate()
@@ -247,6 +270,9 @@ namespace AbxrLib.Runtime.Authentication
             if (_authMechanism != null)
             {
                 _authMechanism.inputSource = inputSource;
+                var savedAuthMechanism = JsonConvert.DeserializeObject<AuthMechanism>(PlayerPrefs.GetString(_authMechanismKey, ""));
+                savedAuthMechanism.inputSource = inputSource;
+                PlayerPrefs.SetString(_authMechanismKey, JsonConvert.SerializeObject(savedAuthMechanism));
             }
         }
 
@@ -358,7 +384,15 @@ namespace AbxrLib.Runtime.Authentication
             {
                 string originalPrompt = _authMechanism.prompt;
                 _authMechanism.prompt = keyboardInput;
-                
+
+                if (_responseData?.Token == null)
+                {
+                    // Only here to get the input for the insight service
+                    AuthCompleted();
+                    KeyboardHandler.Destroy();
+                    yield break;
+                }
+
                 // Store the entered value for email and text auth methods so we can add it to UserData
                 if (_authMechanism.type == "email" || _authMechanism.type == "text")
                 {
@@ -375,12 +409,9 @@ namespace AbxrLib.Runtime.Authentication
                 _enteredAuthValue = null;  // only need this in AuthRequest
                 if (_keyboardAuthSuccess == true)
                 {
+                    AuthCompleted();
                     KeyboardHandler.Destroy();
                     _failedAuthAttempts = 0;
-                    
-                    // Notify completion for keyboard authentication success
-                    Abxr.NotifyAuthCompleted();
-                    
                     yield break;
                 }
 
@@ -444,7 +475,8 @@ namespace AbxrLib.Runtime.Authentication
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             
             bool success = false;
-            while (!success)
+            int attempts = 0;
+            while (!success && attempts < Configuration.Instance.sendRetriesOnFailure)
             {
                 // Create request and handle creation errors
                 UnityWebRequest request;
@@ -543,6 +575,7 @@ namespace AbxrLib.Runtime.Authentication
                 }
 
                 int retrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
+                attempts++;
                 Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {retrySeconds} seconds...");
                 yield return new WaitForSeconds(retrySeconds);
             }
@@ -628,6 +661,8 @@ namespace AbxrLib.Runtime.Authentication
                             {
                                 _authMechanism.inputSource = "user";
                             }
+                            
+                            PlayerPrefs.SetString(_authMechanismKey, JsonConvert.SerializeObject(_authMechanism));
                         }
                     }
                 }
@@ -656,10 +691,10 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             request.SetRequestHeader("Authorization", "Bearer " + _responseData.Token);
-        
+            
             string unixTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
             request.SetRequestHeader("x-abxrlib-timestamp", unixTimeSeconds);
-        
+            
             string hashString = _responseData.Token + _responseData.Secret + unixTimeSeconds;
             if (!string.IsNullOrEmpty(json))
             {
@@ -810,8 +845,8 @@ namespace AbxrLib.Runtime.Authentication
                 _sessionUsedAuthHandoff = true;
                 
                 Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModuleData?.Count ?? 0}");
-                
-                Abxr.NotifyAuthCompleted();
+
+                AuthCompleted();
                 _keyboardAuthSuccess = true;
                 
                 success = true;
