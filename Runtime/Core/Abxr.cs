@@ -147,12 +147,10 @@ public static partial class Abxr
 	/// Trigger authentication completion callback
 	/// Internal method - called by authentication system when authentication completes
 	/// </summary>
-	/// <param name="success">Whether authentication was successful</param>
-	/// <param name="error">Optional error message</param>
-	internal static void NotifyAuthCompleted(bool success, string error = null)
+	internal static void NotifyAuthCompleted()
 	{
 		// Update connection status based on authentication success
-		_connectionActive = success;
+		_connectionActive = true;
 		
 		// Reset module index cache for new authentication
 		_moduleIndexLoaded = false;
@@ -164,49 +162,44 @@ public static partial class Abxr
 		SaveModuleIndex();
 		
 		// Invoke authentication completion event first
-		OnAuthCompleted?.Invoke(success, error);
+		OnAuthCompleted?.Invoke(true, null);
 		
-		// Check if we should execute module sequence after authentication completes
-		if (success)
+		// Check if there are modules available to execute
+		var moduleToExecute = GetModuleTargetWithoutAdvance();
+		if (moduleToExecute != null)
 		{
-			// Check if there are modules available to execute
-			var moduleToExecute = GetModuleTargetWithoutAdvance();
-			if (moduleToExecute != null)
+			// Check if there are already subscribers to OnModuleTarget
+			if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
 			{
-				// Check if there are already subscribers to OnModuleTarget
-				if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
-				{
-					// Execute immediately since there are already subscribers
-					ExecuteModuleSequence();
-				}
-				else
-				{
-					// Mark as pending - will execute when first subscriber is added
-					_hasPendingModules = true;
-				}
+				// Execute immediately since there are already subscribers
+				ExecuteModuleSequence();
 			}
-			
-			// Start default assessment if no assessments are currently running
-			// This ensures duration tracking starts immediately after authentication
-			// Use lock to prevent race condition with concurrent EventAssessmentStart calls
-			lock (_assessmentStartTimesLock)
+			else
 			{
-				if (_assessmentStartTimes.Count == 0)
-				{
-					// Call EventAssessmentStart inside lock to ensure atomicity
-					// Note: EventAssessmentStart will acquire the same lock, so we need to set it directly
-					_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
-					var defaultMeta = new Dictionary<string, string>
-					{
-						["type"] = "assessment",
-						["verb"] = "started"
-					};
-					Event("DEFAULT", defaultMeta);
-					SetModule("DEFAULT");
-				}
+				// Mark as pending - will execute when first subscriber is added
+				_hasPendingModules = true;
 			}
 		}
-		
+			
+		// Start default assessment if no assessments are currently running
+		// This ensures duration tracking starts immediately after authentication
+		// Use lock to prevent race condition with concurrent EventAssessmentStart calls
+		lock (_assessmentStartTimesLock)
+		{
+			if (_assessmentStartTimes.Count == 0)
+			{
+				// Call EventAssessmentStart inside lock to ensure atomicity
+				// Note: EventAssessmentStart will acquire the same lock, so we need to set it directly
+				_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
+				var defaultMeta = new Dictionary<string, string>
+				{
+					["type"] = "assessment",
+					["verb"] = "started"
+				};
+				Event("DEFAULT", defaultMeta);
+				SetModule("DEFAULT");
+			}
+		}
 	}
 
 	/// <summary>
@@ -215,7 +208,19 @@ public static partial class Abxr
 	/// Returns null if no authentication has completed yet
 	/// </summary>
 	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
-	public static Dictionary<string, object> GetUserData() => Authentication.GetAuthResponse().UserData;
+	public static Dictionary<string, string> GetUserData() => Authentication.GetAuthResponse().UserData;
+
+	/// <summary>
+	/// Update user data (UserId and UserData) and reauthenticate to sync with server
+	/// Updates the authentication response with new user information without clearing authentication state
+	/// The server API allows reauthenticate to update these values
+	/// </summary>
+	/// <param name="userId">Optional user ID to update</param>
+	/// <param name="additionalUserData">Optional additional user data dictionary to merge with existing UserData</param>
+	public static void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null)
+	{
+		Authentication.SetUserData(userId, additionalUserData);
+	}
 
 	/// <summary>
 	/// Manually start the authentication process
@@ -245,13 +250,7 @@ public static partial class Abxr
 	public static void StartNewSession()
 	{
 		Authentication.SetSessionId(Guid.NewGuid().ToString());
-		CoroutineRunner.Instance.StartCoroutine(StartNewSessionCoroutine());
-	}
-
-	private static IEnumerator StartNewSessionCoroutine()
-	{
-		yield return Authentication.Authenticate();
-		// Note: Authentication.Authenticate() already calls NotifyAuthCompleted() internally
+		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 	}
 
 	/// <summary>
@@ -262,11 +261,10 @@ public static partial class Abxr
 	/// </summary>
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
-Debug.Log($"PresentKeyboard called with promptText={promptText ?? "null"}, keyboardType={keyboardType ?? "null"}, emailDomain={emailDomain ?? "null"}");
 		if (keyboardType is "text" or null)
 		{
 			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
-			KeyboardHandler.SetPrompt(promptText ?? "Please Enter Your Login");
+			KeyboardHandler.SetPrompt(promptText ?? "Enter Your Login");
 		}
 		else if (keyboardType == "assessmentPin")
 		{

@@ -201,14 +201,14 @@ namespace AbxrLib.Runtime.Core
 			return sb.ToString();
 		}
 	}
-	/// <summary>
-	/// Utility functions and helper methods for AbxrLib
-	/// 
-	/// This class provides low-level utility functions used throughout the AbxrLib system,
-	/// including cryptographic operations, network utilities, data parsing, and formatting.
-	/// All methods are static and designed for internal use within the AbxrLib framework.
-	/// </summary>
-	public static class Utils
+    /// <summary>
+    /// Utility functions and helper methods for AbxrLib
+    /// 
+    /// This class provides low-level utility functions used throughout the AbxrLib system,
+    /// including cryptographic operations, network utilities, data parsing, and formatting.
+    /// All methods are static and designed for internal use within the AbxrLib framework.
+    /// </summary>
+    public static class Utils
     {
 		// --- Dewonkification helpers for enabling C# layer to present/accept nice clean C# types.
 		public static string StringListToString(List<string> lsz)
@@ -431,8 +431,8 @@ namespace AbxrLib.Runtime.Core
             return builder.ToString();
         }
     
-    public static string GetQueryParam(string key, string url)
-    {
+        public static string GetQueryParam(string key, string url)
+        {
             var questionMarkIndex = url.IndexOf('?');
             if (questionMarkIndex < 0) return "";
             var queryString = url.Substring(questionMarkIndex + 1);
@@ -510,7 +510,7 @@ namespace AbxrLib.Runtime.Core
     #endif
             return "";
         }
-    
+
         public static long GetUnityTime() => (long)(Time.time * 1000f) + Initialize.StartTimeMs;
 
         public static void SendAllData()
@@ -570,6 +570,27 @@ namespace AbxrLib.Runtime.Core
             }
 
             return moduleDataList;
+        }
+        
+        /// <summary>
+        /// Validates that a string is a valid HTTP/HTTPS URL
+        /// </summary>
+        /// <param name="url">The URL string to validate</param>
+        /// <returns>True if the URL is valid, false otherwise</returns>
+        public static bool IsValidUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+                
+            try
+            {
+                var uri = new Uri(url);
+                return uri.Scheme == "http" || uri.Scheme == "https";
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

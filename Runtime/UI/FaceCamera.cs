@@ -40,8 +40,8 @@ namespace AbxrLib.Runtime.UI
             if (useConfigurationValues && config != null)
             {
                 faceCamera = config.authUIFollowCamera;
-                // Use default positioning values - no longer configurable
-                distanceFromCamera = DEFAULT_DISTANCE_FROM_CAMERA;
+                // Use configuration values for positioning
+                distanceFromCamera = config.authUIDistanceFromCamera;
                 verticalOffset = DEFAULT_VERTICAL_OFFSET;
                 xPosition = DEFAULT_X_POSITION;
             }
@@ -86,8 +86,8 @@ namespace AbxrLib.Runtime.UI
             if (useConfigurationValues && config != null)
             {
                 faceCamera = config.authUIFollowCamera;
-                // Use default positioning values - no longer configurable
-                distanceFromCamera = DEFAULT_DISTANCE_FROM_CAMERA;
+                // Use configuration values for positioning
+                distanceFromCamera = config.authUIDistanceFromCamera;
                 verticalOffset = DEFAULT_VERTICAL_OFFSET;
                 xPosition = DEFAULT_X_POSITION;
             }

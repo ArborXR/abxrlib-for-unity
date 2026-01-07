@@ -1,13 +1,12 @@
-﻿using AbxrLib.Runtime.Common;
-using AbxrLib.Runtime.Core;
-using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
-using Newtonsoft.Json;
+﻿using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using AbxrLib.Runtime.Common;
+using AbxrLib.Runtime.Core;
+using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
-using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 
 namespace AbxrLib.Runtime.Storage
 {
@@ -54,20 +53,19 @@ namespace AbxrLib.Runtime.Storage
 				{
 					entry
 				},
-					scope = scope.ToString()
-				};
+				scope = scope.ToString()
+			};
 
-				lock (_lock)
+			lock (_lock)
+			{
+				if (IsQueueAtLimit(_payloads, "Storage"))
 				{
-					if (IsQueueAtLimit(_payloads, "Storage"))
-					{
-						return; // Reject new storage if queue is at limit
-					}
-					_payloads.Add(payload);
-					if (_payloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt)
-					{
-						_timer = 0; // Send on the next update
-					}
+					return; // Reject new storage if queue is at limit
+				}
+				_payloads.Add(payload);
+				if (_payloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt)
+				{
+					_timer = 0; // Send on the next update
 				}
 			}
 		}

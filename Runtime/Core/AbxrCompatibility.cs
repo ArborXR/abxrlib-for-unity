@@ -302,7 +302,7 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="propertyKey">Property key to retrieve</param>
 	/// <returns>Property value if found, null otherwise</returns>
-	public static object GetParticipantProperty(string propertyKey)
+	public static string GetParticipantProperty(string propertyKey)
 	{
 		var userData = GetUserData();
 		if (userData != null && userData.ContainsKey(propertyKey))

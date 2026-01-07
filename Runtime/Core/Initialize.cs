@@ -37,6 +37,9 @@ namespace AbxrLib.Runtime.Core
 #if PICO_ENTERPRISE_SDK_3
             ObjectAttacher.Attach<PicoQRCodeReader>("PicoQRCodeReader");
 #endif
+#if META_QR_AVAILABLE
+            ObjectAttacher.Attach<MetaQRCodeReader>("MetaQRCodeReader");
+#endif
 #endif
             ObjectAttacher.Attach<Authentication.Authentication>("Authentication");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");

@@ -67,6 +67,9 @@ namespace AbxrLib.Editor
             
             config.enableDirectTouchInteraction = EditorGUILayout.Toggle(new GUIContent(
                 "Enable Direct Touch Interaction", "When enabled, direct touch interaction will be used for UI elements instead of ray casting."), config.enableDirectTouchInteraction);
+            
+            config.authUIDistanceFromCamera = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
+                "Auth UI Distance From Camera (meters)", "How far in front of the camera the UI panel should float."), config.authUIDistanceFromCamera), 0.1f, 10f);
 
             EditorGUILayout.Space();
 
@@ -119,18 +122,20 @@ namespace AbxrLib.Editor
             config.frameRateTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
                 "Frame Rate Tracking Period (seconds)", config.frameRateTrackingPeriodSeconds), 0.1f, 60f);
             config.sendRetriesOnFailure = Mathf.Clamp(EditorGUILayout.IntField("Send Retries On Failure", config.sendRetriesOnFailure), 0, 10);
-            config.sendRetryIntervalSeconds = Mathf.Clamp(EditorGUILayout.IntField("Send Retry Interval Seconds", config.sendRetryIntervalSeconds), 1, 300);
-            config.sendNextBatchWaitSeconds = Mathf.Clamp(EditorGUILayout.IntField("Send Next Batch Wait Seconds", config.sendNextBatchWaitSeconds), 1, 3600);
+            config.sendRetryIntervalSeconds = Mathf.Clamp(EditorGUILayout.IntField("Send Retry Interval (seconds)", config.sendRetryIntervalSeconds), 1, 300);
+            config.sendNextBatchWaitSeconds = Mathf.Clamp(EditorGUILayout.IntField("Send Next Batch Wait (seconds)", config.sendNextBatchWaitSeconds), 1, 3600);
             config.requestTimeoutSeconds = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
-                "Request Timeout Seconds", "How long to wait before giving up on network requests"), config.requestTimeoutSeconds), 5, 300);
+                "Request Timeout (seconds)", "How long to wait before giving up on network requests"), config.requestTimeoutSeconds), 5, 300);
             config.stragglerTimeoutSeconds = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
-                "Straggler Timeout Seconds", "0 = Infinite, i.e. Never send remainders = Always send exactly DataEntriesPerSendAttempt"), config.stragglerTimeoutSeconds), 0, 3600);
+                "Straggler Timeout (seconds)", "0 = Infinite, i.e. Never send remainders = Always send exactly DataEntriesPerSendAttempt"), config.stragglerTimeoutSeconds), 0, 3600);
+            config.maxCallFrequencySeconds = Mathf.Clamp(EditorGUILayout.FloatField(
+                "Maximum Data Send Frequency (seconds)", config.maxCallFrequencySeconds), 0.1f, 60f);
             config.dataEntriesPerSendAttempt = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
                 "Data Entries Per Send Attempt", "Total count of events, logs, and telemetry entries to batch before sending (0 = Send all not already sent)"), config.dataEntriesPerSendAttempt), 1, 1000);
         
             config.storageEntriesPerSendAttempt = Mathf.Clamp(EditorGUILayout.IntField("Storage Entries Per Send Attempt", config.storageEntriesPerSendAttempt), 1, 1000);
             config.pruneSentItemsOlderThanHours = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
-                "Prune Sent Items Older Than Hours", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours), 0, 8760);
+                "Prune Sent Items Older Than (hours)", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours), 0, 8760);
             config.maximumCachedItems = Mathf.Clamp(EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems), 10, 10000);
 
 
@@ -145,6 +150,7 @@ namespace AbxrLib.Editor
                 // UI Behavior Control
                 config.authUIFollowCamera = defaultConfig.authUIFollowCamera;
                 config.enableDirectTouchInteraction = defaultConfig.enableDirectTouchInteraction;
+                config.authUIDistanceFromCamera = defaultConfig.authUIDistanceFromCamera;
                 
                 // Player Tracking
                 config.headsetTracking = defaultConfig.headsetTracking;
