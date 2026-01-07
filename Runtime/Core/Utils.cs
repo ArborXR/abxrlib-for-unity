@@ -177,15 +177,38 @@ namespace AbxrLib.Runtime.Core
 				addKeyValueAction(sFirst.ToString(), sSecond.ToString());
 			}
 		}
+		/// <summary>
+		/// Extension method for converting Dictionary<string, string> to useful-for-debug-output form.
+		/// </summary>
+		/// <param name="dict">dict to convert.</param>
+		/// <returns></returns>
+		public static string ToString(this Dictionary<string, string> dict)
+		{
+			StringBuilder	sb = new StringBuilder();
+			bool			bFirst = true;
+
+			sb.Append("{");
+			foreach (KeyValuePair<string, string> kvp in dict)
+			{
+				if (bFirst)
+				{
+					sb.Append(",");
+				}
+				sb.Append($"{kvp.Key}={kvp.Value}");
+			}
+			sb.Append("}");
+			// ---
+			return sb.ToString();
+		}
 	}
-    /// <summary>
-    /// Utility functions and helper methods for AbxrLib
-    /// 
-    /// This class provides low-level utility functions used throughout the AbxrLib system,
-    /// including cryptographic operations, network utilities, data parsing, and formatting.
-    /// All methods are static and designed for internal use within the AbxrLib framework.
-    /// </summary>
-    public static class Utils
+	/// <summary>
+	/// Utility functions and helper methods for AbxrLib
+	/// 
+	/// This class provides low-level utility functions used throughout the AbxrLib system,
+	/// including cryptographic operations, network utilities, data parsing, and formatting.
+	/// All methods are static and designed for internal use within the AbxrLib framework.
+	/// </summary>
+	public static class Utils
     {
 		// --- Dewonkification helpers for enabling C# layer to present/accept nice clean C# types.
 		public static string StringListToString(List<string> lsz)

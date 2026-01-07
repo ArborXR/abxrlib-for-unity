@@ -55,8 +55,6 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 
 		public static void Unbind() => _client.Call("unbind");
 		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) => _client.Call<int>("basicTypes", anInt, aLong, aBoolean, aFloat, aDouble, aString);
-		public static bool PlaySampleOnLoop() => _client.Call<bool>("playSampleOnLoop");
-		public static bool StopPlayback() => _client.Call<bool>("stopPlayback");
 		public static string WhatTimeIsIt() => _client.Call<string>("whatTimeIsIt");
 		public static bool IsServiceBound() => _client.Call<bool>("isServiceBound");
 		public static bool IsServiceAvailable() => _client.Call<bool>("isServiceAvailable");
