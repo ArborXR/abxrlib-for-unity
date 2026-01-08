@@ -675,26 +675,6 @@ namespace AbxrLib.Runtime.Authentication
             var dict = new Dictionary<string, string>();
             if (_authMechanism == null && string.IsNullOrEmpty(userId)) return dict;
 
-            if (_authMechanism == null && !string.IsNullOrEmpty(userId))
-            {
-                dict["type"] = "custom";
-                dict["prompt"] = userId;
-                if (additionalUserData != null)
-                {
-                    foreach (var item in additionalUserData)
-                    {
-                        if (item.Key != "type" && item.Key != "prompt")
-                        {
-                            dict[item.Key] = item.Value;
-                        }
-                    }
-                }
-
-                // For custom auth, use "user" as default inputSource if not provided
-                dict["inputSource"] = "user";
-                return dict;
-            }
-
             if (!string.IsNullOrEmpty(userId))
             {
                 dict["type"] = "custom";
