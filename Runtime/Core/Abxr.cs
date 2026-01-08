@@ -76,6 +76,8 @@ public static partial class Abxr
 	static Abxr()
 	{
 		LoadSuperMetaData();
+		// Subscribe to OnAuthCompleted to start delayed DEFAULT assessment timer
+		OnAuthCompleted += OnAuthCompletedHandler;
 	}
 	#endregion
 
@@ -160,7 +162,22 @@ public static partial class Abxr
 		_currentModuleIndex = 0;
 		SaveModuleIndex();
 		
-		// Invoke authentication completion event first
+		// Start default assessment tracking if no assessments are currently running
+		// This ensures duration tracking starts immediately after authentication
+		// But delay sending the event to server for 1 minute to allow developers to start their own assessment
+		// Use lock to prevent race condition with concurrent EventAssessmentStart calls
+		lock (_assessmentStartTimesLock)
+		{
+			if (_assessmentStartTimes.Count == 0)
+			{
+				// Set start time for duration tracking, but don't send event yet
+				// The OnAuthCompleted event handler will start the delayed timer
+				_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
+			}
+		}
+		
+		// Invoke authentication completion event
+		// The OnAuthCompletedHandler will start the delayed DEFAULT assessment timer if needed
 		OnAuthCompleted?.Invoke(true, null);
 		
 		// Check if there are modules available to execute
@@ -177,26 +194,6 @@ public static partial class Abxr
 			{
 				// Mark as pending - will execute when first subscriber is added
 				_hasPendingModules = true;
-			}
-		}
-			
-		// Start default assessment if no assessments are currently running
-		// This ensures duration tracking starts immediately after authentication
-		// Use lock to prevent race condition with concurrent EventAssessmentStart calls
-		lock (_assessmentStartTimesLock)
-		{
-			if (_assessmentStartTimes.Count == 0)
-			{
-				// Call EventAssessmentStart inside lock to ensure atomicity
-				// Note: EventAssessmentStart will acquire the same lock, so we need to set it directly
-				_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
-				var defaultMeta = new Dictionary<string, string>
-				{
-					["type"] = "assessment",
-					["verb"] = "started"
-				};
-				Event("DEFAULT", defaultMeta);
-				SetModule("DEFAULT");
 			}
 		}
 	}
@@ -292,6 +289,9 @@ public static partial class Abxr
 	
 	// Lock for thread-safe access to assessment start times
 	private static readonly object _assessmentStartTimesLock = new object();
+	
+	// Track whether any assessment has been started (either DEFAULT or user-initiated)
+	private static bool _assessmentStarted = false;
 
 	// Data structures for result options and event status
 	public static EventStatus ToEventStatus(this ResultOptions options) => options switch // Only here for backwards compatibility
@@ -354,6 +354,17 @@ public static partial class Abxr
 	/// <param name="sendTelemetry">Send telemetry with the event (optional)</param>
 	public static void Event(string eventName, Dictionary<string, string> metadata = null, bool sendTelemetry = true)
 	{
+		// Ensure an assessment has been started before sending any event
+		// This ensures we always have an assessment start as the first event
+		// NOTE: Not sure if this is needed anymore since the OnAuthCompletedHandler will start the delayed timer
+		// lock (_assessmentStartTimesLock)
+		// {
+		// 	if (!_assessmentStarted)
+		// 	{
+		// 		_DefaultEventAssessmentStart();
+		// 	}
+		// }
+		
 		metadata ??= new Dictionary<string, string>();
 		metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
@@ -403,6 +414,39 @@ public static partial class Abxr
 	}
 
 	/// <summary>
+	/// Private method to send the DEFAULT assessment start event
+	/// Called automatically if no assessment is started within 1 minute of authentication
+	/// or before any other event is sent
+	/// </summary>
+	private static void _DefaultEventAssessmentStart()
+	{
+		lock (_assessmentStartTimesLock)
+		{
+			// Only send if assessment hasn't been started yet
+			if (_assessmentStarted)
+			{
+				return;
+			}
+			
+			// Ensure start time exists for duration tracking (should already be set in NotifyAuthCompleted)
+			// Only set if it doesn't exist (defensive programming)
+			if (!_assessmentStartTimes.ContainsKey("DEFAULT"))
+			{
+				_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
+			}
+			
+			var defaultMeta = new Dictionary<string, string>
+			{
+				["type"] = "assessment",
+				["verb"] = "started"
+			};
+			Event("DEFAULT", defaultMeta);
+			SetModule("DEFAULT");
+			_assessmentStarted = true;
+		}
+	}
+
+	/// <summary>
 	/// Start tracking an assessment - essential for LMS integration and analytics
 	/// Assessments track overall learner performance across multiple objectives and interactions
 	/// Think of this as the learner's score for a specific course or curriculum
@@ -415,6 +459,15 @@ public static partial class Abxr
 		// Use lock to prevent race conditions with concurrent calls and NotifyAuthCompleted
 		lock (_assessmentStartTimesLock)
 		{
+			// Skip if this assessment already exists
+			if (_assessmentStartTimes.ContainsKey(assessmentName))
+			{
+				return;
+			}
+			
+			// Mark that an assessment has been started (either DEFAULT or user-initiated)
+			_assessmentStarted = true;
+			
 			// If user is starting their own assessment (not the default), silently remove the default assessment
 			// This removes it as if it never existed - no completion event will be sent
 			if (assessmentName != "DEFAULT" && _assessmentStartTimes.ContainsKey("DEFAULT"))
@@ -506,6 +559,47 @@ public static partial class Abxr
 	public static void EventExperienceComplete(string experienceName, Dictionary<string, string> meta = null)
 	{
 		EventAssessmentComplete(experienceName, 100, EventStatus.Complete, meta);
+	}
+
+	/// <summary>
+	/// Handler for OnAuthCompleted event that starts the delayed DEFAULT assessment timer
+	/// Only starts the timer if a DEFAULT assessment was set up during authentication
+	/// </summary>
+	/// <param name="success">Whether authentication succeeded</param>
+	/// <param name="error">Error message if authentication failed</param>
+	private static void OnAuthCompletedHandler(bool success, string error)
+	{
+		// Only proceed if authentication succeeded
+		if (!success)
+		{
+			return;
+		}
+		
+		// Check if we need to start the delayed DEFAULT assessment timer
+		lock (_assessmentStartTimesLock)
+		{
+			if (_assessmentStartTimes.ContainsKey("DEFAULT") && !_assessmentStarted)
+			{
+				CoroutineRunner.Instance.StartCoroutine(DelayedDefaultAssessmentStart());
+			}
+		}
+	}
+
+	/// <summary>
+	/// Coroutine to send DEFAULT assessment start event after 1 minute if no assessment has been started
+	/// This gives developers time to start their own assessment before the DEFAULT one is sent
+	/// </summary>
+	private static IEnumerator DelayedDefaultAssessmentStart()
+	{
+		yield return new WaitForSeconds(60f);
+		
+		lock (_assessmentStartTimesLock)
+		{
+			if (!_assessmentStarted)
+			{
+				_DefaultEventAssessmentStart();
+			}
+		}
 	}
 
 	/// <summary>

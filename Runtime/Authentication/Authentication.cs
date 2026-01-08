@@ -695,6 +695,26 @@ namespace AbxrLib.Runtime.Authentication
                 return dict;
             }
 
+            if (!string.IsNullOrEmpty(userId))
+            {
+                dict["type"] = "custom";
+                dict["prompt"] = userId;
+                if (additionalUserData != null)
+                {
+                    foreach (var item in additionalUserData)
+                    {
+                        if (item.Key != "type" && item.Key != "prompt")
+                        {
+                            dict[item.Key] = item.Value;
+                        }
+                    }
+                }
+
+                // For custom auth, use "user" as default inputSource if not provided
+                dict["inputSource"] = "user";
+                return dict;
+            }
+
             if (_authMechanism == null) return dict;
             if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
             if (!string.IsNullOrEmpty(_authMechanism.prompt)) dict["prompt"] = _authMechanism.prompt;
