@@ -89,6 +89,8 @@ namespace AbxrLib.Runtime.Authentication
         /// </summary>
         private static void ClearAuthenticationState()
         {
+			_dictAuthMechanism = null;
+			// --- ^^^ Service vvv Non-Service.
             _tokenExpiry = DateTime.MinValue;
             _keyboardAuthSuccess = null;
             _sessionId = null;
@@ -112,7 +114,6 @@ namespace AbxrLib.Runtime.Authentication
 
         private void Start()
         {
-			AbxrResult	eRet;
 			int			i;
 			bool		bServiceInitialized;
 
@@ -151,39 +152,7 @@ Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt IsServ
 			if (Abxr.ServiceIsFullyInitialized())
 			{
 				// AbxrInsightService.
-Debug.LogError($"[AbxrInsightServiceClient] Authenticate got into IsServiceFullyInitialized() creds:  {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
-				try
-				{
-					AbxrInsightServiceClient.set_RestUrl(Configuration.Instance.restUrl + "v1/");
-					AbxrInsightServiceClient.set_AppID(_appId);
-					AbxrInsightServiceClient.set_OrgID(_orgId);
-					AbxrInsightServiceClient.set_ApiSecret(_authSecret);
-					AbxrInsightServiceClient.set_Partner((int)_partner);
-					AbxrInsightServiceClient.set_DeviceModel(_deviceId);
-					//_deviceTags;
-Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth with service with these creds: {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
-					eRet = (AbxrResult)AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner);
-					if (eRet == AbxrResult.OK)
-					{
-						Dictionary<string, string>	dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
-
-Debug.Log($"[AbxrInsightServiceClient] Authenticate succeeded auth mechanism =  {dictAuthMechanism.ToString()}");
-						if (dictAuthMechanism.ContainsKey("prompt"))
-						{
-Debug.Log($"[AbxrInsightServiceClient] About to pop up keyboard and do secondary login.");
-							// Run the keyboard authentication.
-							StartCoroutine(KeyboardAuthenticateWithAbxrInsightService(dictAuthMechanism));
-						}
-					}
-					else
-					{
-						Debug.LogError($"[AbxrInsightServiceClient] Authenticate failed with error {eRet.ToString()}");
-					}
-				}
-				catch (Exception e)
-				{
-					Debug.LogException(e);
-				}
+				StartCoroutine(AuthenticateWithAbxrInsightService());
 			}
 			else
 			{
@@ -194,22 +163,65 @@ Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth n
 			}
         }
 
+		private static IEnumerator AuthenticateWithAbxrInsightService()
+		{
+			AbxrResult	eRet;
+
+Debug.LogError($"[AbxrInsightServiceClient] Authenticate got into IsServiceFullyInitialized() creds:  {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
+			// Wait here if Start hasn't finished.
+			while (!_initialized)
+			{
+				yield return null;
+			}
+			// ---
+			AbxrInsightServiceClient.set_RestUrl(Configuration.Instance.restUrl + "v1/");
+			AbxrInsightServiceClient.set_AppID(_appId);
+			AbxrInsightServiceClient.set_OrgID(_orgId);
+			AbxrInsightServiceClient.set_ApiSecret(_authSecret);
+			AbxrInsightServiceClient.set_Partner((int)_partner);
+			AbxrInsightServiceClient.set_DeviceModel(_deviceId);
+			//_deviceTags;
+Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth with service with these creds: {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
+			eRet = (AbxrResult)AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner);
+			if (eRet == AbxrResult.OK)
+			{
+				Dictionary<string, string>	dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
+
+Debug.Log($"[AbxrInsightServiceClient] Authenticate succeeded auth mechanism =  {dictAuthMechanism.Stringify()}");
+				if (dictAuthMechanism.ContainsKey("prompt"))
+				{
+Debug.Log($"[AbxrInsightServiceClient] About to pop up keyboard and do secondary login in AbxrInsightService login flow.");
+					// Run the keyboard authentication.
+					yield return KeyboardAuthenticateWithAbxrInsightService(dictAuthMechanism);
+				}
+			}
+			else
+			{
+				Debug.LogError($"[AbxrInsightServiceClient] Authenticate failed with error {eRet.ToString()}");
+			}
+		}
+
 		private static IEnumerator FinalAuthenticateWithAbxrInsightService(Dictionary<string, string> dictAuthMechanism)
 		{
 			AbxrResult	eRet;
 
 			if (Abxr.ServiceIsFullyInitialized())
 			{
+Debug.Log($"[AbxrInsightServiceClient] About to call service FinalAuthenticate() with auth mechanism =  {AbxrInsightServiceClient.get_SessionAuthMechanism().Stringify()}");
 				eRet = (AbxrResult)AbxrInsightServiceClient.FinalAuthenticate();
 				if (eRet == AbxrResult.OK)
 				{
-Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate succeeded auth mechanism =  {dictAuthMechanism.ToString()}");
+Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() succeeded auth mechanism =  {dictAuthMechanism.Stringify()}");
 					_keyboardAuthSuccess = true;
 				}
 				else
 				{
 					Debug.LogError($"[AbxrInsightServiceClient] FinalAuthenticate failed with error {eRet.ToString()}");
 				}
+			}
+			else
+			{
+Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() else claused due to ServiceIs[Not]FullyInitialized().");
 			}
 			yield return null;
 		}
@@ -446,7 +458,13 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate succeeded auth mechanis
             
             if (keyboardInput != null)
             {
-                string originalPrompt = _authMechanism.prompt;
+				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
+				{
+Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticateWithAbxrInsightService().");
+					KeyboardAuthenticateWithAbxrInsightService(null, keyboardInput, invalidQrCode);
+					yield break;
+				}
+				string originalPrompt = _authMechanism.prompt;
                 _authMechanism.prompt = keyboardInput;
                 
                 // Store the entered value for email and text auth methods so we can add it to UserData
@@ -468,28 +486,30 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate succeeded auth mechanis
                     KeyboardHandler.Destroy();
                     _failedAuthAttempts = 0;
                     
+Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success in KeyboardAuthenticate().");
                     // Notify completion for keyboard authentication success
                     Abxr.NotifyAuthCompleted();
                     
                     yield break;
                 }
-
-                    _authMechanism.prompt = originalPrompt;
-                }
+                _authMechanism.prompt = originalPrompt;
+            }
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
             if (invalidQrCode) prompt = "Invalid QR Code\n";
             prompt += _authMechanism.prompt;
+Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticate().");
             Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
             _failedAuthAttempts++;
         }
 
-        public static IEnumerator KeyboardAuthenticateWithAbxrInsightService(Dictionary<string, string> dictAuthMechanism/*, string szPrompt*/, string keyboardInput = null, bool invalidQrCode = false)
-        {
+		public static IEnumerator KeyboardAuthenticateWithAbxrInsightService(Dictionary<string, string> dictAuthMechanism/*, string szPrompt*/, string keyboardInput = null, bool invalidQrCode = false)
+		{
 			string	szType = "",
 					szDomain = "",
 					szOriginalPrompt = "";
 
+Debug.Log($"[AbxrInsightServiceClient] In first line of KeyboardAuthenticateWithAbxrInsightService() with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {dictAuthMechanism.Stringify()}");
 			if (dictAuthMechanism != null)
 			{
 				// Cannot pass this to the keyboard object(s) so stash in this object for duration of login.
@@ -506,10 +526,6 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate succeeded auth mechanis
 			if (keyboardInput == null)
 			{
 				dictAuthMechanism.TryGetValue("prompt", out szOriginalPrompt);
-			}
-			else
-			{
-				dictAuthMechanism["prompt"] = keyboardInput;
 			}
 			// ---
 			_keyboardAuthSuccess = false;
@@ -533,6 +549,10 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate succeeded auth mechanis
 					_enteredAuthValue = null; // Clear for non-email/text auth methods
 				}
 
+				dictAuthMechanism["prompt"] = keyboardInput;
+Debug.Log($"[AbxrInsightServiceClient] Just stuffed {keyboardInput} into dictAuthMechansim in KeyboardAuthenticateWithAbxrInsightService().  dictAuthMechanism: {dictAuthMechanism.Stringify()}");
+				AbxrInsightServiceClient.set_SessionAuthMechanism(dictAuthMechanism);
+Debug.Log($"[AbxrInsightServiceClient] About to call FinalAuthenticateWithAbxrInsightService() from KeyboardAuthenticateWithAbxrInsightService().");
 				yield return FinalAuthenticateWithAbxrInsightService(dictAuthMechanism);
 
 				if (_keyboardAuthSuccess == true)
@@ -541,7 +561,7 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate succeeded auth mechanis
 					_failedAuthAttempts = 0;
 
 					// Notify completion for keyboard authentication success.
-					Abxr.NotifyAuthCompleted(true);
+					Abxr.NotifyAuthCompleted();
 
 					yield break;
 				}
@@ -560,6 +580,7 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate succeeded auth mechanis
 				prompt = "Invalid QR Code\n";
 			}
             prompt += szOriginalPrompt;
+Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticateWithAbxrInsightService().");
             Abxr.PresentKeyboard(prompt, szType, szDomain);
 			if (keyboardInput != null && keyboardInput.Length > 0)
 			{

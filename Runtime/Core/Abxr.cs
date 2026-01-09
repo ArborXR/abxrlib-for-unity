@@ -261,6 +261,7 @@ public static partial class Abxr
 	/// </summary>
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
+Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={promptText ?? "null"}, keyboardType={keyboardType ?? "null"}, emailDomain={emailDomain ?? "null"}");
 		if (keyboardType is "text" or null)
 		{
 			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
@@ -1809,8 +1810,15 @@ public static partial class Abxr
 	/// <returns></returns>
 	public static bool ServiceIsFullyInitialized()
 	{
-		return false;
-		//return AbxrInsightServiceClient.ServiceIsFullyInitialized();
+		try
+		{
+			//return false;
+			return AbxrInsightServiceClient.ServiceIsFullyInitialized();
+		}
+		catch (Exception)
+		{
+			return false;
+		}
 	}
 
 	#endregion

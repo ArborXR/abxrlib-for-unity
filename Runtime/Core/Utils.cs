@@ -182,7 +182,7 @@ namespace AbxrLib.Runtime.Core
 		/// </summary>
 		/// <param name="dict">dict to convert.</param>
 		/// <returns></returns>
-		public static string ToString(this Dictionary<string, string> dict)
+		public static string Stringify(this Dictionary<string, string> dict)
 		{
 			StringBuilder	sb = new StringBuilder();
 			bool			bFirst = true;
@@ -190,9 +190,13 @@ namespace AbxrLib.Runtime.Core
 			sb.Append("{");
 			foreach (KeyValuePair<string, string> kvp in dict)
 			{
-				if (bFirst)
+				if (!bFirst)
 				{
 					sb.Append(",");
+				}
+				else
+				{
+					bFirst = false;
 				}
 				sb.Append($"{kvp.Key}={kvp.Value}");
 			}

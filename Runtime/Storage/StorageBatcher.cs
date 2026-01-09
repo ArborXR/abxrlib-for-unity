@@ -10,49 +10,49 @@ using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Storage
 {
-	public class StorageBatcher : MonoBehaviour
+public class StorageBatcher : MonoBehaviour
+{
+	private const string UrlPath = "/v1/storage";
+	private static Uri _uri;
+	private static readonly List<Payload> _payloads = new();
+	private static readonly object _lock = new();
+	private static float _timer;
+	private static float _lastCallTime;
+	
+	private void Start()
 	{
-		private const string UrlPath = "/v1/storage";
-		private static Uri _uri;
-		private static readonly List<Payload> _payloads = new();
-		private static readonly object _lock = new();
-		private static float _timer;
-		private static float _lastCallTime;
+		_uri = new Uri(new Uri(Configuration.Instance.restUrl), UrlPath);
+		_timer = Configuration.Instance.sendNextBatchWaitSeconds;
+	}
 	
-		private void Start()
-		{
-			_uri = new Uri(new Uri(Configuration.Instance.restUrl), UrlPath);
-			_timer = Configuration.Instance.sendNextBatchWaitSeconds;
-		}
-	
-		private void Update()
-		{
-			_timer -= Time.deltaTime;
-			if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
-		}
-	
-		public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
-		{
-			if (Abxr.ServiceIsFullyInitialized())
-			{
-				String	szOrigin = "";
-				bool	bSessionData = false;	// TODO:  code actual values when known... this code is different than the API.
+	private void Update()
+	{
+		_timer -= Time.deltaTime;
+		if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
+	}
 
-				AbxrInsightServiceClient.StorageSetEntryFromString(name, Utils.DictToString(entry), policy == Abxr.StoragePolicy.keepLatest, szOrigin, bSessionData);
-			}
-			else
+	public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
+	{
+		if (Abxr.ServiceIsFullyInitialized())
+		{
+			String szOrigin = "";
+			bool bSessionData = false;  // TODO:  code actual values when known... this code is different than the API.
+
+			AbxrInsightServiceClient.StorageSetEntryFromString(name, Utils.DictToString(entry), policy == Abxr.StoragePolicy.keepLatest, szOrigin, bSessionData);
+		}
+		else
+		{
+			long storageTime = Utils.GetUnityTime();
+			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(storageTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+			var payload = new Payload
 			{
-				long storageTime = Utils.GetUnityTime();
-				string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(storageTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-				var payload = new Payload
-				{
-					timestamp = isoTime,
-					keepPolicy = policy.ToString(),
-					name = name,
-					data = new List<Dictionary<string, string>>
-				{
-					entry
-				},
+				timestamp = isoTime,
+				keepPolicy = policy.ToString(),
+				name = name,
+				data = new List<Dictionary<string, string>>
+			{
+				entry
+			},
 				scope = scope.ToString()
 			};
 
@@ -69,7 +69,7 @@ namespace AbxrLib.Runtime.Storage
 				}
 			}
 		}
-
+	}
 	public static IEnumerator Send()
 	{
 		if (Time.time - _lastCallTime < Configuration.Instance.maxCallFrequencySeconds) yield break;
