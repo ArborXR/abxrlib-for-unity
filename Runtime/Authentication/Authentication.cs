@@ -461,38 +461,47 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() else claused due to S
 				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
 				{
 Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticateWithAbxrInsightService().");
-					KeyboardAuthenticateWithAbxrInsightService(null, keyboardInput, invalidQrCode);
-					yield break;
+					try
+					{
+						KeyboardAuthenticateWithAbxrInsightService(null, keyboardInput, invalidQrCode);
+					}
+					catch (Exception e)
+					{
+						Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() crashed trying to call KeyboardAuthenticateWithAbxrInsightService() with exception {e.Message}.");
+					}
 				}
-				string originalPrompt = _authMechanism.prompt;
-                _authMechanism.prompt = keyboardInput;
-                
-                // Store the entered value for email and text auth methods so we can add it to UserData
-                if (_authMechanism.type == "email" || _authMechanism.type == "text")
-                {
-                    _enteredAuthValue = keyboardInput;
+				else
+				{ 
+					string originalPrompt = _authMechanism.prompt;
+
+					_authMechanism.prompt = keyboardInput;
+					// Store the entered value for email and text auth methods so we can add it to UserData
+					if (_authMechanism.type == "email" || _authMechanism.type == "text")
+					{
+						_enteredAuthValue = keyboardInput;
                     
-                    // For email type, combine with domain if provided
-                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
-                    {
-                        _enteredAuthValue += $"@{_authMechanism.domain}";
-                    }
-                }
+						// For email type, combine with domain if provided
+						if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
+						{
+							_enteredAuthValue += $"@{_authMechanism.domain}";
+						}
+					}
                 
-                yield return AuthRequest(false);
-                _enteredAuthValue = null;  // only need this in AuthRequest
-                if (_keyboardAuthSuccess == true)
-                {
-                    KeyboardHandler.Destroy();
-                    _failedAuthAttempts = 0;
+					yield return AuthRequest(false);
+					_enteredAuthValue = null;  // only need this in AuthRequest
+					if (_keyboardAuthSuccess == true)
+					{
+						KeyboardHandler.Destroy();
+						_failedAuthAttempts = 0;
                     
 Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success in KeyboardAuthenticate().");
-                    // Notify completion for keyboard authentication success
-                    Abxr.NotifyAuthCompleted();
+						// Notify completion for keyboard authentication success
+						Abxr.NotifyAuthCompleted();
                     
-                    yield break;
-                }
-                _authMechanism.prompt = originalPrompt;
+						yield break;
+					}
+					_authMechanism.prompt = originalPrompt;
+				}
             }
         
             string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
@@ -531,6 +540,7 @@ Debug.Log($"[AbxrInsightServiceClient] In first line of KeyboardAuthenticateWith
 			_keyboardAuthSuccess = false;
 			if (keyboardInput != null)
 			{
+Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticateWithAbxrInsightService() second phase with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {dictAuthMechanism.Stringify()}");
 				// Store the entered value for email and text auth methods so we can add it to UserData
 				if (dictAuthMechanism != null && (szType == "email" || szType == "text"))
 				{
@@ -548,7 +558,7 @@ Debug.Log($"[AbxrInsightServiceClient] In first line of KeyboardAuthenticateWith
 				{
 					_enteredAuthValue = null; // Clear for non-email/text auth methods
 				}
-
+Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticateWithAbxrInsightService() about to stuff the keyboardInpuyt into dictAuthMechanism");
 				dictAuthMechanism["prompt"] = keyboardInput;
 Debug.Log($"[AbxrInsightServiceClient] Just stuffed {keyboardInput} into dictAuthMechansim in KeyboardAuthenticateWithAbxrInsightService().  dictAuthMechanism: {dictAuthMechanism.Stringify()}");
 				AbxrInsightServiceClient.set_SessionAuthMechanism(dictAuthMechanism);
