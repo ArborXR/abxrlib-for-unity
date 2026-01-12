@@ -21,7 +21,7 @@
  *
  * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
  */
-#if META_QR_AVAILABLE
+#if UNITY_ANDROID && !UNITY_EDITOR && META_QR_AVAILABLE
 using System.Collections;
 using System.Text.RegularExpressions;
 using System.Reflection;
