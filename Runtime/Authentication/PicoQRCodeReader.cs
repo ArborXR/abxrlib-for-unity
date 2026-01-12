@@ -11,7 +11,7 @@
  *
  * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
  */
-#if PICO_ENTERPRISE_SDK_3
+#if UNITY_ANDROID && !UNITY_EDITOR && PICO_ENTERPRISE_SDK_3
 using System.Text.RegularExpressions;
 using UnityEngine;
 using Unity.XR.PICO.TOBSupport;
