@@ -20,13 +20,13 @@ namespace AbxrLib.Runtime.ServiceClient
                 {
                     var error = result?.Call<string>("getError") ?? "Unknown SDK error";
                     Debug.LogWarning($"AbxrLib: SDK call {methodName} failed: {error}");
-                    return default(T);
+                    return default(T)!;
                 }
             }
             catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: SDK call {methodName} threw exception: {ex.Message}");
-                return default(T);
+                return default(T)!;
             }
         }
     }

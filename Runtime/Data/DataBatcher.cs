@@ -129,7 +129,7 @@ namespace AbxrLib.Runtime.Data
 
 			_lastCallTime = Time.time;
 			_timer = Configuration.Instance.sendNextBatchWaitSeconds; // reset timer
-			if (!Authentication.Authentication.FullyAuthenticated()) yield break;
+			if (!Authentication.Authentication.Authenticated()) yield break;
 			
 			lock (_lock)
 			{
@@ -227,7 +227,6 @@ namespace AbxrLib.Runtime.Data
 				{
 					if (request.result == UnityWebRequest.Result.Success)
 					{
-						Debug.Log($"AbxrLib: Data POST Request successful (sent {eventsToSend.Count} events, {telemetriesToSend.Count} telemetries, {logsToSend.Count} logs)");
 						responseSuccess = true;
 						success = true;
 					}

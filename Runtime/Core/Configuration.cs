@@ -14,6 +14,7 @@
  * through the Unity Inspector or programmatically at runtime.
  */
 
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Core
@@ -60,17 +61,19 @@ namespace AbxrLib.Runtime.Core
         /// <returns>True if configuration is valid, false otherwise</returns>
         public bool IsValid()
         {
-            // appID is required and must not be empty if set
-            if (string.IsNullOrEmpty(appID))
+            const string uuidPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
+            
+            // appID must pass format validation if set (UUID format)
+            if (!Regex.IsMatch(appID, uuidPattern))
             {
-                Debug.LogError("AbxrLib: Configuration validation failed - appID is required but not set");
+                Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
                 return false;
             }
             
-            // orgID is optional but must not be empty if set
-            if (!string.IsNullOrEmpty(orgID) && string.IsNullOrWhiteSpace(orgID))
+            // orgID is optional but must pass format validation if set (UUID format)
+            if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
             {
-                Debug.LogError("AbxrLib: Configuration validation failed - orgID cannot be empty if set");
+                Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
                 return false;
             }
             
@@ -88,7 +91,7 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
             
-            if (!IsValidUrl(restUrl))
+            if (!Utils.IsValidUrl(restUrl))
             {
                 Debug.LogError($"AbxrLib: Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL");
                 return false;
@@ -188,27 +191,6 @@ namespace AbxrLib.Runtime.Core
             
             return true;
         }
-        
-        /// <summary>
-        /// Validates that a string is a valid HTTP/HTTPS URL
-        /// </summary>
-        /// <param name="url">The URL string to validate</param>
-        /// <returns>True if the URL is valid, false otherwise</returns>
-        private static bool IsValidUrl(string url)
-        {
-            if (string.IsNullOrWhiteSpace(url))
-                return false;
-                
-            try
-            {
-                var uri = new System.Uri(url);
-                return uri.Scheme == "http" || uri.Scheme == "https";
-            }
-            catch
-            {
-                return false;
-            }
-        }
 
         [Header("Service Provider")]
         public string restUrl = "https://lib-backend.xrdm.app/";
@@ -219,6 +201,9 @@ namespace AbxrLib.Runtime.Core
         
         [Tooltip("When enabled, direct touch interaction will be used for UI elements instead of ray casting.")]
         public bool enableDirectTouchInteraction = true;
+        
+        [Tooltip("How far in front of the camera the UI panel should float (in meters).")]
+        public float authUIDistanceFromCamera = 1.0f;
 
         [Header("Player Tracking")]
         public bool headsetTracking = true;

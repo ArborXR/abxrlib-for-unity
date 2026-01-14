@@ -32,6 +32,12 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
 #if UNITY_ANDROID && !UNITY_EDITOR
             ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
+#if PICO_ENTERPRISE_SDK_3
+            ObjectAttacher.Attach<PicoQRCodeReader>("PicoQRCodeReader");
+#endif
+#if META_QR_AVAILABLE
+            ObjectAttacher.Attach<MetaQRCodeReader>("MetaQRCodeReader");
+#endif
 #endif
             ObjectAttacher.Attach<Authentication.Authentication>("Authentication");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
@@ -48,16 +54,6 @@ namespace AbxrLib.Runtime.Core
             }
 #endif
             Debug.Log($"AbxrLib: Version {AbxrLibVersion.Version} Initialized.");
-        }
-    }
-
-    public class ObjectAttacher : MonoBehaviour
-    {
-        public static T Attach<T>(string componentName) where T : MonoBehaviour
-        {
-            var gameObject = new GameObject(componentName);
-            DontDestroyOnLoad(gameObject);
-            return gameObject.AddComponent<T>();
         }
     }
 }

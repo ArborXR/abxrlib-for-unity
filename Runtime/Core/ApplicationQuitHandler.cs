@@ -3,13 +3,12 @@
  * 
  * AbxrLib for Unity - Application Quit Handler
  * 
- * This file handles application quit and pause events to ensure proper cleanup
+ * This file handles application quit events to ensure proper cleanup
  * of running assessments, objectives, and interactions. It automatically closes
- * any open timed events when the application is terminated or paused.
+ * any open timed events when the application is terminated.
  * 
  * Key Features:
  * - Automatic cleanup of running assessments and objectives
- * - Graceful handling of application pause/resume events
  * - Integration with AbxrLib timing system
  * - Prevents data loss during unexpected application termination
  */
@@ -31,28 +30,6 @@ namespace AbxrLib.Runtime.Core
         {
             Debug.Log("AbxrLib: Application quitting, automatically closing running events");
             CloseRunningEvents();
-        }
-
-        private void OnApplicationPause(bool pauseStatus)
-        {
-            // On mobile platforms, OnApplicationPause(true) is often called instead of OnApplicationQuit
-            if (pauseStatus)
-            {
-                Debug.Log("AbxrLib: Application paused, automatically closing running events");
-                CloseRunningEvents();
-            }
-        }
-
-        private void OnApplicationFocus(bool hasFocus)
-        {
-            // Additional safety net for platforms where focus loss might indicate app termination
-            if (!hasFocus)
-            {
-                Debug.Log("AbxrLib: Application lost focus, checking for running events");
-                // Note: We don't automatically close on focus loss as this can happen during normal use
-                // This is just for logging/debugging purposes
-                DebugLogRunningEvents();
-            }
         }
 
         /// <summary>
@@ -119,8 +96,6 @@ namespace AbxrLib.Runtime.Core
 
             if (totalClosed > 0)
             {
-                Debug.Log($"AbxrLib: Automatically closed {totalClosed} running events due to application quit");
-                
                 // Clear all start times since we've processed them
                 Abxr.ClearAllStartTimes();
                 
@@ -139,27 +114,5 @@ namespace AbxrLib.Runtime.Core
                 // CoroutineRunner.Instance.StartCoroutine(DataBatcher.Send()); // Already called above
             }
         }
-
-        /// <summary>
-        /// Log information about currently running events without closing them
-        /// Used for debugging and monitoring purposes
-        /// </summary>
-        private void DebugLogRunningEvents()
-        {
-            var runningAssessmentTimes = Abxr.GetAssessmentStartTimes();
-            var runningObjectiveTimes = Abxr.GetObjectiveStartTimes();
-            var runningInteractionTimes = Abxr.GetInteractionStartTimes();
-
-            int totalRunning = 0;
-            if (runningAssessmentTimes != null) totalRunning += runningAssessmentTimes.Count;
-            if (runningObjectiveTimes != null) totalRunning += runningObjectiveTimes.Count;
-            if (runningInteractionTimes != null) totalRunning += runningInteractionTimes.Count;
-
-            if (totalRunning > 0)
-            {
-                Debug.Log($"AbxrLib: Currently {totalRunning} events running (Assessments: {runningAssessmentTimes?.Count ?? 0}, Objectives: {runningObjectiveTimes?.Count ?? 0}, Interactions: {runningInteractionTimes?.Count ?? 0})");
-            }
-        }
-
     }
 }

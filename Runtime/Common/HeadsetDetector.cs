@@ -21,15 +21,15 @@ namespace AbxrLib.Runtime.Common
                 // Check if XR is available before trying to get devices
                 if (!IsXRAvailable())
                 {
-                    Debug.LogWarning("AbxrLib - HeadsetDetector: XR not available, headset detection disabled");
+                    Debug.LogWarning("AbxrLib: HeadsetDetector - XR not available, headset detection disabled");
                     return;
                 }
                 
-                //Debug.Log("AbxrLib - HeadsetDetector: XR device tracking initialized successfully");
+                //Debug.Log("AbxrLib: HeadsetDetector - XR device tracking initialized successfully");
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrLib - HeadsetDetector: Failed to initialize XR device tracking: {ex.Message}");
+                Debug.LogWarning($"AbxrLib: HeadsetDetector - Failed to initialize XR device tracking: {ex.Message}");
             }
         }
 
@@ -201,7 +201,7 @@ namespace AbxrLib.Runtime.Common
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogError($"AbxrLib - HeadsetDetector: Error during re-authentication: {ex.Message}");
+                    Debug.LogError($"AbxrLib: HeadsetDetector - Error during re-authentication: {ex.Message}");
                 }
             }
         }

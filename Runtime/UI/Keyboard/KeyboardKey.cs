@@ -1,10 +1,11 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace AbxrLib.Runtime.UI.Keyboard
 {
-    public class KeyboardKey : MonoBehaviour
+    public class KeyboardKey : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
     {
         public string character;
         public string shiftCharacter;
@@ -17,10 +18,10 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         private void Start()
         {
-            KeyboardManager.Instance.shiftButton1?.onClick.AddListener(HandleShift);
-            KeyboardManager.Instance.shiftButton2?.onClick.AddListener(HandleShift);
+            // Shift buttons are now handled by KeyboardManager with pointer down events
             _thisKey = GetComponent<Button>();
-            _thisKey.onClick.AddListener(TypeKey);
+            // Trigger on press (OnPointerDown) instead of release (onClick)
+            // onClick listener removed to prevent double-firing
             character = keyLabel.text;
             shiftCharacter = keyLabel.text.ToUpper();
 
@@ -28,6 +29,58 @@ namespace AbxrLib.Runtime.UI.Keyboard
             if (numbers.Contains(keyLabel.text))
             {
                 shiftCharacter = GetShiftCharacter();
+            }
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            // Trigger on press instead of release
+            if (_thisKey != null && _thisKey.interactable)
+            {
+                // Let the button handle its press state
+                _thisKey.OnPointerDown(eventData);
+                // Trigger the key action
+                TypeKey();
+                // Immediately reset the button state after action
+                StartCoroutine(ResetButtonState());
+            }
+        }
+
+        private System.Collections.IEnumerator ResetButtonState()
+        {
+            // Wait one frame to ensure the press state is set, then reset
+            yield return null;
+            if (_thisKey != null && EventSystem.current != null)
+            {
+                EventSystem.current.SetSelectedGameObject(null);
+            }
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            // Reset button state when pointer is released
+            if (_thisKey != null)
+            {
+                _thisKey.OnPointerUp(eventData);
+                // Deselect the button to reset visual state
+                if (EventSystem.current != null)
+                {
+                    EventSystem.current.SetSelectedGameObject(null);
+                }
+            }
+        }
+
+        public void OnPointerExit(PointerEventData eventData)
+        {
+            // Reset button state when pointer leaves
+            if (_thisKey != null)
+            {
+                _thisKey.OnPointerExit(eventData);
+                // Deselect the button to reset visual state
+                if (EventSystem.current != null)
+                {
+                    EventSystem.current.SetSelectedGameObject(null);
+                }
             }
         }
 
@@ -61,7 +114,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             return string.Empty;
         }
 
-        private void HandleShift()
+        public void ToggleShift()
         {
             _isShifted = !_isShifted;
 

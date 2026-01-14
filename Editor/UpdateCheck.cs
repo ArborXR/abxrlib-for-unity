@@ -44,7 +44,7 @@ namespace AbxrLib.Editor
             {
                 if (forced)
                 {
-                    EditorUtility.DisplayDialog("Up-to-date", "You have the latest version of 'AbxrLib for Unity'.", "OK");
+                    EditorUtility.DisplayDialog("Up-to-date", "You have the latest version of AbxrLib.", "OK");
                 }
             }
             else
@@ -57,7 +57,7 @@ namespace AbxrLib.Editor
 
         private static void ShowUpdateDialog(string currentVersion, string latestVersion)
         {
-            int option = EditorUtility.DisplayDialogComplex("Update Available",
+            int option = EditorUtility.DisplayDialogComplex("AbxrLib Update Available",
                 $"Version {latestVersion} is available. Your current version is {currentVersion}. Would you like to update?",
                 "Update", "Cancel", "Skip This Version");
 

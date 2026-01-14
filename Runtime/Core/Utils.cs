@@ -339,12 +339,33 @@ namespace AbxrLib.Runtime.Core
             catch (Exception ex)
             {
                 // Log error with consistent format and include data conversion context
-                Debug.LogError($"Failed to convert module data: {ex.Message}\n" +
+                Debug.LogError($"AbxrLib: Failed to convert module data: {ex.Message}\n" +
                               $"Exception Type: {ex.GetType().Name}\n" +
                               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
 
             return moduleDataList;
+        }
+        
+        /// <summary>
+        /// Validates that a string is a valid HTTP/HTTPS URL
+        /// </summary>
+        /// <param name="url">The URL string to validate</param>
+        /// <returns>True if the URL is valid, false otherwise</returns>
+        public static bool IsValidUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return false;
+                
+            try
+            {
+                var uri = new Uri(url);
+                return uri.Scheme == "http" || uri.Scheme == "https";
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }

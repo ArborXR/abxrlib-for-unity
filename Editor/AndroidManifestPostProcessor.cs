@@ -9,12 +9,15 @@ using UnityEngine;
 namespace AbxrLib.Editor
 {
     /// <summary>
-    /// Post-processes the Android manifest to add AbxrLib version metadata.
-    /// This allows the manifest to indicate that AbxrLib is being used and which version.
+    /// Post-processes the Android manifest to add AbxrLib version and app_id metadata.
+    /// This allows the manifest to indicate that AbxrLib is being used, which version, and which app_id.
     /// </summary>
     public class AndroidManifestPostProcessor : IPostGenerateGradleAndroidProject
     {
         private const string MetaDataVersionName = "com.arborxr.abxrlib.version";
+        private const string MetaDataAppIdName = "com.arborxr.abxrlib.insights_id";
+        private const string MetaDataBuildTypeName = "com.arborxr.abxrlib.build_type";
+
         private const string FallbackVersion = "1.0.0";
 
         /// <summary>
@@ -36,14 +39,68 @@ namespace AbxrLib.Editor
             
             return FallbackVersion;
         }
+        
+        public int callbackOrder => 1;
+
+        /// <summary>
+        /// Gets the app_id from Configuration, or returns null if not found.
+        /// </summary>
+        private static string GetAppId()
+        {
+            try
+            {
+                var config = Configuration.Instance;
+                if (config != null && !string.IsNullOrEmpty(config.appID))
+                {
+                    return config.appID;
+                }
+            }
+            catch
+            {
+                // If Configuration is not accessible, return null
+            }
+            
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the build type based on Configuration values.
+        /// Returns "production" if orgID and authSecret are both empty, "custom" otherwise.
+        /// </summary>
+        private static string GetBuildType()
+        {
+            try
+            {
+                var config = Configuration.Instance;
+                if (config != null)
+                {
+                    bool orgIdEmpty = string.IsNullOrEmpty(config.orgID);
+                    bool authSecretEmpty = string.IsNullOrEmpty(config.authSecret);
+                    
+                    // Production when both are empty, custom otherwise
+                    if (orgIdEmpty && authSecretEmpty)
+                    {
+                        return "production";
+                    }
+                    else
+                    {
+                        return "custom";
+                    }
+                }
+            }
+            catch
+            {
+                // If Configuration is not accessible, default to production
+            }
+            
+            return "production";
+        }
 
         /// <summary>
         /// Called after Unity generates the Gradle Android project.
         /// This is the correct place to modify the AndroidManifest.xml for Gradle builds.
         /// </summary>
         /// <param name="path">Path to the generated Gradle project</param>
-        public int callbackOrder => 1;
-
         public void OnPostGenerateGradleAndroidProject(string path)
         {
             ProcessManifest(path);
@@ -71,9 +128,17 @@ namespace AbxrLib.Editor
         /// </summary>
         private static void ProcessManifest(string projectPath)
         {
+            // For direct APK builds, the manifest is already packaged and not accessible as a file.
+            // This is expected behavior, so we skip silently.
+            if (!string.IsNullOrEmpty(projectPath) && projectPath.EndsWith(".apk", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             string manifestPath = GetManifestPath(projectPath);
             if (string.IsNullOrEmpty(manifestPath))
             {
+                // Only log warning for Gradle project builds where we expect to find the manifest
                 Debug.LogWarning($"AbxrLib: AndroidManifest.xml not found. Searched in: {projectPath}");
                 return;
             }
@@ -148,56 +213,89 @@ namespace AbxrLib.Editor
                 }
             }
 
-            // Log all paths we tried for debugging
-            Debug.LogWarning($"AbxrLib: Manifest not found. Searched paths:\n{string.Join("\n", possiblePaths)}");
+            // Only log warning if this is a Gradle project build (not an APK build)
+            // For APK builds, the manifest is already packaged and not accessible as a file
+            if (!projectPath.EndsWith(".apk", System.StringComparison.OrdinalIgnoreCase))
+            {
+                Debug.LogWarning($"AbxrLib: Manifest not found. Searched paths:\n{string.Join("\n", possiblePaths)}");
+            }
             return null;
         }
 
         /// <summary>
-        /// Injects AbxrLib version metadata into the manifest content.
+        /// Injects AbxrLib version, app_id, and build_type metadata into the manifest content.
         /// </summary>
         private static string InjectMetadata(string manifestContent)
         {
             // Remove old enabled flag if it exists (from previous versions)
             string enabledFlagPattern = @"<meta-data\s+android:name=""com\.arborxr\.abxrlib\.enabled""\s+android:value=""[^""]*""\s*/>\s*";
             manifestContent = Regex.Replace(manifestContent, enabledFlagPattern, "", RegexOptions.IgnoreCase);
+            
+            // Add camera permission for Meta Quest QR code reading
+            manifestContent = AddCameraPermission(manifestContent);
+            
+            // Add headset camera permission for Meta Quest Passthrough Camera API
+            manifestContent = AddHeadsetCameraPermission(manifestContent);
+            
+            // Handle version metadata
+            manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataVersionName, GetVersion());
 
-            // Check if version metadata already exists
-            if (manifestContent.Contains(MetaDataVersionName))
+            // Handle app_id metadata (only if app_id is available)
+            string appId = GetAppId();
+            if (!string.IsNullOrEmpty(appId))
             {
-                // Version exists, check if it needs updating
-                string versionPattern = $@"<meta-data\s+android:name=""{Regex.Escape(MetaDataVersionName)}""\s+android:value=""([^""]*)""\s*/>";
-                Match versionMatch = Regex.Match(manifestContent, versionPattern, RegexOptions.IgnoreCase);
-                
-                if (versionMatch.Success && versionMatch.Groups.Count > 1)
-                {
-                    string currentVersion = versionMatch.Groups[1].Value;
-                    string targetVersion = GetVersion();
-                    if (currentVersion != targetVersion)
-                    {
-                        // Update version
-                        manifestContent = Regex.Replace(manifestContent, versionPattern, 
-                            $@"<meta-data android:name=""{MetaDataVersionName}"" android:value=""{targetVersion}"" />", 
-                            RegexOptions.IgnoreCase);
-                    }
-                }
-                
-                return manifestContent;
+                manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataAppIdName, appId);
             }
 
-            // Version doesn't exist, add it
-            return AddVersionMetadata(manifestContent);
+            // Handle build_type metadata
+            manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataBuildTypeName, GetBuildType());
+
+            return manifestContent;
         }
 
         /// <summary>
-        /// Adds the version metadata if it doesn't exist.
+        /// Injects or updates a metadata entry in the manifest.
         /// </summary>
-        private static string AddVersionMetadata(string manifestContent)
+        /// <param name="manifestContent">The manifest content</param>
+        /// <param name="metadataName">The metadata name</param>
+        /// <param name="metadataValue">The metadata value</param>
+        /// <returns>The modified manifest content</returns>
+        private static string InjectOrUpdateMetadata(string manifestContent, string metadataName, string metadataValue)
         {
-            string version = GetVersion();
-            string versionMetadata = $@"        <meta-data android:name=""{MetaDataVersionName}"" android:value=""{version}"" />";
-            return InsertMetadataAfterApplicationTag(manifestContent, versionMetadata);
+            if (string.IsNullOrEmpty(metadataValue))
+            {
+                return manifestContent;
+            }
+
+            // Check if metadata already exists
+            if (manifestContent.Contains(metadataName))
+            {
+                // Metadata exists, check if it needs updating
+                string metadataPattern = $@"<meta-data\s+android:name=""{Regex.Escape(metadataName)}""\s+android:value=""([^""]*)""\s*/>";
+                Match metadataMatch = Regex.Match(manifestContent, metadataPattern, RegexOptions.IgnoreCase);
+                
+                if (metadataMatch.Success && metadataMatch.Groups.Count > 1)
+                {
+                    string currentValue = metadataMatch.Groups[1].Value;
+                    if (currentValue != metadataValue)
+                    {
+                        // Update metadata value
+                        manifestContent = Regex.Replace(manifestContent, metadataPattern, 
+                            $@"<meta-data android:name=""{metadataName}"" android:value=""{metadataValue}"" />", 
+                            RegexOptions.IgnoreCase);
+                    }
+                }
+            }
+            else
+            {
+                // Metadata doesn't exist, add it
+                string metadata = $@"        <meta-data android:name=""{metadataName}"" android:value=""{metadataValue}"" />";
+                manifestContent = InsertMetadataAfterApplicationTag(manifestContent, metadata);
+            }
+
+            return manifestContent;
         }
+
 
         /// <summary>
         /// Inserts metadata after the <application> tag.
@@ -232,6 +330,75 @@ namespace AbxrLib.Editor
             return manifestContent;
         }
 
+        /// <summary>
+        /// Adds camera permission to the manifest if it doesn't already exist.
+        /// Required for Meta Quest QR code reading functionality.
+        /// </summary>
+        private static string AddCameraPermission(string manifestContent)
+        {
+            // Check if camera permission already exists
+            if (manifestContent.Contains("android.permission.CAMERA"))
+            {
+                return manifestContent;
+            }
+
+            // Find the <manifest> tag and add permission after it
+            string manifestPattern = @"(<manifest[\s\S]*?>)";
+            Match match = Regex.Match(manifestContent, manifestPattern, RegexOptions.IgnoreCase);
+            
+            if (match.Success)
+            {
+                int insertPosition = match.Index + match.Length;
+                int newlineAfter = manifestContent.IndexOf('\n', insertPosition);
+                if (newlineAfter > 0)
+                {
+                    insertPosition = newlineAfter + 1;
+                }
+                
+                // Add camera permission
+                string cameraPermission = "    <uses-permission android:name=\"android.permission.CAMERA\" />\n";
+                manifestContent = manifestContent.Insert(insertPosition, cameraPermission);
+                return manifestContent;
+            }
+
+            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Camera permission not added.");
+            return manifestContent;
+        }
+
+        /// <summary>
+        /// Adds the headset camera permission for Meta Quest Passthrough Camera API.
+        /// </summary>
+        private static string AddHeadsetCameraPermission(string manifestContent)
+        {
+            // Check if headset camera permission already exists
+            if (manifestContent.Contains("horizonos.permission.HEADSET_CAMERA"))
+            {
+                return manifestContent;
+            }
+
+            // Find the <manifest> tag and add permission after it
+            string manifestPattern = @"(<manifest[\s\S]*?>)";
+            Match match = Regex.Match(manifestContent, manifestPattern, RegexOptions.IgnoreCase);
+            
+            if (match.Success)
+            {
+                int insertPosition = match.Index + match.Length;
+                int newlineAfter = manifestContent.IndexOf('\n', insertPosition);
+                if (newlineAfter > 0)
+                {
+                    insertPosition = newlineAfter + 1;
+                }
+                
+                // Add headset camera permission
+                string headsetCameraPermission = "    <uses-permission android:name=\"horizonos.permission.HEADSET_CAMERA\" />\n";
+                manifestContent = manifestContent.Insert(insertPosition, headsetCameraPermission);
+                Debug.Log("AbxrLib: Added horizonos.permission.HEADSET_CAMERA permission to AndroidManifest.xml");
+                return manifestContent;
+            }
+
+            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Headset camera permission not added.");
+            return manifestContent;
+        }
     }
 }
 
