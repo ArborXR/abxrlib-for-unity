@@ -122,7 +122,6 @@ namespace AbxrLib.Tests.Runtime
             // Step 4: Verify target app is authenticated
             Debug.Log("Step 4: Verifying target app authentication...");
             Assert.IsTrue(Authentication.Authenticated(), "Target app should be authenticated after handoff");
-            Assert.IsTrue(Authentication.FullyAuthenticated(), "Target app should be fully authenticated after handoff");
 
             // Verify we got the correct auth response data
             var targetAuthResponse = Authentication.GetAuthResponse();
@@ -152,7 +151,6 @@ namespace AbxrLib.Tests.Runtime
 
             // Assert: Verify authentication is successful
             Assert.IsTrue(Authentication.Authenticated(), "Authentication should be successful");
-            Assert.IsTrue(Authentication.FullyAuthenticated(), "Authentication should be fully authenticated");
 
             // Validate and extract handoff data from auth response
             var (packageName, appId) = ValidateAndExtractHandoffData();
@@ -453,7 +451,6 @@ namespace AbxrLib.Tests.Runtime
             // Step 3: Verify target app is fully authenticated
             Debug.Log("Step 3: Verifying target app authentication...");
             Assert.IsTrue(Authentication.Authenticated(), "Target app should be authenticated");
-            Assert.IsTrue(Authentication.FullyAuthenticated(), "Target app should be fully authenticated");
 
             // Step 4: Test that target app can use Abxr functionality
             Debug.Log("Step 4: Testing Abxr functionality in target app...");

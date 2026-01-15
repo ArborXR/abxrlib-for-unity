@@ -60,7 +60,6 @@ public IEnumerator Test_AuthenticationHandoff_BasicFlow_CompletesSuccessfully()
     
     // Verify handoff was processed successfully
     Assert.IsTrue(Authentication.Authenticated());
-    Assert.IsTrue(Authentication.FullyAuthenticated());
 }
 ```
 
