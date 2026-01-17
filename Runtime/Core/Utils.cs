@@ -204,6 +204,16 @@ namespace AbxrLib.Runtime.Core
 			// ---
 			return sb.ToString();
 		}
+		public static List<string> ToList(this string[] asz)
+		{
+			List<string>	lszRet = new List<string>();
+
+			foreach (string s in asz)
+			{
+				lszRet.Add(s);
+			}
+			return lszRet;
+		}
 	}
     /// <summary>
     /// Utility functions and helper methods for AbxrLib
@@ -236,6 +246,24 @@ namespace AbxrLib.Runtime.Core
 			szList.UnescapeAndDeserialize((s) => { lszRet.Add(s); });
 			// ---
 			return lszRet;
+		}
+		public static string StringArrayToString(string[] asz)
+		{
+			string result = "";
+
+			foreach (string sz in asz)
+			{
+				if (!string.IsNullOrEmpty(result))
+				{
+					result += ",";
+				}
+				result += sz.EscapeForSerialization();
+			}
+			return result;
+		}
+		public static string[] StringToStringArray(string szList)
+		{
+			return StringToStringList(szList).ToArray();
 		}
 		public static string DictToString(Dictionary<string, string> dict)
 		{

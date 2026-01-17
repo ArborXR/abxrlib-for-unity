@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.XR.CoreUtils;
+using UnityEditor.PackageManager;
+
 //using UnityEditor.PackageManager;
 using UnityEngine;
 
@@ -63,6 +65,8 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static void AbxrLibInitStart() => _client.Call<int>("abxrLibInitStart");
 		public static void AbxrLibInitEnd() => _client.Call<int>("abxrLibInitEnd");
 		// ---
+		public static int AuthRequest(String szUserId, String dictAdditionalUserData) => _client.Call<int>("authRequest", szUserId, dictAdditionalUserData);
+		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => _client.Call<int>("authenticate", szAppId, szOrgId, szDeviceId, szAuthSecret, ePartner);
 		public static int FinalAuthenticate() => _client.Call<int>("finalAuthenticate");
 		public static int ReAuthenticate(bool bObtainAuthSecret) => _client.Call<int>("reAuthenticate", bObtainAuthSecret);
@@ -117,6 +121,15 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static String get_OrgID() => _client.Call<String>("get_OrgID");
 		public static void set_OrgID(String szOrgID) => _client.Call<int>("set_OrgID", szOrgID);
 		// ---
+		public static String get_AuthSecret() => _client.Call<String>("get_AuthSecret");
+		public static void set_AuthSecret(String szAuthSecret) => _client.Call<int>("set_AuthSecret", szAuthSecret);
+		// ---
+		public static String get_DeviceID() => _client.Call<String>("get_DeviceID");
+		public static void set_DeviceID(String szDeviceID) => _client.Call<int>("set_DeviceID", szDeviceID);
+		// ---
+		public static String get_UserID() => _client.Call<String>("get_UserID");
+		public static void set_UserID(String szUserID) => _client.Call<int>("set_UserID", szUserID);
+		// ---
 		public static long get_TokenExpiration() => _client.Call<long>("get_TokenExpiration");
 		public static void set_TokenExpiration(long dtTokenExpiration) => _client.Call<int>("set_TokenExpiration", dtTokenExpiration);
 		// ---
@@ -139,6 +152,12 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		// ---
 		public static String get_UnityVersion() => _client.Call<String>("get_UnityVersion");
 		public static void set_UnityVersion(String szUnityVersion) => _client.Call<int>("set_UnityVersion", szUnityVersion);
+		// ---
+		public static String get_AbxrLibType() => _client.Call<String>("get_AbxrLibType");
+		public static void set_AbxrLibType(String szAbxrLibType) => _client.Call<int>("set_AbxrLibType", szAbxrLibType);
+		// ---
+		public static String get_AbxrLibVersion() => _client.Call<String>("get_AbxrLibVersion");
+		public static void set_AbxrLibVersion(String szAbxrLibVersion) => _client.Call<int>("set_AbxrLibVersion", szAbxrLibVersion);
 		// ---
 		// Not sure about this one... seems to be an artifact of an earlier time.  It is in the C++ code but only as a data member that is not used anywhere.
 		//String get_DataPath();
@@ -319,6 +338,8 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static void AbxrLibInitStart() => AbxrInsightServiceBridge.AbxrLibInitStart();
 		public static void AbxrLibInitEnd() => AbxrInsightServiceBridge.AbxrLibInitEnd();
 		// ---
+		public static int AuthRequest(String szUserId, String dictAdditionalUserData) => AbxrInsightServiceBridge.AuthRequest(szUserId, dictAdditionalUserData);
+		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => AbxrInsightServiceBridge.Authenticate(szAppId, szOrgId, szDeviceId, szAuthSecret, ePartner);
 		public static int FinalAuthenticate() => AbxrInsightServiceBridge.FinalAuthenticate();
 		public static int ReAuthenticate(bool bObtainAuthSecret) => AbxrInsightServiceBridge.ReAuthenticate(bObtainAuthSecret);
@@ -373,6 +394,15 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static String get_OrgID() => AbxrInsightServiceBridge.get_OrgID();
 		public static void set_OrgID(String szOrgID) => AbxrInsightServiceBridge.set_OrgID(szOrgID);
 		// ---
+		public static String get_AuthSecret() => AbxrInsightServiceBridge.get_AuthSecret();
+		public static void set_AuthSecret(String szAuthSecret) => AbxrInsightServiceBridge.set_AuthSecret(szAuthSecret);
+		// ---
+		public static String get_DeviceID() => AbxrInsightServiceBridge.get_DeviceID();
+		public static void set_DeviceID(String szDeviceID) => AbxrInsightServiceBridge.set_DeviceID(szDeviceID);
+		// ---
+		public static String get_UserID() => AbxrInsightServiceBridge.get_UserID();
+		public static void set_UserID(String szUserID) => AbxrInsightServiceBridge.set_UserID(szUserID);
+		// ---
 		public static long get_TokenExpiration() => AbxrInsightServiceBridge.get_TokenExpiration();
 		public static void set_TokenExpiration(long dtTokenExpiration) => AbxrInsightServiceBridge.set_TokenExpiration(dtTokenExpiration);
 		// ---
@@ -395,6 +425,12 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		// ---
 		public static String get_UnityVersion() => AbxrInsightServiceBridge.get_UnityVersion();
 		public static void set_UnityVersion(String szUnityVersion) => AbxrInsightServiceBridge.set_UnityVersion(szUnityVersion);
+		// ---
+		public static String get_AbxrLibType() => AbxrInsightServiceBridge.get_AbxrLibType();
+		public static void set_AbxrLibType(String szAbxrLibType) => AbxrInsightServiceBridge.set_AbxrLibType(szAbxrLibType);
+		// ---
+		public static String get_AbxrLibVersion() => AbxrInsightServiceBridge.get_AbxrLibVersion();
+		public static void set_AbxrLibVersion(String szAbxrLibVersion) => AbxrInsightServiceBridge.set_AbxrLibVersion(szAbxrLibVersion);
 		// ---
 		// Not sure about this one... seems to be an artifact of an earlier time.  It is in the C++ code but only as a data member that is not used anywhere.
 		//String get_DataPath();
