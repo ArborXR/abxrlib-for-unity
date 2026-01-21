@@ -243,7 +243,10 @@ namespace AbxrLib.Runtime.Core
 		{
 			List<string> lszRet = new List<string>();
 
-			szList.UnescapeAndDeserialize((s) => { lszRet.Add(s); });
+			if (szList != null)
+			{
+				szList.UnescapeAndDeserialize((s) => { lszRet.Add(s); });
+			}
 			// ---
 			return lszRet;
 		}
@@ -279,11 +282,14 @@ namespace AbxrLib.Runtime.Core
 			}
 			return result;
 		}
-		public static Dictionary<string, string> StringToDict(string szdict)
+		public static Dictionary<string, string> StringToDict(string szDict)
 		{
 			Dictionary<string, string> dictRet = new Dictionary<string, string>();
 
-			szdict.UnescapeAndDeserialize((k, v) => dictRet.Add(k, v));
+			if (szDict != null)
+			{
+				szDict.UnescapeAndDeserialize((k, v) => dictRet.Add(k, v));
+			}
 			// ---
 			return dictRet;
 		}

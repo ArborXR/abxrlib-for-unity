@@ -129,13 +129,22 @@ namespace AbxrLib.Runtime.Authentication
             _initialized = true;
 
 Debug.LogError($"[AbxrInsightServiceClient] Authenticate wait for fully initialized.");
-			for (i = 0, bServiceInitialized = false; !bServiceInitialized || i < 40; i++)
+			for (i = 0, bServiceInitialized = false; !bServiceInitialized && i < 40; i++)
 			{
-				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
+				try
 				{
-					bServiceInitialized = true;
+					if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
+					{
+						bServiceInitialized = true;
+						Debug.LogError($"[AbxrInsightServiceClient] Service fully initialized after {i} attempts.");
+						break;
+					}
 				}
-				else
+				catch (Exception e)
+				{
+					Debug.LogError($"[AbxrInsightServiceClient] ServiceIsFullyInitialized() threw exception: {e.Message}");
+				}
+				if (!bServiceInitialized)
 				{
 					System.Threading.Thread.Sleep(250);
 				}
@@ -149,82 +158,82 @@ Debug.LogError($"[AbxrInsightServiceClient] Call WhatTimeIsIt(), returned {AbxrI
 Debug.LogError($"[AbxrInsightServiceClient] Never got the service.");
 			}
 Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt IsServiceFullyInitialized().");
-			if (Abxr.ServiceIsFullyInitialized())
-			{
-				// AbxrInsightService.
-				StartCoroutine(AuthenticateWithAbxrInsightService());
-			}
-			else
-			{
+			//if (Abxr.ServiceIsFullyInitialized())
+			//{
+			//	// AbxrInsightService.
+			//	StartCoroutine(AuthenticateWithAbxrInsightService());
+			//}
+			//else
+			//{
 				// Start the deferred authentication system
 Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth non-service.");
 				StartCoroutine(DeferredAuthenticationSystem());
 				StartCoroutine(PollForReAuth());
-			}
+			//}
         }
 
-		private static IEnumerator AuthenticateWithAbxrInsightService()
-		{
-			AbxrResult	eRet;
+//		private static IEnumerator AuthenticateWithAbxrInsightService()
+//		{
+//			AbxrResult	eRet;
 
-Debug.LogError($"[AbxrInsightServiceClient] Authenticate got into IsServiceFullyInitialized() creds:  {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
-			// Wait here if Start hasn't finished.
-			while (!_initialized)
-			{
-				yield return null;
-			}
-			// ---
-			AbxrInsightServiceClient.set_RestUrl(Configuration.Instance.restUrl + "v1/");
-			AbxrInsightServiceClient.set_AppID(_appId);
-			AbxrInsightServiceClient.set_OrgID(_orgId);
-			AbxrInsightServiceClient.set_ApiSecret(_authSecret);
-			AbxrInsightServiceClient.set_Partner((int)_partner);
-			AbxrInsightServiceClient.set_DeviceModel(_deviceId);
-			//_deviceTags;
-Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth with service with these creds: {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
-			eRet = (AbxrResult)AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner);
-			if (eRet == AbxrResult.OK)
-			{
-				Dictionary<string, string>	dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
+//Debug.LogError($"[AbxrInsightServiceClient] Authenticate got into IsServiceFullyInitialized() creds:  {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
+//			// Wait here if Start hasn't finished.
+//			while (!_initialized)
+//			{
+//				yield return null;
+//			}
+//			// ---
+//			AbxrInsightServiceClient.set_RestUrl(Configuration.Instance.restUrl + "v1/");
+//			AbxrInsightServiceClient.set_AppID(_appId);
+//			AbxrInsightServiceClient.set_OrgID(_orgId);
+//			AbxrInsightServiceClient.set_ApiSecret(_authSecret);
+//			AbxrInsightServiceClient.set_Partner((int)_partner);
+//			AbxrInsightServiceClient.set_DeviceModel(_deviceId);
+//			//_deviceTags;
+//Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth with service with these creds: {_appId}, {_orgId}, {_deviceId}, {_authSecret}, {_partner.ToString()}.");
+//			eRet = (AbxrResult)AbxrInsightServiceClient.Authenticate(_appId, _orgId, _deviceId, _authSecret, (int)_partner);
+//			if (eRet == AbxrResult.OK)
+//			{
+//				Dictionary<string, string>	dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
 
-Debug.Log($"[AbxrInsightServiceClient] Authenticate succeeded auth mechanism = {dictAuthMechanism?.Stringify() ?? "null"}");
-				if (dictAuthMechanism.ContainsKey("prompt"))
-				{
-Debug.Log($"[AbxrInsightServiceClient] About to pop up keyboard and do secondary login in AbxrInsightService login flow.");
-					// Run the keyboard authentication.
-					yield return KeyboardAuthenticateWithAbxrInsightService(dictAuthMechanism);
-				}
-			}
-			else
-			{
-				Debug.LogError($"[AbxrInsightServiceClient] Authenticate failed with error {eRet.ToString()}");
-			}
-		}
+//Debug.Log($"[AbxrInsightServiceClient] Authenticate succeeded auth mechanism = {dictAuthMechanism?.Stringify() ?? "null"}");
+//				if (dictAuthMechanism.ContainsKey("prompt"))
+//				{
+//Debug.Log($"[AbxrInsightServiceClient] About to pop up keyboard and do secondary login in AbxrInsightService login flow.");
+//					// Run the keyboard authentication.
+//					yield return KeyboardAuthenticateWithAbxrInsightService(dictAuthMechanism);
+//				}
+//			}
+//			else
+//			{
+//				Debug.LogError($"[AbxrInsightServiceClient] Authenticate failed with error {eRet.ToString()}");
+//			}
+//		}
 
-		private static IEnumerator FinalAuthenticateWithAbxrInsightService(Dictionary<string, string> dictAuthMechanism)
-		{
-			AbxrResult	eRet;
+//		private static IEnumerator FinalAuthenticateWithAbxrInsightService(Dictionary<string, string> dictAuthMechanism)
+//		{
+//			AbxrResult	eRet;
 
-			if (Abxr.ServiceIsFullyInitialized())
-			{
-Debug.Log($"[AbxrInsightServiceClient] About to call service FinalAuthenticate() with auth mechanism = {AbxrInsightServiceClient.get_SessionAuthMechanism().Stringify()}");
-				eRet = (AbxrResult)AbxrInsightServiceClient.FinalAuthenticate();
-				if (eRet == AbxrResult.OK)
-				{
-Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() succeeded auth mechanism = {dictAuthMechanism?.Stringify() ?? "null"}");
-					_keyboardAuthSuccess = true;
-				}
-				else
-				{
-					Debug.LogError($"[AbxrInsightServiceClient] FinalAuthenticate failed with error {eRet.ToString()}");
-				}
-			}
-			else
-			{
-Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() else claused due to ServiceIs[Not]FullyInitialized().");
-			}
-			yield return null;
-		}
+//			if (Abxr.ServiceIsFullyInitialized())
+//			{
+//Debug.Log($"[AbxrInsightServiceClient] About to call service FinalAuthenticate() with auth mechanism = {AbxrInsightServiceClient.get_SessionAuthMechanism().Stringify()}");
+//				eRet = (AbxrResult)AbxrInsightServiceClient.FinalAuthenticate();
+//				if (eRet == AbxrResult.OK)
+//				{
+//Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() succeeded auth mechanism = {dictAuthMechanism?.Stringify() ?? "null"}");
+//					_keyboardAuthSuccess = true;
+//				}
+//				else
+//				{
+//					Debug.LogError($"[AbxrInsightServiceClient] FinalAuthenticate failed with error {eRet.ToString()}");
+//				}
+//			}
+//			else
+//			{
+//Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() else claused due to ServiceIs[Not]FullyInitialized().");
+//			}
+//			yield return null;
+//		}
 
         private static IEnumerator DeferredAuthenticationSystem()
         {
@@ -263,10 +272,12 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() else claused due to S
             {
                 yield break; // Auth handoff handled everything, we're done
             }
-            
-            yield return AuthRequest();
+Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call AuthRequest().");
+			yield return AuthRequest();
+Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call GetConfiguration().");
             yield return GetConfiguration();
-            if (_authMechanism != null)
+			if ((AbxrInsightServiceClient.ServiceIsFullyInitialized() && _dictAuthMechanism != null && _dictAuthMechanism.Count > 0) ||
+				(!AbxrInsightServiceClient.ServiceIsFullyInitialized() && _authMechanism != null))
             {
                 yield return KeyboardAuthenticate();
                 // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
@@ -458,12 +469,62 @@ Debug.Log($"[AbxrInsightServiceClient] FinalAuthenticate() else claused due to S
             
             if (keyboardInput != null)
             {
+				// Accept keyboard input and do second stage of authentication that uses it.
 				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
 				{
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticateWithAbxrInsightService().");
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() about to call KeyboardAuthenticateWithAbxrInsightService().");
-					yield return KeyboardAuthenticateWithAbxrInsightService(null, keyboardInput, invalidQrCode);
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() returned from KeyboardAuthenticateWithAbxrInsightService().");
+Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticate() AbxrInsightService.");
+					string	szType = "",
+							szDomain = "",
+							szOriginalPrompt = "";
+
+Debug.Log($"[AbxrInsightServiceClient] In first line of KeyboardAuthenticate() with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {_dictAuthMechanism?.Stringify() ?? "null"}");
+					// _dictAuthMechanism has been set up or we would not be in here.
+					_dictAuthMechanism.TryGetValue("type", out szType);
+					_dictAuthMechanism.TryGetValue("domain", out szDomain);
+					if (keyboardInput == null)
+					{
+						_dictAuthMechanism.TryGetValue("prompt", out szOriginalPrompt);
+					}
+					// ---
+					_keyboardAuthSuccess = false;
+					if (keyboardInput != null)
+					{
+Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticate() second phase with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {_dictAuthMechanism?.Stringify() ?? "null"}");
+						// Store the entered value for email and text auth methods so we can add it to UserData
+						if (szType == "email" || szType == "text")
+						{
+							// For email type, combine with domain if provided.
+							if (szType == "email" && !string.IsNullOrEmpty(szDomain))
+							{
+								_enteredAuthValue = $"{keyboardInput}@{szDomain}";
+							}
+							else
+							{
+								_enteredAuthValue = keyboardInput;
+							}
+						}
+						else
+						{
+							_enteredAuthValue = null; // Clear for non-email/text auth methods
+						}
+Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticate() about to stuff the keyboardInput into dictAuthMechanism");
+						_dictAuthMechanism["prompt"] = keyboardInput;
+Debug.Log($"[AbxrInsightServiceClient] Just stuffed {keyboardInput} into dictAuthMechanism in KeyboardAuthenticate().  dictAuthMechanism: {_dictAuthMechanism?.Stringify() ?? "null"}");
+						AbxrInsightServiceClient.set_SessionAuthMechanism(_dictAuthMechanism);
+Debug.Log($"[AbxrInsightServiceClient] About to call AuthRequest() from KeyboardAuthenticate().");
+						yield return AuthRequest(false);
+						_enteredAuthValue = null;  // only need this in AuthRequest
+						if (_keyboardAuthSuccess == true)
+						{
+							KeyboardHandler.Destroy();
+							_failedAuthAttempts = 0;
+Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success in KeyboardAuthenticate().");
+							// Notify completion for keyboard authentication success
+							Abxr.NotifyAuthCompleted();
+							yield break;
+						}
+						_dictAuthMechanism["prompt"] = szOriginalPrompt;
+					}
 				}
 				else
 				{ 
@@ -507,93 +568,93 @@ Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from
             _failedAuthAttempts++;
         }
 
-		public static IEnumerator KeyboardAuthenticateWithAbxrInsightService(Dictionary<string, string> dictAuthMechanism/*, string szPrompt*/, string keyboardInput = null, bool invalidQrCode = false)
-		{
-Debug.Log($"[AbxrInsightServiceClient] In zeroth line of KeyboardAuthenticateWithAbxrInsightService() with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {dictAuthMechanism?.Stringify() ?? "null"}");
-//yield return null;
-			string	szType = "",
-					szDomain = "",
-					szOriginalPrompt = "";
+//		public static IEnumerator KeyboardAuthenticateWithAbxrInsightService(Dictionary<string, string> dictAuthMechanism/*, string szPrompt*/, string keyboardInput = null, bool invalidQrCode = false)
+//		{
+//Debug.Log($"[AbxrInsightServiceClient] In zeroth line of KeyboardAuthenticateWithAbxrInsightService() with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {dictAuthMechanism?.Stringify() ?? "null"}");
+////yield return null;
+//			string	szType = "",
+//					szDomain = "",
+//					szOriginalPrompt = "";
 
-			Debug.Log($"[AbxrInsightServiceClient] In first line of KeyboardAuthenticateWithAbxrInsightService() with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {dictAuthMechanism?.Stringify() ?? "null"}");
-			if (dictAuthMechanism != null)
-			{
-				// Cannot pass this to the keyboard object(s) so stash in this object for duration of login.
-				_dictAuthMechanism = dictAuthMechanism;
-			}
-			else
-			{
-				// Got the keyboard input.
-				dictAuthMechanism = _dictAuthMechanism;
-			}
-			// ---
-			dictAuthMechanism.TryGetValue("type", out szType);
-			dictAuthMechanism.TryGetValue("domain", out szDomain);
-			if (keyboardInput == null)
-			{
-				dictAuthMechanism.TryGetValue("prompt", out szOriginalPrompt);
-			}
-			// ---
-			_keyboardAuthSuccess = false;
-			if (keyboardInput != null)
-			{
-Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticateWithAbxrInsightService() second phase with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {dictAuthMechanism?.Stringify() ?? "null"}");
-				// Store the entered value for email and text auth methods so we can add it to UserData
-				if (dictAuthMechanism != null && (szType == "email" || szType == "text"))
-				{
-					// For email type, combine with domain if provided.
-					if (szType == "email" && !string.IsNullOrEmpty(szDomain))
-					{
-						_enteredAuthValue = $"{keyboardInput}@{szDomain}";
-					}
-					else
-					{
-						_enteredAuthValue = keyboardInput;
-					}
-				}
-				else
-				{
-					_enteredAuthValue = null; // Clear for non-email/text auth methods
-				}
-Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticateWithAbxrInsightService() about to stuff the keyboardInput into dictAuthMechanism");
-				dictAuthMechanism["prompt"] = keyboardInput;
-Debug.Log($"[AbxrInsightServiceClient] Just stuffed {keyboardInput} into dictAuthMechanism in KeyboardAuthenticateWithAbxrInsightService().  dictAuthMechanism: {dictAuthMechanism?.Stringify() ?? "null"}");
-				AbxrInsightServiceClient.set_SessionAuthMechanism(dictAuthMechanism);
-Debug.Log($"[AbxrInsightServiceClient] About to call FinalAuthenticateWithAbxrInsightService() from KeyboardAuthenticateWithAbxrInsightService().");
-				yield return FinalAuthenticateWithAbxrInsightService(dictAuthMechanism);
+//			Debug.Log($"[AbxrInsightServiceClient] In first line of KeyboardAuthenticateWithAbxrInsightService() with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {dictAuthMechanism?.Stringify() ?? "null"}");
+//			if (dictAuthMechanism != null)
+//			{
+//				// Cannot pass this to the keyboard object(s) so stash in this object for duration of login.
+//				_dictAuthMechanism = dictAuthMechanism;
+//			}
+//			else
+//			{
+//				// Got the keyboard input.
+//				dictAuthMechanism = _dictAuthMechanism;
+//			}
+//			// ---
+//			dictAuthMechanism.TryGetValue("type", out szType);
+//			dictAuthMechanism.TryGetValue("domain", out szDomain);
+//			if (keyboardInput == null)
+//			{
+//				dictAuthMechanism.TryGetValue("prompt", out szOriginalPrompt);
+//			}
+//			// ---
+//			_keyboardAuthSuccess = false;
+//			if (keyboardInput != null)
+//			{
+//Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticateWithAbxrInsightService() second phase with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {dictAuthMechanism?.Stringify() ?? "null"}");
+//				// Store the entered value for email and text auth methods so we can add it to UserData
+//				if (dictAuthMechanism != null && (szType == "email" || szType == "text"))
+//				{
+//					// For email type, combine with domain if provided.
+//					if (szType == "email" && !string.IsNullOrEmpty(szDomain))
+//					{
+//						_enteredAuthValue = $"{keyboardInput}@{szDomain}";
+//					}
+//					else
+//					{
+//						_enteredAuthValue = keyboardInput;
+//					}
+//				}
+//				else
+//				{
+//					_enteredAuthValue = null; // Clear for non-email/text auth methods
+//				}
+//Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticateWithAbxrInsightService() about to stuff the keyboardInput into dictAuthMechanism");
+//				dictAuthMechanism["prompt"] = keyboardInput;
+//Debug.Log($"[AbxrInsightServiceClient] Just stuffed {keyboardInput} into dictAuthMechanism in KeyboardAuthenticateWithAbxrInsightService().  dictAuthMechanism: {dictAuthMechanism?.Stringify() ?? "null"}");
+//				AbxrInsightServiceClient.set_SessionAuthMechanism(dictAuthMechanism);
+//Debug.Log($"[AbxrInsightServiceClient] About to call FinalAuthenticateWithAbxrInsightService() from KeyboardAuthenticateWithAbxrInsightService().");
+//				yield return FinalAuthenticateWithAbxrInsightService(dictAuthMechanism);
 
-				if (_keyboardAuthSuccess == true)
-				{
-					KeyboardHandler.Destroy();
-					_failedAuthAttempts = 0;
+//				if (_keyboardAuthSuccess == true)
+//				{
+//					KeyboardHandler.Destroy();
+//					_failedAuthAttempts = 0;
 
-					// Notify completion for keyboard authentication success.
-					Abxr.NotifyAuthCompleted();
+//					// Notify completion for keyboard authentication success.
+//					Abxr.NotifyAuthCompleted();
 
-					yield break;
-				}
+//					yield break;
+//				}
 
-				if (_dictAuthMechanism != null)
-				{
-					_dictAuthMechanism["prompt"] = szOriginalPrompt;
-				}
-				_enteredAuthValue = null; // Clear on failure
-			}
+//				if (_dictAuthMechanism != null)
+//				{
+//					_dictAuthMechanism["prompt"] = szOriginalPrompt;
+//				}
+//				_enteredAuthValue = null; // Clear on failure
+//			}
 
-			string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
+//			string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
 
-			if (invalidQrCode)
-			{
-				prompt = "Invalid QR Code\n";
-			}
-			prompt += szOriginalPrompt;
-Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticateWithAbxrInsightService().");
-			Abxr.PresentKeyboard(prompt, szType, szDomain);
-			if (keyboardInput != null && keyboardInput.Length > 0)
-			{
-				_failedAuthAttempts++;
-			}
-		}
+//			if (invalidQrCode)
+//			{
+//				prompt = "Invalid QR Code\n";
+//			}
+//			prompt += szOriginalPrompt;
+//Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticateWithAbxrInsightService().");
+//			Abxr.PresentKeyboard(prompt, szType, szDomain);
+//			if (keyboardInput != null && keyboardInput.Length > 0)
+//			{
+//				_failedAuthAttempts++;
+//			}
+//		}
 
         private static void SetSessionData()
         {
@@ -619,35 +680,59 @@ Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from
         {
 			if (Abxr.ServiceIsFullyInitialized())
 			{
+Debug.Log($"[AbxrInsightServiceClient] In the beginning of AuthRequest().");
 				AbxrResult	eRet;
 				bool		bSuccess = false;
 				int			nRetrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
 
-				AbxrInsightServiceClient.set_AppID(_appId);
-				AbxrInsightServiceClient.set_OrgID(_orgId);
-				AbxrInsightServiceClient.set_AuthSecret(_authSecret);
-				AbxrInsightServiceClient.set_DeviceID(_deviceId);
-				if (userId != null)
+				try
 				{
-					AbxrInsightServiceClient.set_UserID(userId);
+					AbxrInsightServiceClient.set_AppID(_appId);
+					AbxrInsightServiceClient.set_OrgID(_orgId);
+					AbxrInsightServiceClient.set_AuthSecret(_authSecret);
+					AbxrInsightServiceClient.set_DeviceID(_deviceId);
+					if (userId != null)
+					{
+						AbxrInsightServiceClient.set_UserID(userId);
+					}
+					AbxrInsightServiceClient.set_Tags(_deviceTags.ToList());
+					AbxrInsightServiceClient.set_Partner((int)_partner);
+					AbxrInsightServiceClient.set_IpAddress(_ipAddress);
+					AbxrInsightServiceClient.set_DeviceModel(_deviceModel);
+					AbxrInsightServiceClient.set_GeoLocation(new Dictionary<string, string>());
+					AbxrInsightServiceClient.set_OsVersion(SystemInfo.operatingSystem);
+					AbxrInsightServiceClient.set_XrdmVersion(_xrdmVersion);
+					AbxrInsightServiceClient.set_AppVersion(Application.version);
+					AbxrInsightServiceClient.set_UnityVersion(Application.unityVersion);
+					AbxrInsightServiceClient.set_AbxrLibType("unity");
+					AbxrInsightServiceClient.set_AbxrLibVersion(AbxrLibVersion.Version);
 				}
-				AbxrInsightServiceClient.set_Tags(_deviceTags.ToList());
-				AbxrInsightServiceClient.set_Partner((int)_partner);
-				AbxrInsightServiceClient.set_IpAddress(_ipAddress);
-				AbxrInsightServiceClient.set_DeviceModel(_deviceModel);
-				AbxrInsightServiceClient.set_GeoLocation(new Dictionary<string, string>());
-				AbxrInsightServiceClient.set_OsVersion(SystemInfo.operatingSystem);
-				AbxrInsightServiceClient.set_XrdmVersion(_xrdmVersion);
-				AbxrInsightServiceClient.set_AppVersion(Application.version);
-				AbxrInsightServiceClient.set_UnityVersion(Application.unityVersion);
-				AbxrInsightServiceClient.set_AbxrLibType("unity");
-				AbxrInsightServiceClient.set_AbxrLibVersion(AbxrLibVersion.Version);
+				catch (Exception e)
+				{
+Debug.LogError($"[AbxrInsightServiceClient] Blew exception while setting service properties for auth in AuthRequest().  Exception {e.Message}");
+				}
 				// ---
+Debug.LogError($"[AbxrInsightServiceClient] About to enter the while (!bSuccess) loop in AuthRequest().");
+				// Test connection first
+				try
+				{
+					string testResult = AbxrInsightServiceClient.WhatTimeIsIt();
+					Debug.Log($"[AbxrInsightServiceClient] Connection test - WhatTimeIsIt() returned: {testResult}");
+				}
+				catch (Exception e)
+				{
+					Debug.LogError($"[AbxrInsightServiceClient] Connection test failed: {e.Message}");
+				}
 				while (!bSuccess)
 				{
+Debug.Log($"[AbxrInsightServiceClient] About to call AbxrInsightServiceClient.AuthRequest() with userId='{userId}', dict='{Utils.DictToString(additionalUserData)}'.");
 					eRet = (AbxrResult)AbxrInsightServiceClient.AuthRequest(userId, Utils.DictToString(additionalUserData));
 					if (eRet == AbxrResult.OK)
 					{
+Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceClient.AuthRequest() succeeded.");
+						_keyboardAuthSuccess = true;
+						bSuccess = true;
+						break;
 					}
 					if (!withRetry)
 					{
@@ -826,72 +911,79 @@ Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from
 
         private static IEnumerator GetConfiguration()
         {
-            var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
+			if (Abxr.ServiceIsFullyInitialized())
+			{
+				_dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
+			}
+			else
+			{
+				var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
             
-            // Create request and handle creation errors
-            UnityWebRequest request;
+				// Create request and handle creation errors
+				UnityWebRequest request;
             
-            // Request creation with error handling (no yield statements)
-            try
-            {
-                request = UnityWebRequest.Get(fullUri.ToString());
-                request.SetRequestHeader("Accept", "application/json");
-                request.timeout = Configuration.Instance.requestTimeoutSeconds;
-                SetAuthHeaders(request);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
-                yield break;
-            }
+				// Request creation with error handling (no yield statements)
+				try
+				{
+					request = UnityWebRequest.Get(fullUri.ToString());
+					request.SetRequestHeader("Accept", "application/json");
+					request.timeout = Configuration.Instance.requestTimeoutSeconds;
+					SetAuthHeaders(request);
+				}
+				catch (Exception ex)
+				{
+					Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
+					yield break;
+				}
             
-            // Send request (yield outside try-catch)
-            yield return request.SendWebRequest();
+				// Send request (yield outside try-catch)
+				yield return request.SendWebRequest();
             
-            try
-            {
-                if (request.result == UnityWebRequest.Result.Success)
-                {
-                    string response = request.downloadHandler.text;
-                    if (string.IsNullOrEmpty(response))
-                    {
-                        Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
-                    }
-                    else
-                    {
-                        var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
-                        if (config == null)
-                        {
-                            Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
-                        }
-                        else
-                        {
-                            SetConfigFromPayload(config);
-                            _authMechanism = config.authMechanism;
-                            // Ensure inputSource is initialized to "user" if not set
-                            if (_authMechanism != null && string.IsNullOrEmpty(_authMechanism.inputSource))
-                            {
-                                _authMechanism.inputSource = "user";
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    string errorMessage = HandleNetworkError(request);
-                    Debug.LogWarning($"AbxrLib: GetConfiguration failed: {errorMessage}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
-            }
+				try
+				{
+					if (request.result == UnityWebRequest.Result.Success)
+					{
+						string response = request.downloadHandler.text;
+						if (string.IsNullOrEmpty(response))
+						{
+							Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
+						}
+						else
+						{
+							var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
+							if (config == null)
+							{
+								Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
+							}
+							else
+							{
+								SetConfigFromPayload(config);
+								_authMechanism = config.authMechanism;
+								// Ensure inputSource is initialized to "user" if not set
+								if (_authMechanism != null && string.IsNullOrEmpty(_authMechanism.inputSource))
+								{
+									_authMechanism.inputSource = "user";
+								}
+							}
+						}
+					}
+					else
+					{
+						string errorMessage = HandleNetworkError(request);
+						Debug.LogWarning($"AbxrLib: GetConfiguration failed: {errorMessage}");
+					}
+				}
+				catch (Exception ex)
+				{
+					Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
+				}
             
-            // Always dispose of request
-            request?.Dispose();
-        }
-    
-        public static void SetAuthHeaders(UnityWebRequest request, string json = "")
+				// Always dispose of request
+				request?.Dispose();
+			}
+		}
+
+		public static void SetAuthHeaders(UnityWebRequest request, string json = "")
         {
             // Check if we have valid authentication tokens
             if (string.IsNullOrEmpty(_responseData.Token) || string.IsNullOrEmpty(_responseData.Secret))

@@ -5,9 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.XR.CoreUtils;
-using UnityEditor.PackageManager;
-
-//using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
@@ -65,7 +62,26 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static void AbxrLibInitStart() => _client.Call<int>("abxrLibInitStart");
 		public static void AbxrLibInitEnd() => _client.Call<int>("abxrLibInitEnd");
 		// ---
-		public static int AuthRequest(String szUserId, String dictAdditionalUserData) => _client.Call<int>("authRequest", szUserId, dictAdditionalUserData);
+		public static int AuthRequest(String szUserId, String dictAdditionalUserData)
+		{
+			if (_client == null)
+			{
+				Debug.LogError($"[AbxrInsightServiceClient] AuthRequest called but _client is null!");
+				return 0;
+			}
+			try
+			{
+				Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceBridge.AuthRequest() calling _client.Call<int>(\"authRequest\", ...)");
+				int result = _client.Call<int>("authRequest", szUserId ?? "", dictAdditionalUserData ?? "");
+				Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceBridge.AuthRequest() returned: {result}");
+				return result;
+			}
+			catch (Exception e)
+			{
+				Debug.LogError($"[AbxrInsightServiceClient] AuthRequest exception: {e.GetType().Name}: {e.Message}\nStackTrace: {e.StackTrace}");
+				return 0;
+			}
+		}
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => _client.Call<int>("authenticate", szAppId, szOrgId, szDeviceId, szAuthSecret, ePartner);
 		public static int FinalAuthenticate() => _client.Call<int>("finalAuthenticate");
@@ -338,9 +354,9 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static void AbxrLibInitStart() => AbxrInsightServiceBridge.AbxrLibInitStart();
 		public static void AbxrLibInitEnd() => AbxrInsightServiceBridge.AbxrLibInitEnd();
 		// ---
-		public static int AuthRequest(String szUserId, String dictAdditionalUserData) => AbxrInsightServiceBridge.AuthRequest(szUserId, dictAdditionalUserData);
+		public static int AuthRequest(String szUserId, String dictAdditionalUserData) => AbxrInsightServiceBridge.AuthRequest(szUserId ?? "", dictAdditionalUserData ?? "");
 		// ---
-		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => AbxrInsightServiceBridge.Authenticate(szAppId, szOrgId, szDeviceId, szAuthSecret, ePartner);
+		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => AbxrInsightServiceBridge.Authenticate(szAppId ?? "", szOrgId ?? "", szDeviceId ?? "", szAuthSecret ?? "", ePartner);
 		public static int FinalAuthenticate() => AbxrInsightServiceBridge.FinalAuthenticate();
 		public static int ReAuthenticate(bool bObtainAuthSecret) => AbxrInsightServiceBridge.ReAuthenticate(bObtainAuthSecret);
 		public static int ForceSendUnsent() => AbxrInsightServiceBridge.ForceSendUnsent();
@@ -348,60 +364,60 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static void CaptureTimeStamp() => AbxrInsightServiceBridge.CaptureTimeStamp();
 		public static void UnCaptureTimeStamp() => AbxrInsightServiceBridge.UnCaptureTimeStamp();
 		// ---
-		public static int LogDebug(String szText, Dictionary<string, string> dictMeta) => AbxrInsightServiceBridge.LogDebug(szText, dictMeta);
-		public static int LogDebugDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogDebugDeferred(szText, dictMeta);
-		public static int LogInfo(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogInfo(szText, dictMeta);
+		public static int LogDebug(String szText, Dictionary<string, string> dictMeta) => AbxrInsightServiceBridge.LogDebug(szText ?? "", dictMeta);
+		public static int LogDebugDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogDebugDeferred(szText ?? "", dictMeta);
+		public static int LogInfo(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogInfo(szText ?? "", dictMeta);
 		public static int LogInfoDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogInfoDeferred(szText, dictMeta);
-		public static int LogWarn(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogWarn(szText, dictMeta);
-		public static int LogWarnDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogWarnDeferred(szText, dictMeta);
-		public static int LogError(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogError(szText, dictMeta);
-		public static int LogErrorDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogErrorDeferred(szText, dictMeta);
-		public static int LogCritical(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogCritical(szText, dictMeta);
-		public static int LogCriticalDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogCriticalDeferred(szText, dictMeta);
+		public static int LogWarn(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogWarn(szText ?? "", dictMeta);
+		public static int LogWarnDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogWarnDeferred(szText ?? "", dictMeta);
+		public static int LogError(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogError(szText ?? "", dictMeta);
+		public static int LogErrorDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogErrorDeferred(szText ?? "", dictMeta);
+		public static int LogCritical(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogCritical(szText ?? "", dictMeta);
+		public static int LogCriticalDeferred(String szText, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.LogCriticalDeferred(szText ?? "", dictMeta);
 		// ---
-		public static int Event(String szMessage, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.Event(szMessage, dictMeta);
-		public static int EventDeferred(String szMessage, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventDeferred(szMessage, dictMeta);
+		public static int Event(String szMessage, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.Event(szMessage ?? "", dictMeta);
+		public static int EventDeferred(String szMessage, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventDeferred(szMessage ?? "", dictMeta);
 		// --- Convenient wrappers for particular forms of events.
-		public static int EventAssessmentStart(String szAssessmentName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventAssessmentStart(szAssessmentName, dictMeta);
-		public static int EventAssessmentComplete(String szAssessmentName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventAssessmentComplete(szAssessmentName, szScore, eResultOptions, dictMeta);
+		public static int EventAssessmentStart(String szAssessmentName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventAssessmentStart(szAssessmentName ?? "", dictMeta);
+		public static int EventAssessmentComplete(String szAssessmentName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventAssessmentComplete(szAssessmentName ?? "", szScore ?? "", eResultOptions, dictMeta);
 		// ---
-		public static int EventObjectiveStart(String szObjectiveName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventObjectiveStart(szObjectiveName, dictMeta);
-		public static int EventObjectiveComplete(String szObjectiveName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventObjectiveComplete(szObjectiveName, szScore, eResultOptions, dictMeta);
+		public static int EventObjectiveStart(String szObjectiveName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventObjectiveStart(szObjectiveName ?? "", dictMeta);
+		public static int EventObjectiveComplete(String szObjectiveName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventObjectiveComplete(szObjectiveName ?? "", szScore ?? "", eResultOptions, dictMeta);
 		// ---
-		public static int EventInteractionStart(String szInteractionName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventInteractionStart(szInteractionName, dictMeta);
-		public static int EventInteractionComplete(String szInteractionName, String szResult, String szResultDetails, int eInteractionType, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventInteractionComplete(szInteractionName, szResult, szResultDetails, eInteractionType, dictMeta);
+		public static int EventInteractionStart(String szInteractionName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventInteractionStart(szInteractionName ?? "", dictMeta);
+		public static int EventInteractionComplete(String szInteractionName, String szResult, String szResultDetails, int eInteractionType, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventInteractionComplete(szInteractionName ?? "", szResult ?? "", szResultDetails ?? "", eInteractionType, dictMeta);
 		// ---
-		public static int EventLevelStart(String szLevelName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventLevelStart(szLevelName, dictMeta);
-		public static int EventLevelComplete(String szLevelName, String szScore, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventLevelComplete(szLevelName, szScore, dictMeta);
+		public static int EventLevelStart(String szLevelName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventLevelStart(szLevelName ?? "", dictMeta);
+		public static int EventLevelComplete(String szLevelName, String szScore, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.EventLevelComplete(szLevelName ?? "", szScore ?? "", dictMeta);
 		// ---
-		public static int AddAIProxy(String szPrompt, String szPastMessages, String szLMMProvider) => AbxrInsightServiceBridge.AddAIProxy(szPrompt, szPastMessages, szLMMProvider);
-		public static int AddAIProxyDeferred(String szPrompt, String szPastMessages, String szLMMProvider) => AbxrInsightServiceBridge.AddAIProxyDeferred(szPrompt, szPastMessages, szLMMProvider);
+		public static int AddAIProxy(String szPrompt, String szPastMessages, String szLMMProvider) => AbxrInsightServiceBridge.AddAIProxy(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
+		public static int AddAIProxyDeferred(String szPrompt, String szPastMessages, String szLMMProvider) => AbxrInsightServiceBridge.AddAIProxyDeferred(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
 		// ---
-		public static int AddTelemetryEntry(String szName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.AddTelemetryEntry(szName, dictMeta);
-		public static int AddTelemetryEntryDeferred(String szName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.AddTelemetryEntryDeferred(szName, dictMeta);
+		public static int AddTelemetryEntry(String szName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.AddTelemetryEntry(szName ?? "", dictMeta);
+		public static int AddTelemetryEntryDeferred(String szName, Dictionary<String, String> dictMeta) => AbxrInsightServiceBridge.AddTelemetryEntryDeferred(szName ?? "", dictMeta);
 		// ---
 		//boolean platformIsWindows();
 		// --- Authentication fields.
 		public static String get_ApiToken() => AbxrInsightServiceBridge.get_ApiToken();
-		public static void set_ApiToken(String szApiToken) => AbxrInsightServiceBridge.set_ApiToken(szApiToken);
+		public static void set_ApiToken(String szApiToken) => AbxrInsightServiceBridge.set_ApiToken(szApiToken ?? "");
 		// ---
 		public static String get_ApiSecret() => AbxrInsightServiceBridge.get_ApiSecret();
-		public static void set_ApiSecret(String szApiSecret) => AbxrInsightServiceBridge.set_ApiSecret(szApiSecret);
+		public static void set_ApiSecret(String szApiSecret) => AbxrInsightServiceBridge.set_ApiSecret(szApiSecret ?? "");
 		// ---
 		public static String get_AppID() => AbxrInsightServiceBridge.get_AppID();
-		public static void set_AppID(String szAppID) => AbxrInsightServiceBridge.set_AppID(szAppID);
+		public static void set_AppID(String szAppID) => AbxrInsightServiceBridge.set_AppID(szAppID ?? "");
 		// ---
 		public static String get_OrgID() => AbxrInsightServiceBridge.get_OrgID();
-		public static void set_OrgID(String szOrgID) => AbxrInsightServiceBridge.set_OrgID(szOrgID);
+		public static void set_OrgID(String szOrgID) => AbxrInsightServiceBridge.set_OrgID(szOrgID ?? "");
 		// ---
 		public static String get_AuthSecret() => AbxrInsightServiceBridge.get_AuthSecret();
-		public static void set_AuthSecret(String szAuthSecret) => AbxrInsightServiceBridge.set_AuthSecret(szAuthSecret);
+		public static void set_AuthSecret(String szAuthSecret) => AbxrInsightServiceBridge.set_AuthSecret(szAuthSecret ?? "");
 		// ---
 		public static String get_DeviceID() => AbxrInsightServiceBridge.get_DeviceID();
-		public static void set_DeviceID(String szDeviceID) => AbxrInsightServiceBridge.set_DeviceID(szDeviceID);
+		public static void set_DeviceID(String szDeviceID) => AbxrInsightServiceBridge.set_DeviceID(szDeviceID ?? "");
 		// ---
 		public static String get_UserID() => AbxrInsightServiceBridge.get_UserID();
-		public static void set_UserID(String szUserID) => AbxrInsightServiceBridge.set_UserID(szUserID);
+		public static void set_UserID(String szUserID) => AbxrInsightServiceBridge.set_UserID(szUserID ?? "");
 		// ---
 		public static long get_TokenExpiration() => AbxrInsightServiceBridge.get_TokenExpiration();
 		public static void set_TokenExpiration(long dtTokenExpiration) => AbxrInsightServiceBridge.set_TokenExpiration(dtTokenExpiration);
@@ -412,35 +428,35 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static void set_Partner(int ePartner) => AbxrInsightServiceBridge.set_Partner(ePartner);
 		// --- Environment/session globals that get sent with the auth payload in Authenticate() functions.
 		public static String get_OsVersion() => AbxrInsightServiceBridge.get_OsVersion();
-		public static void set_OsVersion(String szOsVersion) => AbxrInsightServiceBridge.set_OsVersion(szOsVersion);
+		public static void set_OsVersion(String szOsVersion) => AbxrInsightServiceBridge.set_OsVersion(szOsVersion ?? "");
 		// ---
 		public static String get_IpAddress() => AbxrInsightServiceBridge.get_IpAddress();
-		public static void set_IpAddress(String szIpAddress) => AbxrInsightServiceBridge.set_IpAddress(szIpAddress);
+		public static void set_IpAddress(String szIpAddress) => AbxrInsightServiceBridge.set_IpAddress(szIpAddress ?? "");
 		// ---
 		public static String get_XrdmVersion() => AbxrInsightServiceBridge.get_XrdmVersion();
-		public static void set_XrdmVersion(String szXrdmVersion) => AbxrInsightServiceBridge.set_XrdmVersion(szXrdmVersion);
+		public static void set_XrdmVersion(String szXrdmVersion) => AbxrInsightServiceBridge.set_XrdmVersion(szXrdmVersion ?? "");
 		// ---
 		public static String get_AppVersion() => AbxrInsightServiceBridge.get_AppVersion();
-		public static void set_AppVersion(String szAppVersion) => AbxrInsightServiceBridge.set_AppVersion(szAppVersion);
+		public static void set_AppVersion(String szAppVersion) => AbxrInsightServiceBridge.set_AppVersion(szAppVersion ?? "");
 		// ---
 		public static String get_UnityVersion() => AbxrInsightServiceBridge.get_UnityVersion();
-		public static void set_UnityVersion(String szUnityVersion) => AbxrInsightServiceBridge.set_UnityVersion(szUnityVersion);
+		public static void set_UnityVersion(String szUnityVersion) => AbxrInsightServiceBridge.set_UnityVersion(szUnityVersion ?? "");
 		// ---
 		public static String get_AbxrLibType() => AbxrInsightServiceBridge.get_AbxrLibType();
-		public static void set_AbxrLibType(String szAbxrLibType) => AbxrInsightServiceBridge.set_AbxrLibType(szAbxrLibType);
+		public static void set_AbxrLibType(String szAbxrLibType) => AbxrInsightServiceBridge.set_AbxrLibType(szAbxrLibType ?? "");
 		// ---
 		public static String get_AbxrLibVersion() => AbxrInsightServiceBridge.get_AbxrLibVersion();
-		public static void set_AbxrLibVersion(String szAbxrLibVersion) => AbxrInsightServiceBridge.set_AbxrLibVersion(szAbxrLibVersion);
+		public static void set_AbxrLibVersion(String szAbxrLibVersion) => AbxrInsightServiceBridge.set_AbxrLibVersion(szAbxrLibVersion ?? "");
 		// ---
 		// Not sure about this one... seems to be an artifact of an earlier time.  It is in the C++ code but only as a data member that is not used anywhere.
 		//String get_DataPath();
 		//void set_DataPath(String szDataPath);
 		// ---
 		public static String get_DeviceModel() => AbxrInsightServiceBridge.get_DeviceModel();
-		public static void set_DeviceModel(String szDeviceModel) => AbxrInsightServiceBridge.set_DeviceModel(szDeviceModel);
+		public static void set_DeviceModel(String szDeviceModel) => AbxrInsightServiceBridge.set_DeviceModel(szDeviceModel ?? "");
 		// ---
 		public static String get_UserId() => AbxrInsightServiceBridge.get_UserId();
-		public static void set_UserId(String szUserId) => AbxrInsightServiceBridge.set_UserId(szUserId);
+		public static void set_UserId(String szUserId) => AbxrInsightServiceBridge.set_UserId(szUserId ?? "");
 		// ---
 		public static List<String> get_Tags() => AbxrInsightServiceBridge.get_Tags();
 		public static void set_Tags(List<String> lszTags) => AbxrInsightServiceBridge.set_Tags(lszTags);
@@ -452,17 +468,17 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static void set_SessionAuthMechanism(Dictionary<String, String> dictValue) => AbxrInsightServiceBridge.set_SessionAuthMechanism(dictValue);
 		// --- Environment / Storage functions.
 		public static String StorageGetDefaultEntryAsString() => AbxrInsightServiceBridge.StorageGetDefaultEntryAsString();
-		public static String StorageGetEntryAsString(String szName) => AbxrInsightServiceBridge.StorageGetEntryAsString(szName);
+		public static String StorageGetEntryAsString(String szName) => AbxrInsightServiceBridge.StorageGetEntryAsString(szName ?? "");
 		// ---
-		public static int StorageSetDefaultEntryFromString(String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => AbxrInsightServiceBridge.StorageSetDefaultEntryFromString(szStorageEntry, bKeepLatest, szOrigin, bSessionData);
-		public static int StorageSetEntryFromString(String szName, String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => AbxrInsightServiceBridge.StorageSetEntryFromString(szName, szStorageEntry, bKeepLatest, szOrigin, bSessionData);
+		public static int StorageSetDefaultEntryFromString(String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => AbxrInsightServiceBridge.StorageSetDefaultEntryFromString(szStorageEntry ?? "", bKeepLatest, szOrigin ?? "", bSessionData);
+		public static int StorageSetEntryFromString(String szName, String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => AbxrInsightServiceBridge.StorageSetEntryFromString(szName ?? "", szStorageEntry ?? "", bKeepLatest, szOrigin ?? "", bSessionData);
 		// ---
 		public static int StorageRemoveDefaultEntry() => AbxrInsightServiceBridge.StorageRemoveDefaultEntry();
-		public static int StorageRemoveEntry(String szName) => AbxrInsightServiceBridge.StorageRemoveEntry(szName);
+		public static int StorageRemoveEntry(String szName) => AbxrInsightServiceBridge.StorageRemoveEntry(szName ?? "");
 		public static int StorageRemoveMultipleEntries(bool bSessionOnly) => AbxrInsightServiceBridge.StorageRemoveMultipleEntries(bSessionOnly);
 		// --- Configuration fields.
 		public static String get_RestUrl() => AbxrInsightServiceBridge.get_RestUrl();
-		public static void set_RestUrl(String szValue) => AbxrInsightServiceBridge.set_RestUrl(szValue);
+		public static void set_RestUrl(String szValue) => AbxrInsightServiceBridge.set_RestUrl(szValue ?? "");
 		// ---
 		public static int get_SendRetriesOnFailure() => AbxrInsightServiceBridge.get_SendRetriesOnFailure();
 		public static void set_SendRetriesOnFailure(int nValue) => AbxrInsightServiceBridge.set_SendRetriesOnFailure(nValue);
