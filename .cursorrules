@@ -13,6 +13,16 @@
 - **Use clear, professional language** in all user-facing messages
 - **Follow Unity logging conventions** with appropriate log levels
 
+### Maintaining This Document
+- **Update `.cursorrules` when code changes reveal new patterns, edge cases, or architectural decisions** that should guide future development
+- **Document discovered edge cases** that could easily be overlooked by future developers or AI agents
+- **Capture general understanding** gained from implementing features or fixing bugs that would benefit future work
+- **Add examples** when encountering common pitfalls or non-obvious implementation patterns
+- **Update existing rules** when code changes demonstrate better approaches or when current rules become outdated
+- **Keep this document as a living reference** - it should evolve with the codebase to maintain its value as a comprehensive guide
+- **When adding new rules, place them in the most appropriate existing section** or create a new section if needed
+- **Be specific and actionable** - rules should clearly guide decision-making, not just describe what exists
+
 ## Code Style and Patterns
 
 ### Metadata Handling
