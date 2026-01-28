@@ -229,13 +229,16 @@ namespace AbxrLib.Runtime.Core
 		{
 			string result = "";
 
-			foreach (string sz in lsz)
+			if (lsz != null)
 			{
-				if (!string.IsNullOrEmpty(result))
+				foreach (string sz in lsz)
 				{
-					result += ",";
+					if (!string.IsNullOrEmpty(result))
+					{
+						result += ",";
+					}
+					result += sz.EscapeForSerialization();
 				}
-				result += sz.EscapeForSerialization();
 			}
 			return result;
 		}
@@ -254,13 +257,16 @@ namespace AbxrLib.Runtime.Core
 		{
 			string result = "";
 
-			foreach (string sz in asz)
+			if (asz != null)
 			{
-				if (!string.IsNullOrEmpty(result))
+				foreach (string sz in asz)
 				{
-					result += ",";
+					if (!string.IsNullOrEmpty(result))
+					{
+						result += ",";
+					}
+					result += sz.EscapeForSerialization();
 				}
-				result += sz.EscapeForSerialization();
 			}
 			return result;
 		}
@@ -272,13 +278,16 @@ namespace AbxrLib.Runtime.Core
 		{
 			string result = "";
 
-			foreach (KeyValuePair<string, string> kvp in dict)
+			if (dict != null)
 			{
-				if (!string.IsNullOrEmpty(result))
+				foreach (KeyValuePair<string, string> kvp in dict)
 				{
-					result += ",";
+					if (!string.IsNullOrEmpty(result))
+					{
+						result += ",";
+					}
+					result += $"{kvp.Key.EscapeForSerialization()}={kvp.Value.EscapeForSerialization()}";
 				}
-				result += $"{kvp.Key.EscapeForSerialization()}={kvp.Value.EscapeForSerialization()}";
 			}
 			return result;
 		}

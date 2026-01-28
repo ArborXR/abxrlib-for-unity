@@ -687,6 +687,8 @@ Debug.Log($"[AbxrInsightServiceClient] In the beginning of AuthRequest().");
 
 				try
 				{
+Debug.LogError($"[AbxrInsightServiceClient] appId={_appId}\norgId={_orgId}\nauthSecret={_authSecret}\ndeviceId={_deviceId}\nuserId={userId ?? "null"}\ntags={_deviceTags.ToString()}\npartner={_partner.ToString()}");
+Debug.LogError($"[AbxrInsightServiceClient] ipAddress={_ipAddress}\ndeviceModel={_deviceModel}\nosVersion={SystemInfo.operatingSystem}\nXrdmVersion={_xrdmVersion}\nappVersion={Application.version}\nAbxrLibType={"unity"}\nAbxrLibVersion={AbxrLibVersion.Version}");
 					AbxrInsightServiceClient.set_AppID(_appId);
 					AbxrInsightServiceClient.set_OrgID(_orgId);
 					AbxrInsightServiceClient.set_AuthSecret(_authSecret);
@@ -723,6 +725,16 @@ Debug.LogError($"[AbxrInsightServiceClient] About to enter the while (!bSuccess)
 				{
 					Debug.LogError($"[AbxrInsightServiceClient] Connection test failed: {e.Message}");
 				}
+//try
+//{
+//	Debug.Log($"[AbxrInsightServiceClient] About to call AbxrInsightServiceClient.AuthRequest() with userId='{userId}', dict='{Utils.DictToString(additionalUserData)}' outside the loop which is magically not being entered.");
+//	eRet = (AbxrResult)AbxrInsightServiceClient.AuthRequest(userId, Utils.DictToString(additionalUserData));
+//}
+//catch (Exception e)
+//{
+//	Debug.Log($"[AbxrInsightServiceClient] Blew exception calling AbxrInsightServiceClient.AuthRequest() '{e.Message}' outside the loop which is magically not being entered.");
+//}
+Debug.Log($"[AbxrInsightServiceClient] About to enter the while (!bSuccess) loop, bSuccess = {bSuccess.ToString()}.");
 				while (!bSuccess)
 				{
 Debug.Log($"[AbxrInsightServiceClient] About to call AbxrInsightServiceClient.AuthRequest() with userId='{userId}', dict='{Utils.DictToString(additionalUserData)}'.");
