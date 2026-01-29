@@ -285,6 +285,54 @@ namespace AbxrLib.Runtime.Core
     #endif
             return "";
         }
+
+        /// <summary>
+        /// Get Android manifest metadata value by key
+        /// Reads metadata from AndroidManifest.xml using ApplicationInfo
+        /// </summary>
+        /// <param name="key">The metadata key to search for</param>
+        /// <returns>The metadata value if found, empty string otherwise</returns>
+        public static string GetAndroidManifestMetadata(string key)
+        {
+    #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                using var packageManager = activity.Call<AndroidJavaObject>("getPackageManager");
+                using var packageName = activity.Call<string>("getPackageName");
+                
+                // Get ApplicationInfo with GET_META_DATA flag (0x00000080)
+                using var appInfo = packageManager.Call<AndroidJavaObject>("getApplicationInfo", packageName, 0x00000080);
+                using var metaData = appInfo.Get<AndroidJavaObject>("metaData");
+                
+                if (metaData != null)
+                {
+                    // Try to get as string first (most common case)
+                    string stringValue = metaData.Call<string>("getString", key);
+                    if (!string.IsNullOrEmpty(stringValue))
+                    {
+                        return stringValue;
+                    }
+                    
+                    // Fallback: get as object and convert to string
+                    object value = metaData.Call<object>("get", key);
+                    if (value != null)
+                    {
+                        return value.ToString();
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                // Log warning with consistent format and include Android context
+                Debug.LogWarning($"AbxrLib: Failed to get Android manifest metadata '{key}': {ex.Message}\n" +
+                                $"Exception Type: {ex.GetType().Name}\n" +
+                                $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+            }
+    #endif
+            return "";
+        }
     
         public static long GetUnityTime() => (long)(Time.time * 1000f) + Initialize.StartTimeMs;
 

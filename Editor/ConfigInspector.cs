@@ -1,4 +1,4 @@
-﻿using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
@@ -10,12 +10,32 @@ namespace AbxrLib.Editor
         public override void OnInspectorGUI()
         {
             var config = (Configuration)target;
-        
+            EditorGUILayout.LabelField("Application Identity", EditorStyles.boldLabel);
+            
+            string[] buildTypeValues = { "production", "development" };
+            string[] buildTypeDisplayNames = { "Production", "Development" };
+            int currentSelection = config.buildType == "production" ? 0 : 1;
+            int newSelection = EditorGUILayout.Popup(new GUIContent(
+                "Build Type", "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only)."), 
+                currentSelection, buildTypeDisplayNames);
+            
+            config.buildType = buildTypeValues[newSelection];
+
             config.appID = EditorGUILayout.TextField(new GUIContent(
                 "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
+            
+            // Grey out orgID and authSecret when buildType is production
+            bool isProduction = config.buildType == "production";
+            EditorGUI.BeginDisabledGroup(isProduction);
             config.orgID = EditorGUILayout.TextField(new GUIContent(
                 "Organization ID (*)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.orgID);
             config.authSecret = EditorGUILayout.TextField("Authorization Secret (*)", config.authSecret);
+            EditorGUI.EndDisabledGroup();
+            
+            if (isProduction)
+            {
+                EditorGUILayout.HelpBox("OrgID and AuthSecret are disabled in Production builds. These values will NOT be included in builds.", MessageType.Info);
+            }
         
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Service Provider", EditorStyles.boldLabel);

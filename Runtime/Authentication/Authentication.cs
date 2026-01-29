@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2024 ArborXR. All rights reserved.
  * 
  * AbxrLib for Unity - Authentication System
@@ -43,6 +43,7 @@ namespace AbxrLib.Runtime.Authentication
         private static string _xrdmVersion;
         private static string _ipAddress;
         private static string _sessionId;
+        private static string _buildFingerprint;
         private static int _failedAuthAttempts;
         
         private static AuthMechanism _authMechanism;
@@ -270,8 +271,20 @@ namespace AbxrLib.Runtime.Authentication
         private static void GetConfigData()
         {
             _appId = Configuration.Instance.appID;
-            _orgId = Configuration.Instance.orgID;
-            _authSecret = Configuration.Instance.authSecret;
+            
+            // Only include orgID and authSecret if buildType is development
+            // In production builds, these should be empty to avoid including credentials
+            if (Configuration.Instance.buildType == "development")
+            {
+                _orgId = Configuration.Instance.orgID;
+                _authSecret = Configuration.Instance.authSecret;
+            }
+            else
+            {
+                // Production build - use empty values
+                _orgId = null;
+                _authSecret = null;
+            }
         }
     
         private static void GetArborData()
@@ -334,13 +347,17 @@ namespace AbxrLib.Runtime.Authentication
                 return false;
             }
             
-            if (string.IsNullOrEmpty(_orgId))
+            // In production builds, orgID and authSecret may be empty (they won't be included in builds)
+            // They may be provided by ArborServiceClient or other sources instead
+            bool isProductionBuild = Configuration.Instance.buildType == "production";
+            
+            if (string.IsNullOrEmpty(_orgId) && !isProductionBuild)
             {
                 Debug.LogError("AbxrLib: Organization ID is missing. Cannot authenticate.");
                 return false;
             }
             
-            if (string.IsNullOrEmpty(_authSecret))
+            if (string.IsNullOrEmpty(_authSecret) && !isProductionBuild)
             {
                 Debug.LogError("AbxrLib: Authentication Secret is missing. Cannot authenticate");
                 return false;
@@ -400,6 +417,9 @@ namespace AbxrLib.Runtime.Authentication
 #if UNITY_ANDROID && !UNITY_EDITOR
             _ipAddress = Utils.GetIPAddress();
             
+            // Read build_fingerprint from Android manifest
+            _buildFingerprint = Utils.GetAndroidManifestMetadata("com.arborxr.abxrlib.build_fingerprint");
+            
             var currentAssembly = Assembly.GetExecutingAssembly();
             AssemblyName[] referencedAssemblies = currentAssembly.GetReferencedAssemblies();
             foreach (AssemblyName assemblyName in referencedAssemblies)
@@ -437,6 +457,8 @@ namespace AbxrLib.Runtime.Authentication
                 unityVersion = Application.unityVersion,
                 abxrLibType = "unity",
                 abxrLibVersion = AbxrLibVersion.Version,
+                buildFingerprint = _buildFingerprint,
+                buildType = Configuration.Instance.buildType,
                 authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
             };
         
@@ -887,6 +909,10 @@ namespace AbxrLib.Runtime.Authentication
             public string unityVersion;
             public string abxrLibType;
             public string abxrLibVersion;
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public string buildFingerprint;
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public string buildType;
             public Dictionary<string, string> authMechanism;
         }
 

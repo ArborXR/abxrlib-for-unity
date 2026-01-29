@@ -17,6 +17,7 @@ namespace AbxrLib.Editor
         private const string MetaDataVersionName = "com.arborxr.abxrlib.version";
         private const string MetaDataAppIdName = "com.arborxr.abxrlib.insights_id";
         private const string MetaDataBuildTypeName = "com.arborxr.abxrlib.build_type";
+        private const string MetaDataBuildFingerprintName = "com.arborxr.abxrlib.build_fingerprint";
 
         private const string FallbackVersion = "1.0.0";
 
@@ -64,28 +65,17 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// Gets the build type based on Configuration values.
-        /// Returns "production" if orgID and authSecret are both empty, "custom" otherwise.
+        /// Gets the build type from Configuration.
+        /// Returns the buildType field value, or "production" as default.
         /// </summary>
         private static string GetBuildType()
         {
             try
             {
                 var config = Configuration.Instance;
-                if (config != null)
+                if (config != null && !string.IsNullOrEmpty(config.buildType))
                 {
-                    bool orgIdEmpty = string.IsNullOrEmpty(config.orgID);
-                    bool authSecretEmpty = string.IsNullOrEmpty(config.authSecret);
-                    
-                    // Production when both are empty, custom otherwise
-                    if (orgIdEmpty && authSecretEmpty)
-                    {
-                        return "production";
-                    }
-                    else
-                    {
-                        return "custom";
-                    }
+                    return config.buildType;
                 }
             }
             catch
@@ -94,6 +84,15 @@ namespace AbxrLib.Editor
             }
             
             return "production";
+        }
+
+        /// <summary>
+        /// Generates a unique GUID for each build.
+        /// This build_fingerprint can be used to track and compare results across different builds.
+        /// </summary>
+        private static string GenerateBuildFingerprint()
+        {
+            return System.Guid.NewGuid().ToString();
         }
 
         /// <summary>
@@ -249,6 +248,9 @@ namespace AbxrLib.Editor
 
             // Handle build_type metadata
             manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataBuildTypeName, GetBuildType());
+
+            // Handle build_fingerprint metadata (generated GUID for each build)
+            manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataBuildFingerprintName, GenerateBuildFingerprint());
 
             return manifestContent;
         }
