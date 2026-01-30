@@ -138,6 +138,55 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
+        /// <summary>
+        /// Extracts authentication data from an App Token (JWT).
+        /// Production tokens include: appId, buildType
+        /// Development tokens include: appId, orgId, authSecret, buildType
+        /// </summary>
+        /// <param name="appToken">The App Token JWT string</param>
+        /// <returns>Dictionary containing extracted fields (appId, orgId, authSecret, buildType), or null if token is invalid</returns>
+        public static Dictionary<string, string> ExtractAppTokenData(string appToken)
+        {
+            if (string.IsNullOrEmpty(appToken))
+            {
+                return null;
+            }
+
+            Dictionary<string, object> jwtPayload = DecodeJwt(appToken);
+            if (jwtPayload == null)
+            {
+                return null;
+            }
+
+            var result = new Dictionary<string, string>();
+
+            // Extract appId (required in both production and development tokens)
+            if (jwtPayload.ContainsKey("appId") && jwtPayload["appId"] != null)
+            {
+                result["appId"] = jwtPayload["appId"].ToString();
+            }
+
+            // Extract buildType (required in both production and development tokens)
+            if (jwtPayload.ContainsKey("buildType") && jwtPayload["buildType"] != null)
+            {
+                result["buildType"] = jwtPayload["buildType"].ToString();
+            }
+
+            // Extract orgId (only in development tokens)
+            if (jwtPayload.ContainsKey("orgId") && jwtPayload["orgId"] != null)
+            {
+                result["orgId"] = jwtPayload["orgId"].ToString();
+            }
+
+            // Extract authSecret (only in development tokens)
+            if (jwtPayload.ContainsKey("authSecret") && jwtPayload["authSecret"] != null)
+            {
+                result["authSecret"] = jwtPayload["authSecret"].ToString();
+            }
+
+            return result;
+        }
+
         private static string Base64UrlDecode(string input)
         {
             return input.Replace('-', '+').Replace('_', '/');

@@ -20,23 +20,54 @@ namespace AbxrLib.Editor
                 currentSelection, buildTypeDisplayNames);
             
             config.buildType = buildTypeValues[newSelection];
-
-            config.appID = EditorGUILayout.TextField(new GUIContent(
-                "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
+                        
+            EditorGUILayout.Space();
             
-            // Grey out orgID and authSecret when buildType is production
+            bool useAppTokens = config.useAppTokens;
             bool isProduction = config.buildType == "production";
-            EditorGUI.BeginDisabledGroup(isProduction);
-            config.orgID = EditorGUILayout.TextField(new GUIContent(
-                "Organization ID (*)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.orgID);
-            config.authSecret = EditorGUILayout.TextField("Authorization Secret (*)", config.authSecret);
-            EditorGUI.EndDisabledGroup();
             
-            if (isProduction)
+            if (useAppTokens)
             {
-                EditorGUILayout.HelpBox("OrgID and AuthSecret are disabled in Production builds. These values will NOT be included in builds.", MessageType.Info);
+                // Show App Token fields
+                // Indicate which token will be used based on buildType
+                
+                // Production Token
+                string productionLabel = isProduction ? "Production Token ▶" : "Production Token";
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(productionLabel, isProduction ? EditorStyles.boldLabel : EditorStyles.label, GUILayout.Width(EditorGUIUtility.labelWidth));
+                config.appTokenProduction = EditorGUILayout.TextField(config.appTokenProduction);
+                EditorGUILayout.EndHorizontal();
+                
+                // Development Token
+                string developmentLabel = isProduction ? "Development Token" : "Development Token ▶";
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(developmentLabel, isProduction ? EditorStyles.label : EditorStyles.boldLabel, GUILayout.Width(EditorGUIUtility.labelWidth));
+                config.appTokenDevelopment = EditorGUILayout.TextField(config.appTokenDevelopment);
+                EditorGUILayout.EndHorizontal();
             }
-        
+            else
+            {
+                // Show traditional appID/orgID/authSecret fields
+                config.appID = EditorGUILayout.TextField(new GUIContent(
+                    "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
+                
+                // Grey out orgID and authSecret when buildType is production
+                EditorGUI.BeginDisabledGroup(isProduction);
+                config.orgID = EditorGUILayout.TextField(new GUIContent(
+                    "Organization ID (*)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.orgID);
+                config.authSecret = EditorGUILayout.TextField("Authorization Secret (*)", config.authSecret);
+                EditorGUI.EndDisabledGroup();
+                
+                if (isProduction)
+                {
+                    EditorGUILayout.HelpBox("OrgID and AuthSecret are disabled in Production builds. These values will NOT be included in builds.", MessageType.Info);
+                }
+            }
+                    // Use App Tokens checkbox right under buildType dropdown
+            EditorGUILayout.Space(5);
+            config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(
+                "Use App Tokens", "When enabled, use App Tokens (JWT) instead of appID/orgID/authSecret combination"), config.useAppTokens);
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Service Provider", EditorStyles.boldLabel);
             string newRestUrl = EditorGUILayout.TextField(new GUIContent(

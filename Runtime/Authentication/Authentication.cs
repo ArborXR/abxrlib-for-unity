@@ -33,10 +33,11 @@ namespace AbxrLib.Runtime.Authentication
     [DefaultExecutionOrder(1)]
     public class Authentication : MonoBehaviour
     {
+        private static string _appToken;
+        private static string _appId;
         private static string _orgId;
         private static string _deviceId;
         private static string _authSecret;
-        private static string _appId;
         private static Partner _partner = Partner.None;
         private static string _deviceModel;
         private static string[] _deviceTags;
@@ -270,20 +271,83 @@ namespace AbxrLib.Runtime.Authentication
 
         private static void GetConfigData()
         {
-            _appId = Configuration.Instance.appID;
+            var config = Configuration.Instance;
             
-            // Only include orgID and authSecret if buildType is development
-            // In production builds, these should be empty to avoid including credentials
-            if (Configuration.Instance.buildType == "development")
+            // Check if using App Tokens
+            if (config.useAppTokens)
             {
-                _orgId = Configuration.Instance.orgID;
-                _authSecret = Configuration.Instance.authSecret;
+                // Get the appropriate token based on buildType
+                string tokenToUse = config.buildType == "production" 
+                    ? config.appTokenProduction 
+                    : config.appTokenDevelopment;
+                
+                if (string.IsNullOrEmpty(tokenToUse))
+                {
+                    Debug.LogError($"AbxrLib: App Token for {config.buildType} build is not set. Cannot authenticate.");
+                    return;
+                }
+                
+                // Store the token for sending in AuthPayload
+                _appToken = tokenToUse;
+                
+                // Extract data from the JWT token
+                var tokenData = Utils.ExtractAppTokenData(tokenToUse);
+                if (tokenData == null)
+                {
+                    Debug.LogError("AbxrLib: Failed to decode App Token. Cannot authenticate.");
+                    return;
+                }
+                
+                // Extract appId (required)
+                if (tokenData.ContainsKey("appId"))
+                {
+                    _appId = tokenData["appId"];
+                }
+                else
+                {
+                    Debug.LogError("AbxrLib: App Token missing appId. Cannot authenticate.");
+                    return;
+                }
+                
+                // Extract orgId and authSecret (only in development tokens)
+                // These will still be overridden by GetArborData() if ArborServiceClient is connected
+                if (tokenData.ContainsKey("orgId"))
+                {
+                    _orgId = tokenData["orgId"];
+                }
+                else
+                {
+                    _orgId = null;
+                }
+                
+                if (tokenData.ContainsKey("authSecret"))
+                {
+                    _authSecret = tokenData["authSecret"];
+                }
+                else
+                {
+                    _authSecret = null;
+                }
             }
             else
             {
-                // Production build - use empty values
-                _orgId = null;
-                _authSecret = null;
+                // Use traditional appID/orgID/authSecret approach
+                _appId = config.appID;
+                _appToken = null;
+                
+                // Only include orgID and authSecret if buildType is development
+                // In production builds, these should be empty to avoid including credentials
+                if (config.buildType == "development")
+                {
+                    _orgId = config.orgID;
+                    _authSecret = config.authSecret;
+                }
+                else
+                {
+                    // Production build - use empty values
+                    _orgId = null;
+                    _authSecret = null;
+                }
             }
         }
     
@@ -339,7 +403,36 @@ namespace AbxrLib.Runtime.Authentication
 #endif
         private static bool ValidateConfigValues()
         {
-            if (!Configuration.Instance.IsValid()) return false;
+            var config = Configuration.Instance;
+            
+            // If using app tokens, validate token is set
+            if (config.useAppTokens)
+            {
+                string tokenToUse = config.buildType == "production" 
+                    ? config.appTokenProduction 
+                    : config.appTokenDevelopment;
+                
+                if (string.IsNullOrEmpty(tokenToUse))
+                {
+                    Debug.LogError($"AbxrLib: App Token for {config.buildType} build is not set. Cannot authenticate.");
+                    return false;
+                }
+                
+                // Validate token can be decoded and contains required fields
+                var tokenData = Utils.ExtractAppTokenData(tokenToUse);
+                if (tokenData == null || !tokenData.ContainsKey("appId"))
+                {
+                    Debug.LogError("AbxrLib: Invalid App Token or missing appId. Cannot authenticate.");
+                    return false;
+                }
+                
+                // appId is validated above, orgId and authSecret are optional (only in development tokens)
+                // They may also be provided by ArborServiceClient
+                return true;
+            }
+            
+            // Traditional validation for appID/orgID/authSecret approach
+            if (!config.IsValid()) return false;
             
             if (string.IsNullOrEmpty(_appId))
             {
@@ -349,7 +442,7 @@ namespace AbxrLib.Runtime.Authentication
             
             // In production builds, orgID and authSecret may be empty (they won't be included in builds)
             // They may be provided by ArborServiceClient or other sources instead
-            bool isProductionBuild = Configuration.Instance.buildType == "production";
+            bool isProductionBuild = config.buildType == "production";
             
             if (string.IsNullOrEmpty(_orgId) && !isProductionBuild)
             {
@@ -438,9 +531,12 @@ namespace AbxrLib.Runtime.Authentication
         {
             if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
+            var config = Configuration.Instance;
             var data = new AuthPayload
             {
-                appId = _appId,
+                // Send either appId or appToken, not both
+                appId = config.useAppTokens ? null : _appId,
+                appToken = config.useAppTokens ? _appToken : null,
                 orgId = _orgId,
                 authSecret = _authSecret,
                 deviceId = _deviceId,
@@ -458,7 +554,7 @@ namespace AbxrLib.Runtime.Authentication
                 abxrLibType = "unity",
                 abxrLibVersion = AbxrLibVersion.Version,
                 buildFingerprint = _buildFingerprint,
-                buildType = Configuration.Instance.buildType,
+                buildType = config.buildType,
                 authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
             };
         
@@ -891,6 +987,8 @@ namespace AbxrLib.Runtime.Authentication
 
         private class AuthPayload
         {
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public string appToken;
             public string appId;
             public string orgId;
             public string authSecret;
@@ -913,6 +1011,7 @@ namespace AbxrLib.Runtime.Authentication
             public string buildFingerprint;
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public string buildType;
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public Dictionary<string, string> authMechanism;
         }
 

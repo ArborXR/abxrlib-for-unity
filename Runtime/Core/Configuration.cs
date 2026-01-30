@@ -58,6 +58,11 @@ namespace AbxrLib.Runtime.Core
         [HideInInspector]
         [Tooltip("Optional")] public string launcherAppID;
         
+        [Header("App Tokens")]
+        [Tooltip("When enabled, use App Tokens instead of appID/orgID/authSecret combination")] public bool useAppTokens = false;
+        [Tooltip("Production App Token (JWT) - includes appId and buildType=production")] public string appTokenProduction;
+        [Tooltip("Development App Token (JWT) - includes appId, orgId, authSecret, and buildType=development")] public string appTokenDevelopment;
+        
         /// <summary>
         /// Validates that the configuration has the required fields set properly.
         /// Validates appID, orgID, authSecret, restUrl format, and numeric ranges for timeouts.
