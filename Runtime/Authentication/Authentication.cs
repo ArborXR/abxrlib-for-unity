@@ -166,7 +166,6 @@ Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt IsServ
 			//else
 			//{
 				// Start the deferred authentication system
-Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt auth non-service.");
 				StartCoroutine(DeferredAuthenticationSystem());
 				StartCoroutine(PollForReAuth());
 			//}
@@ -689,6 +688,7 @@ Debug.Log($"[AbxrInsightServiceClient] In the beginning of AuthRequest().");
 				{
 Debug.LogError($"[AbxrInsightServiceClient] appId={_appId}\norgId={_orgId}\nauthSecret={_authSecret}\ndeviceId={_deviceId}\nuserId={userId ?? "null"}\ntags={_deviceTags.ToString()}\npartner={_partner.ToString()}");
 Debug.LogError($"[AbxrInsightServiceClient] ipAddress={_ipAddress}\ndeviceModel={_deviceModel}\nosVersion={SystemInfo.operatingSystem}\nXrdmVersion={_xrdmVersion}\nappVersion={Application.version}\nAbxrLibType={"unity"}\nAbxrLibVersion={AbxrLibVersion.Version}");
+					AbxrInsightServiceClient.set_RestUrl("https://lib-backend.xrdm.app/v1/");
 					AbxrInsightServiceClient.set_AppID(_appId);
 					AbxrInsightServiceClient.set_OrgID(_orgId);
 					AbxrInsightServiceClient.set_AuthSecret(_authSecret);
