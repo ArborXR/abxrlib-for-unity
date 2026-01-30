@@ -311,30 +311,15 @@ namespace AbxrLib.Runtime.Authentication
                 
                 // Extract orgId and authSecret (only in development tokens)
                 // These will still be overridden by GetArborData() if ArborServiceClient is connected
-                if (tokenData.ContainsKey("orgId"))
-                {
-                    _orgId = tokenData["orgId"];
-                }
-                else
-                {
-                    _orgId = null;
-                }
-                
-                if (tokenData.ContainsKey("authSecret"))
-                {
-                    _authSecret = tokenData["authSecret"];
-                }
-                else
-                {
-                    _authSecret = null;
-                }
+                _orgId = tokenData.ContainsKey("orgId") ? tokenData["orgId"] : null;
+                _authSecret = tokenData.ContainsKey("authSecret") ? tokenData["authSecret"] : null;
             }
             else
             {
                 // Use traditional appID/orgID/authSecret approach
                 _appId = config.appID;
                 _appToken = null;
-                
+               
                 // Only include orgID and authSecret if buildType is development
                 // In production builds, these should be empty to avoid including credentials
                 if (config.buildType == "development")
@@ -404,53 +389,21 @@ namespace AbxrLib.Runtime.Authentication
         private static bool ValidateConfigValues()
         {
             var config = Configuration.Instance;
+            if (!config.useAppTokens && !Configuration.Instance.IsValid()) return false;
             
-            // If using app tokens, validate token is set
-            if (config.useAppTokens)
+            if (string.IsNullOrEmpty(_appId) && string.IsNullOrEmpty(_appToken))
             {
-                string tokenToUse = config.buildType == "production" 
-                    ? config.appTokenProduction 
-                    : config.appTokenDevelopment;
-                
-                if (string.IsNullOrEmpty(tokenToUse))
-                {
-                    Debug.LogError($"AbxrLib: App Token for {config.buildType} build is not set. Cannot authenticate.");
-                    return false;
-                }
-                
-                // Validate token can be decoded and contains required fields
-                var tokenData = Utils.ExtractAppTokenData(tokenToUse);
-                if (tokenData == null || !tokenData.ContainsKey("appId"))
-                {
-                    Debug.LogError("AbxrLib: Invalid App Token or missing appId. Cannot authenticate.");
-                    return false;
-                }
-                
-                // appId is validated above, orgId and authSecret are optional (only in development tokens)
-                // They may also be provided by ArborServiceClient
-                return true;
-            }
-            
-            // Traditional validation for appID/orgID/authSecret approach
-            if (!config.IsValid()) return false;
-            
-            if (string.IsNullOrEmpty(_appId))
-            {
-                Debug.LogError("AbxrLib: Application ID is missing. Cannot authenticate.");
+                Debug.LogError("AbxrLib: Need Application ID or Application Token. Cannot authenticate.");
                 return false;
             }
             
-            // In production builds, orgID and authSecret may be empty (they won't be included in builds)
-            // They may be provided by ArborServiceClient or other sources instead
-            bool isProductionBuild = config.buildType == "production";
-            
-            if (string.IsNullOrEmpty(_orgId) && !isProductionBuild)
+            if (string.IsNullOrEmpty(_orgId))
             {
                 Debug.LogError("AbxrLib: Organization ID is missing. Cannot authenticate.");
                 return false;
             }
             
-            if (string.IsNullOrEmpty(_authSecret) && !isProductionBuild)
+            if (string.IsNullOrEmpty(_authSecret))
             {
                 Debug.LogError("AbxrLib: Authentication Secret is missing. Cannot authenticate");
                 return false;
@@ -554,7 +507,6 @@ namespace AbxrLib.Runtime.Authentication
                 abxrLibType = "unity",
                 abxrLibVersion = AbxrLibVersion.Version,
                 buildFingerprint = _buildFingerprint,
-                buildType = config.buildType,
                 authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
             };
         
@@ -987,13 +939,11 @@ namespace AbxrLib.Runtime.Authentication
 
         private class AuthPayload
         {
-            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-            public string appToken;
-            public string appId;
+            public string appToken;  // optional - either appToken or appId will be set
+            public string appId;  // optional - either appToken or appId will be set
             public string orgId;
             public string authSecret;
             public string deviceId;
-            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public string userId;
             public string[] tags;
             public string sessionId;
@@ -1007,11 +957,7 @@ namespace AbxrLib.Runtime.Authentication
             public string unityVersion;
             public string abxrLibType;
             public string abxrLibVersion;
-            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-            public string buildFingerprint;
-            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-            public string buildType;
-            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+            public string buildFingerprint;  // optional - set on Android devices
             public Dictionary<string, string> authMechanism;
         }
 
