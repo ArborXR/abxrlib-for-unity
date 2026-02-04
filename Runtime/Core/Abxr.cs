@@ -983,6 +983,272 @@ public static partial class Abxr
 
 	#endregion
 
+	#region Target Management
+
+	/// <summary>
+	/// Enables the AbxrTarget component on the specified GameObject.
+	/// When enabled, the target will be included in gaze tracking during Events.
+	/// </summary>
+	/// <param name="targetGameObject">The GameObject with an AbxrTarget component to enable</param>
+	/// <returns>True if the target was found and enabled, false otherwise</returns>
+	public static bool TargetEnable(GameObject targetGameObject)
+	{
+		if (targetGameObject == null)
+		{
+			LogWarn("Abxr.TargetEnable: target GameObject is null");
+			return false;
+		}
+
+		AbxrTarget target = targetGameObject.GetComponent<AbxrTarget>();
+		if (target == null)
+		{
+			// Try searching in children in case the AbxrTarget is on a child GameObject
+			target = targetGameObject.GetComponentInChildren<AbxrTarget>();
+			if (target == null)
+			{
+				LogWarn($"Abxr.TargetEnable: GameObject '{targetGameObject.name}' does not have an AbxrTarget component (checked self and children)");
+				return false;
+			}
+		}
+
+		target.enabled = true;
+		return true;
+	}
+
+	/// <summary>
+	/// Enables the AbxrTarget component by target display name (custom target name or GameObject name).
+	/// Searches all AbxrTarget components in the scene for one matching the specified display name.
+	/// This is the recommended method for enabling targets by their display name.
+	/// </summary>
+	/// <param name="name">The display name of the target (custom target name or GameObject name if no custom name is set)</param>
+	/// <returns>True if the target was found and enabled, false otherwise</returns>
+	public static bool TargetEnable(string name)
+	{
+		if (string.IsNullOrEmpty(name))
+		{
+			LogWarn("Abxr.TargetEnable: target display name is null or empty");
+			return false;
+		}
+
+		// Search all AbxrTarget components for one with matching display name
+		AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+		foreach (var target in allTargets)
+		{
+			if (target != null && target.GetTargetName() == name)
+			{
+				target.enabled = true;
+				return true;
+			}
+		}
+
+		// If not found by display name, try GameObject name as fallback
+		GameObject targetGameObject = GameObject.Find(name);
+		if (targetGameObject != null)
+		{
+			return TargetEnable(targetGameObject);
+		}
+
+		LogWarn($"Abxr.TargetEnable: AbxrTarget with display name '{name}' not found");
+		return false;
+	}
+
+	/// <summary>
+	/// Enables the AbxrTarget component by GameObject name (not the custom target display name).
+	/// Searches all active GameObjects in the scene for one matching the specified GameObject name.
+	/// For enabling by display name, use TargetEnable(string) which accepts the target display name.
+	/// </summary>
+	/// <param name="gameObjectName">The GameObject name of the GameObject with an AbxrTarget component to enable</param>
+	/// <returns>True if the target was found and enabled, false otherwise</returns>
+	public static bool TargetEnableByGameObjectName(string gameObjectName)
+	{
+		if (string.IsNullOrEmpty(gameObjectName))
+		{
+			LogWarn("Abxr.TargetEnableByGameObjectName: GameObject name is null or empty");
+			return false;
+		}
+
+		GameObject targetGameObject = GameObject.Find(gameObjectName);
+		if (targetGameObject == null)
+		{
+			LogWarn($"Abxr.TargetEnableByGameObjectName: GameObject with name '{gameObjectName}' not found");
+			return false;
+		}
+
+		return TargetEnable(targetGameObject);
+	}
+
+	/// <summary>
+	/// Disables the AbxrTarget component on the specified GameObject.
+	/// When disabled, the target will be excluded from gaze tracking during Events.
+	/// </summary>
+	/// <param name="targetGameObject">The GameObject with an AbxrTarget component to disable</param>
+	/// <returns>True if the target was found and disabled, false otherwise</returns>
+	public static bool TargetDisable(GameObject targetGameObject)
+	{
+		if (targetGameObject == null)
+		{
+			LogWarn("Abxr.TargetDisable: target GameObject is null");
+			return false;
+		}
+
+		AbxrTarget target = targetGameObject.GetComponent<AbxrTarget>();
+		if (target == null)
+		{
+			// Try searching in children in case the AbxrTarget is on a child GameObject
+			target = targetGameObject.GetComponentInChildren<AbxrTarget>();
+			if (target == null)
+			{
+				LogWarn($"Abxr.TargetDisable: GameObject '{targetGameObject.name}' does not have an AbxrTarget component (checked self and children)");
+				return false;
+			}
+		}
+
+		target.enabled = false;
+		return true;
+	}
+
+	/// <summary>
+	/// Disables the AbxrTarget component by target display name (custom target name or GameObject name).
+	/// Searches all AbxrTarget components in the scene for one matching the specified display name.
+	/// This is the recommended method for disabling targets by their display name.
+	/// </summary>
+	/// <param name="name">The display name of the target (custom target name or GameObject name if no custom name is set)</param>
+	/// <returns>True if the target was found and disabled, false otherwise</returns>
+	public static bool TargetDisable(string name)
+	{
+		if (string.IsNullOrEmpty(name))
+		{
+			LogWarn("Abxr.TargetDisable: target display name is null or empty");
+			return false;
+		}
+
+		// Search all AbxrTarget components for one with matching display name
+		AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+		foreach (var target in allTargets)
+		{
+			if (target != null && target.GetTargetName() == name)
+			{
+				target.enabled = false;
+				return true;
+			}
+		}
+
+		// If not found by display name, try GameObject name as fallback
+		GameObject targetGameObject = GameObject.Find(name);
+		if (targetGameObject != null)
+		{
+			return TargetDisable(targetGameObject);
+		}
+
+		LogWarn($"Abxr.TargetDisable: AbxrTarget with display name '{name}' not found");
+		return false;
+	}
+
+	/// <summary>
+	/// Disables the AbxrTarget component by GameObject name (not the custom target display name).
+	/// Searches all active GameObjects in the scene for one matching the specified GameObject name.
+	/// For disabling by display name, use TargetDisable(string) which accepts the target display name.
+	/// </summary>
+	/// <param name="gameObjectName">The GameObject name of the GameObject with an AbxrTarget component to disable</param>
+	/// <returns>True if the target was found and disabled, false otherwise</returns>
+	public static bool TargetDisableByGameObjectName(string gameObjectName)
+	{
+		if (string.IsNullOrEmpty(gameObjectName))
+		{
+			LogWarn("Abxr.TargetDisableByGameObjectName: GameObject name is null or empty");
+			return false;
+		}
+
+		GameObject targetGameObject = GameObject.Find(gameObjectName);
+		if (targetGameObject == null)
+		{
+			LogWarn($"Abxr.TargetDisableByGameObjectName: GameObject with name '{gameObjectName}' not found");
+			return false;
+		}
+
+		return TargetDisable(targetGameObject);
+	}
+
+	/// <summary>
+	/// Data structure representing an AbxrTarget's status information
+	/// </summary>
+	public class TargetInfo
+	{
+		/// <summary>
+		/// The custom target name if set, otherwise the GameObject name (display name)
+		/// </summary>
+		public string name;
+
+		/// <summary>
+		/// The GameObject name of the target
+		/// </summary>
+		public string gameObjectName;
+
+		/// <summary>
+		/// Whether the AbxrTarget component is currently enabled
+		/// </summary>
+		public bool enabled;
+
+		/// <summary>
+		/// Whether the GameObject is active in the hierarchy
+		/// </summary>
+		public bool activeInHierarchy;
+
+		/// <summary>
+		/// The world position of the target
+		/// </summary>
+		public Vector3 position;
+
+		public TargetInfo(string name, string gameObjectName, bool enabled, bool activeInHierarchy, Vector3 position)
+		{
+			this.name = name;
+			this.gameObjectName = gameObjectName;
+			this.enabled = enabled;
+			this.activeInHierarchy = activeInHierarchy;
+			this.position = position;
+		}
+	}
+
+	/// <summary>
+	/// Returns a list of all AbxrTarget components in the scene with their enabled/disabled status.
+	/// Only returns active GameObjects (disabled GameObjects are automatically excluded from tracking).
+	/// Each TargetInfo contains:
+	/// - name: The custom target display name (or GameObject name if no custom name is set)
+	/// - gameObjectName: The GameObject name
+	/// - enabled: Whether the AbxrTarget component is enabled
+	/// - activeInHierarchy: Whether the GameObject is active
+	/// - position: World position of the target
+	/// </summary>
+	/// <returns>List of TargetInfo objects containing name (display name), gameObjectName (GameObject name), enabled status, and position for each target</returns>
+	public static List<TargetInfo> TargetList()
+	{
+		List<TargetInfo> targets = new List<TargetInfo>();
+		
+		// FindObjectsOfType only returns active objects, which matches the behavior of gaze tracking
+		AbxrTarget[] abxrTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+		
+		foreach (var target in abxrTargets)
+		{
+			if (target == null) continue;
+
+			// Use GetTargetName() to get the display name (custom name or GameObject name)
+			string name = target.GetTargetName();
+			// Use GetWorldPosition() to get the correct world position (handles child objects correctly)
+			Vector3 worldPosition = target.GetWorldPosition();
+			targets.Add(new TargetInfo(
+				name,
+				target.gameObject.name,
+				target.enabled,
+				target.gameObject.activeInHierarchy,
+				worldPosition
+			));
+		}
+
+		return targets;
+	}
+
+	#endregion
+
 	#region Storage
 
 	// Data structures for storage

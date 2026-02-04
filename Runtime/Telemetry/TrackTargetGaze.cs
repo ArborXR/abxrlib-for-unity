@@ -78,15 +78,15 @@ namespace AbxrLib.Runtime.Telemetry
                 if (hmd.isValid)
                 {
                     // Try to find camera in scene that matches HMD
-                    Camera[] cameras = FindObjectsOfType<Camera>();
+                    Camera[] cameras = UnityEngine.Object.FindObjectsOfType<Camera>();
                     foreach (var cam in cameras)
                     {
-                    if (cam.enabled && cam.gameObject.activeInHierarchy)
-                    {
-                        _cachedCamera = cam;
-                        _cachedCameraTransform = cam.transform;
-                        return;
-                    }
+                        if (cam.enabled && cam.gameObject.activeInHierarchy)
+                        {
+                            _cachedCamera = cam;
+                            _cachedCameraTransform = cam.transform;
+                            return;
+                        }
                     }
                 }
             }
@@ -110,7 +110,7 @@ namespace AbxrLib.Runtime.Telemetry
         {
             // Early return optimization: Check if any targets exist before doing any work
             // This ensures zero overhead when no targets are present
-            AbxrTarget[] targets = FindObjectsOfType<AbxrTarget>();
+            AbxrTarget[] targets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
             if (targets == null || targets.Length == 0)
             {
                 return; // No targets, exit immediately with zero overhead
@@ -136,15 +136,20 @@ namespace AbxrLib.Runtime.Telemetry
                     continue; // Skip disabled or destroyed targets
                 }
 
-                // Validate transform exists
+                // Skip targets where the AbxrTarget component itself is disabled
+                if (!target.enabled)
+                {
+                    continue;
+                }
+
+                // Skip if transform is null (defensive check)
                 if (target.transform == null)
                 {
-                    Debug.LogWarning($"AbxrLib: AbxrTarget '{target.name}' has null transform, skipping.");
                     continue;
                 }
 
                 // Get target name (custom name or GameObject name)
-                string targetDisplayName = target.GetTargetName();
+                string name = target.GetTargetName();
 
                 // Get world position using the helper method that handles child objects correctly
                 Vector3 worldPosition = target.GetWorldPosition();
@@ -152,17 +157,17 @@ namespace AbxrLib.Runtime.Telemetry
                 // Calculate distance from camera to target
                 float distanceToTarget = Vector3.Distance(_cachedCameraTransform.position, worldPosition);
 
-                // Check occlusion status for debugging
+                // Check occlusion status
                 bool isOccluded = target.CheckOcclusion(_cachedCameraTransform.position, worldPosition, distanceToTarget);
 
                 // Calculate gaze score (uses the same GetWorldPosition method internally)
                 float gazeScore = target.CalculateGazeScore(_cachedCameraTransform);
 
                 // Add gaze score to Event metadata if provided
-                // Format: "gaze_score_{targetName}" = "0.9310"
+                // Format: "gaze_score_{name}" = "0.9310"
                 if (eventMetadata != null)
                 {
-                    string gazeScoreKey = $"gaze_score_{targetDisplayName}";
+                    string gazeScoreKey = $"gaze_score_{name}";
                     eventMetadata[gazeScoreKey] = gazeScore.ToString("F4", CultureInfo.InvariantCulture);
                 }
 
@@ -173,13 +178,13 @@ namespace AbxrLib.Runtime.Telemetry
                     ["target_position_x"] = worldPosition.x.ToString(CultureInfo.InvariantCulture),
                     ["target_position_y"] = worldPosition.y.ToString(CultureInfo.InvariantCulture),
                     ["target_position_z"] = worldPosition.z.ToString(CultureInfo.InvariantCulture),
-                    ["target_name"] = targetDisplayName,
+                    ["target_name"] = name,
                     ["distance_to_target"] = distanceToTarget.ToString("F4", CultureInfo.InvariantCulture),
                     ["occluded"] = isOccluded ? "true" : "false"
                 };
 
                 // Send telemetry with target name in the telemetry entry name
-                Abxr.Telemetry($"{targetDisplayName} Gaze", telemetryData);
+                Abxr.Telemetry($"{name} Gaze", telemetryData);
             }
         }
     }

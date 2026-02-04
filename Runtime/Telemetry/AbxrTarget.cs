@@ -70,8 +70,8 @@ namespace AbxrLib.Runtime.Telemetry
         }
 
         /// <summary>
-        /// Gets the display name for this target.
-        /// Returns custom targetName if set, otherwise falls back to GameObject name.
+        /// Gets the display name for this target (the name used in TargetInfo and other APIs).
+        /// Returns custom targetName field if set, otherwise falls back to GameObject name.
         /// </summary>
         public string GetTargetName()
         {
@@ -160,14 +160,6 @@ namespace AbxrLib.Runtime.Telemetry
             if (worldPosition == Vector3.zero && transform.root != transform)
             {
                 worldPosition = transform.root.TransformPoint(transform.localPosition);
-            }
-            
-            // Final debug check - if still zero, log warning
-            if (worldPosition == Vector3.zero && transform.localPosition != Vector3.zero)
-            {
-                Debug.LogWarning($"AbxrLib: AbxrTarget '{GetTargetName()}' - Unable to calculate world position. " +
-                               $"Local: {transform.localPosition}, Parent: {(transform.parent != null ? transform.parent.name : "None")}, " +
-                               $"Parent World: {(transform.parent != null ? transform.parent.position.ToString() : "N/A")}");
             }
             
             return worldPosition;
@@ -265,17 +257,8 @@ namespace AbxrLib.Runtime.Telemetry
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
             
             // Check if target has a collider for accurate detection
+            // Note: If target has no collider and auto-create is disabled, occlusion detection may be less accurate
             bool targetHasCollider = HasCollider();
-            if (!targetHasCollider && hits.Length > 0)
-            {
-                // Only warn if auto-create is disabled (user explicitly chose not to use trigger colliders)
-                if (!autoCreateTriggerCollider)
-                {
-                    Debug.LogWarning($"AbxrLib: Target '{GetTargetName()}' has no collider - occlusion detection may be less accurate. " +
-                                   $"Enable 'Auto Create Trigger Collider' on the AbxrTarget component for more accurate detection. " +
-                                   $"Trigger colliders don't interfere with physics or interactions.");
-                }
-            }
             
             if (hits.Length == 0)
             {
