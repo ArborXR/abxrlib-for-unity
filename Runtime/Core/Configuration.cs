@@ -192,6 +192,12 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
             
+            if (defaultMaxOcclusionCheckDistance < 0f || defaultMaxOcclusionCheckDistance > 10000f)
+            {
+                Debug.LogError($"AbxrLib: Configuration validation failed - defaultMaxOcclusionCheckDistance must be between 0 and 10000 meters, got {defaultMaxOcclusionCheckDistance}");
+                return false;
+            }
+            
             if (authenticationStartDelay < 0f || authenticationStartDelay > 60f)
             {
                 Debug.LogError($"AbxrLib: Configuration validation failed - authenticationStartDelay must be between 0 and 60 seconds, got {authenticationStartDelay}");
@@ -217,6 +223,12 @@ namespace AbxrLib.Runtime.Core
         [Header("Player Tracking")]
         public bool headsetTracking = true;
         public float positionTrackingPeriodSeconds = 1f;
+        
+        [Tooltip("Global default maximum distance for AbxrTarget occlusion checks (in meters). 0 = unlimited. Individual AbxrTarget components can override this value.")]
+        public float defaultMaxOcclusionCheckDistance = 50f; // Default: 50 meters (reasonable for most VR scenarios)
+        
+        [Tooltip("Global default for automatically creating trigger colliders on AbxrTarget components. Trigger colliders don't interfere with physics - they're only used for raycast detection. Individual AbxrTarget components can override this value.")]
+        public bool defaultAutoCreateTriggerCollider = true; // Default: enabled for better accuracy
 
         [Header("Authentication Control")]
         [Tooltip("When enabled, authentication will NOT start automatically on app launch. You must manually call Abxr.StartAuthentication()")]

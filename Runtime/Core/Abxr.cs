@@ -393,6 +393,14 @@ public static partial class Abxr
 			AddDuration(_timedEventStartTimes, eventName, metadata);
 		}
 		
+		// Add gaze scores to Event metadata if telemetry is enabled
+		// This adds entries like "gaze_score_Dropper": "0.9310" to the Event metadata
+		// Must be called before DataBatcher.AddEvent() so scores are included in the Event
+		if (sendTelemetry)
+		{
+			TrackTargetGaze.SendTargetGazeData(metadata);
+		}
+		
 		DataBatcher.AddEvent(eventName, metadata);
 		if (sendTelemetry)
 		{

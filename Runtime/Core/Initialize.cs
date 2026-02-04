@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Data;
@@ -45,6 +45,7 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<DataBatcher>("DataBatcher");
             ObjectAttacher.Attach<StorageBatcher>("StorageBatcher");
             ObjectAttacher.Attach<TrackSystemInfo>("TrackSystemInfo");
+            ObjectAttacher.Attach<TrackTargetGaze>("TrackTargetGaze");
             ObjectAttacher.Attach<ApplicationQuitHandler>("ApplicationQuitHandler");
 #if UNITY_ANDROID && !UNITY_EDITOR
             ObjectAttacher.Attach<HeadsetDetector>("HeadsetDetector");

@@ -135,6 +135,11 @@ namespace AbxrLib.Editor
                     "Position Capture Period (seconds)", config.positionTrackingPeriodSeconds), 0.1f, 60f);
                 config.disableSceneEvents = !EditorGUILayout.Toggle("Enable Scene Events", !config.disableSceneEvents);
             EditorGUI.EndDisabledGroup();
+            
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Target Gaze Tracking", EditorStyles.boldLabel);
+            config.defaultMaxOcclusionCheckDistance = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
+                "Default Max Check Distance (meters)", "Global default maximum distance for AbxrTarget occlusion checks. 0 = unlimited. Individual AbxrTarget components can override this value."), config.defaultMaxOcclusionCheckDistance), 0f, 10000f);
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Control", EditorStyles.boldLabel);
             config.disableAutoStartAuthentication = !EditorGUILayout.Toggle(new GUIContent(
@@ -206,6 +211,7 @@ namespace AbxrLib.Editor
                 // Player Tracking
                 config.headsetTracking = defaultConfig.headsetTracking;
                 config.positionTrackingPeriodSeconds = defaultConfig.positionTrackingPeriodSeconds;
+                config.defaultMaxOcclusionCheckDistance = defaultConfig.defaultMaxOcclusionCheckDistance;
                 
                 // Authentication Control
                 config.disableAutoStartAuthentication = defaultConfig.disableAutoStartAuthentication;
