@@ -201,11 +201,27 @@ public static partial class Abxr
 	/// <summary>
 	/// Get the learner/user data from the most recent authentication completion
 	/// This is the userData object from the authentication response, containing user preferences and information
-	/// Returns null if no authentication has completed yet
+	/// The API handles normalization and adds OrgId to the UserData
+	/// Returns null if authentication has not completed or UserData is not available
 	/// </summary>
-	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
-	public static Dictionary<string, string> GetUserData() => Authentication.GetAuthResponse().UserData;
-
+	/// <returns>Dictionary containing learner data, or null if not authenticated or UserData is not available</returns>
+	public static Dictionary<string, string> GetUserData()
+	{
+		if (!Authentication.Authenticated())
+		{
+			return null;
+		}
+		
+		var authResponse = Authentication.GetAuthResponse();
+		if (authResponse?.UserData == null)
+		{
+			return null;
+		}
+		
+		// Return a copy of UserData to avoid modifying the original
+		return new Dictionary<string, string>(authResponse.UserData);
+	}
+	
 	/// <summary>
 	/// Update user data (UserId and UserData) and reauthenticate to sync with server
 	/// Updates the authentication response with new user information without clearing authentication state
@@ -361,7 +377,7 @@ public static partial class Abxr
 		// {
 		// 	if (!_assessmentStarted)
 		// 	{
-		// 		_DefaultEventAssessmentStart();
+		// 		DefaultEventAssessmentStart();
 		// 	}
 		// }
 		
@@ -418,7 +434,7 @@ public static partial class Abxr
 	/// Called automatically if no assessment is started within 1 minute of authentication
 	/// or before any other event is sent
 	/// </summary>
-	private static void _DefaultEventAssessmentStart()
+	private static void DefaultEventAssessmentStart()
 	{
 		lock (_assessmentStartTimesLock)
 		{
@@ -597,7 +613,7 @@ public static partial class Abxr
 		{
 			if (!_assessmentStarted)
 			{
-				_DefaultEventAssessmentStart();
+				DefaultEventAssessmentStart();
 			}
 		}
 	}

@@ -83,6 +83,11 @@ namespace AbxrLib.Runtime.Authentication
         public static bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
         
         /// <summary>
+        /// Gets the authentication mechanism type, or null if no mechanism is set
+        /// </summary>
+        public static string GetAuthMechanismType() => _authMechanism?.type;
+        
+        /// <summary>
         /// Clears authentication state and stops data transmission
         /// </summary>
         private static void ClearAuthenticationState()
@@ -485,6 +490,14 @@ namespace AbxrLib.Runtime.Authentication
             if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
             var config = Configuration.Instance;
+            
+            // Get SSO access token if SSO is active
+            string ssoAccessToken = null;
+            if (Abxr.GetIsAuthenticated())
+            {
+                ssoAccessToken = Abxr.GetAccessToken();
+            }
+            
             var data = new AuthPayload
             {
                 // Send either appId or appToken, not both
@@ -507,6 +520,7 @@ namespace AbxrLib.Runtime.Authentication
                 abxrLibType = "unity",
                 abxrLibVersion = AbxrLibVersion.Version,
                 buildFingerprint = _buildFingerprint,
+                SSOAccessToken = ssoAccessToken,  // Include SSO access token if SSO is active
                 authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
             };
         
@@ -945,6 +959,7 @@ namespace AbxrLib.Runtime.Authentication
             public string authSecret;
             public string deviceId;
             public string userId;
+            public string SSOAccessToken;  // optional - SSO access token when SSO is active
             public string[] tags;
             public string sessionId;
             public string partner;
