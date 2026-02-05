@@ -148,8 +148,8 @@ namespace AbxrLib.Runtime.Telemetry
                     continue;
                 }
 
-                // Get target name (custom name or GameObject name)
-                string name = target.GetTargetName();
+                // Get targetName (custom targetName or GameObject name)
+                string targetName = target.GetTargetName();
 
                 // Get world position using the helper method that handles child objects correctly
                 Vector3 worldPosition = target.GetWorldPosition();
@@ -164,10 +164,10 @@ namespace AbxrLib.Runtime.Telemetry
                 float gazeScore = target.CalculateGazeScore(_cachedCameraTransform);
 
                 // Add gaze score to Event metadata if provided
-                // Format: "gaze_score_{name}" = "0.9310"
+                // Format: "gaze_score_{targetName}" = "0.9310"
                 if (eventMetadata != null)
                 {
-                    string gazeScoreKey = $"gaze_score_{name}";
+                    string gazeScoreKey = $"gaze_score_{targetName}";
                     eventMetadata[gazeScoreKey] = gazeScore.ToString("F4", CultureInfo.InvariantCulture);
                 }
 
@@ -178,13 +178,13 @@ namespace AbxrLib.Runtime.Telemetry
                     ["target_position_x"] = worldPosition.x.ToString(CultureInfo.InvariantCulture),
                     ["target_position_y"] = worldPosition.y.ToString(CultureInfo.InvariantCulture),
                     ["target_position_z"] = worldPosition.z.ToString(CultureInfo.InvariantCulture),
-                    ["target_name"] = name,
+                    ["target_name"] = targetName,
                     ["distance_to_target"] = distanceToTarget.ToString("F4", CultureInfo.InvariantCulture),
                     ["occluded"] = isOccluded ? "true" : "false"
                 };
 
-                // Send telemetry with target name in the telemetry entry name
-                Abxr.Telemetry($"{name} Gaze", telemetryData);
+                // Send telemetry with targetName in the telemetry entry name
+                Abxr.Telemetry($"{targetName} Gaze", telemetryData);
             }
         }
     }

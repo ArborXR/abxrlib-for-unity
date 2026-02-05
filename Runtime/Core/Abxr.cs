@@ -1016,21 +1016,21 @@ public static partial class Abxr
 	}
 
 	/// <summary>
-	/// Enables the AbxrTarget component by target display name (custom target name or GameObject name).
-	/// Searches all AbxrTarget components in the scene for one matching the specified display name.
-	/// This is the recommended method for enabling targets by their display name.
+	/// Enables the AbxrTarget component by targetName (custom targetName or GameObject name).
+	/// Searches all AbxrTarget components in the scene for one matching the specified targetName.
+	/// This is the recommended method for enabling targets by their targetName.
 	/// </summary>
-	/// <param name="name">The display name of the target (custom target name or GameObject name if no custom name is set)</param>
+	/// <param name="name">The targetName of the target (custom targetName or GameObject name if no custom targetName is set)</param>
 	/// <returns>True if the target was found and enabled, false otherwise</returns>
 	public static bool TargetEnable(string name)
 	{
 		if (string.IsNullOrEmpty(name))
 		{
-			LogWarn("Abxr.TargetEnable: target display name is null or empty");
+			LogWarn("Abxr.TargetEnable: targetName is null or empty");
 			return false;
 		}
 
-		// Search all AbxrTarget components for one with matching display name
+		// Search all AbxrTarget components for one with matching targetName
 		AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
 		foreach (var target in allTargets)
 		{
@@ -1041,21 +1041,21 @@ public static partial class Abxr
 			}
 		}
 
-		// If not found by display name, try GameObject name as fallback
+		// If not found by targetName, try GameObject name as fallback
 		GameObject targetGameObject = GameObject.Find(name);
 		if (targetGameObject != null)
 		{
 			return TargetEnable(targetGameObject);
 		}
 
-		LogWarn($"Abxr.TargetEnable: AbxrTarget with display name '{name}' not found");
+		LogWarn($"Abxr.TargetEnable: AbxrTarget with targetName '{name}' not found");
 		return false;
 	}
 
 	/// <summary>
-	/// Enables the AbxrTarget component by GameObject name (not the custom target display name).
+	/// Enables the AbxrTarget component by GameObject name (not the targetName).
 	/// Searches all active GameObjects in the scene for one matching the specified GameObject name.
-	/// For enabling by display name, use TargetEnable(string) which accepts the target display name.
+	/// For enabling by targetName, use TargetEnable(string) which accepts the targetName.
 	/// </summary>
 	/// <param name="gameObjectName">The GameObject name of the GameObject with an AbxrTarget component to enable</param>
 	/// <returns>True if the target was found and enabled, false otherwise</returns>
@@ -1108,21 +1108,21 @@ public static partial class Abxr
 	}
 
 	/// <summary>
-	/// Disables the AbxrTarget component by target display name (custom target name or GameObject name).
-	/// Searches all AbxrTarget components in the scene for one matching the specified display name.
-	/// This is the recommended method for disabling targets by their display name.
+	/// Disables the AbxrTarget component by targetName (custom targetName or GameObject name).
+	/// Searches all AbxrTarget components in the scene for one matching the specified targetName.
+	/// This is the recommended method for disabling targets by their targetName.
 	/// </summary>
-	/// <param name="name">The display name of the target (custom target name or GameObject name if no custom name is set)</param>
+	/// <param name="name">The targetName of the target (custom targetName or GameObject name if no custom targetName is set)</param>
 	/// <returns>True if the target was found and disabled, false otherwise</returns>
 	public static bool TargetDisable(string name)
 	{
 		if (string.IsNullOrEmpty(name))
 		{
-			LogWarn("Abxr.TargetDisable: target display name is null or empty");
+			LogWarn("Abxr.TargetDisable: targetName is null or empty");
 			return false;
 		}
 
-		// Search all AbxrTarget components for one with matching display name
+		// Search all AbxrTarget components for one with matching targetName
 		AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
 		foreach (var target in allTargets)
 		{
@@ -1133,21 +1133,21 @@ public static partial class Abxr
 			}
 		}
 
-		// If not found by display name, try GameObject name as fallback
+		// If not found by targetName, try GameObject name as fallback
 		GameObject targetGameObject = GameObject.Find(name);
 		if (targetGameObject != null)
 		{
 			return TargetDisable(targetGameObject);
 		}
 
-		LogWarn($"Abxr.TargetDisable: AbxrTarget with display name '{name}' not found");
+		LogWarn($"Abxr.TargetDisable: AbxrTarget with targetName '{name}' not found");
 		return false;
 	}
 
 	/// <summary>
-	/// Disables the AbxrTarget component by GameObject name (not the custom target display name).
+	/// Disables the AbxrTarget component by GameObject name (not the targetName).
 	/// Searches all active GameObjects in the scene for one matching the specified GameObject name.
-	/// For disabling by display name, use TargetDisable(string) which accepts the target display name.
+	/// For disabling by targetName, use TargetDisable(string) which accepts the targetName.
 	/// </summary>
 	/// <param name="gameObjectName">The GameObject name of the GameObject with an AbxrTarget component to disable</param>
 	/// <returns>True if the target was found and disabled, false otherwise</returns>
@@ -1175,7 +1175,7 @@ public static partial class Abxr
 	public class TargetInfo
 	{
 		/// <summary>
-		/// The custom target name if set, otherwise the GameObject name (display name)
+		/// The targetName if set, otherwise the GameObject name
 		/// </summary>
 		public string name;
 
@@ -1213,13 +1213,13 @@ public static partial class Abxr
 	/// Returns a list of all AbxrTarget components in the scene with their enabled/disabled status.
 	/// Only returns active GameObjects (disabled GameObjects are automatically excluded from tracking).
 	/// Each TargetInfo contains:
-	/// - name: The custom target display name (or GameObject name if no custom name is set)
+	/// - name: The targetName (or GameObject name if no custom targetName is set)
 	/// - gameObjectName: The GameObject name
 	/// - enabled: Whether the AbxrTarget component is enabled
 	/// - activeInHierarchy: Whether the GameObject is active
 	/// - position: World position of the target
 	/// </summary>
-	/// <returns>List of TargetInfo objects containing name (display name), gameObjectName (GameObject name), enabled status, and position for each target</returns>
+	/// <returns>List of TargetInfo objects containing name (targetName), gameObjectName (GameObject name), enabled status, and position for each target</returns>
 	public static List<TargetInfo> TargetList()
 	{
 		List<TargetInfo> targets = new List<TargetInfo>();
@@ -1231,12 +1231,12 @@ public static partial class Abxr
 		{
 			if (target == null) continue;
 
-			// Use GetTargetName() to get the display name (custom name or GameObject name)
-			string name = target.GetTargetName();
+			// Use GetTargetName() to get the targetName (custom targetName or GameObject name)
+			string targetName = target.GetTargetName();
 			// Use GetWorldPosition() to get the correct world position (handles child objects correctly)
 			Vector3 worldPosition = target.GetWorldPosition();
 			targets.Add(new TargetInfo(
-				name,
+				targetName,
 				target.gameObject.name,
 				target.enabled,
 				target.gameObject.activeInHierarchy,

@@ -20,7 +20,7 @@ namespace AbxrLib.Runtime.Telemetry
     [AddComponentMenu("Analytics for XR/Abxr Target")]
     public class AbxrTarget : MonoBehaviour
     {
-        [Tooltip("Custom name for this target (e.g., 'head', 'leftleg', 'button1'). If empty, uses GameObject name.")]
+        [Tooltip("Target name for this target (e.g., 'head', 'leftleg', 'button1'). If empty, uses GameObject name.")]
         [SerializeField]
         public string targetName = "";
 
@@ -30,7 +30,7 @@ namespace AbxrLib.Runtime.Telemetry
 
         [Tooltip("Maximum distance for line-of-sight check. Targets beyond this distance won't be checked for occlusion. 0 = use global default from Configuration.")]
         [SerializeField]
-        public float maxOcclusionCheckDistance = 0f; // 0 = use global default
+        public float maxDistanceLimit = 0f; // 0 = use global default
 
         [Tooltip("Automatically create a trigger collider if none exists. Trigger colliders don't interfere with physics or interactions - they're only used for raycast detection. Initializes from global default in Configuration.")]
         [SerializeField]
@@ -54,24 +54,24 @@ namespace AbxrLib.Runtime.Telemetry
 
         /// <summary>
         /// Gets the effective maximum occlusion check distance.
-        /// Returns the local maxOcclusionCheckDistance if set (non-zero), otherwise returns the global default from Configuration.
+        /// Returns the local maxDistanceLimit if set (non-zero), otherwise returns the global default from Configuration.
         /// </summary>
         /// <returns>Effective maximum distance for occlusion checks (0 = unlimited)</returns>
-        public float GetEffectiveMaxOcclusionCheckDistance()
+        public float GetEffectivemaxDistanceLimit()
         {
             // If local value is set (non-zero), use it
-            if (maxOcclusionCheckDistance > 0f)
+            if (maxDistanceLimit > 0f)
             {
-                return maxOcclusionCheckDistance;
+                return maxDistanceLimit;
             }
             
             // Otherwise, use global default from Configuration
-            return Configuration.Instance.defaultMaxOcclusionCheckDistance;
+            return Configuration.Instance.defaultmaxDistanceLimit;
         }
 
         /// <summary>
-        /// Gets the display name for this target (the name used in TargetInfo and other APIs).
-        /// Returns custom targetName field if set, otherwise falls back to GameObject name.
+        /// Gets the targetName for this target (the name used in TargetInfo and other APIs).
+        /// Returns the targetName field if set, otherwise falls back to GameObject name.
         /// </summary>
         public string GetTargetName()
         {
@@ -129,6 +129,98 @@ namespace AbxrLib.Runtime.Telemetry
             // Initialize from global default when component is first added or reset
             // This allows the global default to control new components
             autoCreateTriggerCollider = Configuration.Instance.defaultAutoCreateTriggerCollider;
+            
+            // Auto-assign a unique targetName if targetName field is empty
+            if (string.IsNullOrEmpty(targetName))
+            {
+                targetName = GenerateUniqueTargetName();
+            }
+        }
+
+        /// <summary>
+        /// Called when values are changed in the Inspector.
+        /// Validates that the targetName is unique and warns if duplicates are found.
+        /// </summary>
+        private void OnValidate()
+        {
+            // Only check for duplicates if targetName field is set (not empty)
+            if (!string.IsNullOrEmpty(targetName))
+            {
+                ValidateTargetNameUniqueness();
+            }
+        }
+
+        /// <summary>
+        /// Generates a unique targetName in the format "AbxrTarget1", "AbxrTarget2", etc.
+        /// Finds all existing AbxrTarget components and assigns the next available number.
+        /// </summary>
+        /// <returns>A unique targetName</returns>
+        private string GenerateUniqueTargetName()
+        {
+            // Find all AbxrTarget components in the scene
+            AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+            
+            int maxNumber = 0;
+            string baseName = "AbxrTarget";
+            
+            // Find the highest number used
+            foreach (var target in allTargets)
+            {
+                if (target == null || target == this) continue;
+                
+                string targetName = target.GetTargetName();
+                
+                // Skip if the targetName is exactly the base name (no number) - these are likely unnamed targets
+                if (targetName == baseName) continue;
+                
+                // Check if this name matches our pattern "AbxrTarget" followed by a number
+                if (targetName.StartsWith(baseName))
+                {
+                    string suffix = targetName.Substring(baseName.Length);
+                    if (int.TryParse(suffix, out int number))
+                    {
+                        if (number > maxNumber)
+                        {
+                            maxNumber = number;
+                        }
+                    }
+                }
+            }
+            
+            // Return the next available number
+            return $"{baseName}{maxNumber + 1}";
+        }
+
+        /// <summary>
+        /// Validates that this target's targetName is unique among all AbxrTarget components.
+        /// If a duplicate is found, logs a warning to help the user identify the conflict.
+        /// </summary>
+        private void ValidateTargetNameUniqueness()
+        {
+            string currentTargetName = GetTargetName();
+            
+            // Find all other AbxrTarget components in the scene
+            AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+            
+            foreach (var target in allTargets)
+            {
+                if (target == null || target == this) continue;
+                
+                string otherTargetName = target.GetTargetName();
+                
+                // If we find a duplicate targetName, warn the user
+                if (otherTargetName == currentTargetName)
+                {
+                    Debug.LogWarning(
+                        $"AbxrTarget: Duplicate targetName '{currentTargetName}' detected! " +
+                        $"Both '{gameObject.name}' and '{target.gameObject.name}' have the same targetName. " +
+                        $"This may cause confusion when using Abxr.TargetEnable/Disable by targetName. " +
+                        $"Please assign unique targetNames to each AbxrTarget component.",
+                        this
+                    );
+                    return; // Only warn once per duplicate
+                }
+            }
         }
 
         private void Awake()
@@ -215,7 +307,7 @@ namespace AbxrLib.Runtime.Telemetry
         /// <summary>
         /// Checks if there's a clear line-of-sight from the camera to the target.
         /// Uses raycasting to detect if any objects are blocking the view.
-        /// Targets beyond maxOcclusionCheckDistance are treated as occluded (too far to see).
+        /// Targets beyond maxDistanceLimit are treated as occluded (too far to see).
         /// </summary>
         /// <param name="fromPosition">Starting position (camera)</param>
         /// <param name="toPosition">Target position</param>
@@ -229,7 +321,7 @@ namespace AbxrLib.Runtime.Telemetry
         /// <summary>
         /// Checks if there's a clear line-of-sight from the camera to the target.
         /// Uses raycasting to detect if any objects are blocking the view.
-        /// Targets beyond maxOcclusionCheckDistance are treated as occluded (too far to see).
+        /// Targets beyond maxDistanceLimit are treated as occluded (too far to see).
         /// </summary>
         /// <param name="fromPosition">Starting position (camera)</param>
         /// <param name="toPosition">Target position</param>
@@ -238,7 +330,7 @@ namespace AbxrLib.Runtime.Telemetry
         private bool CheckLineOfSight(Vector3 fromPosition, Vector3 toPosition, float distance)
         {
             // Get effective max distance (local value or global default)
-            float effectiveMaxDistance = GetEffectiveMaxOcclusionCheckDistance();
+            float effectiveMaxDistance = GetEffectivemaxDistanceLimit();
             
             // Check max distance if specified
             // If target is beyond max distance, treat it as occluded (too far to see)
