@@ -36,8 +36,13 @@ namespace AbxrLib.Runtime.Telemetry
         public static AbxrTarget[] GetAllTargets()
         {
             // Remove null entries (destroyed targets) before returning
-            _allTargets.RemoveAll(target => target == null);
-            return _allTargets.ToArray();
+            // This prevents memory leaks from targets that were destroyed without proper cleanup
+            if (_allTargets != null)
+            {
+                _allTargets.RemoveAll(target => target == null);
+                return _allTargets.ToArray();
+            }
+            return new AbxrTarget[0];
         }
 
         [Tooltip("Target name for this target (e.g., 'head', 'leftleg', 'button1'). If empty, uses GameObject name.")]
@@ -61,7 +66,7 @@ namespace AbxrLib.Runtime.Telemetry
         /// Uses local value (which defaults to the global default when components are created).
         /// The global default in Configuration primarily affects new components.
         /// </summary>
-        private bool GetEffectiveAutoCreateTriggerCollider()
+        private bool GetAutoCreateTriggerCollider()
         {
             // Use local value - it was initialized from global default when component was created
             // Users can override per-component by changing autoCreateTriggerCollider directly
@@ -78,11 +83,11 @@ namespace AbxrLib.Runtime.Telemetry
         public bool autoCenterOnParent = true; // Default to true for convenience
 
         /// <summary>
-        /// Gets the effective maximum occlusion check distance.
+        /// Gets the maximum occlusion check distance.
         /// Returns the local maxDistanceLimit if set (non-zero), otherwise returns the global default from Configuration.
         /// </summary>
-        /// <returns>Effective maximum distance for occlusion checks (0 = unlimited)</returns>
-        public float GetEffectiveMaxDistanceLimit()
+        /// <returns>Maximum distance for occlusion checks (0 = unlimited)</returns>
+        public float GetMaxDistanceLimit()
         {
             // If local value is set (non-zero), use it
             if (maxDistanceLimit > 0f)
@@ -105,11 +110,53 @@ namespace AbxrLib.Runtime.Telemetry
 
         /// <summary>
         /// Sets the targetName for this target.
+        /// Validates and sanitizes the name to ensure it's safe for use in telemetry keys.
         /// </summary>
         /// <param name="name">The target name to set</param>
         public void SetTargetName(string name)
         {
-            targetName = name;
+            if (string.IsNullOrEmpty(name))
+            {
+                targetName = "";
+                return;
+            }
+            
+            // Sanitize the name: remove or replace characters that could break telemetry keys
+            // Telemetry keys use format "gaze_score_{targetName}", so we need safe characters
+            // Allow: letters, numbers, underscores, hyphens
+            // Replace spaces with underscores, remove other special characters
+            System.Text.StringBuilder sanitized = new System.Text.StringBuilder();
+            foreach (char c in name)
+            {
+                if (char.IsLetterOrDigit(c) || c == '_' || c == '-')
+                {
+                    sanitized.Append(c);
+                }
+                else if (char.IsWhiteSpace(c))
+                {
+                    sanitized.Append('_');
+                }
+                // Skip other special characters
+            }
+            
+            string sanitizedName = sanitized.ToString();
+            
+            // Ensure it's not empty after sanitization
+            if (string.IsNullOrEmpty(sanitizedName))
+            {
+                Debug.LogWarning($"AbxrTarget: Target name '{name}' was sanitized to empty string. Using original name.", this);
+                targetName = name;
+            }
+            else
+            {
+                targetName = sanitizedName;
+                
+                // Warn if name was changed during sanitization
+                if (sanitizedName != name)
+                {
+                    Debug.LogWarning($"AbxrTarget: Target name '{name}' was sanitized to '{sanitizedName}' for safe use in telemetry keys.", this);
+                }
+            }
         }
 
         /// <summary>
@@ -143,12 +190,13 @@ namespace AbxrLib.Runtime.Telemetry
         /// Trigger colliders don't interfere with physics or interactions - they're only used for detection.
         /// This is called automatically if autoCreateTriggerCollider is enabled.
         /// </summary>
-        private void EnsureTriggerCollider()
+        /// <param name="deferIfInValidation">If true and called during OnValidate, defers the component addition to avoid Unity's SendMessage restriction</param>
+        private void EnsureTriggerCollider(bool deferIfInValidation = false)
         {
             // Use the effective value (local override or global default)
             // The local value defaults to true, but users can override it
             // The global default primarily affects new components, but we check it here for consistency
-            bool shouldCreate = GetEffectiveAutoCreateTriggerCollider();
+            bool shouldCreate = GetAutoCreateTriggerCollider();
             
             if (!shouldCreate)
                 return;
@@ -157,6 +205,29 @@ namespace AbxrLib.Runtime.Telemetry
             if (HasCollider())
                 return;
 
+#if UNITY_EDITOR
+            // If we're in validation and should defer, schedule the component addition for later
+            if (deferIfInValidation)
+            {
+                UnityEditor.EditorApplication.delayCall += () =>
+                {
+                    if (this != null && gameObject != null && !HasCollider())
+                    {
+                        CreateTriggerCollider();
+                    }
+                };
+                return;
+            }
+#endif
+
+            CreateTriggerCollider();
+        }
+
+        /// <summary>
+        /// Creates the trigger collider component. Separated to allow deferred creation.
+        /// </summary>
+        private void CreateTriggerCollider()
+        {
             // Create a small sphere trigger collider
             // Sphere colliders work well for point targets and are efficient
             SphereCollider triggerCollider = gameObject.AddComponent<SphereCollider>();
@@ -259,7 +330,8 @@ namespace AbxrLib.Runtime.Telemetry
         {
             // Register this target in the static registry for efficient lookup
             // Do this in Awake to catch targets that start disabled
-            if (!_allTargets.Contains(this))
+            // Add null checks to prevent race conditions
+            if (this != null && _allTargets != null && !_allTargets.Contains(this))
             {
                 _allTargets.Add(this);
             }
@@ -277,7 +349,8 @@ namespace AbxrLib.Runtime.Telemetry
         private void OnEnable()
         {
             // Ensure we're registered (in case object was disabled and re-enabled)
-            if (!_allTargets.Contains(this))
+            // Add null checks to prevent race conditions
+            if (this != null && _allTargets != null && !_allTargets.Contains(this))
             {
                 _allTargets.Add(this);
             }
@@ -286,13 +359,23 @@ namespace AbxrLib.Runtime.Telemetry
         private void OnDisable()
         {
             // Unregister this target from the static registry
-            _allTargets.Remove(this);
+            // Add null checks to prevent race conditions and ensure proper cleanup
+            if (_allTargets != null && this != null)
+            {
+                _allTargets.Remove(this);
+            }
         }
 
         private void OnDestroy()
         {
             // Ensure we're removed from the registry when destroyed
-            _allTargets.Remove(this);
+            // Add null checks to prevent race conditions and ensure proper cleanup to prevent memory leaks
+            if (_allTargets != null)
+            {
+                _allTargets.Remove(this);
+                // Also remove any null entries that might have accumulated
+                _allTargets.RemoveAll(target => target == null);
+            }
         }
 
 #if UNITY_EDITOR
@@ -458,48 +541,70 @@ namespace AbxrLib.Runtime.Telemetry
 
             // Check renderers first (most accurate for visual representation)
             // Exclude this AbxrTarget's own renderer to avoid including itself
-            Renderer[] renderers = parent.GetComponentsInChildren<Renderer>();
-            foreach (Renderer renderer in renderers)
+            // Wrap in try-catch for defensive programming
+            try
             {
-                // Skip this AbxrTarget's own renderer
-                if (renderer != null && renderer.transform != this.transform && renderer.bounds.size.magnitude > 0)
+                Renderer[] renderers = parent.GetComponentsInChildren<Renderer>();
+                if (renderers != null)
                 {
-                    if (!hasBounds)
+                    foreach (Renderer renderer in renderers)
                     {
-                        combinedBounds = renderer.bounds;
-                        hasBounds = true;
-                    }
-                    else
-                    {
-                        Bounds currentBounds = combinedBounds.Value;
-                        currentBounds.Encapsulate(renderer.bounds);
-                        combinedBounds = currentBounds;
+                        // Skip this AbxrTarget's own renderer
+                        if (renderer != null && renderer.transform != this.transform && renderer.bounds.size.magnitude > 0)
+                        {
+                            if (!hasBounds)
+                            {
+                                combinedBounds = renderer.bounds;
+                                hasBounds = true;
+                            }
+                            else
+                            {
+                                Bounds currentBounds = combinedBounds.Value;
+                                currentBounds.Encapsulate(renderer.bounds);
+                                combinedBounds = currentBounds;
+                            }
+                        }
                     }
                 }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"AbxrTarget: Failed to get renderer bounds from parent '{parent.name}': {ex.Message}", this);
             }
 
             // If no renderers, check colliders
             // Exclude this AbxrTarget's own collider to avoid including itself
+            // Wrap in try-catch for defensive programming
             if (!hasBounds)
             {
-                Collider[] colliders = parent.GetComponentsInChildren<Collider>();
-                foreach (Collider collider in colliders)
+                try
                 {
-                    // Skip this AbxrTarget's own collider
-                    if (collider != null && collider.transform != this.transform && collider.bounds.size.magnitude > 0)
+                    Collider[] colliders = parent.GetComponentsInChildren<Collider>();
+                    if (colliders != null)
                     {
-                        if (!hasBounds)
+                        foreach (Collider collider in colliders)
                         {
-                            combinedBounds = collider.bounds;
-                            hasBounds = true;
-                        }
-                        else
-                        {
-                            Bounds currentBounds = combinedBounds.Value;
-                            currentBounds.Encapsulate(collider.bounds);
-                            combinedBounds = currentBounds;
+                            // Skip this AbxrTarget's own collider
+                            if (collider != null && collider.transform != this.transform && collider.bounds.size.magnitude > 0)
+                            {
+                                if (!hasBounds)
+                                {
+                                    combinedBounds = collider.bounds;
+                                    hasBounds = true;
+                                }
+                                else
+                                {
+                                    Bounds currentBounds = combinedBounds.Value;
+                                    currentBounds.Encapsulate(collider.bounds);
+                                    combinedBounds = currentBounds;
+                                }
+                            }
                         }
                     }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"AbxrTarget: Failed to get collider bounds from parent '{parent.name}': {ex.Message}", this);
                 }
             }
 
@@ -651,7 +756,8 @@ namespace AbxrLib.Runtime.Telemetry
         {
 #if UNITY_EDITOR
             // In editor, OnValidate is called before Awake, so ensure collider and size are updated
-            EnsureTriggerCollider();
+            // Defer component addition to avoid Unity's SendMessage restriction during validation
+            EnsureTriggerCollider(deferIfInValidation: true);
             UpdateTargetSize();
             
             // If auto-center is enabled and we have a parent, ensure we're centered at the center of parent's children's bounds
@@ -744,7 +850,7 @@ namespace AbxrLib.Runtime.Telemetry
         /// </summary>
         /// <param name="target">The AbxrTarget instance to draw gizmo for</param>
         /// <param name="isSelected">Whether the target is currently selected</param>
-        internal static void DrawGizmoInternal(AbxrTarget target, bool isSelected)
+        public static void DrawGizmoInternal(AbxrTarget target, bool isSelected)
         {
             if (target == null || target.transform == null) return;
 
@@ -910,8 +1016,8 @@ namespace AbxrLib.Runtime.Telemetry
         /// <returns>True if view is blocked (occluded), false if clear line-of-sight</returns>
         private bool CheckLineOfSight(Vector3 fromPosition, Vector3 toPosition, float distance)
         {
-            // Get effective max distance (local value or global default)
-            float effectiveMaxDistance = GetEffectiveMaxDistanceLimit();
+            // Get max distance (local value or global default)
+            float effectiveMaxDistance = GetMaxDistanceLimit();
             
             // Check max distance if specified
             // If target is beyond max distance, treat it as occluded (too far to see)

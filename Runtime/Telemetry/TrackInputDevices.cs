@@ -106,12 +106,12 @@ namespace AbxrLib.Runtime.Telemetry
         /// <summary>
         /// Fallback method to send camera/headset position when XR devices aren't available.
         /// Used in Unity Editor or when XR isn't initialized.
-        /// Uses the shared camera finding logic from TrackTargetGaze for consistency.
+        /// Uses the shared camera finding logic from Utils for consistency.
         /// </summary>
         private static void SendCameraFallbackData()
         {
-            // Use the shared camera finding method from TrackTargetGaze for consistency
-            Transform cameraTransform = TrackTargetGaze.FindCameraTransform();
+            // Use the shared camera finding method from Utils for consistency
+            Transform cameraTransform = Utils.FindCameraTransform();
             if (cameraTransform == null) return;
             
             Vector3 position = cameraTransform.position;

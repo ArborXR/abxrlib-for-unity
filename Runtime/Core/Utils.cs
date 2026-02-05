@@ -464,5 +464,56 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
         }
+        
+        /// <summary>
+        /// Finds the best available camera for gaze tracking and telemetry.
+        /// Tries multiple strategies in order: Camera.main, XR HMD camera, any active enabled camera.
+        /// This method is shared across telemetry classes for consistency.
+        /// </summary>
+        /// <returns>Camera transform if found, null otherwise</returns>
+        public static Transform FindCameraTransform()
+        {
+            // Strategy 1: Try Camera.main first (most common case, works in Editor and most builds)
+            Camera mainCamera = Camera.main;
+            if (mainCamera != null && mainCamera.enabled && mainCamera.gameObject.activeInHierarchy)
+            {
+                return mainCamera.transform;
+            }
+
+            // Strategy 2: Try to find XR camera via InputDevices (for VR scenarios)
+            try
+            {
+                var hmd = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.Head);
+                if (hmd.isValid)
+                {
+                    // Try to find camera in scene that matches HMD
+                    Camera[] cameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+                    foreach (var cam in cameras)
+                    {
+                        if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
+                        {
+                            return cam.transform;
+                        }
+                    }
+                }
+            }
+            catch (System.Exception)
+            {
+                // Ignore errors - XR might not be available (e.g., in Editor without XR simulation)
+            }
+
+            // Strategy 3: Fallback to any active enabled camera in the scene
+            Camera[] allCameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+            foreach (var cam in allCameras)
+            {
+                if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
+                {
+                    return cam.transform;
+                }
+            }
+
+            // No camera found
+            return null;
+        }
     }
 }
