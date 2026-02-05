@@ -225,6 +225,12 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
         public float authenticationStartDelay = 0f;
         
+        [Tooltip("When enabled, the first module will start automatically on successful authentication")]
+        public bool enableAutoStartModules = true;
+        
+        [Tooltip("When enabled, the next module in the sequence will automatically start after completion of a module")]
+        public bool enableAutoAdvanceModules = true;
+        
         [Tooltip("When enabled, the app will return to the launcher after an assessment is complete. When disabled, the app will stay open after an assessment is complete. Specifically used with Learner Launcher.")]
         public bool returnToLauncherAfterAssessmentComplete = true;
 

@@ -18,6 +18,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
@@ -58,9 +59,6 @@ namespace AbxrLib.Runtime.Authentication
         
         private static AuthResponse _authHandoffData;
         public static AuthResponse GetAuthHandoffData() => _authHandoffData;
-        
-        // Complete authentication response data
-        private static List<Abxr.ModuleData> _authResponseModuleData;
     
         private const string DeviceIdKey = "abxrlib_device_id";
 
@@ -99,7 +97,6 @@ namespace AbxrLib.Runtime.Authentication
             
             // Clear cached user data
             _responseData = null;
-            _authResponseModuleData = null;
             
             // Clear stored auth value
             _enteredAuthValue = null;
@@ -543,8 +540,11 @@ namespace AbxrLib.Runtime.Authentication
                         }
                         
                         _responseData = postResponse;
-                        _authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
-                        
+                        if (_responseData.Modules?.Count > 1)
+                        {
+                            _responseData.Modules = _responseData.Modules.OrderBy(m => m.Order).ToList();
+                        }
+
                         // Add entered email/text value to UserData if we have one stored
                         if (!string.IsNullOrEmpty(_enteredAuthValue))
                         {
@@ -759,8 +759,6 @@ namespace AbxrLib.Runtime.Authentication
             if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) Configuration.Instance.retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
         }
 
-        public static List<Abxr.ModuleData> GetModuleData() => _authResponseModuleData;
-
         /// <summary>
         /// Check for authentication handoff from external launcher apps
         /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params
@@ -836,13 +834,6 @@ namespace AbxrLib.Runtime.Authentication
                     UserData = handoffData.UserData,
                     Modules = handoffData.Modules
                 };
-                _authResponseModuleData = new List<Abxr.ModuleData>();
-                
-                // Convert modules if provided
-                if (handoffData.Modules != null)
-                {
-                    _authResponseModuleData = Utils.ConvertToModuleDataList(handoffData.Modules);
-                }
                 
                 // Set token expiry to far in the future since we're trusting the handoff
                 _tokenExpiry = DateTime.UtcNow.AddHours(24);
@@ -851,7 +842,7 @@ namespace AbxrLib.Runtime.Authentication
                 _authHandoffCompleted = true;
                 _sessionUsedAuthHandoff = true;
                 
-                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModuleData?.Count ?? 0}");
+                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_responseData.Modules.Count}");
                 
                 Abxr.NotifyAuthCompleted();
                 _keyboardAuthSuccess = true;
@@ -943,10 +934,18 @@ namespace AbxrLib.Runtime.Authentication
             public object UserId;
             public string AppId;
             public string PackageName;
-            public List<Dictionary<string, object>> Modules;
+            public List<ModuleData> Modules;
 
             [Preserve]
             public AuthResponse() {}
+        }
+        
+        public class ModuleData
+        {
+            public string Id;
+            public string Name;
+            public string Target;
+            public int Order;
         }
 
         private enum Partner
