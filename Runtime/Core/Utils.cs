@@ -505,51 +505,6 @@ namespace AbxrLib.Runtime.Core
         }
         
         /// <summary>
-        /// Convert raw module dictionaries to typed ModuleData objects
-        /// Internal helper method for processing authentication response modules
-        /// Modules are automatically sorted by their order field
-        /// </summary>
-        /// <param name="rawModules">Raw module data from authentication response</param>
-        /// <returns>List of typed ModuleData objects sorted by order</returns>
-        public static List<Abxr.ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
-        {
-            var moduleDataList = new List<Abxr.ModuleData>();
-            if (rawModules == null) return moduleDataList;
-
-            try
-            {
-                var tempList = new List<Abxr.ModuleData>();
-			
-                foreach (var rawModule in rawModules)
-                {
-                    var moduleId = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
-                    var moduleName = rawModule.ContainsKey("name") ? rawModule["name"]?.ToString() : "";
-                    var moduleTarget = rawModule.ContainsKey("target") ? rawModule["target"]?.ToString() : "";
-                    var moduleOrder = 0;
-				
-                    if (rawModule.ContainsKey("order") && rawModule["order"] != null)
-                    {
-                        int.TryParse(rawModule["order"].ToString(), out moduleOrder);
-                    }
-
-                    tempList.Add(new Abxr.ModuleData(moduleId, moduleName, moduleTarget, moduleOrder));
-                }
-
-                // Sort modules by order field
-                moduleDataList = tempList.OrderBy(m => m.order).ToList();
-            }
-            catch (Exception ex)
-            {
-                // Log error with consistent format and include data conversion context
-                Debug.LogError($"AbxrLib: Failed to convert module data: {ex.Message}\n" +
-                              $"Exception Type: {ex.GetType().Name}\n" +
-                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-            }
-
-            return moduleDataList;
-        }
-        
-        /// <summary>
         /// Validates that a string is a valid HTTP/HTTPS URL
         /// </summary>
         /// <param name="url">The URL string to validate</param>
