@@ -101,6 +101,75 @@ namespace AbxrLib.Runtime.Telemetry
         }
 
         /// <summary>
+        /// Determines a categorical gaze direction based on horizontal and vertical angles.
+        /// Helps with analyzing user behavior patterns.
+        /// </summary>
+        /// <param name="horizontalAngle">Horizontal angle in degrees (positive = right, negative = left)</param>
+        /// <param name="verticalAngle">Vertical angle in degrees (positive = up, negative = down)</param>
+        /// <param name="totalAngle">Total angle from forward direction in degrees</param>
+        /// <returns>Categorical direction string (e.g., "center", "above_right", "left", etc.)</returns>
+        private static string DetermineGazeDirection(float horizontalAngle, float verticalAngle, float totalAngle)
+        {
+            // Threshold angles for determining direction (in degrees)
+            const float centerThreshold = 5f; // Within 5 degrees = "center"
+            const float significantThreshold = 15f; // Beyond 15 degrees = significant offset
+            
+            // If very close to center, return "center"
+            if (totalAngle < centerThreshold)
+            {
+                return "center";
+            }
+            
+            // Determine horizontal component
+            string horizontalDir = "";
+            if (Mathf.Abs(horizontalAngle) < significantThreshold)
+            {
+                horizontalDir = ""; // Centered horizontally
+            }
+            else if (horizontalAngle > 0)
+            {
+                horizontalDir = "right";
+            }
+            else
+            {
+                horizontalDir = "left";
+            }
+            
+            // Determine vertical component
+            string verticalDir = "";
+            if (Mathf.Abs(verticalAngle) < significantThreshold)
+            {
+                verticalDir = ""; // Centered vertically
+            }
+            else if (verticalAngle > 0)
+            {
+                verticalDir = "above";
+            }
+            else
+            {
+                verticalDir = "below";
+            }
+            
+            // Combine directions
+            if (string.IsNullOrEmpty(horizontalDir) && string.IsNullOrEmpty(verticalDir))
+            {
+                return "near_center";
+            }
+            else if (string.IsNullOrEmpty(horizontalDir))
+            {
+                return verticalDir;
+            }
+            else if (string.IsNullOrEmpty(verticalDir))
+            {
+                return horizontalDir;
+            }
+            else
+            {
+                return $"{verticalDir}_{horizontalDir}";
+            }
+        }
+
+        /// <summary>
         /// Sends gaze tracking data for all AbxrTarget objects in the scene.
         /// This method is called when Events occur to include target gaze information in telemetry.
         /// Optionally adds gaze scores to Event metadata if provided.
@@ -176,6 +245,43 @@ namespace AbxrLib.Runtime.Telemetry
                 // Calculate gaze score (uses the same GetWorldPosition method internally)
                 float gazeScore = target.CalculateGazeScore(_cachedCameraTransform);
 
+                // Calculate camera-relative position offsets
+                Vector3 cameraPosition = _cachedCameraTransform.position;
+                Vector3 cameraForward = _cachedCameraTransform.forward;
+                Vector3 cameraRight = _cachedCameraTransform.right;
+                Vector3 cameraUp = _cachedCameraTransform.up;
+                
+                // Direction from camera to target
+                Vector3 directionToTarget = (worldPosition - cameraPosition).normalized;
+                
+                // Calculate offsets in camera-relative space (in world units)
+                // Right = positive, Left = negative
+                float horizontalOffset = Vector3.Dot(worldPosition - cameraPosition, cameraRight);
+                // Up = positive, Down = negative
+                float verticalOffset = Vector3.Dot(worldPosition - cameraPosition, cameraUp);
+                // Forward = positive, Back = negative
+                float depthOffset = Vector3.Dot(worldPosition - cameraPosition, cameraForward);
+                
+                // Calculate angular offsets from camera forward direction
+                // Project direction onto horizontal plane (right-forward plane)
+                Vector3 horizontalProjection = Vector3.ProjectOnPlane(directionToTarget, cameraUp).normalized;
+                float horizontalAngle = Vector3.SignedAngle(cameraForward, horizontalProjection, cameraUp);
+                // Positive = right, negative = left
+                
+                // Project direction onto vertical plane (up-forward plane)
+                Vector3 verticalProjection = Vector3.ProjectOnPlane(directionToTarget, cameraRight).normalized;
+                float verticalAngle = Vector3.SignedAngle(cameraForward, verticalProjection, cameraRight);
+                // Positive = up, negative = down
+                
+                // Total angle from forward direction (0-180 degrees)
+                float totalAngle = Vector3.Angle(cameraForward, directionToTarget);
+                
+                // Calculate view angle (same as total angle, but kept for clarity)
+                float viewAngleDegrees = totalAngle;
+                
+                // Determine categorical gaze direction for easier analysis
+                string gazeDirection = DetermineGazeDirection(horizontalAngle, verticalAngle, totalAngle);
+                
                 // Add gaze score to Event metadata if provided
                 // Format: "gaze_score_{targetName}" = "0.9310"
                 if (eventMetadata != null)
@@ -184,7 +290,7 @@ namespace AbxrLib.Runtime.Telemetry
                     eventMetadata[gazeScoreKey] = gazeScore.ToString("F4", CultureInfo.InvariantCulture);
                 }
 
-                // Create telemetry metadata
+                // Create telemetry metadata with enhanced gaze information
                 var telemetryData = new Dictionary<string, string>
                 {
                     ["gaze_score"] = gazeScore.ToString("F4", CultureInfo.InvariantCulture),
@@ -193,7 +299,21 @@ namespace AbxrLib.Runtime.Telemetry
                     ["target_position_z"] = worldPosition.z.ToString(CultureInfo.InvariantCulture),
                     ["target_name"] = targetName,
                     ["distance_to_target"] = distanceToTarget.ToString("F4", CultureInfo.InvariantCulture),
-                    ["occluded"] = isOccluded ? "true" : "false"
+                    ["occluded"] = isOccluded ? "true" : "false",
+                    
+                    // Camera-relative position offsets (in world units)
+                    ["gaze_offset_horizontal"] = horizontalOffset.ToString("F4", CultureInfo.InvariantCulture),
+                    ["gaze_offset_vertical"] = verticalOffset.ToString("F4", CultureInfo.InvariantCulture),
+                    ["gaze_offset_depth"] = depthOffset.ToString("F4", CultureInfo.InvariantCulture),
+                    
+                    // Angular measurements (in degrees)
+                    ["gaze_angle_horizontal"] = horizontalAngle.ToString("F2", CultureInfo.InvariantCulture),
+                    ["gaze_angle_vertical"] = verticalAngle.ToString("F2", CultureInfo.InvariantCulture),
+                    ["gaze_angle_total"] = totalAngle.ToString("F2", CultureInfo.InvariantCulture),
+                    ["view_angle_degrees"] = viewAngleDegrees.ToString("F2", CultureInfo.InvariantCulture),
+                    
+                    // Categorical direction for easier analysis
+                    ["gaze_direction"] = gazeDirection
                 };
 
                 // Send telemetry with targetName in the telemetry entry name
