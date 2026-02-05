@@ -186,13 +186,13 @@ namespace AbxrLib.Runtime.Telemetry
             }
 
             // Update camera reference if needed
-            if (_cachedCameraTransform == null)
+            if (_cachedCameraTransform == null || _cachedCamera == null || !_cachedCamera.gameObject.activeInHierarchy)
             {
                 UpdateCameraReference();
             }
 
             // If still no camera, can't calculate gaze
-            if (_cachedCameraTransform == null)
+            if (_cachedCameraTransform == null || _cachedCamera == null || !_cachedCamera.gameObject.activeInHierarchy)
             {
                 return;
             }

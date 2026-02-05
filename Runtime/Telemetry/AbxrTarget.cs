@@ -66,7 +66,7 @@ namespace AbxrLib.Runtime.Telemetry
         /// Returns the local maxDistanceLimit if set (non-zero), otherwise returns the global default from Configuration.
         /// </summary>
         /// <returns>Effective maximum distance for occlusion checks (0 = unlimited)</returns>
-        public float GetEffectivemaxDistanceLimit()
+        public float GetEffectiveMaxDistanceLimit()
         {
             // If local value is set (non-zero), use it
             if (maxDistanceLimit > 0f)
@@ -75,7 +75,7 @@ namespace AbxrLib.Runtime.Telemetry
             }
             
             // Otherwise, use global default from Configuration
-            return Configuration.Instance.defaultmaxDistanceLimit;
+            return Configuration.Instance.defaultMaxDistanceLimit;
         }
 
         /// <summary>
@@ -837,7 +837,7 @@ namespace AbxrLib.Runtime.Telemetry
         private bool CheckLineOfSight(Vector3 fromPosition, Vector3 toPosition, float distance)
         {
             // Get effective max distance (local value or global default)
-            float effectiveMaxDistance = GetEffectivemaxDistanceLimit();
+            float effectiveMaxDistance = GetEffectiveMaxDistanceLimit();
             
             // Check max distance if specified
             // If target is beyond max distance, treat it as occluded (too far to see)
@@ -854,10 +854,6 @@ namespace AbxrLib.Runtime.Telemetry
             // Sort hits by distance to process them in order
             RaycastHit[] hits = Physics.RaycastAll(fromPosition, direction, maxDistance, occlusionLayers);
             System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-            
-            // Check if target has a collider for accurate detection
-            // Note: If target has no collider and auto-create is disabled, occlusion detection may be less accurate
-            bool targetHasCollider = HasCollider();
             
             if (hits.Length == 0)
             {

@@ -192,9 +192,9 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
             
-            if (defaultmaxDistanceLimit < 0f || defaultmaxDistanceLimit > 10000f)
+            if (defaultMaxDistanceLimit < 0f || defaultMaxDistanceLimit > 10000f)
             {
-                Debug.LogError($"AbxrLib: Configuration validation failed - defaultmaxDistanceLimit must be between 0 and 10000 meters, got {defaultmaxDistanceLimit}");
+                Debug.LogError($"AbxrLib: Configuration validation failed - defaultMaxDistanceLimit must be between 0 and 10000 meters, got {defaultMaxDistanceLimit}");
                 return false;
             }
             
@@ -225,7 +225,7 @@ namespace AbxrLib.Runtime.Core
         public float positionTrackingPeriodSeconds = 1f;
         
         [Tooltip("Global default maximum distance for AbxrTarget occlusion checks (in meters). 0 = unlimited. Individual AbxrTarget components can override this value.")]
-        public float defaultmaxDistanceLimit = 50f; // Default: 50 meters (reasonable for most VR scenarios)
+        public float defaultMaxDistanceLimit = 50f; // Default: 50 meters (reasonable for most VR scenarios)
         
         [Tooltip("Global default for automatically creating trigger colliders on AbxrTarget components. Trigger colliders don't interfere with physics - they're only used for raycast detection. Individual AbxrTarget components can override this value.")]
         public bool defaultAutoCreateTriggerCollider = true; // Default: enabled for better accuracy
