@@ -49,11 +49,13 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<ApplicationQuitHandler>("ApplicationQuitHandler");
 #if UNITY_ANDROID && !UNITY_EDITOR
             ObjectAttacher.Attach<HeadsetDetector>("HeadsetDetector");
+#endif
+            // Initialize TrackInputDevices on all platforms when headsetTracking is enabled
+            // Works in Editor (with XR simulation) and on all build platforms
             if (Configuration.Instance.headsetTracking)
             {
                 ObjectAttacher.Attach<TrackInputDevices>("TrackInputDevices");
             }
-#endif
             Debug.Log($"AbxrLib: Version {AbxrLibVersion.Version} Initialized.");
         }
     }

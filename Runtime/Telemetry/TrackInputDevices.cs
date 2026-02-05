@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Globalization;
 using AbxrLib.Runtime.Core;
 using UnityEngine;
@@ -85,9 +85,94 @@ namespace AbxrLib.Runtime.Telemetry
         {
             if (_timer == 0f) return; // Make sure not to send twice in the same update
             _timer = 0; // Reset timer
+            
+            // Try to refresh device references if they're not valid (handles late initialization)
+            if (!_hmd.isValid || !_rightController.isValid || !_leftController.isValid)
+            {
+                RefreshDeviceReferences();
+            }
+            
             SendLocationData(_rightController);
             SendLocationData(_leftController);
             SendLocationData(_hmd);
+            
+            // Fallback: If HMD is not available (e.g., in Unity Editor), use Camera.main as fallback
+            if (!_hmd.isValid)
+            {
+                SendCameraFallbackData();
+            }
+        }
+        
+        /// <summary>
+        /// Fallback method to send camera/headset position when XR devices aren't available.
+        /// Used in Unity Editor or when XR isn't initialized.
+        /// </summary>
+        private static void SendCameraFallbackData()
+        {
+            Camera mainCamera = Camera.main;
+            if (mainCamera == null)
+            {
+                // Try to find any active camera
+                Camera[] cameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+                foreach (var cam in cameras)
+                {
+                    if (cam.enabled && cam.gameObject.activeInHierarchy)
+                    {
+                        mainCamera = cam;
+                        break;
+                    }
+                }
+            }
+            
+            if (mainCamera == null) return;
+            
+            Transform cameraTransform = mainCamera.transform;
+            Vector3 position = cameraTransform.position;
+            Quaternion rotation = cameraTransform.rotation;
+            
+            var positionDict = new Dictionary<string, string>
+            {
+                ["x"] = position.x.ToString(CultureInfo.InvariantCulture),
+                ["y"] = position.y.ToString(CultureInfo.InvariantCulture),
+                ["z"] = position.z.ToString(CultureInfo.InvariantCulture)
+            };
+            var rotationDict = new Dictionary<string, string>
+            {
+                ["x"] = rotation.x.ToString(CultureInfo.InvariantCulture),
+                ["y"] = rotation.y.ToString(CultureInfo.InvariantCulture),
+                ["z"] = rotation.z.ToString(CultureInfo.InvariantCulture),
+                ["w"] = rotation.w.ToString(CultureInfo.InvariantCulture)
+            };
+            Abxr.Telemetry(_hmdName + " Position", positionDict);
+            Abxr.Telemetry(_hmdName + " Rotation", rotationDict);
+        }
+        
+        /// <summary>
+        /// Refreshes device references by querying XR input devices again.
+        /// Useful when devices connect after initial Start() call.
+        /// </summary>
+        private static void RefreshDeviceReferences()
+        {
+            try
+            {
+                if (!_leftController.isValid)
+                {
+                    _leftController = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+                }
+                if (!_rightController.isValid)
+                {
+                    _rightController = InputDevices.GetDeviceAtXRNode(XRNode.RightHand);
+                }
+                if (!_hmd.isValid)
+                {
+                    _hmd = InputDevices.GetDeviceAtXRNode(XRNode.Head);
+                }
+            }
+            catch (System.Exception)
+            {
+                // Silently fail - devices might not be available yet
+                // This is expected in Editor or when XR is not initialized
+            }
         }
 
         private static void SendLocationData(InputDevice device)
