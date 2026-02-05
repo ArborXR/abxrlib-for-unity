@@ -30,7 +30,7 @@ namespace AbxrLib.Editor
 
             // Generate and set a unique targetName
             // Note: Reset() will also be called automatically, but we set it here for immediate feedback
-            abxrTarget.targetName = GenerateUniqueTargetName();
+            abxrTarget.SetTargetName(GenerateUniqueTargetName());
 
             // Position the target intelligently:
             // 1. If an object is selected, parent to it and position at its location
@@ -80,7 +80,7 @@ namespace AbxrLib.Editor
             string locationInfo = parentTransform != null 
                 ? $"parented to '{parentTransform.name}'" 
                 : $"at position {targetPosition}";
-            Debug.Log($"AbxrLib: Created AbxrTarget GameObject with targetName '{abxrTarget.targetName}' {locationInfo}. You can edit the 'Target Name' field in the Inspector to customize it.");
+            Debug.Log($"AbxrLib: Created AbxrTarget GameObject with targetName '{abxrTarget.GetTargetName()}' {locationInfo}. You can edit the 'Target Name' field in the Inspector to customize it.");
         }
 
         /// <summary>
@@ -90,8 +90,8 @@ namespace AbxrLib.Editor
         /// <returns>A unique targetName</returns>
         private static string GenerateUniqueTargetName()
         {
-            // Find all AbxrTarget components in the scene
-            AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+            // Use cached registry instead of FindObjectsOfType for performance
+            AbxrTarget[] allTargets = AbxrTarget.GetAllTargets();
             
             int maxNumber = 0;
             string baseName = "AbxrTarget";
@@ -101,9 +101,9 @@ namespace AbxrLib.Editor
             {
                 if (target == null) continue;
                 
-                // Skip targets that don't have a targetName set (they use GameObject name, which might be "AbxrTarget")
+                // Skip targets that don't have a custom targetName set (they use GameObject name, which might be "AbxrTarget")
                 // These are likely newly created targets that haven't been assigned a name yet
-                if (string.IsNullOrEmpty(target.targetName)) continue;
+                if (!target.HasCustomTargetName()) continue;
                 
                 string targetName = target.GetTargetName();
                 

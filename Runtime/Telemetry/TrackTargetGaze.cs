@@ -59,19 +59,21 @@ namespace AbxrLib.Runtime.Telemetry
         }
 
         /// <summary>
-        /// Updates the cached camera reference.
-        /// Tries Camera.main first, then falls back to finding XR camera.
+        /// Finds the best available camera for gaze tracking.
+        /// Tries multiple strategies in order: Camera.main, XR HMD camera, any active enabled camera.
+        /// This method is shared with other telemetry classes for consistency.
         /// </summary>
-        private static void UpdateCameraReference()
+        /// <returns>Camera transform if found, null otherwise</returns>
+        public static Transform FindCameraTransform()
         {
-            if (Camera.main != null)
+            // Strategy 1: Try Camera.main first (most common case, works in Editor and most builds)
+            Camera mainCamera = Camera.main;
+            if (mainCamera != null && mainCamera.enabled && mainCamera.gameObject.activeInHierarchy)
             {
-                _cachedCamera = Camera.main;
-                _cachedCameraTransform = Camera.main.transform;
-                return;
+                return mainCamera.transform;
             }
 
-            // Fallback: Try to find XR camera via InputDevices
+            // Strategy 2: Try to find XR camera via InputDevices (for VR scenarios)
             try
             {
                 var hmd = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.Head);
@@ -81,23 +83,50 @@ namespace AbxrLib.Runtime.Telemetry
                     Camera[] cameras = UnityEngine.Object.FindObjectsOfType<Camera>();
                     foreach (var cam in cameras)
                     {
-                        if (cam.enabled && cam.gameObject.activeInHierarchy)
+                        if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
                         {
-                            _cachedCamera = cam;
-                            _cachedCameraTransform = cam.transform;
-                            return;
+                            return cam.transform;
                         }
                     }
                 }
             }
             catch (System.Exception)
             {
-                // Ignore errors - camera might not be available yet
+                // Ignore errors - XR might not be available (e.g., in Editor without XR simulation)
             }
 
-            // If no camera found, clear references
-            _cachedCamera = null;
-            _cachedCameraTransform = null;
+            // Strategy 3: Fallback to any active enabled camera in the scene
+            Camera[] allCameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+            foreach (var cam in allCameras)
+            {
+                if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
+                {
+                    return cam.transform;
+                }
+            }
+
+            // No camera found
+            return null;
+        }
+
+        /// <summary>
+        /// Updates the cached camera reference.
+        /// Uses the shared camera finding logic for consistency across telemetry classes.
+        /// </summary>
+        private static void UpdateCameraReference()
+        {
+            Transform cameraTransform = FindCameraTransform();
+            if (cameraTransform != null)
+            {
+                _cachedCameraTransform = cameraTransform;
+                _cachedCamera = cameraTransform.GetComponent<Camera>();
+            }
+            else
+            {
+                // If no camera found, clear references
+                _cachedCamera = null;
+                _cachedCameraTransform = null;
+            }
         }
 
         /// <summary>
@@ -179,7 +208,8 @@ namespace AbxrLib.Runtime.Telemetry
         {
             // Early return optimization: Check if any targets exist before doing any work
             // This ensures zero overhead when no targets are present
-            AbxrTarget[] targets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+            // Use cached registry instead of FindObjectsOfType for performance
+            AbxrTarget[] targets = AbxrTarget.GetAllTargets();
             if (targets == null || targets.Length == 0)
             {
                 return; // No targets, exit immediately with zero overhead

@@ -121,68 +121,11 @@ namespace AbxrLib.Editor
         [DrawGizmo(GizmoType.Selected | GizmoType.Active | GizmoType.NonSelected)]
         private static void DrawAbxrTargetGizmo(AbxrTarget target, GizmoType gizmoType)
         {
-            if (target == null || target.transform == null) return;
-
-            // Use transform.position which correctly handles parent hierarchy
-            // This ensures the gizmo moves correctly when the object is reparented
-            Vector3 worldPosition = target.transform.position;
+            if (target == null) return;
             
-            // Get the size from transform.localScale to match the visualization
-            // The visualization sets localScale to match the parent's bounds size
-            Vector3 gizmoSize = target.transform.localScale;
-            
-            // Ensure minimum size (at least 0.1 units in each dimension)
-            if (gizmoSize.x <= 0.01f) gizmoSize.x = 0.1f;
-            if (gizmoSize.y <= 0.01f) gizmoSize.y = 0.1f;
-            if (gizmoSize.z <= 0.01f) gizmoSize.z = 0.1f;
-            
-            // Fallback: if scale is still default (1,1,1) and we have a collider, use that
-            if (gizmoSize == Vector3.one)
-            {
-                Collider collider = target.GetComponent<Collider>();
-                if (collider != null)
-                {
-                    if (collider is SphereCollider sphereCollider)
-                    {
-                        float radius = sphereCollider.radius * 2f; // Convert radius to diameter
-                        gizmoSize = Vector3.one * radius;
-                    }
-                    else if (collider is BoxCollider boxCollider)
-                    {
-                        gizmoSize = boxCollider.size;
-                    }
-                }
-                else
-                {
-                    // Final fallback
-                    float fallbackSize = target.triggerColliderSize > 0f ? target.triggerColliderSize : 1f;
-                    gizmoSize = Vector3.one * fallbackSize;
-                }
-            }
-
-            // Draw a wireframe cube at the target position
-            // Use company color: #00db97 (RGB: 0, 219, 151)
-            Color companyColor = new Color(0f, 219f / 255f, 151f / 255f, 1f);
-            if ((gizmoType & GizmoType.Selected) != 0)
-            {
-                Gizmos.color = companyColor; // Full opacity when selected
-            }
-            else
-            {
-                Gizmos.color = new Color(companyColor.r, companyColor.g, companyColor.b, 0.6f); // Semi-transparent when not selected
-            }
-            
-            // Draw wireframe cube with actual dimensions
-            Gizmos.DrawWireCube(worldPosition, gizmoSize);
-            
-            // Draw a solid cube for better visibility
-            Gizmos.color = new Color(companyColor.r, companyColor.g, companyColor.b, 0.2f); // Very transparent
-            Gizmos.DrawCube(worldPosition, gizmoSize);
-            
-            // Draw a small sphere at the center (use average size for sphere radius)
-            float avgSize = (gizmoSize.x + gizmoSize.y + gizmoSize.z) / 3f;
-            Gizmos.color = companyColor; // Solid color
-            Gizmos.DrawSphere(worldPosition, avgSize * 0.15f);
+            // Use the consolidated gizmo drawing method from AbxrTarget
+            bool isSelected = (gizmoType & GizmoType.Selected) != 0;
+            AbxrTarget.DrawGizmoInternal(target, isSelected);
         }
     }
 }

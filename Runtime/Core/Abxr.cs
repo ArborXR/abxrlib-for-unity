@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2024 ArborXR. All rights reserved.
  * 
  * AbxrLib for Unity - Main API Class
@@ -1031,7 +1031,8 @@ public static partial class Abxr
 		}
 
 		// Search all AbxrTarget components for one with matching targetName
-		AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+		// Use cached registry instead of FindObjectsOfType for performance
+		AbxrTarget[] allTargets = AbxrTarget.GetAllTargets();
 		foreach (var target in allTargets)
 		{
 			if (target != null && target.GetTargetName() == name)
@@ -1123,7 +1124,8 @@ public static partial class Abxr
 		}
 
 		// Search all AbxrTarget components for one with matching targetName
-		AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+		// Use cached registry instead of FindObjectsOfType for performance
+		AbxrTarget[] allTargets = AbxrTarget.GetAllTargets();
 		foreach (var target in allTargets)
 		{
 			if (target != null && target.GetTargetName() == name)
@@ -1224,8 +1226,10 @@ public static partial class Abxr
 	{
 		List<TargetInfo> targets = new List<TargetInfo>();
 		
-		// FindObjectsOfType only returns active objects, which matches the behavior of gaze tracking
-		AbxrTarget[] abxrTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+		// Use cached registry instead of FindObjectsOfType for performance
+		// Note: GetAllTargets() returns all registered targets (active and inactive)
+		// We filter by activeInHierarchy below to match the behavior of gaze tracking
+		AbxrTarget[] abxrTargets = AbxrTarget.GetAllTargets();
 		
 		foreach (var target in abxrTargets)
 		{

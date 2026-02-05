@@ -24,9 +24,25 @@ namespace AbxrLib.Runtime.Telemetry
     [AddComponentMenu("Analytics for XR/Abxr Target")]
     public class AbxrTarget : MonoBehaviour
     {
+        // Static registry of all AbxrTarget instances for efficient lookup
+        // This avoids expensive FindObjectsOfType calls
+        private static System.Collections.Generic.List<AbxrTarget> _allTargets = new System.Collections.Generic.List<AbxrTarget>();
+
+        /// <summary>
+        /// Gets all AbxrTarget instances in the scene.
+        /// Uses a cached registry for performance instead of FindObjectsOfType.
+        /// </summary>
+        /// <returns>Array of all AbxrTarget instances</returns>
+        public static AbxrTarget[] GetAllTargets()
+        {
+            // Remove null entries (destroyed targets) before returning
+            _allTargets.RemoveAll(target => target == null);
+            return _allTargets.ToArray();
+        }
+
         [Tooltip("Target name for this target (e.g., 'head', 'leftleg', 'button1'). If empty, uses GameObject name.")]
         [SerializeField]
-        public string targetName = "";
+        private string targetName = "";
 
         [Tooltip("Layers that should block line-of-sight (e.g., walls, obstacles). Objects on these layers will occlude the target.")]
         [SerializeField]
@@ -85,6 +101,25 @@ namespace AbxrLib.Runtime.Telemetry
         public string GetTargetName()
         {
             return string.IsNullOrEmpty(targetName) ? gameObject.name : targetName;
+        }
+
+        /// <summary>
+        /// Sets the targetName for this target.
+        /// </summary>
+        /// <param name="name">The target name to set</param>
+        public void SetTargetName(string name)
+        {
+            targetName = name;
+        }
+
+        /// <summary>
+        /// Checks if a custom targetName is set (not empty).
+        /// Returns false if targetName is empty (will use GameObject name).
+        /// </summary>
+        /// <returns>True if custom targetName is set, false otherwise</returns>
+        public bool HasCustomTargetName()
+        {
+            return !string.IsNullOrEmpty(targetName);
         }
 
         /// <summary>
@@ -154,8 +189,8 @@ namespace AbxrLib.Runtime.Telemetry
         /// <returns>A unique targetName</returns>
         private string GenerateUniqueTargetName()
         {
-            // Find all AbxrTarget components in the scene
-            AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+            // Use cached registry instead of FindObjectsOfType for performance
+            AbxrTarget[] allTargets = GetAllTargets();
             
             int maxNumber = 0;
             string baseName = "AbxrTarget";
@@ -196,8 +231,8 @@ namespace AbxrLib.Runtime.Telemetry
         {
             string currentTargetName = GetTargetName();
             
-            // Find all other AbxrTarget components in the scene
-            AbxrTarget[] allTargets = UnityEngine.Object.FindObjectsOfType<AbxrTarget>();
+            // Use cached registry instead of FindObjectsOfType for performance
+            AbxrTarget[] allTargets = GetAllTargets();
             
             foreach (var target in allTargets)
             {
@@ -222,6 +257,13 @@ namespace AbxrLib.Runtime.Telemetry
 
         private void Awake()
         {
+            // Register this target in the static registry for efficient lookup
+            // Do this in Awake to catch targets that start disabled
+            if (!_allTargets.Contains(this))
+            {
+                _allTargets.Add(this);
+            }
+
             // Ensure we have a trigger collider for accurate detection
             // Using Awake() instead of Start() ensures colliders are created before any occlusion checks
             EnsureTriggerCollider();
@@ -230,6 +272,27 @@ namespace AbxrLib.Runtime.Telemetry
             // Update collider size and scale based on parent bounds
             UpdateTargetSize();
 #endif
+        }
+
+        private void OnEnable()
+        {
+            // Ensure we're registered (in case object was disabled and re-enabled)
+            if (!_allTargets.Contains(this))
+            {
+                _allTargets.Add(this);
+            }
+        }
+
+        private void OnDisable()
+        {
+            // Unregister this target from the static registry
+            _allTargets.Remove(this);
+        }
+
+        private void OnDestroy()
+        {
+            // Ensure we're removed from the registry when destroyed
+            _allTargets.Remove(this);
         }
 
 #if UNITY_EDITOR
@@ -672,15 +735,26 @@ namespace AbxrLib.Runtime.Telemetry
         /// <param name="isSelected">Whether the target is currently selected</param>
         private void DrawTargetGizmo(bool isSelected)
         {
-            if (transform == null) return;
+            DrawGizmoInternal(this, isSelected);
+        }
+
+        /// <summary>
+        /// Internal static method to draw gizmo for an AbxrTarget instance.
+        /// Shared between runtime gizmo drawing and editor gizmo drawing.
+        /// </summary>
+        /// <param name="target">The AbxrTarget instance to draw gizmo for</param>
+        /// <param name="isSelected">Whether the target is currently selected</param>
+        internal static void DrawGizmoInternal(AbxrTarget target, bool isSelected)
+        {
+            if (target == null || target.transform == null) return;
 
             // Use transform.position which correctly handles parent hierarchy
             // This ensures the gizmo moves correctly when the object is reparented
-            Vector3 worldPosition = transform.position;
+            Vector3 worldPosition = target.transform.position;
             
             // Get the size from transform.localScale to match the visualization
             // The visualization sets localScale to match the parent's bounds size
-            Vector3 gizmoSize = transform.localScale;
+            Vector3 gizmoSize = target.transform.localScale;
             
             // Ensure minimum size (at least 0.1 units in each dimension)
             if (gizmoSize.x <= 0.01f) gizmoSize.x = 0.1f;
@@ -690,7 +764,7 @@ namespace AbxrLib.Runtime.Telemetry
             // Fallback: if scale is still default (1,1,1) and we have a collider, use that
             if (gizmoSize == Vector3.one)
             {
-                Collider collider = GetComponent<Collider>();
+                Collider collider = target.GetComponent<Collider>();
                 if (collider != null)
                 {
                     if (collider is SphereCollider sphereCollider)
@@ -706,7 +780,7 @@ namespace AbxrLib.Runtime.Telemetry
                 else
                 {
                     // Final fallback
-                    float fallbackSize = triggerColliderSize > 0f ? triggerColliderSize : 1f;
+                    float fallbackSize = target.triggerColliderSize > 0f ? target.triggerColliderSize : 1f;
                     gizmoSize = Vector3.one * fallbackSize;
                 }
             }
