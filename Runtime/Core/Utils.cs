@@ -349,7 +349,7 @@ namespace AbxrLib.Runtime.Core
                 using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
                 using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
                 using var packageManager = activity.Call<AndroidJavaObject>("getPackageManager");
-                using var packageName = activity.Call<string>("getPackageName");
+                var packageName = activity.Call<string>("getPackageName");
                 
                 // Get ApplicationInfo with GET_META_DATA flag (0x00000080)
                 using var appInfo = packageManager.Call<AndroidJavaObject>("getApplicationInfo", packageName, 0x00000080);
