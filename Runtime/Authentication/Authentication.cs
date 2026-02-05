@@ -582,7 +582,7 @@ namespace AbxrLib.Runtime.Authentication
                         }
                         
                         _responseData = postResponse;
-                        if (_responseData.Modules.Count > 1)
+                        if (_responseData.Modules != null && _responseData.Modules.Count > 1)
                         {
                             _responseData.Modules = _responseData.Modules.OrderBy(m => m.Order).ToList();
                         }
@@ -884,7 +884,7 @@ namespace AbxrLib.Runtime.Authentication
                 _authHandoffCompleted = true;
                 _sessionUsedAuthHandoff = true;
                 
-                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_responseData.Modules.Count}");
+                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_responseData.Modules?.Count ?? 0}");
                 
                 Abxr.NotifyAuthCompleted();
                 _keyboardAuthSuccess = true;

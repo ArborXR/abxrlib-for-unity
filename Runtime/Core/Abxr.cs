@@ -521,7 +521,8 @@ public static partial class Abxr
 		Event(assessmentName, meta);
 		
 		// Check if we're in a module sequence
-		if (Authentication.GetAuthResponse().Modules.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
+		var authResponse = Authentication.GetAuthResponse();
+		if (authResponse != null && authResponse.Modules != null && authResponse.Modules.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
 		{
 			AdvanceToNextModule();
 		}
@@ -1320,9 +1321,10 @@ public static partial class Abxr
 		
 		// If LMS modules exist, inject current module metadata unless the event already specifies it.
 		// (Data-specific metadata takes precedence.)
-		if (Authentication.GetAuthResponse().Modules.Count > 0 && _currentModuleIndex < Authentication.GetAuthResponse().Modules.Count)
+		var authResponse = Authentication.GetAuthResponse();
+		if (authResponse != null && authResponse.Modules != null && authResponse.Modules.Count > 0 && _currentModuleIndex < authResponse.Modules.Count)
 		{
-			Authentication.ModuleData moduleData = Authentication.GetAuthResponse().Modules[_currentModuleIndex];
+			Authentication.ModuleData moduleData = authResponse.Modules[_currentModuleIndex];
 			if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
 			if (!meta.ContainsKey("moduleName")) meta["moduleName"] = moduleData.Name;
 			if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
@@ -1402,11 +1404,12 @@ public static partial class Abxr
 	private static void AdvanceToNextModule()
 	{
 		_currentModuleIndex++;
-		if (_currentModuleIndex < Authentication.GetAuthResponse().Modules.Count)
+		var authResponse = Authentication.GetAuthResponse();
+		if (authResponse != null && authResponse.Modules != null && _currentModuleIndex < authResponse.Modules.Count)
 		{
-			Debug.Log($"AbxrLib: Module '{Authentication.GetAuthResponse().Modules[_currentModuleIndex-1].Name}' complete. " +
-			          $"Advancing to next module - '{Authentication.GetAuthResponse().Modules[_currentModuleIndex].Name}'");
-			OnModuleTarget?.Invoke(Authentication.GetAuthResponse().Modules[_currentModuleIndex].Target);
+			Debug.Log($"AbxrLib: Module '{authResponse.Modules[_currentModuleIndex-1].Name}' complete. " +
+			          $"Advancing to next module - '{authResponse.Modules[_currentModuleIndex].Name}'");
+			OnModuleTarget?.Invoke(authResponse.Modules[_currentModuleIndex].Target);
 		}
 		else
 		{
@@ -1459,7 +1462,7 @@ public static partial class Abxr
 	/// Returns empty list if no authentication has completed yet
 	/// </summary>
 	/// <returns>List of ModuleData objects with complete module information</returns>
-	public static List<Authentication.ModuleData> GetModuleList() => Authentication.GetAuthResponse().Modules;
+	public static List<Authentication.ModuleData> GetModuleList() => Authentication.GetAuthResponse()?.Modules;
 
 	#endregion
 
