@@ -32,8 +32,44 @@ namespace AbxrLib.Editor
             // Note: Reset() will also be called automatically, but we set it here for immediate feedback
             abxrTarget.targetName = GenerateUniqueTargetName();
 
-            // Position it at the scene origin (user can move it)
-            targetObject.transform.position = Vector3.zero;
+            // Position the target intelligently:
+            // 1. If an object is selected, parent to it and position at its location
+            // 2. Otherwise, try to position at scene view camera focus point
+            // 3. Fall back to scene origin
+            Vector3 targetPosition = Vector3.zero;
+            Transform parentTransform = null;
+
+            if (Selection.activeGameObject != null)
+            {
+                // Parent to selected object and position at its location
+                parentTransform = Selection.activeGameObject.transform;
+                targetPosition = parentTransform.position;
+            }
+            else
+            {
+                // Try to get scene view camera focus point
+                SceneView sceneView = SceneView.lastActiveSceneView;
+                if (sceneView != null)
+                {
+                    // Get the pivot point (center of view) from the scene view
+                    targetPosition = sceneView.pivot;
+                }
+            }
+
+            // Set parent if we have one
+            if (parentTransform != null)
+            {
+                targetObject.transform.SetParent(parentTransform);
+                // When parented, use local position (0,0,0) to center it on the parent
+                targetObject.transform.localPosition = Vector3.zero;
+                targetObject.transform.localRotation = Quaternion.identity;
+                targetObject.transform.localScale = Vector3.one;
+            }
+            else
+            {
+                // No parent, use world position
+                targetObject.transform.position = targetPosition;
+            }
 
             // Select the newly created object
             Selection.activeGameObject = targetObject;
@@ -41,7 +77,10 @@ namespace AbxrLib.Editor
             // Register undo operation
             Undo.RegisterCreatedObjectUndo(targetObject, "Create Abxr Target");
 
-            Debug.Log($"AbxrLib: Created AbxrTarget GameObject with targetName '{abxrTarget.targetName}'. You can edit the 'Target Name' field in the Inspector to customize it.");
+            string locationInfo = parentTransform != null 
+                ? $"parented to '{parentTransform.name}'" 
+                : $"at position {targetPosition}";
+            Debug.Log($"AbxrLib: Created AbxrTarget GameObject with targetName '{abxrTarget.targetName}' {locationInfo}. You can edit the 'Target Name' field in the Inspector to customize it.");
         }
 
         /// <summary>

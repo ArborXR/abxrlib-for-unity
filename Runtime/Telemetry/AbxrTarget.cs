@@ -10,6 +10,10 @@
 
 using AbxrLib.Runtime.Core;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+using UnityEditor.SceneManagement;
+#endif
 
 namespace AbxrLib.Runtime.Telemetry
 {
@@ -48,9 +52,14 @@ namespace AbxrLib.Runtime.Telemetry
             return autoCreateTriggerCollider;
         }
 
-        [Tooltip("Size of the auto-created trigger collider (if autoCreateTriggerCollider is enabled).")]
+        [Tooltip("Size of the auto-created trigger collider (if autoCreateTriggerCollider is enabled). Automatically calculated from parent bounds when parented.")]
+        [HideInInspector]
         [SerializeField]
-        public float triggerColliderSize = 0.5f; // Default to 0.5 unit radius/sphere
+        public float triggerColliderSize = 1f; // Default fallback size (automatically calculated from parent bounds when parented)
+
+        [Tooltip("When reparented, automatically center this target at the parent's origin (local position 0,0,0).")]
+        [SerializeField]
+        public bool autoCenterOnParent = true; // Default to true for convenience
 
         /// <summary>
         /// Gets the effective maximum occlusion check distance.
@@ -117,7 +126,8 @@ namespace AbxrLib.Runtime.Telemetry
             // Sphere colliders work well for point targets and are efficient
             SphereCollider triggerCollider = gameObject.AddComponent<SphereCollider>();
             triggerCollider.isTrigger = true; // Critical: trigger colliders don't block physics
-            triggerCollider.radius = triggerColliderSize;
+            // Use triggerColliderSize, but ensure it's at least 1f as a fallback (will be recalculated from parent bounds when parented)
+            triggerCollider.radius = triggerColliderSize > 0f ? triggerColliderSize : 1f;
             triggerCollider.center = Vector3.zero; // Center at the GameObject's pivot
 
             // Hide it in the inspector to reduce clutter (optional, but helpful)
@@ -134,19 +144,6 @@ namespace AbxrLib.Runtime.Telemetry
             if (string.IsNullOrEmpty(targetName))
             {
                 targetName = GenerateUniqueTargetName();
-            }
-        }
-
-        /// <summary>
-        /// Called when values are changed in the Inspector.
-        /// Validates that the targetName is unique and warns if duplicates are found.
-        /// </summary>
-        private void OnValidate()
-        {
-            // Only check for duplicates if targetName field is set (not empty)
-            if (!string.IsNullOrEmpty(targetName))
-            {
-                ValidateTargetNameUniqueness();
             }
         }
 
@@ -228,7 +225,517 @@ namespace AbxrLib.Runtime.Telemetry
             // Ensure we have a trigger collider for accurate detection
             // Using Awake() instead of Start() ensures colliders are created before any occlusion checks
             EnsureTriggerCollider();
+            
+#if UNITY_EDITOR
+            // Update collider size and scale based on parent bounds
+            UpdateTargetSize();
+#endif
         }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Forces an update of the target size and collider based on parent bounds. Call this when reparenting to ensure the size matches the new parent's bounds.
+        /// </summary>
+        public void UpdateDebugVisualization()
+        {
+            UpdateTargetSize();
+        }
+
+        /// <summary>
+        /// Updates the target's scale and collider size based on parent object's bounds.
+        /// This ensures the gizmo displays correctly and the collider matches the target area.
+        /// </summary>
+        private void UpdateTargetSize()
+        {
+            // Calculate bounds based on parent object's bounds if available
+            Bounds? targetBounds = CalculateTargetBounds();
+            
+            Vector3 targetSize;
+            if (targetBounds.HasValue)
+            {
+                targetSize = targetBounds.Value.size;
+            }
+            else
+            {
+                // Fallback to CalculateTargetSize for backwards compatibility
+                targetSize = CalculateTargetSize();
+            }
+            
+            // Ensure no component is zero (Unity doesn't like zero scale)
+            if (targetSize.x <= 0.01f) targetSize.x = 0.1f;
+            if (targetSize.y <= 0.01f) targetSize.y = 0.1f;
+            if (targetSize.z <= 0.01f) targetSize.z = 0.1f;
+            
+            // Set local scale to match parent object size (used by gizmo for visualization)
+            // Use a small threshold to avoid unnecessary updates
+            if (Vector3.Distance(transform.localScale, targetSize) > 0.01f)
+            {
+                transform.localScale = targetSize;
+                
+                // Verify it was set correctly
+                if (Mathf.Abs(transform.localScale.y) < 0.01f)
+                {
+                    // Force it again
+                    Vector3 correctedScale = transform.localScale;
+                    correctedScale.y = Mathf.Max(correctedScale.y, 0.1f);
+                    transform.localScale = correctedScale;
+                }
+            }
+
+            // Update collider size to match the target size
+            // Use the average of the three dimensions for sphere collider radius
+            Collider collider = GetComponent<Collider>();
+            if (collider != null && collider is SphereCollider sphereCollider)
+            {
+                // Use the average size for sphere collider radius
+                float avgSize = (targetSize.x + targetSize.y + targetSize.z) / 3f;
+                float newRadius = avgSize / 2f; // Radius is half the diameter
+                
+                if (Mathf.Abs(sphereCollider.radius - newRadius) > 0.01f)
+                {
+                    sphereCollider.radius = newRadius;
+                    // Update triggerColliderSize to match
+                    triggerColliderSize = avgSize;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Calculates the appropriate bounds for the target visualization based on parent object bounds.
+        /// If parent has renderers or colliders, uses their bounds. Otherwise falls back to triggerColliderSize.
+        /// </summary>
+        /// <returns>Bounds object with center and size, or null if no parent bounds available</returns>
+        private Bounds? CalculateTargetBounds()
+        {
+            // If we have a parent, try to get its bounds
+            if (transform.parent != null)
+            {
+                Bounds? parentBounds = GetParentBounds(transform.parent);
+                
+                if (parentBounds.HasValue)
+                {
+                    Bounds bounds = parentBounds.Value;
+                    
+                    // Ensure minimum size (at least 0.1 units in each dimension)
+                    Vector3 size = bounds.size;
+                    size.x = Mathf.Max(size.x, 0.1f);
+                    size.y = Mathf.Max(size.y, 0.1f);
+                    size.z = Mathf.Max(size.z, 0.1f);
+                    
+                    // Create bounds with corrected size
+                    Bounds correctedBounds = new Bounds(bounds.center, size);
+                    
+                    return correctedBounds;
+                }
+            }
+            
+            return null;
+        }
+
+        /// <summary>
+        /// Calculates the appropriate size for the target visualization based on parent object bounds.
+        /// Legacy method for backwards compatibility - prefer using CalculateTargetBounds().
+        /// </summary>
+        /// <returns>Vector3 representing the size (scale) for the visualization</returns>
+        private Vector3 CalculateTargetSize()
+        {
+            Bounds? bounds = CalculateTargetBounds();
+            if (bounds.HasValue)
+            {
+                return bounds.Value.size;
+            }
+            
+            // Fallback to triggerColliderSize (with safety check)
+            float fallbackSize = triggerColliderSize > 0f ? triggerColliderSize : 1f;
+            Vector3 size = Vector3.one * fallbackSize;
+            
+            // No parent, use collider size if available
+            Collider collider = GetComponent<Collider>();
+            if (collider != null && collider is SphereCollider sphereCollider)
+            {
+                float radius = sphereCollider.radius * 2f;
+                size = Vector3.one * radius;
+            }
+            
+            return size;
+        }
+
+        /// <summary>
+        /// Gets the local position where this target should be centered based on parent's children's bounds.
+        /// Returns the center of the parent's children's bounds if available, otherwise returns Vector3.zero (parent's pivot).
+        /// </summary>
+        /// <returns>Local position where the target should be centered</returns>
+        public Vector3 GetTargetLocalPosition()
+        {
+            if (transform.parent == null)
+            {
+                return Vector3.zero;
+            }
+            
+            Bounds? parentBounds = GetParentBounds(transform.parent);
+            if (parentBounds.HasValue)
+            {
+                return parentBounds.Value.center;
+            }
+            
+            return Vector3.zero;
+        }
+
+        /// <summary>
+        /// Gets the combined bounds of all renderers and colliders in the parent object and its children.
+        /// </summary>
+        /// <param name="parent">The parent transform to get bounds from</param>
+        /// <returns>Combined bounds, or null if no renderers or colliders found</returns>
+        internal Bounds? GetParentBounds(Transform parent)
+        {
+            if (parent == null) return null;
+
+            Bounds? combinedBounds = null;
+            bool hasBounds = false;
+
+            // Check renderers first (most accurate for visual representation)
+            // Exclude this AbxrTarget's own renderer to avoid including itself
+            Renderer[] renderers = parent.GetComponentsInChildren<Renderer>();
+            foreach (Renderer renderer in renderers)
+            {
+                // Skip this AbxrTarget's own renderer
+                if (renderer != null && renderer.transform != this.transform && renderer.bounds.size.magnitude > 0)
+                {
+                    if (!hasBounds)
+                    {
+                        combinedBounds = renderer.bounds;
+                        hasBounds = true;
+                    }
+                    else
+                    {
+                        Bounds currentBounds = combinedBounds.Value;
+                        currentBounds.Encapsulate(renderer.bounds);
+                        combinedBounds = currentBounds;
+                    }
+                }
+            }
+
+            // If no renderers, check colliders
+            // Exclude this AbxrTarget's own collider to avoid including itself
+            if (!hasBounds)
+            {
+                Collider[] colliders = parent.GetComponentsInChildren<Collider>();
+                foreach (Collider collider in colliders)
+                {
+                    // Skip this AbxrTarget's own collider
+                    if (collider != null && collider.transform != this.transform && collider.bounds.size.magnitude > 0)
+                    {
+                        if (!hasBounds)
+                        {
+                            combinedBounds = collider.bounds;
+                            hasBounds = true;
+                        }
+                        else
+                        {
+                            Bounds currentBounds = combinedBounds.Value;
+                            currentBounds.Encapsulate(collider.bounds);
+                            combinedBounds = currentBounds;
+                        }
+                    }
+                }
+            }
+
+            // Transform bounds from world space to local space relative to parent
+            if (hasBounds && combinedBounds.HasValue)
+            {
+                Bounds worldBounds = combinedBounds.Value;
+                
+                // Get all corners of the world bounds
+                Vector3[] worldCorners = new Vector3[]
+                {
+                    worldBounds.center + new Vector3(-worldBounds.extents.x, -worldBounds.extents.y, -worldBounds.extents.z),
+                    worldBounds.center + new Vector3(worldBounds.extents.x, -worldBounds.extents.y, -worldBounds.extents.z),
+                    worldBounds.center + new Vector3(-worldBounds.extents.x, worldBounds.extents.y, -worldBounds.extents.z),
+                    worldBounds.center + new Vector3(worldBounds.extents.x, worldBounds.extents.y, -worldBounds.extents.z),
+                    worldBounds.center + new Vector3(-worldBounds.extents.x, -worldBounds.extents.y, worldBounds.extents.z),
+                    worldBounds.center + new Vector3(worldBounds.extents.x, -worldBounds.extents.y, worldBounds.extents.z),
+                    worldBounds.center + new Vector3(-worldBounds.extents.x, worldBounds.extents.y, worldBounds.extents.z),
+                    worldBounds.center + new Vector3(worldBounds.extents.x, worldBounds.extents.y, worldBounds.extents.z)
+                };
+                
+                // Convert all corners to local space
+                Vector3[] localCorners = new Vector3[8];
+                for (int i = 0; i < 8; i++)
+                {
+                    localCorners[i] = parent.InverseTransformPoint(worldCorners[i]);
+                }
+                
+                // Find min/max in local space
+                Vector3 min = localCorners[0];
+                Vector3 max = localCorners[0];
+                for (int i = 1; i < 8; i++)
+                {
+                    min = Vector3.Min(min, localCorners[i]);
+                    max = Vector3.Max(max, localCorners[i]);
+                }
+                
+                // Create local-space bounds
+                Vector3 localCenter = (min + max) / 2f;
+                Vector3 localSize = max - min;
+                
+                // Ensure size is never zero or negative
+                localSize.x = Mathf.Max(localSize.x, 0.01f);
+                localSize.y = Mathf.Max(localSize.y, 0.01f);
+                localSize.z = Mathf.Max(localSize.z, 0.01f);
+                
+                Bounds localBounds = new Bounds(localCenter, localSize);
+                
+                return localBounds;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Called when the transform's parent changes.
+        /// Ensures the collider center is reset to local origin when reparented.
+        /// Optionally centers the target at the parent's origin.
+        /// </summary>
+        private void OnTransformParentChanged()
+        {
+            // If auto-center is enabled and we have a parent, center at the center of parent's children's bounds
+            if (autoCenterOnParent && transform.parent != null)
+            {
+                // Get the target local position (bounds center or parent pivot)
+                Vector3 targetLocalPosition = GetTargetLocalPosition();
+                
+                if (Vector3.Distance(transform.localPosition, targetLocalPosition) > 0.01f)
+                {
+                    // Record undo for the transform change
+                    Undo.RecordObject(transform, "Auto-center AbxrTarget on parent");
+                    
+                    // Set the local position to the center of parent's children's bounds
+                    transform.localPosition = targetLocalPosition;
+                    transform.localRotation = Quaternion.identity;
+                    
+                    // Mark the scene as dirty so changes are saved
+                    if (!Application.isPlaying)
+                    {
+                        EditorUtility.SetDirty(gameObject);
+                        EditorUtility.SetDirty(transform);
+                        EditorSceneManager.MarkSceneDirty(gameObject.scene);
+                    }
+                    
+                    // Use delayCall to verify position after Unity processes the change
+                    // This helps catch cases where Unity might override our change
+                    EditorApplication.delayCall += () =>
+                    {
+                        if (this != null && transform != null)
+                        {
+                            // Recalculate target position in case parent changed
+                            Vector3 delayedTargetPos = GetTargetLocalPosition();
+                            
+                            if (Vector3.Distance(transform.localPosition, delayedTargetPos) > 0.01f && autoCenterOnParent && transform.parent != null)
+                            {
+                                Undo.RecordObject(transform, "Re-center AbxrTarget (delayed)");
+                                transform.localPosition = delayedTargetPos;
+                                transform.localRotation = Quaternion.identity;
+                                EditorUtility.SetDirty(gameObject);
+                                EditorSceneManager.MarkSceneDirty(gameObject.scene);
+                            }
+                        }
+                    };
+                }
+            }
+            
+            // Ensure collider exists (OnValidate might not have run yet)
+            EnsureTriggerCollider();
+            
+            // When reparented, ensure collider center is at local origin
+            // This ensures the collider visualization updates correctly
+            Collider collider = GetComponent<Collider>();
+            if (collider != null)
+            {
+                if (collider is SphereCollider sphereCollider)
+                {
+                    if (sphereCollider.center != Vector3.zero)
+                    {
+                        Undo.RecordObject(sphereCollider, "Reset collider center");
+                        sphereCollider.center = Vector3.zero;
+                    }
+                }
+                else if (collider is BoxCollider boxCollider)
+                {
+                    if (boxCollider.center != Vector3.zero)
+                    {
+                        Undo.RecordObject(boxCollider, "Reset collider center");
+                        boxCollider.center = Vector3.zero;
+                    }
+                }
+            }
+            
+            // Update target size - use delayCall to ensure parent hierarchy is fully updated
+            EditorApplication.delayCall += () =>
+            {
+                if (this != null && transform != null && gameObject != null)
+                {
+                    UpdateTargetSize();
+                }
+            };
+        }
+#endif
+
+        /// <summary>
+        /// Called when values are changed in the Inspector (including transform changes).
+        /// Ensures collider center stays at local origin and validates target name uniqueness.
+        /// </summary>
+        private void OnValidate()
+        {
+#if UNITY_EDITOR
+            // In editor, OnValidate is called before Awake, so ensure collider and size are updated
+            EnsureTriggerCollider();
+            UpdateTargetSize();
+            
+            // If auto-center is enabled and we have a parent, ensure we're centered at the center of parent's children's bounds
+            // This handles cases where OnTransformParentChanged might not have fired immediately
+            // Note: This will only run when OnValidate is called (on changes), not every frame
+            if (autoCenterOnParent && transform.parent != null)
+            {
+                // Get the target local position (bounds center or parent pivot)
+                Vector3 targetLocalPosition = GetTargetLocalPosition();
+                
+                if (Vector3.Distance(transform.localPosition, targetLocalPosition) > 0.01f)
+                {
+                    // Record undo for the transform change
+                    Undo.RecordObject(transform, "Auto-center AbxrTarget on parent (OnValidate)");
+                    
+                    transform.localPosition = targetLocalPosition;
+                    transform.localRotation = Quaternion.identity;
+                    
+                    // Mark the scene as dirty so changes are saved
+                    if (!Application.isPlaying)
+                    {
+                        EditorUtility.SetDirty(gameObject);
+                        EditorUtility.SetDirty(transform);
+                        EditorSceneManager.MarkSceneDirty(gameObject.scene);
+                    }
+                }
+            }
+#endif
+            
+            // Ensure collider center is at local origin
+            Collider collider = GetComponent<Collider>();
+            if (collider != null)
+            {
+                if (collider is SphereCollider sphereCollider)
+                {
+                    if (sphereCollider.center != Vector3.zero)
+                    {
+                        sphereCollider.center = Vector3.zero;
+                    }
+                }
+                else if (collider is BoxCollider boxCollider)
+                {
+                    if (boxCollider.center != Vector3.zero)
+                    {
+                        boxCollider.center = Vector3.zero;
+                    }
+                }
+            }
+
+            // Validate target name uniqueness
+            if (!string.IsNullOrEmpty(targetName))
+            {
+                ValidateTargetNameUniqueness();
+            }
+        }
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Draws gizmos in the Scene view to visualize the target position.
+        /// Uses transform.position which correctly respects parent hierarchy.
+        /// </summary>
+        private void OnDrawGizmos()
+        {
+            if (!enabled || !gameObject.activeInHierarchy) return;
+            DrawTargetGizmo(false);
+        }
+
+        /// <summary>
+        /// Draws gizmos when the target is selected in the Scene view.
+        /// Uses transform.position which correctly respects parent hierarchy.
+        /// </summary>
+        private void OnDrawGizmosSelected()
+        {
+            if (!enabled || !gameObject.activeInHierarchy) return;
+            DrawTargetGizmo(true);
+        }
+
+        /// <summary>
+        /// Draws the target gizmo at the current transform position.
+        /// </summary>
+        /// <param name="isSelected">Whether the target is currently selected</param>
+        private void DrawTargetGizmo(bool isSelected)
+        {
+            if (transform == null) return;
+
+            // Use transform.position which correctly handles parent hierarchy
+            // This ensures the gizmo moves correctly when the object is reparented
+            Vector3 worldPosition = transform.position;
+            
+            // Get the size from transform.localScale to match the visualization
+            // The visualization sets localScale to match the parent's bounds size
+            Vector3 gizmoSize = transform.localScale;
+            
+            // Ensure minimum size (at least 0.1 units in each dimension)
+            if (gizmoSize.x <= 0.01f) gizmoSize.x = 0.1f;
+            if (gizmoSize.y <= 0.01f) gizmoSize.y = 0.1f;
+            if (gizmoSize.z <= 0.01f) gizmoSize.z = 0.1f;
+            
+            // Fallback: if scale is still default (1,1,1) and we have a collider, use that
+            if (gizmoSize == Vector3.one)
+            {
+                Collider collider = GetComponent<Collider>();
+                if (collider != null)
+                {
+                    if (collider is SphereCollider sphereCollider)
+                    {
+                        float radius = sphereCollider.radius * 2f; // Convert radius to diameter
+                        gizmoSize = Vector3.one * radius;
+                    }
+                    else if (collider is BoxCollider boxCollider)
+                    {
+                        gizmoSize = boxCollider.size;
+                    }
+                }
+                else
+                {
+                    // Final fallback
+                    float fallbackSize = triggerColliderSize > 0f ? triggerColliderSize : 1f;
+                    gizmoSize = Vector3.one * fallbackSize;
+                }
+            }
+
+            // Draw a wireframe cube at the target position
+            // Use company color: #00db97 (RGB: 0, 219, 151)
+            Color companyColor = new Color(0f, 219f / 255f, 151f / 255f, 1f);
+            if (isSelected)
+            {
+                Gizmos.color = companyColor; // Full opacity when selected
+            }
+            else
+            {
+                Gizmos.color = new Color(companyColor.r, companyColor.g, companyColor.b, 0.6f); // Semi-transparent when not selected
+            }
+            
+            // Draw wireframe cube with actual dimensions
+            Gizmos.DrawWireCube(worldPosition, gizmoSize);
+            
+            // Draw a solid cube for better visibility
+            Gizmos.color = new Color(companyColor.r, companyColor.g, companyColor.b, 0.2f); // Very transparent
+            Gizmos.DrawCube(worldPosition, gizmoSize);
+            
+            // Draw a small sphere at the center (use average size for sphere radius)
+            float avgSize = (gizmoSize.x + gizmoSize.y + gizmoSize.z) / 3f;
+            Gizmos.color = companyColor; // Solid color
+            Gizmos.DrawSphere(worldPosition, avgSize * 0.15f);
+        }
+#endif
 
         /// <summary>
         /// Gets the world position of this target, handling child objects correctly.

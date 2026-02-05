@@ -131,15 +131,23 @@ namespace AbxrLib.Runtime.Telemetry
             // Calculate and send gaze data for each target
             foreach (var target in targets)
             {
-                if (target == null || !target.gameObject.activeInHierarchy)
+                // Skip null targets
+                if (target == null)
                 {
-                    continue; // Skip disabled or destroyed targets
+                    continue;
                 }
 
                 // Skip targets where the AbxrTarget component itself is disabled
+                // This check must come before other checks to ensure disabled targets are excluded
                 if (!target.enabled)
                 {
                     continue;
+                }
+
+                // Skip inactive GameObjects
+                if (!target.gameObject.activeInHierarchy)
+                {
+                    continue; // Skip disabled or destroyed targets
                 }
 
                 // Skip if transform is null (defensive check)
@@ -150,6 +158,11 @@ namespace AbxrLib.Runtime.Telemetry
 
                 // Get targetName (custom targetName or GameObject name)
                 string targetName = target.GetTargetName();
+                // Trim whitespace to prevent extra spaces in metadata keys
+                if (!string.IsNullOrEmpty(targetName))
+                {
+                    targetName = targetName.Trim();
+                }
 
                 // Get world position using the helper method that handles child objects correctly
                 Vector3 worldPosition = target.GetWorldPosition();
