@@ -131,6 +131,9 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static String get_ApiSecret() => _client.Call<String>("get_ApiSecret");
 		public static void set_ApiSecret(String szApiSecret) => _client.Call<int>("set_ApiSecret", szApiSecret);
 		// ---
+		public static String get_AppToken() => _client.Call<String>("get_AppToken");
+		public static void set_AppToken(String szAppToken) => _client.Call("set_AppToken", szAppToken);
+		// ---
 		public static String get_AppID() => _client.Call<String>("get_AppID");
 		public static void set_AppID(String szAppID) => _client.Call<int>("set_AppID", szAppID);
 		// ---
@@ -139,6 +142,9 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		// ---
 		public static String get_AuthSecret() => _client.Call<String>("get_AuthSecret");
 		public static void set_AuthSecret(String szAuthSecret) => _client.Call<int>("set_AuthSecret", szAuthSecret);
+		// ---
+		public static String get_BuildType() => _client.Call<String>("get_BuildType");
+		public static void set_BuildType(String szBuildType) => _client.Call("set_BuildType", szBuildType);
 		// ---
 		public static String get_DeviceID() => _client.Call<String>("get_DeviceID");
 		public static void set_DeviceID(String szDeviceID) => _client.Call<int>("set_DeviceID", szDeviceID);
@@ -404,6 +410,9 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		public static String get_ApiSecret() => AbxrInsightServiceBridge.get_ApiSecret();
 		public static void set_ApiSecret(String szApiSecret) => AbxrInsightServiceBridge.set_ApiSecret(szApiSecret ?? "");
 		// ---
+		public static String get_AppToken() => AbxrInsightServiceBridge.get_AppToken();
+		public static void set_AppToken(String szAppToken) => AbxrInsightServiceBridge.set_AppToken(szAppToken ?? "");
+		// ---
 		public static String get_AppID() => AbxrInsightServiceBridge.get_AppID();
 		public static void set_AppID(String szAppID) => AbxrInsightServiceBridge.set_AppID(szAppID ?? "");
 		// ---
@@ -412,6 +421,9 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		// ---
 		public static String get_AuthSecret() => AbxrInsightServiceBridge.get_AuthSecret();
 		public static void set_AuthSecret(String szAuthSecret) => AbxrInsightServiceBridge.set_AuthSecret(szAuthSecret ?? "");
+		// ---
+		public static String get_BuildType() => AbxrInsightServiceBridge.get_BuildType();
+		public static void set_BuildType(String szBuildType) => AbxrInsightServiceBridge.set_BuildType(szBuildType ?? "");
 		// ---
 		public static String get_DeviceID() => AbxrInsightServiceBridge.get_DeviceID();
 		public static void set_DeviceID(String szDeviceID) => AbxrInsightServiceBridge.set_DeviceID(szDeviceID ?? "");
