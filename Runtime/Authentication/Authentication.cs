@@ -278,67 +278,22 @@ namespace AbxrLib.Runtime.Authentication
         {
             var config = Configuration.Instance;
             
-            // Check if using App Tokens
-            if (config.useAppTokens)
+            // Extract all config data using centralized helper
+            var configData = Utils.ExtractConfigData(config);
+            
+            if (!configData.isValid)
             {
-                // Get the appropriate token based on buildType
-                string tokenToUse = config.buildType == "production" 
-                    ? config.appTokenProduction 
-                    : config.appTokenDevelopment;
-                
-                if (string.IsNullOrEmpty(tokenToUse))
-                {
-                    Debug.LogError($"AbxrLib: App Token for {config.buildType} build is not set. Cannot authenticate.");
-                    return;
-                }
-                
-                // Store the token for sending in AuthPayload
-                _appToken = tokenToUse;
-                
-                // Extract data from the JWT token
-                var tokenData = Utils.ExtractAppTokenData(tokenToUse);
-                if (tokenData == null)
-                {
-                    Debug.LogError("AbxrLib: Failed to decode App Token. Cannot authenticate.");
-                    return;
-                }
-                
-                // Extract appId (required)
-                if (tokenData.ContainsKey("appId"))
-                {
-                    _appId = tokenData["appId"];
-                }
-                else
-                {
-                    Debug.LogError("AbxrLib: App Token missing appId. Cannot authenticate.");
-                    return;
-                }
-                
-                // Extract orgId and authSecret (only in development tokens)
-                // These will still be overridden by GetArborData() if ArborServiceClient is connected
-                _orgId = tokenData.ContainsKey("orgId") ? tokenData["orgId"] : null;
-                _authSecret = tokenData.ContainsKey("authSecret") ? tokenData["authSecret"] : null;
+                Debug.LogError($"AbxrLib: {configData.errorMessage} Cannot authenticate.");
+                return;
             }
-            else
-            {
-                // Use traditional appID/orgID/authSecret approach
-                _appId = config.appID;
-                _appToken = null;
-               
-                // Only include orgID and authSecret if buildType is development
-                // In production builds, these should be empty to avoid including credentials
-                if (config.buildType == "development")
-                {
-                    _orgId = config.orgID;
-                    _authSecret = config.authSecret;
-                }
-                else
-                {
-                    // Production build - use empty values
-                    _orgId = null;
-                    _authSecret = null;
-                }
-            }
+            
+            // Set Authentication static fields from extracted config data
+            _appId = configData.appId;
+            _appToken = configData.appToken;
+            _orgId = configData.orgId;
+            _authSecret = configData.authSecret;
+            
+            // Note: orgId and authSecret will still be overridden by GetArborData() if ArborServiceClient is connected
         }
     
         private static void GetArborData()
@@ -501,7 +456,10 @@ namespace AbxrLib.Runtime.Authentication
             var data = new AuthPayload
             {
                 // Send either appId or appToken, not both
-                appId = config.useAppTokens ? null : _appId,
+                //appId = config.useAppTokens ? null : _appId,
+                // When using app tokens, include both appId (extracted from token) and appToken
+                // When not using app tokens, only include appId
+                appId = _appId,
                 appToken = config.useAppTokens ? _appToken : null,
                 orgId = _orgId,
                 authSecret = _authSecret,
