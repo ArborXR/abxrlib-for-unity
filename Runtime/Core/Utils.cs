@@ -187,6 +187,111 @@ namespace AbxrLib.Runtime.Core
             return result;
         }
 
+        /// <summary>
+        /// Result structure containing all authentication configuration data extracted from config or tokens.
+        /// Internal API - not intended for external use.
+        /// </summary>
+        internal struct AuthConfigData
+        {
+            public string appId;
+            public string appToken;
+            public string orgId;
+            public string authSecret;
+            public string buildType;
+            public bool isValid;
+            public string errorMessage;
+        }
+
+        /// <summary>
+        /// Extracts all authentication configuration data from Configuration, handling both App Tokens and traditional config.
+        /// Internal API - not intended for external use.
+        /// </summary>
+        /// <param name="config">The Configuration instance</param>
+        /// <returns>AuthConfigData containing extracted values and validation status</returns>
+        internal static AuthConfigData ExtractConfigData(Configuration config)
+        {
+            var result = new AuthConfigData { isValid = false };
+
+            if (config == null)
+            {
+                result.errorMessage = "Configuration instance is null";
+                return result;
+            }
+
+            // Get buildType from config (will be overridden from token if using app tokens)
+            result.buildType = !string.IsNullOrEmpty(config.buildType) ? config.buildType : "production";
+
+            // Check if using App Tokens
+            if (config.useAppTokens)
+            {
+                // Get the appropriate token based on buildType
+                string tokenToUse = config.buildType == "production" 
+                    ? config.appTokenProduction 
+                    : config.appTokenDevelopment;
+                
+                if (string.IsNullOrEmpty(tokenToUse))
+                {
+                    result.errorMessage = $"App Token for {config.buildType} build is not set.";
+                    return result;
+                }
+                
+                // Store the token
+                result.appToken = tokenToUse;
+                
+                // Extract data from the JWT token
+                var tokenData = ExtractAppTokenData(tokenToUse);
+                if (tokenData == null)
+                {
+                    result.errorMessage = "Failed to decode App Token.";
+                    return result;
+                }
+                
+                // Extract appId (required)
+                if (tokenData.ContainsKey("appId"))
+                {
+                    result.appId = tokenData["appId"];
+                }
+                else
+                {
+                    result.errorMessage = "App Token missing appId.";
+                    return result;
+                }
+                
+                // Extract buildType from token (overrides config value)
+                if (tokenData.ContainsKey("buildType"))
+                {
+                    result.buildType = tokenData["buildType"];
+                }
+                
+                // Extract orgId and authSecret (only in development tokens)
+                result.orgId = tokenData.ContainsKey("orgId") ? tokenData["orgId"] : null;
+                result.authSecret = tokenData.ContainsKey("authSecret") ? tokenData["authSecret"] : null;
+            }
+            else
+            {
+                // Use traditional appID/orgID/authSecret approach
+                result.appId = config.appID;
+                result.appToken = null;
+               
+                // Only include orgID and authSecret if buildType is development
+                // In production builds, these should be empty to avoid including credentials
+                if (config.buildType == "development")
+                {
+                    result.orgId = config.orgID;
+                    result.authSecret = config.authSecret;
+                }
+                else
+                {
+                    // Production build - use empty values
+                    result.orgId = null;
+                    result.authSecret = null;
+                }
+            }
+
+            result.isValid = true;
+            return result;
+        }
+
         private static string Base64UrlDecode(string input)
         {
             return input.Replace('-', '+').Replace('_', '/');
