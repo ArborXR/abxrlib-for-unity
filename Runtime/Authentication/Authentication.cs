@@ -208,7 +208,8 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call GetCo
 			if ((AbxrInsightServiceClient.ServiceIsFullyInitialized() && _dictAuthMechanism != null && _dictAuthMechanism.Count > 0) ||
 				(!AbxrInsightServiceClient.ServiceIsFullyInitialized() && _authMechanism != null))
             {
-                yield return KeyboardAuthenticate();
+Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call KeyboardAuthenticate().");
+				yield return KeyboardAuthenticate();
                 // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
             }
             else
