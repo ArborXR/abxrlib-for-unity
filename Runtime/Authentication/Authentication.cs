@@ -205,6 +205,7 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call AuthR
 			yield return AuthRequest();
 Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call GetConfiguration().");
             yield return GetConfiguration();
+Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to check if the auth mechanism has been set().");
 			if ((AbxrInsightServiceClient.ServiceIsFullyInitialized() && _dictAuthMechanism != null && _dictAuthMechanism.Count > 0) ||
 				(!AbxrInsightServiceClient.ServiceIsFullyInitialized() && _authMechanism != null))
             {
@@ -394,16 +395,18 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call Keybo
 
 		public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)
         {
+Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() at the very beginning.");
             _keyboardAuthSuccess = false;
             _enteredAuthValue = null;
-            
-            if (keyboardInput != null)
-            {
+
+			if (keyboardInput != null)
+			{
+Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate(): that's just lovely Jeremy (Hillary, Boob, PhD) keyboardInput is not null, about to do if service.");
 				// Accept keyboard input and do second stage of authentication that uses it.
 				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
 				{
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticate() AbxrInsightService.");
-					string	szType = "",
+					Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticate() AbxrInsightService.");
+					string szType = "",
 							szDomain = "",
 							szOriginalPrompt = "";
 
@@ -457,7 +460,7 @@ Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success
 					}
 				}
 				else
-				{ 
+				{
 					string originalPrompt = _authMechanism.prompt;
 
 					_authMechanism.prompt = keyboardInput;
@@ -465,32 +468,37 @@ Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success
 					if (_authMechanism.type == "email" || _authMechanism.type == "text")
 					{
 						_enteredAuthValue = keyboardInput;
-                    
+
 						// For email type, combine with domain if provided
 						if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
 						{
 							_enteredAuthValue += $"@{_authMechanism.domain}";
 						}
 					}
-                
+
 					yield return AuthRequest(false);
 					_enteredAuthValue = null;  // only need this in AuthRequest
 					if (_keyboardAuthSuccess == true)
 					{
 						KeyboardHandler.Destroy();
 						_failedAuthAttempts = 0;
-                    
+
 Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success in KeyboardAuthenticate().");
 						// Notify completion for keyboard authentication success
 						Abxr.NotifyAuthCompleted();
-                    
+
 						yield break;
 					}
 					_authMechanism.prompt = originalPrompt;
 				}
-            }
-        
-            string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
+			}
+			else
+			{
+Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() keyboardInput is null.");
+			}
+
+Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() past the if (keyboardInput) and about to go on to execute PresentKeyboard().");
+			string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
             if (invalidQrCode) prompt = "Invalid QR Code\n";
             prompt += _authMechanism.prompt;
 Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticate().");
@@ -769,12 +777,15 @@ Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceClient.AuthRequest() su
 
         private static IEnumerator GetConfiguration()
         {
+Debug.Log($"[AbxrInsightServiceClient] In GetConfiguration() at the very beginning.");
 			if (Abxr.ServiceIsFullyInitialized())
 			{
+Debug.Log($"[AbxrInsightServiceClient] In GetConfiguration() in the if service clause and about to get_AppConfigAuthMechanism().");
 				_dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
 			}
 			else
 			{
+Debug.Log($"[AbxrInsightServiceClient] Не очень хорошо, GetConfiguration() got into the else-not-service clause somehow.");
 				var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
             
 				// Create request and handle creation errors
