@@ -1320,7 +1320,7 @@ public static partial class Abxr
 		
 		// If LMS modules exist, inject current module metadata unless the event already specifies it.
 		// (Data-specific metadata takes precedence.)
-		if (Authentication.GetAuthResponse().Modules.Count > 0 && _currentModuleIndex < Authentication.GetAuthResponse().Modules.Count)
+		if (Authentication.GetAuthResponse()?.Modules?.Count > 0 && _currentModuleIndex < Authentication.GetAuthResponse()?.Modules?.Count)
 		{
 			Authentication.ModuleData moduleData = Authentication.GetAuthResponse().Modules[_currentModuleIndex];
 			if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
