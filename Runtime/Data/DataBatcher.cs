@@ -6,11 +6,17 @@ using AbxrLib.Runtime.Core;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
+#if UNITY_ANDROID && !UNITY_EDITOR
+using AbxrLib.Runtime.ServiceClient.ArborInsightService;
+#endif
 
 namespace AbxrLib.Runtime.Data
 {
 	public class DataBatcher : MonoBehaviour
 	{
+		/// <summary>Set to true to log data flow (service vs queue vs HTTP) for debugging ArborInsightService integration.</summary>
+		private const bool DataBatcherDebugLog = true;
+
 		private const string UrlPath = "/v1/collect/data";
 		private static Uri _uri;
 		private static readonly List<EventPayload> _eventPayloads = new();
@@ -33,10 +39,20 @@ namespace AbxrLib.Runtime.Data
 		}
 
 		/// <summary>
-		/// Add an event to the batch
+		/// Add an event to the batch.
+		/// When this session authenticated via ArborInsightService we send directly to the service (no queue). Otherwise we queue and Send() uses HTTP; we never switch to the service later.
 		/// </summary>
 		public static void AddEvent(string name, Dictionary<string, string> meta)
 		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (Authentication.Authentication.UsingArborInsightServiceForData())
+			{
+				if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddEvent to service (immediate): name={name}");
+				ArborInsightServiceClient.EventDeferred(name, meta ?? new Dictionary<string, string>());
+				return;
+			}
+			if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddEvent queued (standalone mode): name={name}");
+#endif
 			long eventTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(eventTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 			var payload = new EventPayload
@@ -62,10 +78,20 @@ namespace AbxrLib.Runtime.Data
 		}
 
 		/// <summary>
-		/// Add telemetry data to the batch
+		/// Add telemetry data to the batch.
+		/// When this session uses ArborInsightService we send directly to the service; otherwise we queue for Send() (standalone).
 		/// </summary>
 		public static void AddTelemetry(string name, Dictionary<string, string> meta)
 		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (Authentication.Authentication.UsingArborInsightServiceForData())
+			{
+				if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddTelemetry to service (immediate): name={name}");
+				ArborInsightServiceClient.AddTelemetryEntryDeferred(name, meta ?? new Dictionary<string, string>());
+				return;
+			}
+			if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddTelemetry queued (standalone mode): name={name}");
+#endif
 			long telemetryTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(telemetryTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 			var payload = new TelemetryPayload
@@ -91,10 +117,33 @@ namespace AbxrLib.Runtime.Data
 		}
 
 		/// <summary>
-		/// Add a log entry to the batch
+		/// Add a log entry to the batch.
+		/// When this session uses ArborInsightService we send directly to the service; otherwise we queue for Send() (standalone).
 		/// </summary>
 		public static void AddLog(string logLevel, string text, Dictionary<string, string> meta)
 		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (Authentication.Authentication.UsingArborInsightServiceForData())
+			{
+				if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddLog to service (immediate): level={logLevel}, text={((text ?? "").Length > 40 ? (text ?? "").Substring(0, 40) + "..." : text ?? "")}");
+				var dict = meta ?? new Dictionary<string, string>();
+				string level = logLevel?.ToUpperInvariant() ?? "";
+				if (level == "DEBUG")
+					ArborInsightServiceClient.LogDebugDeferred(text ?? "", dict);
+				else if (level == "INFO")
+					ArborInsightServiceClient.LogInfoDeferred(text ?? "", dict);
+				else if (level == "WARN")
+					ArborInsightServiceClient.LogWarnDeferred(text ?? "", dict);
+				else if (level == "ERROR")
+					ArborInsightServiceClient.LogErrorDeferred(text ?? "", dict);
+				else if (level == "CRITICAL")
+					ArborInsightServiceClient.LogCriticalDeferred(text ?? "", dict);
+				else
+					ArborInsightServiceClient.LogInfoDeferred(text ?? "", dict);
+				return;
+			}
+			if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddLog queued (standalone mode): level={logLevel}");
+#endif
 			long logTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(logTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 			var payload = new LogPayload
@@ -140,21 +189,59 @@ namespace AbxrLib.Runtime.Data
 			List<EventPayload> eventsToSend;
 			List<TelemetryPayload> telemetriesToSend;
 			List<LogPayload> logsToSend;
-			
+
 			lock (_lock)
 			{
 				eventsToSend = new List<EventPayload>(_eventPayloads);
 				telemetriesToSend = new List<TelemetryPayload>(_telemetryPayloads);
 				logsToSend = new List<LogPayload>(_logPayloads);
-				
+
 				_eventPayloads.Clear();
 				_telemetryPayloads.Clear();
 				_logPayloads.Clear();
 			}
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+			// When this session uses ArborInsightService, never do our own HTTP; push any queued items to the service.
+			if (Authentication.Authentication.UsingArborInsightServiceForData())
+			{
+				int e = eventsToSend.Count, t = telemetriesToSend.Count, l = logsToSend.Count;
+				if (DataBatcherDebugLog && (e + t + l) > 0)
+					Debug.Log($"AbxrLib: DataBatcher Send() pushing queued to ArborInsightService: events={e}, telemetry={t}, logs={l}");
+				PushQueuedToService(eventsToSend, telemetriesToSend, logsToSend);
+				yield break;
+			}
+#endif
+			if (DataBatcherDebugLog && (eventsToSend.Count + telemetriesToSend.Count + logsToSend.Count) > 0)
+				Debug.Log($"AbxrLib: DataBatcher Send() sending via HTTP: events={eventsToSend.Count}, telemetry={telemetriesToSend.Count}, logs={logsToSend.Count}");
+
 			// Retry logic for data sending - using separate coroutine to avoid yield in try-catch
 			yield return SendWithRetry(eventsToSend, telemetriesToSend, logsToSend);
 		}
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+		/// <summary>
+		/// Pushes queued events, telemetry, and logs to ArborInsightService via Deferred APIs (no HTTP from Unity).
+		/// </summary>
+		private static void PushQueuedToService(List<EventPayload> events, List<TelemetryPayload> telemetries, List<LogPayload> logs)
+		{
+			foreach (var p in events)
+				ArborInsightServiceClient.EventDeferred(p.name, p.meta ?? new Dictionary<string, string>());
+			foreach (var p in telemetries)
+				ArborInsightServiceClient.AddTelemetryEntryDeferred(p.name, p.meta ?? new Dictionary<string, string>());
+			foreach (var p in logs)
+			{
+				string level = (p.logLevel ?? "").ToUpperInvariant();
+				var dict = p.meta ?? new Dictionary<string, string>();
+				if (level == "DEBUG") ArborInsightServiceClient.LogDebugDeferred(p.text ?? "", dict);
+				else if (level == "INFO") ArborInsightServiceClient.LogInfoDeferred(p.text ?? "", dict);
+				else if (level == "WARN") ArborInsightServiceClient.LogWarnDeferred(p.text ?? "", dict);
+				else if (level == "ERROR") ArborInsightServiceClient.LogErrorDeferred(p.text ?? "", dict);
+				else if (level == "CRITICAL") ArborInsightServiceClient.LogCriticalDeferred(p.text ?? "", dict);
+				else ArborInsightServiceClient.LogInfoDeferred(p.text ?? "", dict);
+			}
+		}
+#endif
 
 		/// <summary>
 		/// Sends data with retry logic, avoiding yield statements in try-catch blocks

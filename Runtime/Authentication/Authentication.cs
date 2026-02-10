@@ -68,6 +68,20 @@ namespace AbxrLib.Runtime.Authentication
         // Auth handoff for external launcher apps
         private static bool _sessionUsedAuthHandoff = false;
 
+        /// <summary>
+        /// True only when we completed authentication via ArborInsightService this session.
+        /// Set once when auth succeeds through the service; never switches to true later.
+        /// Data (events, telemetry, logs) use the service only when this is true.
+        /// </summary>
+        private static bool _usedArborInsightServiceForSession = false;
+
+        /// <summary>
+        /// True when this session authenticated via ArborInsightService. When true, DataBatcher and
+        /// other data paths use the service only (no Unity HTTP). When false, we operate in standalone mode
+        /// for the whole session and do not switch to the service later.
+        /// </summary>
+        public static bool UsingArborInsightServiceForData() => _usedArborInsightServiceForSession;
+
         public static bool Authenticated()
         {
             // Check if we have a valid token and it hasn't expired
@@ -120,6 +134,9 @@ namespace AbxrLib.Runtime.Authentication
             
             // Reset auth handoff tracking
             _sessionUsedAuthHandoff = false;
+
+            // Session is no longer using ArborInsightService for data
+            _usedArborInsightServiceForSession = false;
             
             Debug.LogWarning("AbxrLib: Authentication state cleared - data transmission stopped");
         }
@@ -554,6 +571,7 @@ namespace AbxrLib.Runtime.Authentication
                         {
                             _responseData = new AuthResponse { Token = token, Secret = secret };
                             _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                            _usedArborInsightServiceForSession = true; // This session uses the service for data; never switch to service later if we had started standalone
                         }
                     }
                     catch { }
