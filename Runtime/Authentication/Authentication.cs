@@ -395,6 +395,10 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call Keybo
 
 		public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)
         {
+			string	szType = "",
+					szDomain = "",
+					szOriginalPrompt = "";
+
 Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() at the very beginning.");
             _keyboardAuthSuccess = false;
             _enteredAuthValue = null;
@@ -405,11 +409,7 @@ Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate(): that's just lovel
 				// Accept keyboard input and do second stage of authentication that uses it.
 				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
 				{
-					Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticate() AbxrInsightService.");
-					string szType = "",
-							szDomain = "",
-							szOriginalPrompt = "";
-
+Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticate() AbxrInsightService.");
 Debug.Log($"[AbxrInsightServiceClient] In first line of KeyboardAuthenticate() with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {_dictAuthMechanism?.Stringify() ?? "null"}");
 					// _dictAuthMechanism has been set up or we would not be in here.
 					_dictAuthMechanism.TryGetValue("type", out szType);
@@ -494,16 +494,35 @@ Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success
 			}
 			else
 			{
+				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
+				{
+					_dictAuthMechanism.TryGetValue("prompt", out szOriginalPrompt);
+				}
 Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() keyboardInput is null.");
 			}
-
+			try
+			{
 Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() past the if (keyboardInput) and about to go on to execute PresentKeyboard().");
-			string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
-            if (invalidQrCode) prompt = "Invalid QR Code\n";
-            prompt += _authMechanism.prompt;
+				string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
+Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() California oranges.");
+				if (invalidQrCode) prompt = "Invalid QR Code\n";
 Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticate().");
-            Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
-            _failedAuthAttempts++;
+				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
+				{
+					prompt += szOriginalPrompt;
+					Abxr.PresentKeyboard(prompt, szType, szDomain);
+				}
+				else
+				{
+					prompt += _authMechanism.prompt;
+					Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
+				}
+				_failedAuthAttempts++;
+			}
+			catch (Exception e)
+			{
+Debug.Log($"[AbxrInsightServiceClient] Kablooey in KeyboardAuthenticate() with message {e.Message}.");
+			}
         }
 
 
