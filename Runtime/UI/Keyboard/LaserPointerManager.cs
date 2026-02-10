@@ -132,7 +132,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _cachedRayInteractors = UnityEngine.Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
             _cacheValid = true;
             
-            Debug.Log($"AbxrLib: LaserPointerManager - Cached {_cachedRayInteractors.Length} ray interactors for app lifetime");
             return _cachedRayInteractors;
         }
 
@@ -182,8 +181,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     break;
                 }
             }
-
-            Debug.Log($"AbxrLib: LaserPointerManager - Managing {_originalStates.Count} ray interactors for keyboard interaction");
         }
 
         /// <summary>
@@ -230,7 +227,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     if (comp.gameObject.activeInHierarchy != originalState)
                     {
                         comp.gameObject.SetActive(originalState);
-                        Debug.Log($"AbxrLib: LaserPointerManager - Restored ray interactor on {comp.gameObject.name} to {(originalState ? "enabled" : "disabled")}");
                     }
                     keysToRemove.Add(rayInteractor); // Mark for removal after processing
                 }
@@ -257,8 +253,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
 
             _isManagingLaserPointers = false;
-
-            Debug.Log("AbxrLib: LaserPointerManager - Restored all ray interactors to original states");
         }
 
         /// <summary>
