@@ -20,6 +20,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.Storage;
@@ -783,14 +784,14 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         /// <param name="rawModules">Raw module data from authentication response</param>
         /// <returns>List of typed ModuleData objects sorted by order</returns>
-        public static List<Abxr.ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
+        public static List<AbxrLib.Runtime.Authentication.Authentication.ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
         {
-            var moduleDataList = new List<Abxr.ModuleData>();
+            var moduleDataList = new List<AbxrLib.Runtime.Authentication.Authentication.ModuleData>();
             if (rawModules == null) return moduleDataList;
 
             try
             {
-                var tempList = new List<Abxr.ModuleData>();
+                var tempList = new List<AbxrLib.Runtime.Authentication.Authentication.ModuleData>();
 			
                 foreach (var rawModule in rawModules)
                 {
@@ -804,11 +805,11 @@ namespace AbxrLib.Runtime.Core
                         int.TryParse(rawModule["order"].ToString(), out moduleOrder);
                     }
 
-                    tempList.Add(new Abxr.ModuleData(moduleId, moduleName, moduleTarget, moduleOrder));
+                    tempList.Add(new AbxrLib.Runtime.Authentication.Authentication.ModuleData { Id = moduleId, Name = moduleName, Target = moduleTarget, Order = moduleOrder });
                 }
 
                 // Sort modules by order field
-                moduleDataList = tempList.OrderBy(m => m.order).ToList();
+                moduleDataList = tempList.OrderBy(m => m.Order).ToList();
             }
             catch (Exception ex)
             {

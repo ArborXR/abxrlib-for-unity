@@ -31,6 +31,7 @@ using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.ServiceClient;
+using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
 using AbxrLib.Runtime.UI.ExitPoll;
@@ -1510,6 +1511,12 @@ public static partial class Abxr
 	/// <returns>MAC address is provided as a string.</returns>
 	public static string GetMacAddressRandom() =>
 		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetMacAddressRandom() : "";
+
+	/// <summary>Returns true when the AbxrInsight (Kotlin) service is fully initialized and ready for calls.</summary>
+	public static bool ServiceIsFullyInitialized() => AbxrInsightServiceClient.ServiceIsFullyInitialized();
+
+	/// <summary>Returns server time from the AbxrInsight service when initialized; otherwise an empty string.</summary>
+	public static string WhatTimeIsIt() => AbxrInsightServiceClient.ServiceIsFullyInitialized() ? AbxrInsightServiceClient.WhatTimeIsIt() : "";
 
 	/// <summary>Gets whether the device is SSO authenticated.</summary>
 	/// <returns>Whether the device is SSO authenticated.</returns>

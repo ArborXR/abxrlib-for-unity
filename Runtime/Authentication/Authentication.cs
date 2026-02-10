@@ -15,23 +15,6 @@
  * with automatic fallback mechanisms and robust error handling.
  */
 
-/*
- * Copyright (c) 2024 ArborXR. All rights reserved.
- * 
- * AbxrLib for Unity - Authentication System
- * 
- * This file handles user authentication, device identification, and session management
- * for AbxrLib. It provides comprehensive authentication capabilities including:
- * - Device fingerprinting and identification
- * - User authentication with LMS integration support
- * - Authentication handoff mechanisms for seamless user experience
- * - Session management and token handling
- * - Keyboard-based authentication UI
- * 
- * The authentication system supports both device-level and user-level authentication,
- * with automatic fallback mechanisms and robust error handling.
- */
-
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -47,7 +30,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Scripting;
 
-namespace AbxrLibLib.Runtime.Authentication
+namespace AbxrLib.Runtime.Authentication
 {
     [DefaultExecutionOrder(1)]
     public class Authentication : MonoBehaviour
@@ -67,7 +50,6 @@ namespace AbxrLibLib.Runtime.Authentication
         private static string _ipAddress;
         private static string _sessionId;
 		private static string _buildFingerprint;
-        private static string _buildFingerprint;
         private static int _failedAuthAttempts;
         
         private static AuthMechanism _authMechanism;
@@ -83,13 +65,7 @@ namespace AbxrLibLib.Runtime.Authentication
         public static AuthResponse GetAuthHandoffData() => _authHandoffData;
         
         // Complete authentication response data
-        private static List<Abxr.ModuleData> _authResponseModuleData;
-        
-        private static AuthResponse _responseData;
-        public static AuthResponse GetAuthResponse() => _responseData;
-        
-        // Store entered email/text value for email and text auth methods
-        private static string _enteredAuthValue;
+        private static List<ModuleData> _authResponseModuleData;
     
         private const string DeviceIdKey = "abxrlib_device_id";
 
@@ -207,24 +183,6 @@ Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt IsServ
                 Debug.Log("AbxrLib: Auto-start authentication is disabled. Call Abxr.StartAuthentication() manually when ready.");
             }
         }
-
-        private static IEnumerator DeferredAuthenticationSystem()
-        {
-            if (!Configuration.Instance.disableAutoStartAuthentication)
-            {
-                if (Configuration.Instance.authenticationStartDelay > 0)
-                {
-                    yield return new WaitForSeconds(Configuration.Instance.authenticationStartDelay);
-                }
-                
-                yield return Authenticate();
-            }
-            else
-            {
-                Debug.Log("AbxrLib: Auto-start authentication is disabled. Call Abxr.StartAuthentication() manually when ready.");
-            }
-        }
-
 
         public static void SetSessionId(string sessionId) => _sessionId = sessionId;
 
@@ -508,7 +466,7 @@ Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt IsServ
             //TODO Geolocation
         }
 
-        private static IEnumerator AuthRequest(bool withRetry = true, string userId = null, Dictionary<string, string> additionalUserData = nullbool withRetry = true, string userId = null, Dictionary<string, string> additionalUserData = null)
+        private static IEnumerator AuthRequest(bool withRetry = true, string userId = null, Dictionary<string, string> additionalUserData = null)
         {
             if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
@@ -555,7 +513,6 @@ Debug.Log($"[AbxrInsightServiceClient] In the beginning of AuthRequest().");
 				AbxrResult	eRet;
 				bool		bSuccess = false;
 				int			nRetrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
-				var			config = Configuration.Instance;
 
 				try
 				{
@@ -633,28 +590,6 @@ Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceClient.AuthRequest() su
 			{
 				if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
         
-				var data = new AuthPayload
-				{
-					appId = _appId,
-					orgId = _orgId,
-					authSecret = _authSecret,
-					deviceId = _deviceId,
-					userId = userId, // Include userId in payload if provided
-					tags = _deviceTags,
-					sessionId = _sessionId,
-					partner = _partner.ToString().ToLower(),
-					ipAddress = _ipAddress,
-					deviceModel = _deviceModel,
-					geolocation = new Dictionary<string, string>(),
-					osVersion = SystemInfo.operatingSystem,
-					xrdmVersion = _xrdmVersion,
-					appVersion = Application.version,
-					unityVersion = Application.unityVersion,
-					abxrLibType = "unity",
-					abxrLibVersion = AbxrLibVersion.Version,
-					authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
-				};
-        
             string json = JsonConvert.SerializeObject(data);
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             
@@ -717,6 +652,7 @@ Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceClient.AuthRequest() su
                 int retrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
                 Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {retrySeconds} seconds...");
                 yield return new WaitForSeconds(retrySeconds);
+            }
             }
         }
         
@@ -826,8 +762,6 @@ Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceClient.AuthRequest() su
             }
             
             return errorMessage;
-            
-            return errorMessage;
         }
 
         private static IEnumerator GetConfiguration()
@@ -907,7 +841,7 @@ Debug.Log($"[AbxrInsightServiceClient] Не очень хорошо, GetConfigur
 			}
 		}
 
-		public static void SetAuthHeaders(UnityWebRequest request, string json = "")
+        public static void SetAuthHeaders(UnityWebRequest request, string json = "")
         {
             // Check if we have valid authentication tokens
             if (string.IsNullOrEmpty(_responseData.Token) || string.IsNullOrEmpty(_responseData.Secret))
@@ -937,28 +871,6 @@ Debug.Log($"[AbxrInsightServiceClient] Не очень хорошо, GetConfigur
             if (_authMechanism == null && string.IsNullOrEmpty(userId)) return dict;
 
             if (!string.IsNullOrEmpty(userId))
-            {
-                dict["type"] = "custom";
-                dict["prompt"] = userId;
-                if (additionalUserData != null)
-                {
-                    foreach (var item in additionalUserData)
-                    {
-                        if (item.Key != "type" && item.Key != "prompt")
-                        {
-                            dict[item.Key] = item.Value;
-                        }
-                    }
-                }
-
-                // For custom auth, use "user" as default inputSource if not provided
-                dict["inputSource"] = "user";
-                return dict;
-            }
-
-            if (_authMechanism == null && string.IsNullOrEmpty(userId)) return dict;
-
-            if (_authMechanism == null && !string.IsNullOrEmpty(userId))
             {
                 dict["type"] = "custom";
                 dict["prompt"] = userId;
