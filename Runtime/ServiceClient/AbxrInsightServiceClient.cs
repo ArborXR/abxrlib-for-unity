@@ -41,6 +41,11 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 		/// <returns></returns>
 		public static bool Bind(string explicitPackage = null)
 		{
+			if (_client == null)
+			{
+				Debug.LogWarning("[AbxrInsightServiceClient] Bind() skipped: bridge not initialized (Unity AbxrInsightService AAR may be missing from Plugins/Android).");
+				return false;
+			}
 			return _client.Call<bool>("bind", null, explicitPackage); // listener null for brevity
 		}
 		/// <summary>
@@ -52,7 +57,7 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 			return (_client != null);
 		}
 
-		public static void Unbind() => _client.Call("unbind");
+		public static void Unbind() { if (_client != null) _client.Call("unbind"); }
 		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) => _client.Call<int>("basicTypes", anInt, aLong, aBoolean, aFloat, aDouble, aString);
 		public static string WhatTimeIsIt() => _client.Call<string>("whatTimeIsIt");
 		public static bool IsServiceBound() => _client.Call<bool>("isServiceBound");
@@ -327,6 +332,11 @@ namespace AbxrLib.Runtime.ServiceClient.AbxrInsightService
 			{
 				Debug.Log($"[AbxrInsightServiceClient] Start() called on GameObject: {gameObject.name}");
 				AbxrInsightServiceBridge.Init();
+				if (!AbxrInsightServiceBridge.IsInitialized())
+				{
+					Debug.LogWarning("[AbxrInsightServiceClient] Init failed (ClassNotFoundException usually means the AbxrInsightService unity-client AAR is not in Assets/Plugins/Android). Skipping Bind().");
+					return;
+				}
 				Debug.Log($"[AbxrInsightServiceClient] about to call AbxrInsightServiceBridge.Bind() on GameObject: {gameObject.name}");
 				bOk = AbxrInsightServiceBridge.Bind();
 				Debug.Log($"[AbxrInsightServiceClient] Bind() result: {bOk}");
