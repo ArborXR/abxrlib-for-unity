@@ -497,6 +497,8 @@ Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success
 				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
 				{
 					_dictAuthMechanism.TryGetValue("prompt", out szOriginalPrompt);
+					_dictAuthMechanism.TryGetValue("type", out szType);
+					_dictAuthMechanism.TryGetValue("domain", out szDomain);
 				}
 Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() keyboardInput is null.");
 			}
@@ -506,14 +508,15 @@ Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() past the if (keybo
 				string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
 Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() California oranges.");
 				if (invalidQrCode) prompt = "Invalid QR Code\n";
-Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticate().");
 				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
 				{
+Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticate() service flow.");
 					prompt += szOriginalPrompt;
 					Abxr.PresentKeyboard(prompt, szType, szDomain);
 				}
 				else
 				{
+Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticate() non-service flow.");
 					prompt += _authMechanism.prompt;
 					Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
 				}
