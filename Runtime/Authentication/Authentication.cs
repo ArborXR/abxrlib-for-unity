@@ -23,7 +23,7 @@ using System.Reflection;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.ServiceClient;
-using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
+using AbxrLib.Runtime.ServiceClient.ArborInsightService;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -85,13 +85,13 @@ namespace AbxrLib.Runtime.Authentication
         public static string GetAuthMechanismType() => _authMechanism?.type;
 
         /// <summary>
-        /// Returns true when the AbxrInsight (Kotlin) service is fully initialized and ready for calls.
+        /// Returns true when the ArborInsight (Kotlin) service is fully initialized and ready for calls.
         /// </summary>
         public static bool ServiceIsFullyInitialized()
         {
             try
             {
-                return AbxrInsightServiceClient.ServiceIsFullyInitialized();
+                return ArborInsightServiceClient.ServiceIsFullyInitialized();
             }
             catch
             {
@@ -499,24 +499,24 @@ namespace AbxrLib.Runtime.Authentication
             {
                 try
                 {
-                    AbxrInsightServiceClient.set_RestUrl("https://lib-backend.xrdm.app/");
-                    AbxrInsightServiceClient.set_AppToken(_appToken);
-                    AbxrInsightServiceClient.set_AppID(_appId);
-                    AbxrInsightServiceClient.set_OrgID(_orgId);
-                    AbxrInsightServiceClient.set_AuthSecret(_authSecret);
-                    AbxrInsightServiceClient.set_DeviceID(_deviceId);
-                    if (userId != null) AbxrInsightServiceClient.set_UserID(userId);
-                    AbxrInsightServiceClient.set_Tags(_deviceTags?.ToList() ?? new List<string>());
-                    AbxrInsightServiceClient.set_Partner((int)_partner);
-                    AbxrInsightServiceClient.set_IpAddress(_ipAddress);
-                    AbxrInsightServiceClient.set_DeviceModel(_deviceModel);
-                    AbxrInsightServiceClient.set_GeoLocation(new Dictionary<string, string>());
-                    AbxrInsightServiceClient.set_OsVersion(SystemInfo.operatingSystem);
-                    AbxrInsightServiceClient.set_XrdmVersion(_xrdmVersion);
-                    AbxrInsightServiceClient.set_AppVersion(Application.version);
-                    AbxrInsightServiceClient.set_UnityVersion(Application.unityVersion);
-                    AbxrInsightServiceClient.set_AbxrLibType("unity");
-                    AbxrInsightServiceClient.set_AbxrLibVersion(AbxrLibVersion.Version);
+                    ArborInsightServiceClient.set_RestUrl("https://lib-backend.xrdm.app/");
+                    ArborInsightServiceClient.set_AppToken(_appToken);
+                    ArborInsightServiceClient.set_AppID(_appId);
+                    ArborInsightServiceClient.set_OrgID(_orgId);
+                    ArborInsightServiceClient.set_AuthSecret(_authSecret);
+                    ArborInsightServiceClient.set_DeviceID(_deviceId);
+                    if (userId != null) ArborInsightServiceClient.set_UserID(userId);
+                    ArborInsightServiceClient.set_Tags(_deviceTags?.ToList() ?? new List<string>());
+                    ArborInsightServiceClient.set_Partner((int)_partner);
+                    ArborInsightServiceClient.set_IpAddress(_ipAddress);
+                    ArborInsightServiceClient.set_DeviceModel(_deviceModel);
+                    ArborInsightServiceClient.set_GeoLocation(new Dictionary<string, string>());
+                    ArborInsightServiceClient.set_OsVersion(SystemInfo.operatingSystem);
+                    ArborInsightServiceClient.set_XrdmVersion(_xrdmVersion);
+                    ArborInsightServiceClient.set_AppVersion(Application.version);
+                    ArborInsightServiceClient.set_UnityVersion(Application.unityVersion);
+                    ArborInsightServiceClient.set_AbxrLibType("unity");
+                    ArborInsightServiceClient.set_AbxrLibVersion(AbxrLibVersion.Version);
                 }
                 catch (Exception ex)
                 {
@@ -528,7 +528,7 @@ namespace AbxrLib.Runtime.Authentication
                 bool bSuccess = false;
                 while (!bSuccess)
                 {
-                    var eRet = (AbxrResult)AbxrInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(authMechanismDict));
+                    var eRet = (AbxrResult)ArborInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(authMechanismDict));
                     if (eRet == AbxrResult.OK)
                     {
                         _keyboardAuthSuccess = true;
@@ -548,8 +548,8 @@ namespace AbxrLib.Runtime.Authentication
                 {
                     try
                     {
-                        string token = AbxrInsightServiceClient.get_ApiToken();
-                        string secret = AbxrInsightServiceClient.get_ApiSecret();
+                        string token = ArborInsightServiceClient.get_ApiToken();
+                        string secret = ArborInsightServiceClient.get_ApiSecret();
                         if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(secret))
                         {
                             _responseData = new AuthResponse { Token = token, Secret = secret };
@@ -738,7 +738,7 @@ namespace AbxrLib.Runtime.Authentication
         {
             if (ServiceIsFullyInitialized())
             {
-                _dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
+                _dictAuthMechanism = ArborInsightServiceClient.get_AppConfigAuthMechanism();
                 if (_dictAuthMechanism != null && _dictAuthMechanism.Count > 0)
                 {
                     _authMechanism = new AuthMechanism();

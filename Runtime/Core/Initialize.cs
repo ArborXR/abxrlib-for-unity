@@ -3,7 +3,7 @@ using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.ServiceClient;
-using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
+using AbxrLib.Runtime.ServiceClient.ArborInsightService;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
 using AbxrLib.Runtime.UI.ExitPoll;
@@ -33,7 +33,7 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler"); // Needs to come before Auth in case auth needs keyboard
 #if UNITY_ANDROID && !UNITY_EDITOR
             ObjectAttacher.Attach<ArborServiceClient>("ArborServiceClient");
-            ObjectAttacher.Attach<AbxrInsightServiceClient>("AbxrInsightServiceClient");
+            ObjectAttacher.Attach<ArborInsightServiceClient>("ArborInsightServiceClient");
 #if PICO_ENTERPRISE_SDK_3
             ObjectAttacher.Attach<PicoQRCodeReader>("PicoQRCodeReader");
 #endif
