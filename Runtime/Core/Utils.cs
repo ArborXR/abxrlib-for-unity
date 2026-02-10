@@ -20,6 +20,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using AbxrLib.Runtime.Authentication;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.Storage;
@@ -30,6 +31,137 @@ using UnityEngine.Networking;
 namespace AbxrLib.Runtime.Core
 {
     /// <summary>
+    /// Extension methods for string serialization and deserialization
+    /// </summary>
+    public static class StringExtensions
+    {
+        /// <summary>
+        /// Extension method for escaping strings in StringList and AbxrDictStrings for serializing into comma-separated single string.
+        /// </summary>
+        public static string EscapeForSerialization(this string str)
+        {
+            StringBuilder sOut = new StringBuilder();
+            foreach (char c in str)
+            {
+                switch (c)
+                {
+                    case '\\':
+                        sOut.Append("\\\\");
+                        break;
+                    case '\"':
+                        sOut.Append("\\\"");
+                        break;
+                    case ',':
+                    case '=':
+                        sOut.Append(c);
+                        break;
+                    default:
+                        sOut.Append(c);
+                        break;
+                }
+            }
+            return sOut.ToString();
+        }
+
+        /// <summary>
+        /// Extension method for de-escaping strings into StringList from serialized comma-separated single string.
+        /// </summary>
+        public static void UnescapeAndDeserialize(this string str, Action<string> addStringAction)
+        {
+            StringBuilder sOut = new StringBuilder();
+            bool bEscapedState = false;
+            foreach (char c in str)
+            {
+                switch (c)
+                {
+                    case '\\':
+                        if (bEscapedState) { sOut.Append(c); bEscapedState = false; }
+                        else bEscapedState = true;
+                        break;
+                    case ',':
+                        if (bEscapedState) sOut.Append(c);
+                        else { addStringAction(sOut.ToString()); sOut.Clear(); }
+                        bEscapedState = false;
+                        break;
+                    default:
+                        sOut.Append(c);
+                        bEscapedState = false;
+                        break;
+                }
+            }
+            if (sOut.Length > 0) addStringAction(sOut.ToString());
+        }
+
+        /// <summary>
+        /// Extension method for de-escaping strings into AbxrDictStrings from serialized comma-separated single string.
+        /// </summary>
+        public static void UnescapeAndDeserialize(this string str, Action<string, string> addKeyValueAction)
+        {
+            StringBuilder sFirst = new StringBuilder();
+            StringBuilder sSecond = new StringBuilder();
+            bool bEscapedState = false;
+            bool bOnFirst = true;
+            foreach (char c in str)
+            {
+                switch (c)
+                {
+                    case '\\':
+                        if (bEscapedState) { if (bOnFirst) sFirst.Append(c); else sSecond.Append(c); bEscapedState = false; }
+                        else bEscapedState = true;
+                        break;
+                    case '=':
+                        if (bEscapedState) { if (bOnFirst) sFirst.Append(c); else sSecond.Append(c); }
+                        else bOnFirst = false;
+                        bEscapedState = false;
+                        break;
+                    case ',':
+                        if (bEscapedState) { if (bOnFirst) sFirst.Append(c); else sSecond.Append(c); }
+                        else
+                        {
+                            addKeyValueAction(sFirst.ToString(), sSecond.ToString());
+                            sFirst.Clear();
+                            sSecond.Clear();
+                            bOnFirst = true;
+                        }
+                        bEscapedState = false;
+                        break;
+                    default:
+                        if (bOnFirst) sFirst.Append(c); else sSecond.Append(c);
+                        bEscapedState = false;
+                        break;
+                }
+            }
+            if (sFirst.Length > 0 && sSecond.Length > 0 && !bOnFirst)
+                addKeyValueAction(sFirst.ToString(), sSecond.ToString());
+        }
+
+        /// <summary>
+        /// Extension method for converting Dictionary to useful-for-debug-output form.
+        /// </summary>
+        public static string Stringify(this Dictionary<string, string> dict)
+        {
+            StringBuilder sb = new StringBuilder();
+            bool bFirst = true;
+            sb.Append("{");
+            foreach (KeyValuePair<string, string> kvp in dict)
+            {
+                if (!bFirst) sb.Append(",");
+                else bFirst = false;
+                sb.Append($"{kvp.Key}={kvp.Value}");
+            }
+            sb.Append("}");
+            return sb.ToString();
+        }
+
+        public static List<string> ToList(this string[] asz)
+        {
+            var lszRet = new List<string>();
+            if (asz != null) foreach (string s in asz) lszRet.Add(s);
+            return lszRet;
+        }
+    }
+
+    /// <summary>
     /// Utility functions and helper methods for AbxrLib
     /// 
     /// This class provides low-level utility functions used throughout the AbxrLib system,
@@ -38,6 +170,67 @@ namespace AbxrLib.Runtime.Core
     /// </summary>
     public static class Utils
     {
+        public static string StringListToString(List<string> lsz)
+        {
+            string result = "";
+            if (lsz != null)
+            {
+                foreach (string sz in lsz)
+                {
+                    if (!string.IsNullOrEmpty(result)) result += ",";
+                    result += sz.EscapeForSerialization();
+                }
+            }
+            return result;
+        }
+
+        public static List<string> StringToStringList(string szList)
+        {
+            var lszRet = new List<string>();
+            if (szList != null) szList.UnescapeAndDeserialize(s => lszRet.Add(s));
+            return lszRet;
+        }
+
+        public static string StringArrayToString(string[] asz)
+        {
+            string result = "";
+            if (asz != null)
+            {
+                foreach (string sz in asz)
+                {
+                    if (!string.IsNullOrEmpty(result)) result += ",";
+                    result += sz.EscapeForSerialization();
+                }
+            }
+            return result;
+        }
+
+        public static string[] StringToStringArray(string szList) => StringToStringList(szList).ToArray();
+
+        public static string DictToString(Dictionary<string, string> dict)
+        {
+            string result = "";
+            if (dict != null)
+            {
+                foreach (KeyValuePair<string, string> kvp in dict)
+                {
+                    if (!string.IsNullOrEmpty(result)) result += ",";
+                    result += $"{kvp.Key.EscapeForSerialization()}={kvp.Value.EscapeForSerialization()}";
+                }
+            }
+            return result;
+        }
+
+        public static Dictionary<string, string> StringToDict(string szDict)
+        {
+            var dictRet = new Dictionary<string, string>();
+            if (szDict != null) szDict.UnescapeAndDeserialize((k, v) => dictRet.Add(k, v));
+            return dictRet;
+        }
+
+        public static long filetime_to_timet(long ft) => ft / 10000000L - 11644473600L;
+        public static long timet_to_filetime(long tt) => (tt + 11644473600L) * 10000000L;
+
         public static string ComputeSha256Hash(string rawData)
         {
             using var sha256 = SHA256.Create();
@@ -503,7 +696,37 @@ namespace AbxrLib.Runtime.Core
                 Debug.LogWarning("AbxrLib: Cannot send data - CoroutineRunner.Instance is null");
             }
         }
-        
+
+        /// <summary>
+        /// Convert raw module dictionaries to typed ModuleData objects.
+        /// Internal helper for processing authentication response modules. Modules are sorted by order.
+        /// </summary>
+        public static List<Authentication.Authentication.ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
+        {
+            var moduleDataList = new List<Authentication.Authentication.ModuleData>();
+            if (rawModules == null) return moduleDataList;
+            try
+            {
+                var tempList = new List<Authentication.Authentication.ModuleData>();
+                foreach (var rawModule in rawModules)
+                {
+                    var moduleId = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
+                    var moduleName = rawModule.ContainsKey("name") ? rawModule["name"]?.ToString() : "";
+                    var moduleTarget = rawModule.ContainsKey("target") ? rawModule["target"]?.ToString() : "";
+                    var moduleOrder = 0;
+                    if (rawModule.ContainsKey("order") && rawModule["order"] != null)
+                        int.TryParse(rawModule["order"].ToString(), out moduleOrder);
+                    tempList.Add(new Authentication.Authentication.ModuleData { Id = moduleId, Name = moduleName, Target = moduleTarget, Order = moduleOrder });
+                }
+                moduleDataList = tempList.OrderBy(m => m.Order).ToList();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Failed to convert module data: {ex.Message}\nException Type: {ex.GetType().Name}\nStack Trace: {ex.StackTrace ?? "No stack trace available"}");
+            }
+            return moduleDataList;
+        }
+
         /// <summary>
         /// Validates that a string is a valid HTTP/HTTPS URL
         /// </summary>

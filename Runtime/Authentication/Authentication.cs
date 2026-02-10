@@ -23,6 +23,7 @@ using System.Reflection;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.ServiceClient;
+using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -50,6 +51,8 @@ namespace AbxrLib.Runtime.Authentication
         
         private static AuthMechanism _authMechanism;
         private static DateTime _tokenExpiry = DateTime.MinValue;
+        
+        private static Dictionary<string, string> _dictAuthMechanism;
         
         private static AuthResponse _responseData;
         public static AuthResponse GetAuthResponse() => _responseData;
@@ -80,6 +83,21 @@ namespace AbxrLib.Runtime.Authentication
         /// Gets the authentication mechanism type, or null if no mechanism is set
         /// </summary>
         public static string GetAuthMechanismType() => _authMechanism?.type;
+
+        /// <summary>
+        /// Returns true when the AbxrInsight (Kotlin) service is fully initialized and ready for calls.
+        /// </summary>
+        public static bool ServiceIsFullyInitialized()
+        {
+            try
+            {
+                return AbxrInsightServiceClient.ServiceIsFullyInitialized();
+            }
+            catch
+            {
+                return false;
+            }
+        }
         
         /// <summary>
         /// Clears authentication state and stops data transmission
@@ -118,7 +136,19 @@ namespace AbxrLib.Runtime.Authentication
 #endif
             SetSessionData();
             _initialized = true;
-            
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            for (int i = 0; i < 40; i++)
+            {
+                try
+                {
+                    if (ServiceIsFullyInitialized()) break;
+                }
+                catch { }
+                System.Threading.Thread.Sleep(250);
+            }
+#endif
+
             // Start the deferred authentication system
             StartCoroutine(DeferredAuthenticationSystem());
             StartCoroutine(PollForReAuth());
@@ -464,7 +494,73 @@ namespace AbxrLib.Runtime.Authentication
                 SSOAccessToken = ssoAccessToken,  // Include SSO access token if SSO is active
                 authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
             };
-        
+
+            if (ServiceIsFullyInitialized())
+            {
+                try
+                {
+                    AbxrInsightServiceClient.set_RestUrl("https://lib-backend.xrdm.app/");
+                    AbxrInsightServiceClient.set_AppToken(_appToken);
+                    AbxrInsightServiceClient.set_AppID(_appId);
+                    AbxrInsightServiceClient.set_OrgID(_orgId);
+                    AbxrInsightServiceClient.set_AuthSecret(_authSecret);
+                    AbxrInsightServiceClient.set_DeviceID(_deviceId);
+                    if (userId != null) AbxrInsightServiceClient.set_UserID(userId);
+                    AbxrInsightServiceClient.set_Tags(_deviceTags?.ToList() ?? new List<string>());
+                    AbxrInsightServiceClient.set_Partner((int)_partner);
+                    AbxrInsightServiceClient.set_IpAddress(_ipAddress);
+                    AbxrInsightServiceClient.set_DeviceModel(_deviceModel);
+                    AbxrInsightServiceClient.set_GeoLocation(new Dictionary<string, string>());
+                    AbxrInsightServiceClient.set_OsVersion(SystemInfo.operatingSystem);
+                    AbxrInsightServiceClient.set_XrdmVersion(_xrdmVersion);
+                    AbxrInsightServiceClient.set_AppVersion(Application.version);
+                    AbxrInsightServiceClient.set_UnityVersion(Application.unityVersion);
+                    AbxrInsightServiceClient.set_AbxrLibType("unity");
+                    AbxrInsightServiceClient.set_AbxrLibVersion(AbxrLibVersion.Version);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: Failed to set service properties for auth: {ex.Message}");
+                }
+
+                var authMechanismDict = CreateAuthMechanismDict(userId, additionalUserData);
+                int nRetrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
+                bool bSuccess = false;
+                while (!bSuccess)
+                {
+                    var eRet = (AbxrResult)AbxrInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(authMechanismDict));
+                    if (eRet == AbxrResult.OK)
+                    {
+                        _keyboardAuthSuccess = true;
+                        bSuccess = true;
+                        break;
+                    }
+                    if (!withRetry)
+                    {
+                        Abxr.OnAuthCompleted?.Invoke(false, null);
+                        break;
+                    }
+                    Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {nRetrySeconds} seconds...");
+                    yield return new WaitForSeconds(nRetrySeconds);
+                }
+
+                if (bSuccess)
+                {
+                    try
+                    {
+                        string token = AbxrInsightServiceClient.get_ApiToken();
+                        string secret = AbxrInsightServiceClient.get_ApiSecret();
+                        if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(secret))
+                        {
+                            _responseData = new AuthResponse { Token = token, Secret = secret };
+                            _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                        }
+                    }
+                    catch { }
+                }
+                yield break;
+            }
+
             string json = JsonConvert.SerializeObject(data);
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             
@@ -640,6 +736,21 @@ namespace AbxrLib.Runtime.Authentication
 
         private static IEnumerator GetConfiguration()
         {
+            if (ServiceIsFullyInitialized())
+            {
+                _dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
+                if (_dictAuthMechanism != null && _dictAuthMechanism.Count > 0)
+                {
+                    _authMechanism = new AuthMechanism();
+                    if (_dictAuthMechanism.TryGetValue("type", out var type)) _authMechanism.type = type;
+                    if (_dictAuthMechanism.TryGetValue("prompt", out var prompt)) _authMechanism.prompt = prompt;
+                    if (_dictAuthMechanism.TryGetValue("domain", out var domain)) _authMechanism.domain = domain;
+                    if (_dictAuthMechanism.TryGetValue("inputSource", out var inputSource)) _authMechanism.inputSource = inputSource;
+                    if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
+                }
+                yield break;
+            }
+
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
             
             // Create request and handle creation errors
@@ -843,6 +954,7 @@ namespace AbxrLib.Runtime.Authentication
             public string orgId;
             public string authSecret;
             public string deviceId;
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public string userId;
             public string SSOAccessToken;  // optional - SSO access token when SSO is active
             public string[] tags;
