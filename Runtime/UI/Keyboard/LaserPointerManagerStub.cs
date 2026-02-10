@@ -56,6 +56,15 @@ namespace AbxrLib.Runtime.UI.Keyboard
         }
 
         /// <summary>
+        /// Ensures all World Space canvases under the given root have TrackedDeviceGraphicRaycaster.
+        /// Stub implementation - no-op when XR Interaction Toolkit is not available.
+        /// </summary>
+        public static void EnsureTrackedDeviceGraphicRaycasterOnCanvases(GameObject root)
+        {
+            // No-op for stub implementation
+        }
+
+        /// <summary>
         /// Restores laser pointers to their original state before keyboard/PIN pad interaction.
         /// Stub implementation - no-op.
         /// </summary>

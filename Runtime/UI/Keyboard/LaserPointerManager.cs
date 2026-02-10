@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
+using AbxrLib.Runtime.Core;
 
 namespace AbxrLib.Runtime.UI.Keyboard
 {
-#if UNITY_XR_INTERACTION_TOOLKIT
+#if XR_TOOLKIT_AVAILABLE
     /// <summary>
     /// Manages XR ray interactors (laser pointers) to ensure they are enabled during keyboard/PIN pad interactions.
     /// Automatically detects and restores the original state when interactions are complete.
@@ -94,7 +95,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// <returns>True if XR Interaction Toolkit is available, false otherwise</returns>
         public static bool IsXRInteractionToolkitAvailable()
         {
-            return true; // Always true since we're inside the UNITY_XR_INTERACTION_TOOLKIT block
+            return true; // Always true since we're inside the XR_TOOLKIT_AVAILABLE block
         }
 
         /// <summary>
@@ -131,7 +132,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _cachedRayInteractors = UnityEngine.Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
             _cacheValid = true;
             
-            Debug.Log($"AbxrLib: LaserPointerManager - Cached {_cachedRayInteractors.Length} ray interactors for app lifetime");
             return _cachedRayInteractors;
         }
 
@@ -181,8 +181,26 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     break;
                 }
             }
+        }
 
-            Debug.Log($"AbxrLib: LaserPointerManager - Managing {_originalStates.Count} ray interactors for keyboard interaction");
+        /// <summary>
+        /// Ensures all World Space canvases under the given root have a TrackedDeviceGraphicRaycaster
+        /// so that XR controller rays hit UI elements (otherwise the laser passes through).
+        /// Call this after instantiating the keyboard or PIN pad prefab.
+        /// </summary>
+        public static void EnsureTrackedDeviceGraphicRaycasterOnCanvases(GameObject root)
+        {
+            if (root == null) return;
+            var canvases = root.GetComponentsInChildren<Canvas>(true);
+            foreach (var canvas in canvases)
+            {
+                if (canvas.renderMode != RenderMode.WorldSpace)
+                    continue;
+                if (canvas.GetComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>() != null)
+                    continue;
+                canvas.gameObject.AddComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>();
+                Debug.Log($"AbxrLib: LaserPointerManager - Added TrackedDeviceGraphicRaycaster to canvas on {canvas.gameObject.name}");
+            }
         }
 
         /// <summary>
@@ -202,13 +220,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 object rayInteractor = kvp.Key;
                 bool originalState = kvp.Value;
 
-                if (rayInteractor != null)
+                var comp = rayInteractor as Component;
+                if (comp != null)
                 {
                     // Restore original state
-                    if (rayInteractor.gameObject.activeInHierarchy != originalState)
+                    if (comp.gameObject.activeInHierarchy != originalState)
                     {
-                        rayInteractor.gameObject.SetActive(originalState);
-                        Debug.Log($"AbxrLib: LaserPointerManager - Restored ray interactor on {rayInteractor.gameObject.name} to {(originalState ? "enabled" : "disabled")}");
+                        comp.gameObject.SetActive(originalState);
                     }
                     keysToRemove.Add(rayInteractor); // Mark for removal after processing
                 }
@@ -235,8 +253,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
 
             _isManagingLaserPointers = false;
-
-            Debug.Log("AbxrLib: LaserPointerManager - Restored all ray interactors to original states");
         }
 
         /// <summary>
@@ -270,6 +286,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public static void ForceCleanup() => LaserPointerManagerStub.ForceCleanup();
         public static void OnSceneChanged() => LaserPointerManagerStub.OnSceneChanged();
         public static bool IsXRInteractionToolkitAvailable() => LaserPointerManagerStub.IsXRInteractionToolkitAvailable();
+        public static void EnsureTrackedDeviceGraphicRaycasterOnCanvases(GameObject root) => LaserPointerManagerStub.EnsureTrackedDeviceGraphicRaycasterOnCanvases(root);
         public static void EnableLaserPointersForInteraction() => LaserPointerManagerStub.EnableLaserPointersForInteraction();
         public static void RestoreLaserPointerStates() => LaserPointerManagerStub.RestoreLaserPointerStates();
         public static bool IsManagingLaserPointers => LaserPointerManagerStub.IsManagingLaserPointers;

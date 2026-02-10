@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using System;
 using System.Collections;
 using AbxrLib.Runtime.Common;
@@ -124,7 +124,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
                 _prompt = _pinPadInstance.GetComponentsInChildren<TextMeshProUGUI>()
                     .FirstOrDefault(t => t.name == "DynamicMessage");
-                
+                LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_pinPadInstance);
             }
             else if (keyboardType == KeyboardType.FullKeyboard)
             {
@@ -140,6 +140,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     
                 _prompt = _keyboardInstance.GetComponentsInChildren<TextMeshProUGUI>()
                     .FirstOrDefault(t => t.name == "DynamicMessage");
+                LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_keyboardInstance);
             }
         
             // Enable laser pointers for keyboard/PIN pad interaction

@@ -17,6 +17,9 @@ using System.Collections.Generic;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Data;
 using UnityEngine;
+#if UNITY_ANDROID && !UNITY_EDITOR
+using AbxrLib.Runtime.ServiceClient.ArborInsightService;
+#endif
 
 namespace AbxrLib.Runtime.Core
 {
@@ -30,6 +33,13 @@ namespace AbxrLib.Runtime.Core
         {
             Debug.Log("AbxrLib: Application quitting, automatically closing running events");
             CloseRunningEvents();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // When this session used ArborInsightService for auth/data, ask the service to flush before we exit.
+            if (AbxrLib.Runtime.Authentication.Authentication.UsingArborInsightServiceForData())
+            {
+                ArborInsightServiceClient.ForceSendUnsent();
+            }
+#endif
         }
 
         /// <summary>

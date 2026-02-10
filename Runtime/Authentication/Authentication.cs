@@ -23,6 +23,7 @@ using System.Reflection;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.ServiceClient;
+using AbxrLib.Runtime.ServiceClient.ArborInsightService;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -51,6 +52,8 @@ namespace AbxrLib.Runtime.Authentication
         private static AuthMechanism _authMechanism;
         private static DateTime _tokenExpiry = DateTime.MinValue;
         
+        private static Dictionary<string, string> _dictAuthMechanism;
+        
         private static AuthResponse _responseData;
         public static AuthResponse GetAuthResponse() => _responseData;
         
@@ -64,6 +67,20 @@ namespace AbxrLib.Runtime.Authentication
         
         // Auth handoff for external launcher apps
         private static bool _sessionUsedAuthHandoff = false;
+
+        /// <summary>
+        /// True only when we completed authentication via ArborInsightService this session.
+        /// Set once when auth succeeds through the service; never switches to true later.
+        /// Data (events, telemetry, logs) use the service only when this is true.
+        /// </summary>
+        private static bool _usedArborInsightServiceForSession = false;
+
+        /// <summary>
+        /// True when this session authenticated via ArborInsightService. When true, DataBatcher and
+        /// other data paths use the service only (no Unity HTTP). When false, we operate in standalone mode
+        /// for the whole session and do not switch to the service later.
+        /// </summary>
+        public static bool UsingArborInsightServiceForData() => _usedArborInsightServiceForSession;
 
         public static bool Authenticated()
         {
@@ -80,6 +97,21 @@ namespace AbxrLib.Runtime.Authentication
         /// Gets the authentication mechanism type, or null if no mechanism is set
         /// </summary>
         public static string GetAuthMechanismType() => _authMechanism?.type;
+
+        /// <summary>
+        /// Returns true when the ArborInsight (Kotlin) service is fully initialized and ready for calls.
+        /// </summary>
+        public static bool ServiceIsFullyInitialized()
+        {
+            try
+            {
+                return ArborInsightServiceClient.ServiceIsFullyInitialized();
+            }
+            catch
+            {
+                return false;
+            }
+        }
         
         /// <summary>
         /// Clears authentication state and stops data transmission
@@ -102,6 +134,9 @@ namespace AbxrLib.Runtime.Authentication
             
             // Reset auth handoff tracking
             _sessionUsedAuthHandoff = false;
+
+            // Session is no longer using ArborInsightService for data
+            _usedArborInsightServiceForSession = false;
             
             Debug.LogWarning("AbxrLib: Authentication state cleared - data transmission stopped");
         }
@@ -118,7 +153,23 @@ namespace AbxrLib.Runtime.Authentication
 #endif
             SetSessionData();
             _initialized = true;
-            
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // Only wait for service readiness if the ArborInsightService APK is installed; otherwise fail fast and use standalone mode.
+            if (ArborInsightServiceClient.IsServicePackageInstalled())
+            {
+                for (int i = 0; i < 40; i++)
+                {
+                    try
+                    {
+                        if (ServiceIsFullyInitialized()) break;
+                    }
+                    catch { }
+                    System.Threading.Thread.Sleep(250);
+                }
+            }
+#endif
+
             // Start the deferred authentication system
             StartCoroutine(DeferredAuthenticationSystem());
             StartCoroutine(PollForReAuth());
@@ -464,7 +515,74 @@ namespace AbxrLib.Runtime.Authentication
                 SSOAccessToken = ssoAccessToken,  // Include SSO access token if SSO is active
                 authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
             };
-        
+
+            if (ServiceIsFullyInitialized())
+            {
+                try
+                {
+                    ArborInsightServiceClient.set_RestUrl("https://lib-backend.xrdm.app/");
+                    ArborInsightServiceClient.set_AppToken(_appToken);
+                    ArborInsightServiceClient.set_AppID(_appId);
+                    ArborInsightServiceClient.set_OrgID(_orgId);
+                    ArborInsightServiceClient.set_AuthSecret(_authSecret);
+                    ArborInsightServiceClient.set_DeviceID(_deviceId);
+                    if (userId != null) ArborInsightServiceClient.set_UserID(userId);
+                    ArborInsightServiceClient.set_Tags(_deviceTags?.ToList() ?? new List<string>());
+                    ArborInsightServiceClient.set_Partner((int)_partner);
+                    ArborInsightServiceClient.set_IpAddress(_ipAddress);
+                    ArborInsightServiceClient.set_DeviceModel(_deviceModel);
+                    ArborInsightServiceClient.set_GeoLocation(new Dictionary<string, string>());
+                    ArborInsightServiceClient.set_OsVersion(SystemInfo.operatingSystem);
+                    ArborInsightServiceClient.set_XrdmVersion(_xrdmVersion);
+                    ArborInsightServiceClient.set_AppVersion(Application.version);
+                    ArborInsightServiceClient.set_UnityVersion(Application.unityVersion);
+                    ArborInsightServiceClient.set_AbxrLibType("unity");
+                    ArborInsightServiceClient.set_AbxrLibVersion(AbxrLibVersion.Version);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: Failed to set service properties for auth: {ex.Message}");
+                }
+
+                var authMechanismDict = CreateAuthMechanismDict(userId, additionalUserData);
+                int nRetrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
+                bool bSuccess = false;
+                while (!bSuccess)
+                {
+                    var eRet = (AbxrResult)ArborInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(authMechanismDict));
+                    if (eRet == AbxrResult.OK)
+                    {
+                        _keyboardAuthSuccess = true;
+                        bSuccess = true;
+                        break;
+                    }
+                    if (!withRetry)
+                    {
+                        Abxr.OnAuthCompleted?.Invoke(false, null);
+                        break;
+                    }
+                    Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {nRetrySeconds} seconds...");
+                    yield return new WaitForSeconds(nRetrySeconds);
+                }
+
+                if (bSuccess)
+                {
+                    try
+                    {
+                        string token = ArborInsightServiceClient.get_ApiToken();
+                        string secret = ArborInsightServiceClient.get_ApiSecret();
+                        if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(secret))
+                        {
+                            _responseData = new AuthResponse { Token = token, Secret = secret };
+                            _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                            _usedArborInsightServiceForSession = true; // This session uses the service for data; never switch to service later if we had started standalone
+                        }
+                    }
+                    catch { }
+                }
+                yield break;
+            }
+
             string json = JsonConvert.SerializeObject(data);
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             
@@ -640,6 +758,21 @@ namespace AbxrLib.Runtime.Authentication
 
         private static IEnumerator GetConfiguration()
         {
+            if (ServiceIsFullyInitialized())
+            {
+                _dictAuthMechanism = ArborInsightServiceClient.get_AppConfigAuthMechanism();
+                if (_dictAuthMechanism != null && _dictAuthMechanism.Count > 0)
+                {
+                    _authMechanism = new AuthMechanism();
+                    if (_dictAuthMechanism.TryGetValue("type", out var type)) _authMechanism.type = type;
+                    if (_dictAuthMechanism.TryGetValue("prompt", out var prompt)) _authMechanism.prompt = prompt;
+                    if (_dictAuthMechanism.TryGetValue("domain", out var domain)) _authMechanism.domain = domain;
+                    if (_dictAuthMechanism.TryGetValue("inputSource", out var inputSource)) _authMechanism.inputSource = inputSource;
+                    if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
+                }
+                yield break;
+            }
+
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
             
             // Create request and handle creation errors
@@ -843,6 +976,7 @@ namespace AbxrLib.Runtime.Authentication
             public string orgId;
             public string authSecret;
             public string deviceId;
+            [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public string userId;
             public string SSOAccessToken;  // optional - SSO access token when SSO is active
             public string[] tags;

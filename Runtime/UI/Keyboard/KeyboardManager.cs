@@ -40,6 +40,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         private void Start()
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // On VR, the controller ray often hits the input field's rect before the keys.
+            // Disable the input field as a raycast target so pointer events reach KeyboardKey
+            // components (same input path as the PIN pad, which has no large input field).
+            if (inputField != null && inputField.targetGraphic != null)
+                inputField.targetGraphic.raycastTarget = false;
+#endif
             // Check for QR reader instances immediately
             CheckAndEnableQRButton();
             
