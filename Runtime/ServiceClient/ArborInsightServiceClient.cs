@@ -23,15 +23,13 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		{
 			//using var clientClass = new AndroidJavaClass(PackageName);
 
-			Debug.Log($"[ArborInsightServiceClient] ArborInsightServiceBridge.Init() gonna call on {PackageName}");
 			try
 			{
 				_client = new AndroidJavaObject(PackageName, Activity);
-				Debug.Log($"[ArborInsightServiceClient] ArborInsightServiceBridge.Init() succeeded using PackageName {PackageName}");
 			}
 			catch (Exception e)
 			{
-				Debug.Log($"[ArborInsightServiceClient] ArborInsightServiceBridge.Init() failed using PackageName {PackageName} exception message {e.Message}");
+				Debug.LogWarning($"[ArborInsightServiceClient] Init failed ({PackageName}): {e.Message}");
 			}
 		}
 		/// <summary>
@@ -76,10 +74,7 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 			}
 			try
 			{
-				Debug.Log($"[ArborInsightServiceClient] ArborInsightServiceBridge.AuthRequest() calling _client.Call<int>(\"authRequest\", ...)");
-				int result = _client.Call<int>("authRequest", szUserId ?? "", dictAdditionalUserData ?? "");
-				Debug.Log($"[ArborInsightServiceClient] ArborInsightServiceBridge.AuthRequest() returned: {result}");
-				return result;
+				return _client.Call<int>("authRequest", szUserId ?? "", dictAdditionalUserData ?? "");
 			}
 			catch (Exception e)
 			{
@@ -315,38 +310,23 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		//private AndroidJavaObject			_mjpsdk = null;
 		//private MJPNativeConnectionCallback	_nativeCallback = null;
 
-		// Constructor logging
-		public ArborInsightServiceClient()
-		{
-			Debug.Log("[ArborInsightServiceClient] Constructor called - ArborInsightServiceClient instance created");
-		}
-		private void Awake()
-		{
-			Debug.Log($"[ArborInsightServiceClient] Awake() called on GameObject: {gameObject.name}");
-		}
+		public ArborInsightServiceClient() { }
+		private void Awake() { }
 		private void Start()
 		{
-			bool	bOk;
-
 			try
 			{
-				Debug.Log($"[ArborInsightServiceClient] Start() called on GameObject: {gameObject.name}");
 				ArborInsightServiceBridge.Init();
 				if (!ArborInsightServiceBridge.IsInitialized())
 				{
 					Debug.LogWarning("[ArborInsightServiceClient] Init failed (ClassNotFoundException usually means the ArborInsightService unity-client AAR is not in Assets/Plugins/Android). Skipping Bind().");
 					return;
 				}
-				Debug.Log($"[ArborInsightServiceClient] about to call ArborInsightServiceBridge.Bind() on GameObject: {gameObject.name}");
-				bOk = ArborInsightServiceBridge.Bind();
-				Debug.Log($"[ArborInsightServiceClient] Bind() result: {bOk}");
-				// ---
-				//_nativeCallback = new MJPNativeConnectionCallback();
-				// ---
+				ArborInsightServiceBridge.Bind();
 			}
 			catch (Exception e)
 			{
-				Debug.Log($"[ArborInsightServiceClient] Bind() blew: {e.Message}");
+				Debug.LogWarning($"[ArborInsightServiceClient] Bind failed: {e.Message}");
 			}
 		}
 		private void OnDestroy()

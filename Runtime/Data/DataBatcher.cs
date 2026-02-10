@@ -14,9 +14,6 @@ namespace AbxrLib.Runtime.Data
 {
 	public class DataBatcher : MonoBehaviour
 	{
-		/// <summary>Set to true to log data flow (service vs queue vs HTTP) for debugging ArborInsightService integration.</summary>
-		private const bool DataBatcherDebugLog = true;
-
 		private const string UrlPath = "/v1/collect/data";
 		private static Uri _uri;
 		private static readonly List<EventPayload> _eventPayloads = new();
@@ -47,11 +44,9 @@ namespace AbxrLib.Runtime.Data
 #if UNITY_ANDROID && !UNITY_EDITOR
 			if (Authentication.Authentication.UsingArborInsightServiceForData())
 			{
-				if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddEvent to service (immediate): name={name}");
 				ArborInsightServiceClient.EventDeferred(name, meta ?? new Dictionary<string, string>());
 				return;
 			}
-			if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddEvent queued (standalone mode): name={name}");
 #endif
 			long eventTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(eventTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
@@ -86,11 +81,9 @@ namespace AbxrLib.Runtime.Data
 #if UNITY_ANDROID && !UNITY_EDITOR
 			if (Authentication.Authentication.UsingArborInsightServiceForData())
 			{
-				if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddTelemetry to service (immediate): name={name}");
 				ArborInsightServiceClient.AddTelemetryEntryDeferred(name, meta ?? new Dictionary<string, string>());
 				return;
 			}
-			if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddTelemetry queued (standalone mode): name={name}");
 #endif
 			long telemetryTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(telemetryTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
@@ -125,7 +118,6 @@ namespace AbxrLib.Runtime.Data
 #if UNITY_ANDROID && !UNITY_EDITOR
 			if (Authentication.Authentication.UsingArborInsightServiceForData())
 			{
-				if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddLog to service (immediate): level={logLevel}, text={((text ?? "").Length > 40 ? (text ?? "").Substring(0, 40) + "..." : text ?? "")}");
 				var dict = meta ?? new Dictionary<string, string>();
 				string level = logLevel?.ToUpperInvariant() ?? "";
 				if (level == "DEBUG")
@@ -142,7 +134,6 @@ namespace AbxrLib.Runtime.Data
 					ArborInsightServiceClient.LogInfoDeferred(text ?? "", dict);
 				return;
 			}
-			if (DataBatcherDebugLog) Debug.Log($"AbxrLib: DataBatcher AddLog queued (standalone mode): level={logLevel}");
 #endif
 			long logTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(logTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
@@ -206,15 +197,10 @@ namespace AbxrLib.Runtime.Data
 			if (Authentication.Authentication.UsingArborInsightServiceForData())
 			{
 				int e = eventsToSend.Count, t = telemetriesToSend.Count, l = logsToSend.Count;
-				if (DataBatcherDebugLog && (e + t + l) > 0)
-					Debug.Log($"AbxrLib: DataBatcher Send() pushing queued to ArborInsightService: events={e}, telemetry={t}, logs={l}");
 				PushQueuedToService(eventsToSend, telemetriesToSend, logsToSend);
 				yield break;
 			}
 #endif
-			if (DataBatcherDebugLog && (eventsToSend.Count + telemetriesToSend.Count + logsToSend.Count) > 0)
-				Debug.Log($"AbxrLib: DataBatcher Send() sending via HTTP: events={eventsToSend.Count}, telemetry={telemetriesToSend.Count}, logs={logsToSend.Count}");
-
 			// Retry logic for data sending - using separate coroutine to avoid yield in try-catch
 			yield return SendWithRetry(eventsToSend, telemetriesToSend, logsToSend);
 		}
