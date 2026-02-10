@@ -155,14 +155,18 @@ namespace AbxrLib.Runtime.Authentication
             _initialized = true;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-            for (int i = 0; i < 40; i++)
+            // Only wait for service readiness if the ArborInsightService APK is installed; otherwise fail fast and use standalone mode.
+            if (ArborInsightServiceClient.IsServicePackageInstalled())
             {
-                try
+                for (int i = 0; i < 40; i++)
                 {
-                    if (ServiceIsFullyInitialized()) break;
+                    try
+                    {
+                        if (ServiceIsFullyInitialized()) break;
+                    }
+                    catch { }
+                    System.Threading.Thread.Sleep(250);
                 }
-                catch { }
-                System.Threading.Thread.Sleep(250);
             }
 #endif
 

@@ -12,9 +12,37 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 	internal static class ArborInsightServiceBridge
 	{
 		private const string		PackageName = "aar.xrdi.arborinsightservice.unity.UnityArborInsightServiceClient";
+		/// <summary>Package name of the ArborInsightService APK (impl app). Used to check if the service is installed before waiting for bind.</summary>
+		private const string		ServiceApkPackageName = "impl.xrdi.arborinsightservice";
 		static AndroidJavaObject	_client = null;
 
 		static AndroidJavaObject Activity => new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity");
+
+		/// <summary>Returns true if the ArborInsightService APK is installed on the device. Use to skip the readiness poll when not installed.</summary>
+		public static bool IsServicePackageInstalled()
+		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			try
+			{
+				using (var activity = new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity"))
+				{
+					if (activity == null) return false;
+					using (var pm = activity.Call<AndroidJavaObject>("getPackageManager"))
+					{
+						if (pm == null) return false;
+						pm.Call<AndroidJavaObject>("getPackageInfo", ServiceApkPackageName, 0);
+						return true;
+					}
+				}
+			}
+			catch
+			{
+				return false;
+			}
+#else
+			return false;
+#endif
+		}
 
 		/// <summary>
 		/// Init().
@@ -345,6 +373,8 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		public static string WhatTimeIsIt() => ArborInsightServiceBridge.WhatTimeIsIt();
 		public static bool IsServiceBound() => ArborInsightServiceBridge.IsServiceBound();
 		public static bool IsServiceAvailable() => ArborInsightServiceBridge.IsServiceAvailable();
+		/// <summary>True if the ArborInsightService APK is installed. Use to fail fast and skip the readiness poll when running standalone.</summary>
+		public static bool IsServicePackageInstalled() => ArborInsightServiceBridge.IsServicePackageInstalled();
 		public static bool ServiceIsFullyInitialized() => ArborInsightServiceBridge.ServiceIsFullyInitialized();
 		// --- API code.
 		public static void AbxrLibInitStart() => ArborInsightServiceBridge.AbxrLibInitStart();
