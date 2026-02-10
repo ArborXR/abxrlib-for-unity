@@ -410,6 +410,160 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
+        /// <summary>
+        /// Extracts authentication data from an App Token (JWT).
+        /// Production tokens include: appId, buildType
+        /// Development tokens include: appId, orgId, authSecret, buildType
+        /// </summary>
+        /// <param name="appToken">The App Token JWT string</param>
+        /// <returns>Dictionary containing extracted fields (appId, orgId, authSecret, buildType), or null if token is invalid</returns>
+        public static Dictionary<string, string> ExtractAppTokenData(string appToken)
+        {
+            if (string.IsNullOrEmpty(appToken))
+            {
+                return null;
+            }
+
+            Dictionary<string, object> jwtPayload = DecodeJwt(appToken);
+            if (jwtPayload == null)
+            {
+                return null;
+            }
+
+            var result = new Dictionary<string, string>();
+
+            // Extract appId (required in both production and development tokens)
+            if (jwtPayload.ContainsKey("appId") && jwtPayload["appId"] != null)
+            {
+                result["appId"] = jwtPayload["appId"].ToString();
+            }
+
+            // Extract buildType (required in both production and development tokens)
+            if (jwtPayload.ContainsKey("buildType") && jwtPayload["buildType"] != null)
+            {
+                result["buildType"] = jwtPayload["buildType"].ToString();
+            }
+
+            // Extract orgId (only in development tokens)
+            if (jwtPayload.ContainsKey("orgId") && jwtPayload["orgId"] != null)
+            {
+                result["orgId"] = jwtPayload["orgId"].ToString();
+            }
+
+            // Extract authSecret (only in development tokens)
+            if (jwtPayload.ContainsKey("authSecret") && jwtPayload["authSecret"] != null)
+            {
+                result["authSecret"] = jwtPayload["authSecret"].ToString();
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Result structure containing all authentication configuration data extracted from config or tokens.
+        /// Internal API - not intended for external use.
+        /// </summary>
+        internal struct AuthConfigData
+        {
+            public string appId;
+            public string appToken;
+            public string orgId;
+            public string authSecret;
+            public string buildType;
+            public bool isValid;
+            public string errorMessage;
+        }
+
+        /// <summary>
+        /// Extracts all authentication configuration data from Configuration, handling both App Tokens and traditional config.
+        /// Internal API - not intended for external use.
+        /// </summary>
+        /// <param name="config">The Configuration instance</param>
+        /// <returns>AuthConfigData containing extracted values and validation status</returns>
+        internal static AuthConfigData ExtractConfigData(Configuration config)
+        {
+            var result = new AuthConfigData { isValid = false };
+
+            if (config == null)
+            {
+                result.errorMessage = "Configuration instance is null";
+                return result;
+            }
+
+            // Get buildType from config (will be overridden from token if using app tokens)
+            result.buildType = !string.IsNullOrEmpty(config.buildType) ? config.buildType : "production";
+
+            // Check if using App Tokens
+            if (config.useAppTokens)
+            {
+                // Get the appropriate token based on buildType
+                string tokenToUse = config.buildType == "production" 
+                    ? config.appTokenProduction 
+                    : config.appTokenDevelopment;
+                
+                if (string.IsNullOrEmpty(tokenToUse))
+                {
+                    result.errorMessage = $"App Token for {config.buildType} build is not set.";
+                    return result;
+                }
+                
+                // Store the token
+                result.appToken = tokenToUse;
+                
+                // Extract data from the JWT token
+                var tokenData = ExtractAppTokenData(tokenToUse);
+                if (tokenData == null)
+                {
+                    result.errorMessage = "Failed to decode App Token.";
+                    return result;
+                }
+                
+                // Extract appId (required)
+                if (tokenData.ContainsKey("appId"))
+                {
+                    result.appId = tokenData["appId"];
+                }
+                else
+                {
+                    result.errorMessage = "App Token missing appId.";
+                    return result;
+                }
+                
+                // Extract buildType from token (overrides config value)
+                if (tokenData.ContainsKey("buildType"))
+                {
+                    result.buildType = tokenData["buildType"];
+                }
+                
+                // Extract orgId and authSecret (only in development tokens)
+                result.orgId = tokenData.ContainsKey("orgId") ? tokenData["orgId"] : null;
+                result.authSecret = tokenData.ContainsKey("authSecret") ? tokenData["authSecret"] : null;
+            }
+            else
+            {
+                // Use traditional appID/orgID/authSecret approach
+                result.appId = config.appID;
+                result.appToken = null;
+               
+                // Only include orgID and authSecret if buildType is development
+                // In production builds, these should be empty to avoid including credentials
+                if (config.buildType == "development")
+                {
+                    result.orgId = config.orgID;
+                    result.authSecret = config.authSecret;
+                }
+                else
+                {
+                    // Production build - use empty values
+                    result.orgId = null;
+                    result.authSecret = null;
+                }
+            }
+
+            result.isValid = true;
+            return result;
+        }
+
         private static string Base64UrlDecode(string input)
         {
             return input.Replace('-', '+').Replace('_', '/');
@@ -491,18 +645,18 @@ namespace AbxrLib.Runtime.Core
                     return Uri.UnescapeDataString(keyValueArray[1]);
                 }
             }
-        return "";
-    }
+            return "";
+        }
 
-    /// <summary>
-    /// Get command line argument value by key
-    /// Searches through Unity's command line arguments for key=value pairs
-    /// </summary>
-    /// <param name="key">The argument key to search for</param>
-    /// <returns>The argument value if found, empty string otherwise</returns>
-    public static string GetCommandLineArg(string key)
-    {
-        string[] args = System.Environment.GetCommandLineArgs();
+        /// <summary>
+        /// Get command line argument value by key
+        /// Searches through Unity's command line arguments for key=value pairs
+        /// </summary>
+        /// <param name="key">The argument key to search for</param>
+        /// <returns>The argument value if found, empty string otherwise</returns>
+        public static string GetCommandLineArg(string key)
+        {
+            string[] args = System.Environment.GetCommandLineArgs();
             
             // Pre-build the search strings to avoid repeated concatenation
             string keyEquals = key + "=";
@@ -558,6 +712,54 @@ namespace AbxrLib.Runtime.Core
             return "";
         }
 
+        /// <summary>
+        /// Get Android manifest metadata value by key
+        /// Reads metadata from AndroidManifest.xml using ApplicationInfo
+        /// </summary>
+        /// <param name="key">The metadata key to search for</param>
+        /// <returns>The metadata value if found, empty string otherwise</returns>
+        public static string GetAndroidManifestMetadata(string key)
+        {
+    #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                using var packageManager = activity.Call<AndroidJavaObject>("getPackageManager");
+                var packageName = activity.Call<string>("getPackageName");
+                
+                // Get ApplicationInfo with GET_META_DATA flag (0x00000080)
+                using var appInfo = packageManager.Call<AndroidJavaObject>("getApplicationInfo", packageName, 0x00000080);
+                using var metaData = appInfo.Get<AndroidJavaObject>("metaData");
+                
+                if (metaData != null)
+                {
+                    // Try to get as string first (most common case)
+                    string stringValue = metaData.Call<string>("getString", key);
+                    if (!string.IsNullOrEmpty(stringValue))
+                    {
+                        return stringValue;
+                    }
+                    
+                    // Fallback: get as object and convert to string
+                    object value = metaData.Call<object>("get", key);
+                    if (value != null)
+                    {
+                        return value.ToString();
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                // Log warning with consistent format and include Android context
+                Debug.LogWarning($"AbxrLib: Failed to get Android manifest metadata '{key}': {ex.Message}\n" +
+                                $"Exception Type: {ex.GetType().Name}\n" +
+                                $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+            }
+    #endif
+            return "";
+        }
+    
         public static long GetUnityTime() => (long)(Time.time * 1000f) + Initialize.StartTimeMs;
 
         public static void SendAllData()

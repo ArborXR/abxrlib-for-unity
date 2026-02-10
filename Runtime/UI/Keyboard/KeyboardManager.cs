@@ -17,10 +17,10 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public Button qrCodeButton;
 
         public TMP_InputField inputField;
-        
+#if UNITY_ANDROID && !UNITY_EDITOR 
         // Cache button state to avoid repeated logs
         private bool? _lastQRButtonState = null;
-    
+#endif
         private void Awake()
         {
             if (Instance == null)
@@ -71,7 +71,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private void CheckAndEnableQRButton()
         {
             if (qrCodeButton == null) return;
-            
+#if UNITY_ANDROID && !UNITY_EDITOR            
 #if PICO_ENTERPRISE_SDK_3
             // Only enable QR button if PICO Enterprise SDK 3+ is available and instance exists
             if (PicoQRCodeReader.Instance != null)
@@ -125,6 +125,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     _lastQRButtonState = false;
                 }
             }
+#endif
 #endif
         }
 
@@ -202,6 +203,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         
         private void QRCode()
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
             // Toggle: if already scanning, cancel; otherwise start scanning
             if (PicoQRCodeReader.Instance != null)
@@ -225,6 +227,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 // Update button text immediately after toggling
                 UpdateQRButtonTextImmediate();
             }
+#endif
 #endif
             inputField.text = "";
         }
@@ -255,7 +258,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             bool isScanning = false;
             bool isInitializing = false;
             bool permissionsDenied = false;
-            
+#if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
             // PICO doesn't have IsScanning, so we can't toggle text for it
 #endif
@@ -267,7 +270,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 permissionsDenied = MetaQRCodeReader.AreCameraPermissionsDenied();
             }
 #endif
-            
+#endif
             // Update text based on state (priority: permissions denied > scanning > initializing > idle)
             if (permissionsDenied)
             {

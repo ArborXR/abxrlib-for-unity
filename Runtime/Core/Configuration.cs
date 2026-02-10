@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2024 ArborXR. All rights reserved.
  * 
  * AbxrLib for Unity - Configuration Management
@@ -47,12 +47,21 @@ namespace AbxrLib.Runtime.Core
             }
         }
     
+        [Header("Build Type")]
+        [Tooltip("Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution). Development: OrgID and AuthSecret will be included in builds (for custom APKs only).")]
+        public string buildType = "production";
+        
         [Header("Application Identity")]
         [Tooltip("Required")] public string appID;
-        [Tooltip("Optional")] public string orgID;
-        [Tooltip("Optional")] public string authSecret;
+        [Tooltip("Optional - Only used when Build Type is Development")] public string orgID;
+        [Tooltip("Optional - Only used when Build Type is Development")] public string authSecret;
         [HideInInspector]
         [Tooltip("Optional")] public string launcherAppID;
+        
+        [Header("App Tokens")]
+        [Tooltip("When enabled, use App Tokens instead of appID/orgID/authSecret combination")] public bool useAppTokens = false;
+        [Tooltip("Production App Token (JWT) - includes appId and buildType=production")] public string appTokenProduction;
+        [Tooltip("Development App Token (JWT) - includes appId, orgId, authSecret, and buildType=development")] public string appTokenDevelopment;
         
         /// <summary>
         /// Validates that the configuration has the required fields set properly.
@@ -215,6 +224,12 @@ namespace AbxrLib.Runtime.Core
         
         [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
         public float authenticationStartDelay = 0f;
+        
+        [Tooltip("When enabled, the first module will start automatically on successful authentication")]
+        public bool enableAutoStartModules = true;
+        
+        [Tooltip("When enabled, the next module in the sequence will automatically start after completion of a module")]
+        public bool enableAutoAdvanceModules = true;
         
         [Tooltip("When enabled, the app will return to the launcher after an assessment is complete. When disabled, the app will stay open after an assessment is complete. Specifically used with Learner Launcher.")]
         public bool returnToLauncherAfterAssessmentComplete = true;

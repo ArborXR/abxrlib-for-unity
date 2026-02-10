@@ -1,4 +1,4 @@
-﻿using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
 
@@ -10,17 +10,94 @@ namespace AbxrLib.Editor
         public override void OnInspectorGUI()
         {
             var config = (Configuration)target;
-        
-            config.appID = EditorGUILayout.TextField(new GUIContent(
-                "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
-            config.orgID = EditorGUILayout.TextField(new GUIContent(
-                "Organization ID (*)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.orgID);
-            config.authSecret = EditorGUILayout.TextField("Authorization Secret (*)", config.authSecret);
-        
+            EditorGUILayout.LabelField("Application Identity", EditorStyles.boldLabel);
+            
+            string[] buildTypeValues = { "production", "development" };
+            string[] buildTypeDisplayNames = { "Production", "Development" };
+            int currentSelection = config.buildType == "production" ? 0 : 1;
+            int newSelection = EditorGUILayout.Popup(new GUIContent(
+                "Build Type", "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only)."), 
+                currentSelection, buildTypeDisplayNames);
+            
+            config.buildType = buildTypeValues[newSelection];
+                        
+            EditorGUILayout.Space();
+            
+            bool useAppTokens = config.useAppTokens;
+            bool isProduction = config.buildType == "production";
+            
+            if (useAppTokens)
+            {
+                // Show App Token fields
+                // Indicate which token will be used based on buildType
+                
+                // Production Token
+                string productionLabel = isProduction ? "Production Token ▶" : "Production Token";
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(productionLabel, isProduction ? EditorStyles.boldLabel : EditorStyles.label, GUILayout.Width(EditorGUIUtility.labelWidth));
+                config.appTokenProduction = EditorGUILayout.TextField(config.appTokenProduction);
+                EditorGUILayout.EndHorizontal();
+                
+                // Development Token
+                string developmentLabel = isProduction ? "Development Token" : "Development Token ▶";
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField(developmentLabel, isProduction ? EditorStyles.label : EditorStyles.boldLabel, GUILayout.Width(EditorGUIUtility.labelWidth));
+                config.appTokenDevelopment = EditorGUILayout.TextField(config.appTokenDevelopment);
+                EditorGUILayout.EndHorizontal();
+            }
+            else
+            {
+                // Show traditional appID/orgID/authSecret fields
+                config.appID = EditorGUILayout.TextField(new GUIContent(
+                    "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
+                
+                // Grey out orgID and authSecret when buildType is production
+                EditorGUI.BeginDisabledGroup(isProduction);
+                config.orgID = EditorGUILayout.TextField(new GUIContent(
+                    "Organization ID (*)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.orgID);
+                config.authSecret = EditorGUILayout.TextField("Authorization Secret (*)", config.authSecret);
+                EditorGUI.EndDisabledGroup();
+                
+                if (isProduction)
+                {
+                    EditorGUILayout.HelpBox("OrgID and AuthSecret are disabled in Production builds. These values will NOT be included in builds.", MessageType.Info);
+                }
+            }
+                    // Use App Tokens checkbox right under buildType dropdown
+            EditorGUILayout.Space(5);
+            config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(
+                "Use App Tokens", "When enabled, use App Tokens (JWT) instead of appID/orgID/authSecret combination"), config.useAppTokens);
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Service Provider", EditorStyles.boldLabel);
             string newRestUrl = EditorGUILayout.TextField(new GUIContent(
                 "REST URL", "Should most likely be\nhttps://lib-backend.xrdm.app/ during Beta"), config.restUrl);
+            
+            // Validate URL format
+            if (!string.IsNullOrEmpty(newRestUrl))
+            {
+                try
+                {
+                    var uri = new System.Uri(newRestUrl);
+                    if (uri.Scheme == "http" || uri.Scheme == "https")
+                    {
+                        config.restUrl = newRestUrl;
+                    }
+                    else
+                    {
+                        EditorGUILayout.HelpBox("URL must start with http:// or https://", MessageType.Warning);
+                    }
+                }
+                catch
+                {
+                    EditorGUILayout.HelpBox("Invalid URL format", MessageType.Warning);
+                }
+            }
+            else
+            {
+                config.restUrl = newRestUrl;
+            }
+            //if (config.restUrl == "https://lib-backend.xrdm.dev/") config.restUrl = "https://lib-backend.xrdm.app/"; //TODO remove
             
             // Validate URL format
             if (!string.IsNullOrEmpty(newRestUrl))
@@ -59,6 +136,132 @@ namespace AbxrLib.Editor
             EditorGUILayout.LabelField("• Setting these values inappropriately may violate Terms of Service with ArborXR or Meta", EditorStyles.wordWrappedLabel);
             EditorGUILayout.LabelField("• Only use these fields when building for a specific 3rd party who is aware and approves", EditorStyles.wordWrappedLabel);
             EditorGUILayout.EndVertical();
+        
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("UI Behavior Control", EditorStyles.boldLabel);
+            config.authUIFollowCamera = EditorGUILayout.Toggle(new GUIContent(
+                "Auth UI Follow Camera", "When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions."), config.authUIFollowCamera);
+            
+            config.enableDirectTouchInteraction = EditorGUILayout.Toggle(new GUIContent(
+                "Enable Direct Touch Interaction", "When enabled, direct touch interaction will be used for UI elements instead of ray casting."), config.enableDirectTouchInteraction);
+            
+            config.authUIDistanceFromCamera = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
+                "Auth UI Distance From Camera (meters)", "How far in front of the camera the UI panel should float."), config.authUIDistanceFromCamera), 0.1f, 10f);
+
+            EditorGUILayout.Space();
+
+            EditorGUILayout.LabelField("Player Tracking", EditorStyles.boldLabel);
+        
+            // Disable headset tracking UI if telemetry is disabled
+            config.disableAutomaticTelemetry = !EditorGUILayout.Toggle("Enable Automatic Telemetry", !config.disableAutomaticTelemetry);
+            EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
+                config.headsetTracking = EditorGUILayout.Toggle(new GUIContent(
+                    "Headset/Controller Tracking", "Track the Headset and Controllers"), config.headsetTracking);
+                config.positionTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
+                    "Position Capture Period (seconds)", config.positionTrackingPeriodSeconds), 0.1f, 60f);
+                config.disableSceneEvents = !EditorGUILayout.Toggle("Enable Scene Events", !config.disableSceneEvents);
+            EditorGUI.EndDisabledGroup();
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Authentication Control", EditorStyles.boldLabel);
+            config.disableAutoStartAuthentication = !EditorGUILayout.Toggle(new GUIContent(
+                "Enable Auto Start Authentication", "When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()"), !config.disableAutoStartAuthentication);
+            
+            EditorGUI.BeginDisabledGroup(config.disableAutoStartAuthentication);
+                config.authenticationStartDelay = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
+                    "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay), 0f, 60f);
+            EditorGUI.EndDisabledGroup();
+            config.returnToLauncherAfterAssessmentComplete = !EditorGUILayout.Toggle(new GUIContent(
+                "Return to LL after Assessment Complete", "When enabled, the app will return to the Learner Launcher after an assessment is complete. When disabled, the app will stay open after an assessment is complete. Specifically used with Learner Launcher."), !config.returnToLauncherAfterAssessmentComplete);
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Authentication Prefabs", EditorStyles.boldLabel);
+            
+            // Help box explaining how prefab references work
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("ℹ️ Prefab Reference Usage", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("• Leave empty to use default prefabs from Resources/Prefabs/", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField("• Assign custom prefabs to override the default behavior", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.LabelField("• Custom prefabs must have the same components as the default ones", EditorStyles.wordWrappedLabel);
+            EditorGUILayout.EndVertical();
+            
+            config.KeyboardPrefab = (GameObject)EditorGUILayout.ObjectField(new GUIContent(
+                "Keyboard Prefab", "Custom keyboard prefab. Leave empty to use default AbxrKeyboard prefab."), 
+                config.KeyboardPrefab, typeof(GameObject));
+            config.PinPrefab = (GameObject)EditorGUILayout.ObjectField(new GUIContent(
+                "Pin Prefab", "Custom PIN pad prefab. Leave empty to use default AbxrPinPad prefab."), 
+                config.PinPrefab, typeof(GameObject));
+
+            EditorGUILayout.Space();
+
+            EditorGUILayout.LabelField("Network Configuration", EditorStyles.boldLabel);
+            config.telemetryTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
+                "Telemetry Tracking Period (seconds)", config.telemetryTrackingPeriodSeconds), 1f, 300f);
+            config.frameRateTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
+                "Frame Rate Tracking Period (seconds)", config.frameRateTrackingPeriodSeconds), 0.1f, 60f);
+            config.sendRetriesOnFailure = Mathf.Clamp(EditorGUILayout.IntField("Send Retries On Failure", config.sendRetriesOnFailure), 0, 10);
+            config.sendRetryIntervalSeconds = Mathf.Clamp(EditorGUILayout.IntField("Send Retry Interval (seconds)", config.sendRetryIntervalSeconds), 1, 300);
+            config.sendNextBatchWaitSeconds = Mathf.Clamp(EditorGUILayout.IntField("Send Next Batch Wait (seconds)", config.sendNextBatchWaitSeconds), 1, 3600);
+            config.requestTimeoutSeconds = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
+                "Request Timeout (seconds)", "How long to wait before giving up on network requests"), config.requestTimeoutSeconds), 5, 300);
+            config.stragglerTimeoutSeconds = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
+                "Straggler Timeout (seconds)", "0 = Infinite, i.e. Never send remainders = Always send exactly DataEntriesPerSendAttempt"), config.stragglerTimeoutSeconds), 0, 3600);
+            config.maxCallFrequencySeconds = Mathf.Clamp(EditorGUILayout.FloatField(
+                "Maximum Data Send Frequency (seconds)", config.maxCallFrequencySeconds), 0.1f, 60f);
+            config.dataEntriesPerSendAttempt = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
+                "Data Entries Per Send Attempt", "Total count of events, logs, and telemetry entries to batch before sending (0 = Send all not already sent)"), config.dataEntriesPerSendAttempt), 1, 1000);
+        
+            config.storageEntriesPerSendAttempt = Mathf.Clamp(EditorGUILayout.IntField("Storage Entries Per Send Attempt", config.storageEntriesPerSendAttempt), 1, 1000);
+            config.pruneSentItemsOlderThanHours = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent(
+                "Prune Sent Items Older Than (hours)", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours), 0, 8760);
+            config.maximumCachedItems = Mathf.Clamp(EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems), 10, 10000);
+
+
+            if (GUILayout.Button("Reset To Sending Rule Defaults"))
+            {
+                // Create a temporary instance to get the default values
+                var defaultConfig = CreateInstance<Configuration>();
+                
+                // Service Provider
+                config.restUrl = defaultConfig.restUrl;
+                
+                // UI Behavior Control
+                config.authUIFollowCamera = defaultConfig.authUIFollowCamera;
+                config.enableDirectTouchInteraction = defaultConfig.enableDirectTouchInteraction;
+                config.authUIDistanceFromCamera = defaultConfig.authUIDistanceFromCamera;
+                
+                // Player Tracking
+                config.headsetTracking = defaultConfig.headsetTracking;
+                config.positionTrackingPeriodSeconds = defaultConfig.positionTrackingPeriodSeconds;
+                
+                // Authentication Control
+                config.disableAutoStartAuthentication = defaultConfig.disableAutoStartAuthentication;
+                config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
+                config.returnToLauncherAfterAssessmentComplete = defaultConfig.returnToLauncherAfterAssessmentComplete;
+                
+                // Authentication Prefabs
+                config.KeyboardPrefab = defaultConfig.KeyboardPrefab;
+                config.PinPrefab = defaultConfig.PinPrefab;
+                
+                // Data Sending Rules
+                config.telemetryTrackingPeriodSeconds = defaultConfig.telemetryTrackingPeriodSeconds;
+                config.frameRateTrackingPeriodSeconds = defaultConfig.frameRateTrackingPeriodSeconds;
+                config.sendRetriesOnFailure = defaultConfig.sendRetriesOnFailure;
+                config.sendRetryIntervalSeconds = defaultConfig.sendRetryIntervalSeconds;
+                config.sendNextBatchWaitSeconds = defaultConfig.sendNextBatchWaitSeconds;
+                config.requestTimeoutSeconds = defaultConfig.requestTimeoutSeconds;
+                config.stragglerTimeoutSeconds = defaultConfig.stragglerTimeoutSeconds;
+                config.maxCallFrequencySeconds = defaultConfig.maxCallFrequencySeconds;
+                config.dataEntriesPerSendAttempt = defaultConfig.dataEntriesPerSendAttempt;
+                config.storageEntriesPerSendAttempt = defaultConfig.storageEntriesPerSendAttempt;
+                config.pruneSentItemsOlderThanHours = defaultConfig.pruneSentItemsOlderThanHours;
+                config.maximumCachedItems = defaultConfig.maximumCachedItems;
+                config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
+                config.disableAutomaticTelemetry = defaultConfig.disableAutomaticTelemetry;
+                config.disableSceneEvents = defaultConfig.disableSceneEvents;
+                
+                // Clean up the temporary instance
+                DestroyImmediate(defaultConfig);
+            }
         
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("UI Behavior Control", EditorStyles.boldLabel);

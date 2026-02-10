@@ -55,7 +55,6 @@ public class StorageBatcher : MonoBehaviour
 			},
 				scope = scope.ToString()
 			};
-
 			lock (_lock)
 			{
 				if (IsQueueAtLimit(_payloads, "Storage"))

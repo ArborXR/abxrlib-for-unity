@@ -17,8 +17,33 @@ namespace AbxrLib.Editor
         private const string MetaDataVersionName = "com.arborxr.abxrlib.version";
         private const string MetaDataAppIdName = "com.arborxr.abxrlib.insights_id";
         private const string MetaDataBuildTypeName = "com.arborxr.abxrlib.build_type";
+        private const string MetaDataBuildFingerprintName = "com.arborxr.abxrlib.build_fingerprint";
 
         private const string FallbackVersion = "1.0.0";
+
+        // Cached config data to avoid multiple extractions
+        private static Utils.AuthConfigData? _cachedConfigData = null;
+
+        /// <summary>
+        /// Gets the cached config data, extracting it if not already cached.
+        /// </summary>
+        private static Utils.AuthConfigData GetCachedConfigData()
+        {
+            if (_cachedConfigData == null)
+            {
+                try
+                {
+                    var config = Configuration.Instance;
+                    _cachedConfigData = Utils.ExtractConfigData(config);
+                }
+                catch
+                {
+                    // If Configuration is not accessible, return invalid result
+                    _cachedConfigData = new Utils.AuthConfigData { isValid = false };
+                }
+            }
+            return _cachedConfigData.Value;
+        }
 
         /// <summary>
         /// Gets the AbxrLib version, or falls back to 1.0.0 if not found.
@@ -43,57 +68,32 @@ namespace AbxrLib.Editor
         public int callbackOrder => 1;
 
         /// <summary>
-        /// Gets the app_id from Configuration, or returns null if not found.
+        /// Gets the app_id from Configuration, or extracts it from App Token if using app tokens.
+        /// Returns null if not found.
         /// </summary>
         private static string GetAppId()
         {
-            try
-            {
-                var config = Configuration.Instance;
-                if (config != null && !string.IsNullOrEmpty(config.appID))
-                {
-                    return config.appID;
-                }
-            }
-            catch
-            {
-                // If Configuration is not accessible, return null
-            }
-            
-            return null;
+            var configData = GetCachedConfigData();
+            return configData.isValid ? configData.appId : null;
         }
 
         /// <summary>
-        /// Gets the build type based on Configuration values.
-        /// Returns "production" if orgID and authSecret are both empty, "custom" otherwise.
+        /// Gets the build type from Configuration, or extracts it from App Token if using app tokens.
+        /// Returns the buildType field value, or "production" as default.
         /// </summary>
         private static string GetBuildType()
         {
-            try
-            {
-                var config = Configuration.Instance;
-                if (config != null)
-                {
-                    bool orgIdEmpty = string.IsNullOrEmpty(config.orgID);
-                    bool authSecretEmpty = string.IsNullOrEmpty(config.authSecret);
-                    
-                    // Production when both are empty, custom otherwise
-                    if (orgIdEmpty && authSecretEmpty)
-                    {
-                        return "production";
-                    }
-                    else
-                    {
-                        return "custom";
-                    }
-                }
-            }
-            catch
-            {
-                // If Configuration is not accessible, default to production
-            }
-            
-            return "production";
+            var configData = GetCachedConfigData();
+            return configData.isValid ? configData.buildType : "production";
+        }
+
+        /// <summary>
+        /// Generates a unique GUID for each build.
+        /// This build_fingerprint can be used to track and compare results across different builds.
+        /// </summary>
+        private static string GenerateBuildFingerprint()
+        {
+            return System.Guid.NewGuid().ToString();
         }
 
         /// <summary>
@@ -128,6 +128,9 @@ namespace AbxrLib.Editor
         /// </summary>
         private static void ProcessManifest(string projectPath)
         {
+            // Reset cached config data to ensure fresh extraction for each manifest processing
+            _cachedConfigData = null;
+            
             // For direct APK builds, the manifest is already packaged and not accessible as a file.
             // This is expected behavior, so we skip silently.
             if (!string.IsNullOrEmpty(projectPath) && projectPath.EndsWith(".apk", System.StringComparison.OrdinalIgnoreCase))
@@ -249,6 +252,9 @@ namespace AbxrLib.Editor
 
             // Handle build_type metadata
             manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataBuildTypeName, GetBuildType());
+
+            // Handle build_fingerprint metadata (generated GUID for each build)
+            manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataBuildFingerprintName, GenerateBuildFingerprint());
 
             return manifestContent;
         }

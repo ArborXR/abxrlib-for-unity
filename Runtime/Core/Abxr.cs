@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2024 ArborXR. All rights reserved.
  * 
  * AbxrLib for Unity - Main API Class
@@ -31,7 +31,6 @@ using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Data;
 using AbxrLib.Runtime.ServiceClient;
-using AbxrLib.Runtime.ServiceClient.AbxrInsightService;
 using AbxrLib.Runtime.Storage;
 using AbxrLib.Runtime.Telemetry;
 using AbxrLib.Runtime.UI.ExitPoll;
@@ -77,6 +76,8 @@ public static partial class Abxr
 	static Abxr()
 	{
 		LoadSuperMetaData();
+		// Subscribe to OnAuthCompleted to start delayed DEFAULT assessment timer
+		OnAuthCompleted += OnAuthCompletedHandler;
 	}
 	#endregion
 
@@ -152,64 +153,64 @@ public static partial class Abxr
 		// Update connection status based on authentication success
 		_connectionActive = true;
 		
-		// Reset module index cache for new authentication
-		_moduleIndexLoaded = false;
-		_moduleIndexLoading = false;
-		
-		// Set up module index for GetModuleTarget() calls
-		// Start from index 0 so GetModuleTarget() returns ALL modules in sequence
-		_currentModuleIndex = 0;
-		SaveModuleIndex();
-		
-		// Invoke authentication completion event first
-		OnAuthCompleted?.Invoke(true, null);
-		
-		// Check if there are modules available to execute
-		var moduleToExecute = GetModuleTargetWithoutAdvance();
-		if (moduleToExecute != null)
-		{
-			// Check if there are already subscribers to OnModuleTarget
-			if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
-			{
-				// Execute immediately since there are already subscribers
-				ExecuteModuleSequence();
-			}
-			else
-			{
-				// Mark as pending - will execute when first subscriber is added
-				_hasPendingModules = true;
-			}
-		}
-			
-		// Start default assessment if no assessments are currently running
+		// Start default assessment tracking if no assessments are currently running
 		// This ensures duration tracking starts immediately after authentication
+		// But delay sending the event to server for 1 minute to allow developers to start their own assessment
 		// Use lock to prevent race condition with concurrent EventAssessmentStart calls
 		lock (_assessmentStartTimesLock)
 		{
 			if (_assessmentStartTimes.Count == 0)
 			{
-				// Call EventAssessmentStart inside lock to ensure atomicity
-				// Note: EventAssessmentStart will acquire the same lock, so we need to set it directly
+				// Set start time for duration tracking, but don't send event yet
+				// The OnAuthCompleted event handler will start the delayed timer
 				_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
-				var defaultMeta = new Dictionary<string, string>
-				{
-					["type"] = "assessment",
-					["verb"] = "started"
-				};
-				Event("DEFAULT", defaultMeta);
-				SetModule("DEFAULT");
 			}
+		}
+		
+		// Invoke authentication completion event
+		// The OnAuthCompletedHandler will start the delayed DEFAULT assessment timer if needed
+		OnAuthCompleted?.Invoke(true, null);
+		
+		var response = Authentication.GetAuthResponse();
+		if (response.Modules == null || response.Modules.Count == 0) return;
+		
+		if (OnModuleTarget != null)
+		{
+			if (Configuration.Instance.enableAutoStartModules && _currentModuleIndex < response.Modules.Count)
+			{
+				OnModuleTarget?.Invoke(response.Modules[_currentModuleIndex].Target);
+			}
+		}
+		else
+		{
+			Debug.LogError("AbxrLib: Need to subscribe to OnModuleTarget before running modules");
 		}
 	}
 
 	/// <summary>
 	/// Get the learner/user data from the most recent authentication completion
 	/// This is the userData object from the authentication response, containing user preferences and information
-	/// Returns null if no authentication has completed yet
+	/// The API handles normalization and adds OrgId to the UserData
+	/// Returns null if authentication has not completed or UserData is not available
 	/// </summary>
-	/// <returns>Dictionary containing learner data, or null if not authenticated</returns>
-	public static Dictionary<string, string> GetUserData() => Authentication.GetAuthResponse().UserData;
-
+	/// <returns>Dictionary containing learner data, or null if not authenticated or UserData is not available</returns>
+	public static Dictionary<string, string> GetUserData()
+	{
+		if (!Authentication.Authenticated())
+		{
+			return null;
+		}
+		
+		var authResponse = Authentication.GetAuthResponse();
+		if (authResponse?.UserData == null)
+		{
+			return null;
+		}
+		
+		// Return a copy of UserData to avoid modifying the original
+		return new Dictionary<string, string>(authResponse.UserData);
+	}
+	
 	/// <summary>
 	/// Update user data (UserId and UserData) and reauthenticate to sync with server
 	/// Updates the authentication response with new user information without clearing authentication state
@@ -261,7 +262,6 @@ public static partial class Abxr
 	/// </summary>
 	public static void PresentKeyboard(string promptText = null, string keyboardType = null, string emailDomain = null)
 	{
-Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={promptText ?? "null"}, keyboardType={keyboardType ?? "null"}, emailDomain={emailDomain ?? "null"}");
 		if (keyboardType is "text" or null)
 		{
 			KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
@@ -294,6 +294,9 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	
 	// Lock for thread-safe access to assessment start times
 	private static readonly object _assessmentStartTimesLock = new object();
+	
+	// Track whether any assessment has been started (either DEFAULT or user-initiated)
+	private static bool _assessmentStarted = false;
 
 	// Data structures for result options and event status
 	public static EventStatus ToEventStatus(this ResultOptions options) => options switch // Only here for backwards compatibility
@@ -356,6 +359,17 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	/// <param name="sendTelemetry">Send telemetry with the event (optional)</param>
 	public static void Event(string eventName, Dictionary<string, string> metadata = null, bool sendTelemetry = true)
 	{
+		// Ensure an assessment has been started before sending any event
+		// This ensures we always have an assessment start as the first event
+		// NOTE: Not sure if this is needed anymore since the OnAuthCompletedHandler will start the delayed timer
+		// lock (_assessmentStartTimesLock)
+		// {
+		// 	if (!_assessmentStarted)
+		// 	{
+		// 		DefaultEventAssessmentStart();
+		// 	}
+		// }
+		
 		metadata ??= new Dictionary<string, string>();
 		metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
@@ -405,6 +419,39 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	}
 
 	/// <summary>
+	/// Private method to send the DEFAULT assessment start event
+	/// Called automatically if no assessment is started within 1 minute of authentication
+	/// or before any other event is sent
+	/// </summary>
+	private static void DefaultEventAssessmentStart()
+	{
+		lock (_assessmentStartTimesLock)
+		{
+			// Only send if assessment hasn't been started yet
+			if (_assessmentStarted)
+			{
+				return;
+			}
+			
+			// Ensure start time exists for duration tracking (should already be set in NotifyAuthCompleted)
+			// Only set if it doesn't exist (defensive programming)
+			if (!_assessmentStartTimes.ContainsKey("DEFAULT"))
+			{
+				_assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
+			}
+			
+			var defaultMeta = new Dictionary<string, string>
+			{
+				["type"] = "assessment",
+				["verb"] = "started"
+			};
+			Event("DEFAULT", defaultMeta);
+			SetModule("DEFAULT");
+			_assessmentStarted = true;
+		}
+	}
+
+	/// <summary>
 	/// Start tracking an assessment - essential for LMS integration and analytics
 	/// Assessments track overall learner performance across multiple objectives and interactions
 	/// Think of this as the learner's score for a specific course or curriculum
@@ -417,6 +464,15 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 		// Use lock to prevent race conditions with concurrent calls and NotifyAuthCompleted
 		lock (_assessmentStartTimesLock)
 		{
+			// Skip if this assessment already exists
+			if (_assessmentStartTimes.ContainsKey(assessmentName))
+			{
+				return;
+			}
+			
+			// Mark that an assessment has been started (either DEFAULT or user-initiated)
+			_assessmentStarted = true;
+			
 			// If user is starting their own assessment (not the default), silently remove the default assessment
 			// This removes it as if it never existed - no completion event will be sent
 			if (assessmentName != "DEFAULT" && _assessmentStartTimes.ContainsKey("DEFAULT"))
@@ -465,10 +521,8 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 		Event(assessmentName, meta);
 		
 		// Check if we're in a module sequence
-		var currentModuleData = GetModuleTargetWithoutAdvance();
-		if (currentModuleData != null)
+		if (Authentication.GetAuthResponse()?.Modules?.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
 		{
-			// We're in a module sequence - advance to next module
 			AdvanceToNextModule();
 		}
 		else
@@ -508,6 +562,47 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	public static void EventExperienceComplete(string experienceName, Dictionary<string, string> meta = null)
 	{
 		EventAssessmentComplete(experienceName, 100, EventStatus.Complete, meta);
+	}
+
+	/// <summary>
+	/// Handler for OnAuthCompleted event that starts the delayed DEFAULT assessment timer
+	/// Only starts the timer if a DEFAULT assessment was set up during authentication
+	/// </summary>
+	/// <param name="success">Whether authentication succeeded</param>
+	/// <param name="error">Error message if authentication failed</param>
+	private static void OnAuthCompletedHandler(bool success, string error)
+	{
+		// Only proceed if authentication succeeded
+		if (!success)
+		{
+			return;
+		}
+		
+		// Check if we need to start the delayed DEFAULT assessment timer
+		lock (_assessmentStartTimesLock)
+		{
+			if (_assessmentStartTimes.ContainsKey("DEFAULT") && !_assessmentStarted)
+			{
+				CoroutineRunner.Instance.StartCoroutine(DelayedDefaultAssessmentStart());
+			}
+		}
+	}
+
+	/// <summary>
+	/// Coroutine to send DEFAULT assessment start event after 1 minute if no assessment has been started
+	/// This gives developers time to start their own assessment before the DEFAULT one is sent
+	/// </summary>
+	private static IEnumerator DelayedDefaultAssessmentStart()
+	{
+		yield return new WaitForSeconds(60f);
+		
+		lock (_assessmentStartTimesLock)
+		{
+			if (!_assessmentStarted)
+			{
+				DefaultEventAssessmentStart();
+			}
+		}
 	}
 
 	/// <summary>
@@ -1223,37 +1318,15 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	{
 		meta ??= new Dictionary<string, string>();
 		
-		// Add current module information if available from auth-provided modules
-		var currentSessionData = GetModuleTargetWithoutAdvance();
-		if (currentSessionData != null)
+		// If LMS modules exist, inject current module metadata unless the event already specifies it.
+		// (Data-specific metadata takes precedence.)
+		if (Authentication.GetAuthResponse()?.Modules?.Count > 0 && _currentModuleIndex < Authentication.GetAuthResponse()?.Modules?.Count)
 		{
-			// Only add module info if not already present (data-specific metadata take precedence)
-			if (!meta.ContainsKey("module") && !string.IsNullOrEmpty(currentSessionData.moduleTarget))
-			{
-				meta["module"] = currentSessionData.moduleTarget;
-			}
-			// For additional module metadata, we need to get it from the modules list
-			var moduleData = Authentication.GetModuleData();
-			if (moduleData != null && moduleData.Count > 0)
-			{
-				LoadModuleIndex();
-				if (_currentModuleIndex < moduleData.Count)
-				{
-					ModuleData currentModuleData = moduleData[_currentModuleIndex];
-					if (!meta.ContainsKey("moduleName") && !string.IsNullOrEmpty(currentModuleData.name))
-					{
-						meta["moduleName"] = currentModuleData.name;
-					}
-					if (!meta.ContainsKey("moduleId") && !string.IsNullOrEmpty(currentModuleData.id))
-					{
-						meta["moduleId"] = currentModuleData.id;
-					}
-					if (!meta.ContainsKey("moduleOrder"))
-					{
-						meta["moduleOrder"] = currentModuleData.order.ToString();
-					}
-				}
-			}
+			Authentication.ModuleData moduleData = Authentication.GetAuthResponse().Modules[_currentModuleIndex];
+			if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
+			if (!meta.ContainsKey("moduleName")) meta["moduleName"] = moduleData.Name;
+			if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
+			if (!meta.ContainsKey("moduleOrder")) meta["moduleOrder"] = moduleData.Order.ToString();
 		}
 		
 		// Add super metadata to metadata (includes manually-set moduleName/moduleId/moduleOrder when no LMS modules)
@@ -1285,125 +1358,40 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	#region Module Management
 
 	// Module index for sequential LMS multi-module applications
-	private static int _currentModuleIndex = 0;
-	private const string _moduleIndexKey = "AbxrModuleIndex";
-	
-	// Module index loading state to prevent repeated storage calls
-	private static bool _moduleIndexLoaded = false;
-	private static bool _moduleIndexLoading = false;
-	private static readonly object _moduleIndexLock = new object();
+	private static int _currentModuleIndex;
 
 	/// <summary>
 	/// Event that gets triggered when a moduleTarget should be handled.
 	/// Subscribe to this event to handle moduleTargets with your own logic (e.g., deep link handling, scene navigation, etc.).
 	/// </summary>
-	public static event System.Action<string> OnModuleTarget
-	{
-		add
-		{
-			_onModuleTarget += value;
-			
-			// If this is the first subscriber and we have modules to execute, execute them now
-			if (_onModuleTarget.GetInvocationList().Length == 1 && _hasPendingModules)
-			{
-				// Double-check that we still have modules to execute
-				var moduleToExecute = GetModuleTargetWithoutAdvance();
-				if (moduleToExecute != null)
-				{
-					_hasPendingModules = false;
-					ExecuteModuleSequence();
-				}
-			}
-		}
-		remove
-		{
-			_onModuleTarget -= value;
-		}
-	}
+	public static Action<string> OnModuleTarget;
 	
-	private static System.Action<string> _onModuleTarget;
-	private static bool _hasPendingModules = false;
-
-	// Data structures for module target and module information
-	/// <summary>
-	/// Data structure for module target information from LMS integration
-	/// </summary>
-	[Serializable]
-	public class CurrentSessionData
+	public static Action OnAllModulesCompleted;
+	
+	public static bool StartModuleAtIndex(int moduleIndex)
 	{
-		public string moduleTarget;     // The target module identifier from LMS
-		public object userData;         // Additional user data from authentication
-		public object userId;           // User identifier
-		public string userEmail;
-
-		public CurrentSessionData(string moduleTarget, object userData, object userId, string userEmail = null)
+		var response = Authentication.GetAuthResponse();
+		if (response?.Modules == null || response.Modules.Count == 0)
 		{
-			this.moduleTarget = moduleTarget;
-			this.userData = userData;
-			this.userId = userId;
-			this.userEmail = userEmail;
+			Debug.LogError("AbxrLib: No modules available");
+			return false;
 		}
-	}
-
-	/// <summary>
-	/// Data structure for module information from authentication response
-	/// </summary>
-	[Serializable]
-	public class ModuleData
-	{
-		public string id;       // Module unique identifier
-		public string name;     // Module display name
-		public string target;   // Module target identifier
-		public int order;       // Module order/sequence
-
-		public ModuleData(string id, string name, string target, int order)
+	
+		if (moduleIndex >= response.Modules.Count || moduleIndex < 0)
 		{
-			this.id = id;
-			this.name = name;
-			this.target = target;
-			this.order = order;
-		}
-	}
-
-
-	/// <summary>
-	/// Execute the current module in the sequence by triggering the OnModuleTarget event.
-	/// Developers should subscribe to OnModuleTarget to handle module targets with their own logic.
-	/// Module progression happens automatically when EventAssessmentComplete() is called.
-	/// This approach gives developers full control over how to handle each module target.
-	/// </summary>
-	/// <returns>True if a module was executed, false if no modules available or no subscribers</returns>
-	public static bool ExecuteModuleSequence()
-	{
-		if (_onModuleTarget == null)
-		{
-			Debug.LogWarning("AbxrLib: ExecuteModuleSequence - No subscribers to OnModuleTarget event. Subscribe to OnModuleTarget to handle module targets.");
+			Debug.LogError($"AbxrLib: Invalid module index - {moduleIndex}");
 			return false;
 		}
 
-		// Get current module without advancing (advancement happens in EventAssessmentComplete)
-		var currentModuleData = GetModuleTargetWithoutAdvance();
-		if (currentModuleData == null)
+		if (OnModuleTarget == null)
 		{
-			Debug.Log("AbxrLib: ExecuteModuleSequence - No modules available to execute.");
+			Debug.LogError("AbxrLib: Need to subscribe to OnModuleTarget before running modules");
 			return false;
 		}
-
-		Debug.Log($"AbxrLib: Triggering OnModuleTarget event for module - {currentModuleData.moduleTarget}");
-		
-		try
-		{
-			_onModuleTarget.Invoke(currentModuleData.moduleTarget);
-			return true;
-		}
-		catch (Exception ex)
-		{
-			// Log error with consistent format and include module context
-			Debug.LogError($"AbxrLib: Error executing OnModuleTarget event for module {currentModuleData.moduleTarget}: {ex.Message}\n" +
-						  $"Exception Type: {ex.GetType().Name}\n" +
-						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-			return false;
-		}
+	
+		_currentModuleIndex = moduleIndex;
+		OnModuleTarget.Invoke(response.Modules[_currentModuleIndex].Target);
+		return true;
 	}
 
 	/// <summary>
@@ -1413,120 +1401,20 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	/// </summary>
 	private static void AdvanceToNextModule()
 	{
-		var moduleData = Authentication.GetModuleData();
-		if (moduleData == null || moduleData.Count == 0)
-		{
-			return;
-		}
-
-		LoadModuleIndex();
-		if (_currentModuleIndex >= moduleData.Count)
-		{
-			return;
-		}
-
-		ModuleData currentModule = moduleData[_currentModuleIndex];
-		
-		// Advance to next module
 		_currentModuleIndex++;
-		SaveModuleIndex();
-		
-		// Check if there are more modules
-		if (_currentModuleIndex < moduleData.Count)
+		if (_currentModuleIndex < Authentication.GetAuthResponse().Modules.Count)
 		{
-			// More modules remain - get next module and trigger it
-			ModuleData nextModule = moduleData[_currentModuleIndex];
-			Debug.Log($"AbxrLib: Module '{currentModule.name}' completed. Advancing to next module - {nextModule.target}");
-			if (_onModuleTarget != null && _onModuleTarget.GetInvocationList().Length > 0)
-			{
-				_onModuleTarget.Invoke(nextModule.target);
-			}
+			Debug.Log($"AbxrLib: Module '{Authentication.GetAuthResponse().Modules[_currentModuleIndex-1].Name}' complete. " +
+			          $"Advancing to next module - '{Authentication.GetAuthResponse().Modules[_currentModuleIndex].Name}'");
+			OnModuleTarget?.Invoke(Authentication.GetAuthResponse().Modules[_currentModuleIndex].Target);
 		}
 		else
 		{
-			// All modules completed - check exit conditions
-			Debug.Log("AbxrLib: All modules completed.");
-			if (Authentication.SessionUsedAuthHandoff() && Configuration.Instance.returnToLauncherAfterAssessmentComplete)
-			{
-				CoroutineRunner.Instance.StartCoroutine(ExitAfterAssessmentComplete());
-			}
+			OnAllModulesCompleted?.Invoke();
+			Debug.Log("AbxrLib: All modules complete");
 		}
 	}
-
-	/// <summary>
-	/// Get the next module target from the available modules for sequential module processing
-	/// Returns null when no more module targets are available
-	/// Each call moves to the next module in the sequence and updates persistent storage
-	/// </summary>
-	/// <returns>The next CurrentSessionData with complete module information, or null if no more modules</returns>
-	public static CurrentSessionData GetModuleTarget()
-	{
-		// Get current module data without advancing
-		var currentSessionData = GetModuleTargetWithoutAdvance();
-		if (currentSessionData == null)
-		{
-			return null;
-		}
-
-		// Advance to next module
-		LoadModuleIndex();
-		_currentModuleIndex++;
-		SaveModuleIndex();
-
-		return currentSessionData;
-	}
-
-	/// <summary>
-	/// Get the current module target again without advancing to the next one
-	/// Useful for checking what module you're currently on without consuming it
-	/// Returns the same CurrentSessionData structure as GetModuleTarget() but doesn't advance the index
-	/// </summary>
-	/// <returns>CurrentSessionData for the current module, or null if none available</returns>
-	public static CurrentSessionData GetModuleTargetWithoutAdvance()
-	{
-		if (Authentication.GetModuleData() == null || Authentication.GetModuleData().Count == 0)
-		{
-			return null;
-		}
-
-		LoadModuleIndex();
-
-		if (_currentModuleIndex >= Authentication.GetModuleData().Count)
-		{
-			return null;
-		}
-
-		var currentModuleData = Authentication.GetModuleData()[_currentModuleIndex];
-		
-		// Return CurrentSessionData structure (same as GetModuleTarget but without advancing index)
-		return new CurrentSessionData(
-			currentModuleData.target,
-			GetUserData(),
-			Authentication.GetAuthResponse().UserId
-		);
-	}
-
-	/// <summary>
-	/// Get all available modules from the authentication response
-	/// Provides complete module information including id, name, target, and order
-	/// Returns empty list if no authentication has completed yet
-	/// </summary>
-	/// <returns>List of ModuleData objects with complete module information</returns>
-	public static List<ModuleData> GetModuleTargetList() => Authentication.GetModuleData();
-
-	/// <summary>
-	/// Get the current number of module targets remaining
-	/// </summary>
-	/// <returns>Number of module targets remaining</returns>
-	public static int GetModuleTargetCount()
-	{
-		if (Authentication.GetModuleData() == null) return 0;
-
-		LoadModuleIndex();
-		int remainingModuleCount = Authentication.GetModuleData().Count - _currentModuleIndex;
-		return Math.Max(0, remainingModuleCount);
-	}
-
+	
 	/// <summary>
 	/// Set module metadata when no modules are provided in authentication.
 	/// This method allows developers to track module information even when the LMS doesn't provide a module list.
@@ -1538,148 +1426,40 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	private static void SetModule(string module, string moduleName = null)
 	{
 		// Check if we're using auth-provided module targets
-		var moduleData = Authentication.GetModuleData();
-		if (moduleData != null && moduleData.Count > 0)
+		var response = Authentication.GetAuthResponse();
+		if (response?.Modules == null || response.Modules.Count > 0)
 		{
 			// Auth-provided modules exist - don't allow manual setting to prevent breaking module sequence
-			//Debug.LogWarning("AbxrLib: Manual module setting is disabled when using module targets from authentication.");
 			return;
 		}
-
-		// No auth-provided modules - safe to set manually
-		if (string.IsNullOrEmpty(module))
-		{
-			return;
-		}
-
+		
+		if (string.IsNullOrEmpty(module)) return;
+		
 		// Directly set module metadata in super metadata, bypassing Register() check
 		_superMetaData["module"] = module;
-		
+			
 		if (!string.IsNullOrEmpty(moduleName))
 		{
 			_superMetaData["moduleName"] = moduleName;
-		} else {
+		}
+		else
+		{
 			_superMetaData["moduleName"] = FormatModuleNameForDisplay(module);
 		}
-		
-		// When using SetModule, we should not use moduleOrder - unset it if it was set elsewhere
-		if (_superMetaData.ContainsKey("moduleOrder"))
-		{
-			_superMetaData.Remove("moduleOrder");
-		}
-
-		SaveSuperMetaData();
-		//Debug.Log($"AbxrLib: Module manually set - Name: {moduleName}, ID: {moduleId ?? "none"}");
-	}
-
-	/// <summary>
-	/// Get the current module target string (convenience wrapper for GetModuleTargetWithoutAdvance)
-	/// </summary>
-	/// <returns>Current module target string, or null if no module available</returns>
-	public static string GetCurrentModuleTarget()
-	{
-		var currentModule = GetModuleTargetWithoutAdvance();
-		return currentModule?.moduleTarget;
-	}
-
-	/// <summary>
-	/// Clear module progress and reset to beginning
-	/// </summary>
-	public static void ClearModuleTargets()
-	{
-		_currentModuleIndex = 0;
-		// Reset cache since we're clearing the module state
-		_moduleIndexLoaded = false;
-		_moduleIndexLoading = false;
-		CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Delete(StorageScope.user, _moduleIndexKey));
-	}
-
-	private static void SaveModuleIndex()
-	{
-		try
-		{
-			// Module tracking uses user scope for LMS integrations - requires user to be logged in
-			// The StorageSetEntry function will handle the authentication checks and defer until user auth is ready
-			var moduleIndexData = new Dictionary<string, string>
-			{
-				["moduleIndex"] = _currentModuleIndex.ToString()
-			};
-
-			StorageSetEntry(_moduleIndexKey, moduleIndexData, StorageScope.user, StoragePolicy.keepLatest);
-			
-			// Reset cache since we've updated the stored index
-			_moduleIndexLoaded = false;
-		}
-		catch (Exception ex)
-		{
-			// Log error with consistent format and include context
-			Debug.LogError($"AbxrLib: Failed to save module index: {ex.Message}\n" +
-						  $"Current Module Index: {_currentModuleIndex}\n" +
-						  $"Exception Type: {ex.GetType().Name}\n" +
-						  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-		}
-	}
-
-	private static void LoadModuleIndex()
-	{
-		// Use lock to prevent race conditions
-		lock (_moduleIndexLock)
-		{
-			// Don't load if already loaded or currently loading
-			if (_moduleIndexLoaded || _moduleIndexLoading)
-			{
-				return;
-			}
-
-			// Set loading flag first, before any operations that might fail
-			_moduleIndexLoading = true;
-			
-			try
-			{
-				CoroutineRunner.Instance.StartCoroutine(LoadModuleIndexCoroutine());
-			}
-			catch (Exception ex)
-			{
-				// Reset loading flag within the lock to prevent race conditions
-				_moduleIndexLoading = false;
-				// Log error with consistent format and include context
-				Debug.LogError($"AbxrLib: Failed to load module index: {ex.Message}\n" +
-							  $"Module Index Loaded: {_moduleIndexLoaded}\n" +
-							  $"Exception Type: {ex.GetType().Name}\n" +
-							  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-			}
-		}
-	}
-
-	private static IEnumerator LoadModuleIndexCoroutine()
-	{
-		yield return StorageGetEntry(_moduleIndexKey, StorageScope.user, result =>
-		{
-			// Use lock to protect the completion of loading
-			lock (_moduleIndexLock)
-			{
-				if (result != null && result.Count > 0)
-				{
-					var moduleIndexEntry = result[0]; // Get the first (and should be only) entry
-					if (moduleIndexEntry.ContainsKey("moduleIndex"))
-					{
-						var moduleIndexString = moduleIndexEntry["moduleIndex"];
-						if (!string.IsNullOrEmpty(moduleIndexString))
-						{
-							if (int.TryParse(moduleIndexString, out int savedModuleIndex))
-							{
-								_currentModuleIndex = savedModuleIndex;
-							}
-						}
-					}
-				}
 				
-				// Mark loading as complete
-				_moduleIndexLoaded = true;
-				_moduleIndexLoading = false;
-			}
-		});
+		// When using SetModule, we should not use moduleOrder - unset it if it was set elsewhere
+		_superMetaData.Remove("moduleOrder");
+		
+		SaveSuperMetaData();
 	}
+
+	/// <summary>
+	/// Get all available modules from the authentication response
+	/// Provides complete module information including id, name, target, and order
+	/// Returns empty list if no authentication has completed yet
+	/// </summary>
+	/// <returns>List of ModuleData objects with complete module information</returns>
+	public static List<Authentication.ModuleData> GetModuleList() => Authentication.GetAuthResponse().Modules;
 
 	#endregion
 
@@ -1756,71 +1536,6 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	public static string GetFingerprint() =>
 		ArborServiceClient.IsConnected() ? ArborServiceClient.ServiceWrapper?.GetFingerprint() : "";
 
-	/// <summary>Gets the current time from the AbxrInsightService Kotlin service.</summary>
-	/// <returns>The current time as a string, or empty string if service is not connected.</returns>
-	public static string WhatTimeIsIt()
-	{
-		Debug.Log("[Abxr][AbxrInsightServiceClient] WhatTimeIsIt() called");
-		
-		//// First check if there's even an instance of the service client in the scene
-		//var instance = AbxrInsightServiceClient.FindInstance();
-		//if (instance == null)
-		//{
-		//	Debug.LogWarning("[Abxr] No AbxrInsightServiceClient instance found in scene! You need to add it to a GameObject.");
-		//	return "";
-		//}
-		
-		//bool isConnected = AbxrInsightServiceClient.IsConnected();
-		//Debug.Log($"[Abxr] AbxrInsightServiceClient.IsConnected() = {isConnected}");
-		
-		//if (!isConnected)
-		//{
-		//	Debug.Log("[Abxr] Service not connected, returning empty string");
-		//	return "";
-		//}
-		
-		//if (AbxrInsightServiceClient.IsInitialized())
-		//{
-		//	Debug.LogWarning("[Abxr] IsConnected() returned true but MjpServiceWrapper is null!");
-		//	return "";
-		//}
-		
-		try
-		{
-			Debug.Log("[Abxr][AbxrInsightServiceClient] Calling AbxrInsightServiceWrapper.WhatTimeIsIt()");
-			string result = AbxrInsightServiceClient.WhatTimeIsIt();
-			Debug.Log($"[Abxr][AbxrInsightServiceClient] WhatTimeIsIt() result: '{result}'");
-			return result;
-		}
-		catch (Exception ex)
-		{
-			Debug.LogError($"[Abxr][AbxrInsightServiceClient] Error in WhatTimeIsIt(): {ex.Message}");
-			Debug.LogError($"[Abxr][AbxrInsightServiceClient] Stack trace: {ex.StackTrace}");
-			return "";
-		}
-	}
-	//public static bool IsServiceAvailable()
-	//{
-	//	return AbxrInsightServiceClient.IsServiceAvailable();
-	//	//return ArborServiceClient.IsConnected();	// VS2022 AI suggested this... might be a better way to go in the final version.
-	//}
-	/// <summary>
-	/// Stronger form of IsServiceAvailable()... also insists that the SQLiteJDBC.Initialize() has been called by AbxrInsightService.OnCreate().
-	/// </summary>
-	/// <returns></returns>
-	public static bool ServiceIsFullyInitialized()
-	{
-		try
-		{
-			//return false;
-			return AbxrInsightServiceClient.ServiceIsFullyInitialized();
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-	}
-
 	#endregion
 
 	#region Helper Methods
@@ -1834,25 +1549,19 @@ Debug.Log($"[AbxrInsightServiceClient] PresentKeyboard called with promptText={p
 	/// <returns>The formatted module name with spaces between words</returns>
 	private static string FormatModuleNameForDisplay(string moduleName)
 	{
-		if (string.IsNullOrEmpty(moduleName))
-		{
-			return moduleName;
-		}
+		if (string.IsNullOrEmpty(moduleName)) return moduleName;
 
 		// Replace underscores with spaces
 		string withSpaces = moduleName.Replace('_', ' ');
 		
 		// Split by spaces to get individual words
-		string[] words = withSpaces.Split(new[] { ' ' }, System.StringSplitOptions.RemoveEmptyEntries);
+		string[] words = withSpaces.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 		
 		// Capitalize first letter of each word, lowercase the rest
-		System.Text.StringBuilder result = new System.Text.StringBuilder();
+		var result = new System.Text.StringBuilder();
 		for (int i = 0; i < words.Length; i++)
 		{
-			if (i > 0)
-			{
-				result.Append(' ');
-			}
+			if (i > 0) result.Append(' ');
 			
 			if (words[i].Length > 0)
 			{

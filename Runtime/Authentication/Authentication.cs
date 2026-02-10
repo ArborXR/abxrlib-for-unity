@@ -15,9 +15,27 @@
  * with automatic fallback mechanisms and robust error handling.
  */
 
+/*
+ * Copyright (c) 2024 ArborXR. All rights reserved.
+ * 
+ * AbxrLib for Unity - Authentication System
+ * 
+ * This file handles user authentication, device identification, and session management
+ * for AbxrLib. It provides comprehensive authentication capabilities including:
+ * - Device fingerprinting and identification
+ * - User authentication with LMS integration support
+ * - Authentication handoff mechanisms for seamless user experience
+ * - Session management and token handling
+ * - Keyboard-based authentication UI
+ * 
+ * The authentication system supports both device-level and user-level authentication,
+ * with automatic fallback mechanisms and robust error handling.
+ */
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using AbxrLib.Runtime.Common;
 using AbxrLib.Runtime.Core;
@@ -29,7 +47,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Scripting;
 
-namespace AbxrLib.Runtime.Authentication
+namespace AbxrLibLib.Runtime.Authentication
 {
     [DefaultExecutionOrder(1)]
     public class Authentication : MonoBehaviour
@@ -37,11 +55,11 @@ namespace AbxrLib.Runtime.Authentication
 		// Data for use when using the AbxrInsightService to authenticate.
 		private static Dictionary<string, string> _dictAuthMechanism = null;
 		// ---
+        private static string _appToken;
+        private static string _appId;
         private static string _orgId;
         private static string _deviceId;
         private static string _authSecret;
-		private static string _appToken;
-        private static string _appId;
         private static Partner _partner = Partner.None;
         private static string _deviceModel;
         private static string[] _deviceTags;
@@ -49,6 +67,7 @@ namespace AbxrLib.Runtime.Authentication
         private static string _ipAddress;
         private static string _sessionId;
 		private static string _buildFingerprint;
+        private static string _buildFingerprint;
         private static int _failedAuthAttempts;
         
         private static AuthMechanism _authMechanism;
@@ -65,6 +84,12 @@ namespace AbxrLib.Runtime.Authentication
         
         // Complete authentication response data
         private static List<Abxr.ModuleData> _authResponseModuleData;
+        
+        private static AuthResponse _responseData;
+        public static AuthResponse GetAuthResponse() => _responseData;
+        
+        // Store entered email/text value for email and text auth methods
+        private static string _enteredAuthValue;
     
         private const string DeviceIdKey = "abxrlib_device_id";
 
@@ -72,7 +97,6 @@ namespace AbxrLib.Runtime.Authentication
         private static bool _initialized;
         
         // Auth handoff for external launcher apps
-        private static bool _authHandoffCompleted = false;
         private static bool _sessionUsedAuthHandoff = false;
 
         public static bool Authenticated()
@@ -87,12 +111,15 @@ namespace AbxrLib.Runtime.Authentication
         public static bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
         
         /// <summary>
+        /// Gets the authentication mechanism type, or null if no mechanism is set
+        /// </summary>
+        public static string GetAuthMechanismType() => _authMechanism?.type;
+        
+        /// <summary>
         /// Clears authentication state and stops data transmission
         /// </summary>
         private static void ClearAuthenticationState()
         {
-			_dictAuthMechanism = null;
-			// --- ^^^ Service vvv Non-Service.
             _tokenExpiry = DateTime.MinValue;
             _keyboardAuthSuccess = null;
             _sessionId = null;
@@ -100,7 +127,6 @@ namespace AbxrLib.Runtime.Authentication
             
             // Clear cached user data
             _responseData = null;
-            _authResponseModuleData = null;
             
             // Clear stored auth value
             _enteredAuthValue = null;
@@ -182,6 +208,24 @@ Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt IsServ
             }
         }
 
+        private static IEnumerator DeferredAuthenticationSystem()
+        {
+            if (!Configuration.Instance.disableAutoStartAuthentication)
+            {
+                if (Configuration.Instance.authenticationStartDelay > 0)
+                {
+                    yield return new WaitForSeconds(Configuration.Instance.authenticationStartDelay);
+                }
+                
+                yield return Authenticate();
+            }
+            else
+            {
+                Debug.Log("AbxrLib: Auto-start authentication is disabled. Call Abxr.StartAuthentication() manually when ready.");
+            }
+        }
+
+
         public static void SetSessionId(string sessionId) => _sessionId = sessionId;
 
         public static IEnumerator Authenticate()
@@ -196,29 +240,21 @@ Debug.LogError($"[AbxrInsightServiceClient] Authenticate about to attempt IsServ
             }
             
             // Check for auth handoff first before doing normal authentication
-            yield return CheckAuthHandoff();
-            if (_authHandoffCompleted)
-            {
-                yield break; // Auth handoff handled everything, we're done
-            }
-Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call AuthRequest().");
-			yield return AuthRequest();
-Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call GetConfiguration().");
+            if (CheckAuthHandoff()) yield break;  // Auth handoff handled everything, we're done
+            
+            yield return AuthRequest();
             yield return GetConfiguration();
-Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to check if the auth mechanism has been set().");
-			if ((AbxrInsightServiceClient.ServiceIsFullyInitialized() && _dictAuthMechanism != null && _dictAuthMechanism.Count > 0) ||
-				(!AbxrInsightServiceClient.ServiceIsFullyInitialized() && _authMechanism != null))
+            if (_authMechanism != null)
             {
-Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call KeyboardAuthenticate().");
-				yield return KeyboardAuthenticate();
+                yield return KeyboardAuthenticate();
                 // Note: KeyboardAuthenticate calls NotifyAuthCompleted when it succeeds
             }
             else
             {
-                Debug.Log("AbxrLib: Authentication fully completed");
                 // No additional auth needed - notify completion now
                 Abxr.NotifyAuthCompleted();
                 _keyboardAuthSuccess = true;  // So FullyAuthenticated() returns true
+                Debug.Log("AbxrLib: Authentication fully completed");
             }
         }
 
@@ -226,9 +262,6 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call Keybo
         {
             // Clear authentication state to stop data transmission
             ClearAuthenticationState();
-            
-            // Reset auth handoff state
-            _authHandoffCompleted = false;
         
             CoroutineRunner.Instance.StartCoroutine(Authenticate());
         }
@@ -271,9 +304,6 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call Keybo
 
         private static IEnumerator ReAuthenticateWithUserData(string userId, Dictionary<string, string> additionalUserData)
         {
-            // Reset auth handoff state (but don't clear authentication state)
-            _authHandoffCompleted = false;
-            
             // Call AuthRequest with user data parameters
             yield return AuthRequest(true, userId, additionalUserData);
             
@@ -313,9 +343,24 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call Keybo
 
         private static void GetConfigData()
         {
-            _appId = Configuration.Instance.appID;
-            _orgId = Configuration.Instance.orgID;
-            _authSecret = Configuration.Instance.authSecret;
+            var config = Configuration.Instance;
+            
+            // Extract all config data using centralized helper
+            var configData = Utils.ExtractConfigData(config);
+            
+            if (!configData.isValid)
+            {
+                Debug.LogError($"AbxrLib: {configData.errorMessage} Cannot authenticate.");
+                return;
+            }
+            
+            // Set Authentication static fields from extracted config data
+            _appId = configData.appId;
+            _appToken = configData.appToken;
+            _orgId = configData.orgId;
+            _authSecret = configData.authSecret;
+            
+            // Note: orgId and authSecret will still be overridden by GetArborData() if ArborServiceClient is connected
         }
     
         private static void GetArborData()
@@ -370,11 +415,12 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call Keybo
 #endif
         private static bool ValidateConfigValues()
         {
-            if (!Configuration.Instance.IsValid()) return false;
+            var config = Configuration.Instance;
+            if (!config.useAppTokens && !Configuration.Instance.IsValid()) return false;
             
-            if (string.IsNullOrEmpty(_appId))
+            if (string.IsNullOrEmpty(_appId) && string.IsNullOrEmpty(_appToken))
             {
-                Debug.LogError("AbxrLib: Application ID is missing. Cannot authenticate.");
+                Debug.LogError("AbxrLib: Need Application ID or Application Token. Cannot authenticate.");
                 return false;
             }
             
@@ -393,139 +439,49 @@ Debug.Log($"[AbxrInsightServiceClient] In Authenticate() and about to call Keybo
             return true;
         }
 
-		public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)
+        public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)
         {
-			string	szType = "",
-					szDomain = "",
-					szOriginalPrompt = "";
-
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() at the very beginning.");
             _keyboardAuthSuccess = false;
             _enteredAuthValue = null;
+            
+            if (keyboardInput != null)
+            {
+                string originalPrompt = _authMechanism.prompt;
+                _authMechanism.prompt = keyboardInput;
+                
+                // Store the entered value for email and text auth methods so we can add it to UserData
+                if (_authMechanism.type == "email" || _authMechanism.type == "text")
+                {
+                    _enteredAuthValue = keyboardInput;
+                    
+                    // For email type, combine with domain if provided
+                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
+                    {
+                        _enteredAuthValue += $"@{_authMechanism.domain}";
+                    }
+                }
+                
+                yield return AuthRequest(false);
+                _enteredAuthValue = null;  // only need this in AuthRequest
+                if (_keyboardAuthSuccess == true)
+                {
+                    KeyboardHandler.Destroy();
+                    _failedAuthAttempts = 0;
+                    
+                    // Notify completion for keyboard authentication success
+                    Abxr.NotifyAuthCompleted();
+                    
+                    yield break;
+                }
 
-			if (keyboardInput != null)
-			{
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate(): that's just lovely Jeremy (Hillary, Boob, PhD) keyboardInput is not null, about to do if service.");
-				// Accept keyboard input and do second stage of authentication that uses it.
-				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
-				{
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() being called second time, i.e. after input, and service is on ergo calling KeyboardAuthenticate() AbxrInsightService.");
-Debug.Log($"[AbxrInsightServiceClient] In first line of KeyboardAuthenticate() with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {_dictAuthMechanism?.Stringify() ?? "null"}");
-					// _dictAuthMechanism has been set up or we would not be in here.
-					_dictAuthMechanism.TryGetValue("type", out szType);
-					_dictAuthMechanism.TryGetValue("domain", out szDomain);
-					if (keyboardInput == null)
-					{
-						_dictAuthMechanism.TryGetValue("prompt", out szOriginalPrompt);
-					}
-					// ---
-					_keyboardAuthSuccess = false;
-					if (keyboardInput != null)
-					{
-Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticate() second phase with keyboardInput={keyboardInput ?? "null"}.  dictAuthMechanism: {_dictAuthMechanism?.Stringify() ?? "null"}");
-						// Store the entered value for email and text auth methods so we can add it to UserData
-						if (szType == "email" || szType == "text")
-						{
-							// For email type, combine with domain if provided.
-							if (szType == "email" && !string.IsNullOrEmpty(szDomain))
-							{
-								_enteredAuthValue = $"{keyboardInput}@{szDomain}";
-							}
-							else
-							{
-								_enteredAuthValue = keyboardInput;
-							}
-						}
-						else
-						{
-							_enteredAuthValue = null; // Clear for non-email/text auth methods
-						}
-Debug.Log($"[AbxrInsightServiceClient] In KeyboardAuthenticate() about to stuff the keyboardInput into dictAuthMechanism");
-						_dictAuthMechanism["prompt"] = keyboardInput;
-Debug.Log($"[AbxrInsightServiceClient] Just stuffed {keyboardInput} into dictAuthMechanism in KeyboardAuthenticate().  dictAuthMechanism: {_dictAuthMechanism?.Stringify() ?? "null"}");
-						AbxrInsightServiceClient.set_SessionAuthMechanism(_dictAuthMechanism);
-Debug.Log($"[AbxrInsightServiceClient] About to call AuthRequest() from KeyboardAuthenticate().");
-						yield return AuthRequest(false);
-						_enteredAuthValue = null;  // only need this in AuthRequest
-						if (_keyboardAuthSuccess == true)
-						{
-							KeyboardHandler.Destroy();
-							_failedAuthAttempts = 0;
-Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success in KeyboardAuthenticate().");
-							// Notify completion for keyboard authentication success
-							Abxr.NotifyAuthCompleted();
-							yield break;
-						}
-						_dictAuthMechanism["prompt"] = szOriginalPrompt;
-					}
-				}
-				else
-				{
-					string originalPrompt = _authMechanism.prompt;
-
-					_authMechanism.prompt = keyboardInput;
-					// Store the entered value for email and text auth methods so we can add it to UserData
-					if (_authMechanism.type == "email" || _authMechanism.type == "text")
-					{
-						_enteredAuthValue = keyboardInput;
-
-						// For email type, combine with domain if provided
-						if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
-						{
-							_enteredAuthValue += $"@{_authMechanism.domain}";
-						}
-					}
-
-					yield return AuthRequest(false);
-					_enteredAuthValue = null;  // only need this in AuthRequest
-					if (_keyboardAuthSuccess == true)
-					{
-						KeyboardHandler.Destroy();
-						_failedAuthAttempts = 0;
-
-Debug.Log($"[AbxrInsightServiceClient] NotifyAuthCompleted() to indicate success in KeyboardAuthenticate().");
-						// Notify completion for keyboard authentication success
-						Abxr.NotifyAuthCompleted();
-
-						yield break;
-					}
-					_authMechanism.prompt = originalPrompt;
-				}
-			}
-			else
-			{
-				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
-				{
-					_dictAuthMechanism.TryGetValue("prompt", out szOriginalPrompt);
-					_dictAuthMechanism.TryGetValue("type", out szType);
-					_dictAuthMechanism.TryGetValue("domain", out szDomain);
-				}
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() keyboardInput is null.");
-			}
-			try
-			{
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() past the if (keyboardInput) and about to go on to execute PresentKeyboard().");
-				string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
-Debug.Log($"[AbxrInsightServiceClient] KeyboardAuthenticate() California oranges.");
-				if (invalidQrCode) prompt = "Invalid QR Code\n";
-				if (AbxrInsightServiceClient.ServiceIsFullyInitialized())
-				{
-Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticate() service flow.");
-					prompt += szOriginalPrompt;
-					Abxr.PresentKeyboard(prompt, szType, szDomain);
-				}
-				else
-				{
-Debug.Log($"[AbxrInsightServiceClient] About to call Abxr.PresentKeyboard() from KeyboardAuthenticate() non-service flow.");
-					prompt += _authMechanism.prompt;
-					Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
-				}
-				_failedAuthAttempts++;
-			}
-			catch (Exception e)
-			{
-Debug.Log($"[AbxrInsightServiceClient] Kablooey in KeyboardAuthenticate() with message {e.Message}.");
-			}
+                _authMechanism.prompt = originalPrompt;
+            }
+        
+            string prompt = _failedAuthAttempts > 0 ? $"Authentication Failed ({_failedAuthAttempts})\n" : "";
+            if (invalidQrCode) prompt = "Invalid QR Code\n";
+            prompt += _authMechanism.prompt;
+            Abxr.PresentKeyboard(prompt, _authMechanism.type, _authMechanism.domain);
+            _failedAuthAttempts++;
         }
 
 
@@ -534,6 +490,9 @@ Debug.Log($"[AbxrInsightServiceClient] Kablooey in KeyboardAuthenticate() with m
             _deviceModel = DeviceModel.deviceModel;
 #if UNITY_ANDROID && !UNITY_EDITOR
             _ipAddress = Utils.GetIPAddress();
+            
+            // Read build_fingerprint from Android manifest
+            _buildFingerprint = Utils.GetAndroidManifestMetadata("com.arborxr.abxrlib.build_fingerprint");
             
             var currentAssembly = Assembly.GetExecutingAssembly();
             AssemblyName[] referencedAssemblies = currentAssembly.GetReferencedAssemblies();
@@ -549,8 +508,47 @@ Debug.Log($"[AbxrInsightServiceClient] Kablooey in KeyboardAuthenticate() with m
             //TODO Geolocation
         }
 
-        private static IEnumerator AuthRequest(bool withRetry = true, string userId = null, Dictionary<string, string> additionalUserData = null)
+        private static IEnumerator AuthRequest(bool withRetry = true, string userId = null, Dictionary<string, string> additionalUserData = nullbool withRetry = true, string userId = null, Dictionary<string, string> additionalUserData = null)
         {
+            if (string.IsNullOrEmpty(_sessionId)) _sessionId = Guid.NewGuid().ToString();
+        
+            var config = Configuration.Instance;
+            
+            // Get SSO access token if SSO is active
+            string ssoAccessToken = null;
+            if (Abxr.GetIsAuthenticated())
+            {
+                ssoAccessToken = Abxr.GetAccessToken();
+            }
+            
+            var data = new AuthPayload
+            {
+                // Send either appId or appToken, not both
+                //appId = config.useAppTokens ? null : _appId,
+                // When using app tokens, include both appId (extracted from token) and appToken
+                // When not using app tokens, only include appId
+                appId = _appId,
+                appToken = config.useAppTokens ? _appToken : null,
+                orgId = _orgId,
+                authSecret = _authSecret,
+                deviceId = _deviceId,
+                userId = userId, // Include userId in payload if provided
+                tags = _deviceTags,
+                sessionId = _sessionId,
+                partner = _partner.ToString().ToLower(),
+                ipAddress = _ipAddress,
+                deviceModel = _deviceModel,
+                geolocation = new Dictionary<string, string>(),
+                osVersion = SystemInfo.operatingSystem,
+                xrdmVersion = _xrdmVersion,
+                appVersion = Application.version,
+                unityVersion = Application.unityVersion,
+                abxrLibType = "unity",
+                abxrLibVersion = AbxrLibVersion.Version,
+                buildFingerprint = _buildFingerprint,
+                SSOAccessToken = ssoAccessToken,  // Include SSO access token if SSO is active
+                authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
+            };
 			if (Abxr.ServiceIsFullyInitialized())
 			{
 Debug.Log($"[AbxrInsightServiceClient] In the beginning of AuthRequest().");
@@ -657,113 +655,146 @@ Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceClient.AuthRequest() su
 					authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
 				};
         
-				string json = JsonConvert.SerializeObject(data);
-				var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
+            string json = JsonConvert.SerializeObject(data);
+            var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             
-				bool success = false;
-				while (!success)
-				{
-					// Create request and handle creation errors
-					UnityWebRequest request;
+            bool success = false;
+            while (!success)
+            {
+                // Create request and handle creation errors
+                UnityWebRequest request;
                 
-					// Request creation with error handling (no yield statements)
-					try
-					{
-						request = new UnityWebRequest(fullUri.ToString(), "POST");
-						Utils.BuildRequest(request, json);
+                // Request creation with error handling (no yield statements)
+                try
+                {
+                    request = new UnityWebRequest(fullUri.ToString(), "POST");
+                    Utils.BuildRequest(request, json);
                     
-						// Set timeout to prevent hanging requests
-						request.timeout = Configuration.Instance.requestTimeoutSeconds;
-					}
-					catch (Exception ex)
-					{
-						Debug.LogError($"AbxrLib: Authentication request creation failed: {ex.Message}");
-						break; // Exit retry loop - this is a non-retryable error
-					}
+                    // Set timeout to prevent hanging requests
+                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: Authentication request creation failed: {ex.Message}");
+                    break; // Exit retry loop - this is a non-retryable error
+                }
                 
-					// Send request (yield outside try-catch)
-					yield return request.SendWebRequest();
+                // Send request (yield outside try-catch)
+                yield return request.SendWebRequest();
                 
-					try
-					{
-						if (request.result == UnityWebRequest.Result.Success)
-						{
-							AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(request.downloadHandler.text);
+                try
+                {
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        if (HandleAuthResponse(request.downloadHandler.text))
+                        {
+                            success = true;
+                            break; // don't invoke completion yet; additional auth may be required
+                        }
+                    }
+                    else
+                    {
+                        string errorMessage = HandleNetworkError(request);
+                        Debug.LogWarning($"AbxrLib: AuthRequest failed: {errorMessage}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: Authentication response handling failed: {ex.Message}");
+                }
+                finally
+                {
+                    // Always dispose of request
+                    request?.Dispose();
+                }
+
+                if (!withRetry)
+                {
+                    Abxr.OnAuthCompleted?.Invoke(false, null);
+                    break;
+                }
+
+                int retrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
+                Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {retrySeconds} seconds...");
+                yield return new WaitForSeconds(retrySeconds);
+            }
+        }
+        
+        private static bool HandleAuthResponse(string responseText, bool handoff = false)
+        {
+            try
+            {
+                AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(responseText);
+
+                // Validate response data
+                if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
+                {
+                    throw new Exception("Invalid authentication response: missing token");
+                }
+
+                if (handoff)
+                {
+                    // Set token expiry to far in the future since we're trusting the handoff
+                    _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                }
+                else
+                {
+                    // Decode JWT with error handling
+                    Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
+                    if (decodedJwt == null)
+                    {
+                        throw new Exception("Failed to decode JWT token - authentication cannot proceed");
+                    }
                         
-							// Validate response data
-							if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
-							{
-								throw new Exception("Invalid authentication response: missing token");
-							}
+                    if (!decodedJwt.ContainsKey("exp"))
+                    {
+                        throw new Exception("Invalid JWT token: missing expiration field");
+                    }
                         
-							// Decode JWT with error handling
-							Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
-							if (decodedJwt == null)
-							{
-								throw new Exception("Failed to decode JWT token - authentication cannot proceed");
-							}
-                        
-							if (!decodedJwt.ContainsKey("exp"))
-							{
-								throw new Exception("Invalid JWT token: missing expiration field");
-							}
-                        
-							try
-							{
-								_tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
-							}
-							catch (Exception ex)
-							{
-								throw new Exception($"Invalid JWT token expiration: {ex.Message}");
-							}
-                        
-							_responseData = postResponse;
-							_authResponseModuleData = Utils.ConvertToModuleDataList(postResponse.Modules);
-                        
-							// Add entered email/text value to UserData if we have one stored
-							if (!string.IsNullOrEmpty(_enteredAuthValue))
-							{
-								// Initialize UserData if it's null
-								_responseData.UserData ??= new Dictionary<string, string>();
+                    try
+                    {
+                        _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new Exception($"Invalid JWT token expiration: {ex.Message}");
+                    }
+                }
+
+                _responseData = postResponse;
+                if (_responseData.Modules?.Count > 1)
+                {
+                    _responseData.Modules = _responseData.Modules.OrderBy(m => m.Order).ToList();
+                }
+                
+                // Add entered email/text value to UserData if we have one stored
+                if (!string.IsNullOrEmpty(_enteredAuthValue))
+                {
+                    // Initialize UserData if it's null
+                    _responseData.UserData ??= new Dictionary<string, string>();
                             
-								// Determine the key name based on auth type
-								string keyName = _authMechanism?.type == "email" ? "email" : "text";
-								_responseData.UserData[keyName] = _enteredAuthValue;
-							}
+                    // Determine the key name based on auth type
+                    string keyName = _authMechanism?.type == "email" ? "email" : "text";
+                    _responseData.UserData[keyName] = _enteredAuthValue;
+                }
 
-							if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
-                        
-							// Don't notify completion yet since additional auth may be required
-							success = true;
-							break;
-						}
-						else
-						{
-							string errorMessage = HandleNetworkError(request);
-							Debug.LogWarning($"AbxrLib: AuthRequest failed: {errorMessage}");
-						}
-					}
-					catch (Exception ex)
-					{
-						Debug.LogError($"AbxrLib: Authentication response handling failed: {ex.Message}");
-					}
-					finally
-					{
-						// Always dispose of request
-						request?.Dispose();
-					}
+                if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
 
-					if (!withRetry)
-					{
-						Abxr.OnAuthCompleted?.Invoke(false, null);
-						break;
-					}
-
-					int retrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
-					Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {retrySeconds} seconds...");
-					yield return new WaitForSeconds(retrySeconds);
-				}
-			}
+                if (handoff)
+                {
+                    Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_responseData?.Modules?.Count}");
+                    Abxr.NotifyAuthCompleted();
+                    _keyboardAuthSuccess = true;
+                    _sessionUsedAuthHandoff = true;
+                }
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Authentication response handling failed: {ex.Message}");
+                return false;
+            }
         }
         
         /// <summary>
@@ -793,6 +824,8 @@ Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceClient.AuthRequest() su
             {
                 errorMessage += $" - Response: {request.downloadHandler.text}";
             }
+            
+            return errorMessage;
             
             return errorMessage;
         }
@@ -903,6 +936,28 @@ Debug.Log($"[AbxrInsightServiceClient] Не очень хорошо, GetConfigur
             var dict = new Dictionary<string, string>();
             if (_authMechanism == null && string.IsNullOrEmpty(userId)) return dict;
 
+            if (!string.IsNullOrEmpty(userId))
+            {
+                dict["type"] = "custom";
+                dict["prompt"] = userId;
+                if (additionalUserData != null)
+                {
+                    foreach (var item in additionalUserData)
+                    {
+                        if (item.Key != "type" && item.Key != "prompt")
+                        {
+                            dict[item.Key] = item.Value;
+                        }
+                    }
+                }
+
+                // For custom auth, use "user" as default inputSource if not provided
+                dict["inputSource"] = "user";
+                return dict;
+            }
+
+            if (_authMechanism == null && string.IsNullOrEmpty(userId)) return dict;
+
             if (_authMechanism == null && !string.IsNullOrEmpty(userId))
             {
                 dict["type"] = "custom";
@@ -945,120 +1000,30 @@ Debug.Log($"[AbxrInsightServiceClient] Не очень хорошо, GetConfigur
             if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) Configuration.Instance.retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
         }
 
-        public static List<Abxr.ModuleData> GetModuleData() => _authResponseModuleData;
-
         /// <summary>
         /// Check for authentication handoff from external launcher apps
         /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params
         /// </summary>
-        private static IEnumerator CheckAuthHandoff()
+        private static bool CheckAuthHandoff()
         {
-            // Check Android intent parameters first
             string handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
 
-            // If not found, check command line arguments
             if (string.IsNullOrEmpty(handoffJson))
             {
                 handoffJson = Utils.GetCommandLineArg("auth_handoff");
             }
-            
-            // If not found, check WebGL query parameters (for consistency)
+
             if (string.IsNullOrEmpty(handoffJson))
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
                 handoffJson = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
 #endif
             }
-            
-            if (!string.IsNullOrEmpty(handoffJson))
-            {
-                yield return ProcessAuthHandoff(handoffJson);
-            }
-            
-            yield return null;
-        }
 
-        /// <summary>
-        /// Process authentication handoff JSON data and set up authentication state
-        /// </summary>
-        private static IEnumerator ProcessAuthHandoff(string handoffJson)
-        {
-            bool success = false;
+            if (string.IsNullOrEmpty(handoffJson)) return false;
             
-            try
-            {
-                Debug.Log("AbxrLib: Processing authentication handoff from external launcher");
-                
-                // Parse the handoff JSON
-                AuthResponse handoffData = null;
-                try 
-                {
-                    handoffData = JsonConvert.DeserializeObject<AuthResponse>(handoffJson);
-                }
-                catch (Exception ex)
-                {
-                    // Log error with consistent format and include JSON parsing context
-                    Debug.LogError($"AbxrLib: Failed to parse handoff JSON: {ex.Message}\n" +
-                                  $"Exception Type: {ex.GetType().Name}\n" +
-                                  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-                    yield break;
-                }
-                
-                // Validate that we have the required fields
-                if (handoffData == null || string.IsNullOrEmpty(handoffData.Token) || string.IsNullOrEmpty(handoffData.Secret))
-                {
-                    Debug.LogWarning($"AbxrLib: Authentication handoff missing required fields (handoffData null: {handoffData == null}, Token empty: {string.IsNullOrEmpty(handoffData?.Token)}, Secret empty: {string.IsNullOrEmpty(handoffData?.Secret)}), falling back to normal auth");
-                    yield break;
-                }
-                
-                // Cache user data from handoff
-                _responseData = new AuthResponse
-                {
-                    Token = handoffData.Token,
-                    Secret = handoffData.Secret,
-                    UserId = handoffData.UserId,
-                    AppId = handoffData.AppId,
-                    PackageName = handoffData.PackageName,
-                    UserData = handoffData.UserData,
-                    Modules = handoffData.Modules
-                };
-                _authResponseModuleData = new List<Abxr.ModuleData>();
-                
-                // Convert modules if provided
-                if (handoffData.Modules != null)
-                {
-                    _authResponseModuleData = Utils.ConvertToModuleDataList(handoffData.Modules);
-                }
-                
-                // Set token expiry to far in the future since we're trusting the handoff
-                _tokenExpiry = DateTime.UtcNow.AddHours(24);
-                
-                // Mark handoff as completed
-                _authHandoffCompleted = true;
-                _sessionUsedAuthHandoff = true;
-                
-                Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_authResponseModuleData?.Count ?? 0}");
-                
-                Abxr.NotifyAuthCompleted();
-                _keyboardAuthSuccess = true;
-                
-                success = true;
-                _authHandoffData = handoffData;
-            }
-            catch (Exception ex)
-            {
-                // Log error with consistent format and include handoff processing context
-                Debug.LogError($"AbxrLib: Failed to process authentication handoff: {ex.Message}\n" +
-                              $"Exception Type: {ex.GetType().Name}\n" +
-                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-                _authHandoffCompleted = false;
-            }
-            
-            // Yield outside of try-catch block
-            if (success)
-            {
-                yield return null;
-            }
+            Debug.Log("AbxrLib: Processing authentication handoff from external launcher");
+            return HandleAuthResponse(handoffJson, true);
         }
     
         [Preserve]
@@ -1097,12 +1062,14 @@ Debug.Log($"[AbxrInsightServiceClient] Не очень хорошо, GetConfigur
 
         private class AuthPayload
         {
-            public string appId;
+            public string appToken;  // optional - either appToken or appId will be set
+            public string appId;  // optional - either appToken or appId will be set
             public string orgId;
             public string authSecret;
             public string deviceId;
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public string userId;
+            public string SSOAccessToken;  // optional - SSO access token when SSO is active
             public string[] tags;
             public string sessionId;
             public string partner;
@@ -1115,6 +1082,7 @@ Debug.Log($"[AbxrInsightServiceClient] Не очень хорошо, GetConfigur
             public string unityVersion;
             public string abxrLibType;
             public string abxrLibVersion;
+            public string buildFingerprint;  // optional - set on Android devices
             public Dictionary<string, string> authMechanism;
         }
 
@@ -1127,10 +1095,18 @@ Debug.Log($"[AbxrInsightServiceClient] Не очень хорошо, GetConfigur
             public object UserId;
             public string AppId;
             public string PackageName;
-            public List<Dictionary<string, object>> Modules;
+            public List<ModuleData> Modules;
 
             [Preserve]
             public AuthResponse() {}
+        }
+        
+        public class ModuleData
+        {
+            public string Id;
+            public string Name;
+            public string Target;
+            public int Order;
         }
 
         private enum Partner
