@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2024 ArborXR. All rights reserved.
  * 
  * AbxrLib for Unity - Authentication System
@@ -566,10 +566,12 @@ Debug.LogError($"[AbxrInsightServiceClient] Blew exception while setting service
 //	Debug.Log($"[AbxrInsightServiceClient] Blew exception calling AbxrInsightServiceClient.AuthRequest() '{e.Message}' outside the loop which is magically not being entered.");
 //}
 Debug.Log($"[AbxrInsightServiceClient] About to enter the while (!bSuccess) loop, bSuccess = {bSuccess.ToString()}.");
+				// Pass auth mechanism dict (same as HTTP path) so second auth sends user's PIN; service uses it when non-empty.
+				var authMechanismDict = CreateAuthMechanismDict(userId, additionalUserData);
 				while (!bSuccess)
 				{
-Debug.Log($"[AbxrInsightServiceClient] About to call AbxrInsightServiceClient.AuthRequest() with userId='{userId}', dict='{Utils.DictToString(additionalUserData)}'.");
-					eRet = (AbxrResult)AbxrInsightServiceClient.AuthRequest(userId, Utils.DictToString(additionalUserData));
+Debug.Log($"[AbxrInsightServiceClient] About to call AbxrInsightServiceClient.AuthRequest() with userId='{userId}', authMechanismDict='{Utils.DictToString(authMechanismDict)}'.");
+					eRet = (AbxrResult)AbxrInsightServiceClient.AuthRequest(userId, Utils.DictToString(authMechanismDict));
 					if (eRet == AbxrResult.OK)
 					{
 Debug.Log($"[AbxrInsightServiceClient] AbxrInsightServiceClient.AuthRequest() succeeded.");
@@ -771,6 +773,16 @@ Debug.Log($"[AbxrInsightServiceClient] In GetConfiguration() at the very beginni
 			{
 Debug.Log($"[AbxrInsightServiceClient] In GetConfiguration() in the if service clause and about to get_AppConfigAuthMechanism().");
 				_dictAuthMechanism = AbxrInsightServiceClient.get_AppConfigAuthMechanism();
+				// Service returns auth mechanism as dictionary; populate _authMechanism so pinpad/keyboard flow runs
+				if (_dictAuthMechanism != null && _dictAuthMechanism.Count > 0)
+				{
+					_authMechanism = new AuthMechanism();
+					if (_dictAuthMechanism.TryGetValue("type", out var type)) _authMechanism.type = type;
+					if (_dictAuthMechanism.TryGetValue("prompt", out var prompt)) _authMechanism.prompt = prompt;
+					if (_dictAuthMechanism.TryGetValue("domain", out var domain)) _authMechanism.domain = domain;
+					if (_dictAuthMechanism.TryGetValue("inputSource", out var inputSource)) _authMechanism.inputSource = inputSource;
+					if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
+				}
 			}
 			else
 			{
