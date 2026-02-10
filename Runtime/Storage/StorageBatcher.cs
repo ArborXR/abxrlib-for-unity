@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Common;
@@ -6,6 +6,9 @@ using AbxrLib.Runtime.Core;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
+#if UNITY_ANDROID && !UNITY_EDITOR
+using AbxrLib.Runtime.ServiceClient.ArborInsightService;
+#endif
 
 namespace AbxrLib.Runtime.Storage
 {
@@ -30,8 +33,34 @@ namespace AbxrLib.Runtime.Storage
 			if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
 		}
 	
-		public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
+		/// <summary>
+	/// Add a storage entry. When this session uses ArborInsightService we send directly to the service; otherwise we queue for Send() (standalone).
+	/// </summary>
+	public static void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
 		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (Authentication.Authentication.UsingArborInsightServiceForData())
+			{
+				long t = Utils.GetUnityTime();
+				string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+				var p = new Payload
+				{
+					timestamp = iso,
+					keepPolicy = policy.ToString(),
+					name = name,
+					data = new List<Dictionary<string, string>> { entry ?? new Dictionary<string, string>() },
+					scope = scope.ToString()
+				};
+				string json = JsonConvert.SerializeObject(p);
+				bool keepLatest = policy == Abxr.StoragePolicy.keepLatest;
+				bool sessionData = scope == Abxr.StorageScope.user;
+				if (name == "state")
+					ArborInsightServiceClient.StorageSetDefaultEntryFromString(json, keepLatest, "unity", sessionData);
+				else
+					ArborInsightServiceClient.StorageSetEntryFromString(name, json, keepLatest, "unity", sessionData);
+				return;
+			}
+#endif
 			long storageTime = Utils.GetUnityTime();
 			string isoTime = DateTimeOffset.FromUnixTimeMilliseconds(storageTime).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 			var payload = new Payload
@@ -283,7 +312,36 @@ namespace AbxrLib.Runtime.Storage
 		public static IEnumerator Get(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
 		{
 			if (!Authentication.Authentication.Authenticated()) yield break;
-		
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (Authentication.Authentication.UsingArborInsightServiceForData())
+			{
+				string json = name == "state"
+					? ArborInsightServiceClient.StorageGetDefaultEntryAsString()
+					: ArborInsightServiceClient.StorageGetEntryAsString(name);
+				List<Dictionary<string, string>> result = null;
+				if (!string.IsNullOrEmpty(json))
+				{
+					try
+					{
+						var payload = JsonConvert.DeserializeObject<Payload>(json);
+						if (payload?.data != null && payload.data.Count > 0)
+							result = payload.data;
+						else
+						{
+							var list = JsonConvert.DeserializeObject<List<Dictionary<string, string>>>(json);
+							if (list != null) result = list;
+						}
+					}
+					catch (Exception ex)
+					{
+						Debug.LogWarning($"AbxrLib: Storage GET parse failed: {ex.Message}");
+					}
+				}
+				callback?.Invoke(result);
+				yield break;
+			}
+#endif
 			var queryParams = new Dictionary<string, string>
 			{
 				{ "name", name },
@@ -311,7 +369,25 @@ namespace AbxrLib.Runtime.Storage
 		public static IEnumerator Delete(Abxr.StorageScope scope, string name = "")
 		{
 			if (!Authentication.Authentication.Authenticated()) yield break;
-		
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (Authentication.Authentication.UsingArborInsightServiceForData())
+			{
+				if (string.IsNullOrEmpty(name))
+				{
+					ArborInsightServiceClient.StorageRemoveMultipleEntries(scope == Abxr.StorageScope.user);
+				}
+				else if (name == "state")
+				{
+					ArborInsightServiceClient.StorageRemoveDefaultEntry();
+				}
+				else
+				{
+					ArborInsightServiceClient.StorageRemoveEntry(name);
+				}
+				yield break;
+			}
+#endif
 			var queryParams = new Dictionary<string, string>
 			{
 				{ "scope", scope.ToString() }
