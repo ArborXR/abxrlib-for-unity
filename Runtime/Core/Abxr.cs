@@ -125,16 +125,6 @@ public static partial class Abxr
 	/// </summary>
 	public static Action OnHeadsetPutOnNewSession;
 
-	// Connection status - tracks whether AbxrLib can communicate with the server
-	private static bool _connectionActive = false;
-
-	/// <summary>
-	/// Check if AbxrLib has an active connection to the server and can send data
-	/// This indicates whether the library is configured and ready to communicate
-	/// </summary>
-	/// <returns>True if connection is active, false otherwise</returns>
-	public static bool ConnectionActive() => _connectionActive;
-
 	/// <summary>
 	/// Allow the user to toggle whether the authentication UI follows them or stay
 	/// in place
@@ -150,9 +140,6 @@ public static partial class Abxr
 	/// </summary>
 	internal static void NotifyAuthCompleted()
 	{
-		// Update connection status based on authentication success
-		_connectionActive = true;
-		
 		// Start default assessment tracking if no assessments are currently running
 		// This ensures duration tracking starts immediately after authentication
 		// But delay sending the event to server for 1 minute to allow developers to start their own assessment
