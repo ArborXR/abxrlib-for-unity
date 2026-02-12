@@ -28,22 +28,21 @@ namespace AbxrLib.Editor
             
             if (useAppTokens)
             {
-                // Show App Token fields
-                // Indicate which token will be used based on buildType
+                // Insights Token (in code: appToken)
+                config.appToken = EditorGUILayout.TextField(new GUIContent(
+                    "Insights Token", "Insights Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);
                 
-                // Production Token
-                string productionLabel = isProduction ? "Production Token ▶" : "Production Token";
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField(productionLabel, isProduction ? EditorStyles.boldLabel : EditorStyles.label, GUILayout.Width(EditorGUIUtility.labelWidth));
-                config.appTokenProduction = EditorGUILayout.TextField(config.appTokenProduction);
-                EditorGUILayout.EndHorizontal();
-                
-                // Development Token
-                string developmentLabel = isProduction ? "Development Token" : "Development Token ▶";
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField(developmentLabel, isProduction ? EditorStyles.label : EditorStyles.boldLabel, GUILayout.Width(EditorGUIUtility.labelWidth));
-                config.appTokenDevelopment = EditorGUILayout.TextField(config.appTokenDevelopment);
-                EditorGUILayout.EndHorizontal();
+                // Customer Token (optional; disabled in production – not sent in production builds)
+                EditorGUI.BeginDisabledGroup(isProduction);
+                config.customerToken = EditorGUILayout.TextField(new GUIContent(
+                    "Customer Token (optional)", "Optional. In Development: use this or leave empty to use Insights Token as customer token. In Production this field is not used."), config.customerToken);
+                EditorGUI.EndDisabledGroup();
+                if (isProduction)
+                    EditorGUILayout.HelpBox("In Production, Customer Token from config is not sent. The field is disabled for shared production builds.", MessageType.Info);
+                else
+                    EditorGUILayout.HelpBox(
+                        "In Development you can set a Customer Token, or leave empty to use the Insights Token as the customer token.",
+                        MessageType.Info);
             }
             else
             {

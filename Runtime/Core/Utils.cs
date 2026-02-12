@@ -332,12 +332,10 @@ namespace AbxrLib.Runtime.Core
         }
 
         /// <summary>
-        /// Extracts authentication data from an App Token (JWT).
-        /// Production tokens include: appId, buildType
-        /// Development tokens include: appId, orgId, authSecret, buildType
+        /// Extracts authentication data from an App Token (JWT) payload. Used only for legacy or optional appId/orgId extraction.
         /// </summary>
         /// <param name="appToken">The App Token JWT string</param>
-        /// <returns>Dictionary containing extracted fields (appId, orgId, authSecret, buildType), or null if token is invalid</returns>
+        /// <returns>Dictionary containing extracted fields (appId, orgId if present), or null if token is invalid</returns>
         public static Dictionary<string, string> ExtractAppTokenData(string appToken)
         {
             if (string.IsNullOrEmpty(appToken))
@@ -353,28 +351,16 @@ namespace AbxrLib.Runtime.Core
 
             var result = new Dictionary<string, string>();
 
-            // Extract appId (required in both production and development tokens)
+            // Extract appId (Insights token payload may contain appId or insightsId; legacy only)
             if (jwtPayload.ContainsKey("appId") && jwtPayload["appId"] != null)
             {
                 result["appId"] = jwtPayload["appId"].ToString();
             }
 
-            // Extract buildType (required in both production and development tokens)
-            if (jwtPayload.ContainsKey("buildType") && jwtPayload["buildType"] != null)
-            {
-                result["buildType"] = jwtPayload["buildType"].ToString();
-            }
-
-            // Extract orgId (only in development tokens)
+            // Extract orgId (optional in token payload)
             if (jwtPayload.ContainsKey("orgId") && jwtPayload["orgId"] != null)
             {
                 result["orgId"] = jwtPayload["orgId"].ToString();
-            }
-
-            // Extract authSecret (only in development tokens)
-            if (jwtPayload.ContainsKey("authSecret") && jwtPayload["authSecret"] != null)
-            {
-                result["authSecret"] = jwtPayload["authSecret"].ToString();
             }
 
             return result;
@@ -386,10 +372,11 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         internal struct AuthConfigData
         {
-            public string appId;
+            public string appId; //legacy only
+            public string orgId; //legacy only
+            public string authSecret; //legacy only
             public string appToken;
-            public string orgId;
-            public string authSecret;
+            public string customerToken;
             public string buildType;
             public bool isValid;
             public string errorMessage;
@@ -411,54 +398,24 @@ namespace AbxrLib.Runtime.Core
                 return result;
             }
 
-            // Get buildType from config (will be overridden from token if using app tokens)
+            // Get buildType from config (no longer taken from token)
             result.buildType = !string.IsNullOrEmpty(config.buildType) ? config.buildType : "production";
 
             // Check if using App Tokens
             if (config.useAppTokens)
             {
-                // Get the appropriate token based on buildType
-                string tokenToUse = config.buildType == "production" 
-                    ? config.appTokenProduction 
-                    : config.appTokenDevelopment;
-                
-                if (string.IsNullOrEmpty(tokenToUse))
+                // Single appToken (Insights Token) required
+                if (string.IsNullOrEmpty(config.appToken))
                 {
-                    result.errorMessage = $"App Token for {config.buildType} build is not set.";
+                    result.errorMessage = "Insights Token (appToken) is not set.";
                     return result;
                 }
-                
-                // Store the token
-                result.appToken = tokenToUse;
-                
-                // Extract data from the JWT token
-                var tokenData = ExtractAppTokenData(tokenToUse);
-                if (tokenData == null)
-                {
-                    result.errorMessage = "Failed to decode App Token.";
-                    return result;
-                }
-                
-                // Extract appId (required)
-                if (tokenData.ContainsKey("appId"))
-                {
-                    result.appId = tokenData["appId"];
-                }
-                else
-                {
-                    result.errorMessage = "App Token missing appId.";
-                    return result;
-                }
-                
-                // Extract buildType from token (overrides config value)
-                if (tokenData.ContainsKey("buildType"))
-                {
-                    result.buildType = tokenData["buildType"];
-                }
-                
-                // Extract orgId and authSecret (only in development tokens)
-                result.orgId = tokenData.ContainsKey("orgId") ? tokenData["orgId"] : null;
-                result.authSecret = tokenData.ContainsKey("authSecret") ? tokenData["authSecret"] : null;
+                result.appId = null; //legacy only
+                result.orgId = null; //legacy only
+                result.authSecret = null; //legacy only
+                result.appToken = config.appToken;
+                result.customerToken = config.customerToken;
+                // buildType stays from config above
             }
             else
             {
@@ -488,6 +445,50 @@ namespace AbxrLib.Runtime.Core
         private static string Base64UrlDecode(string input)
         {
             return input.Replace('-', '+').Replace('_', '/');
+        }
+
+        /// <summary>
+        /// Base64url-encodes bytes (no padding). Used for JWT compact serialization.
+        /// </summary>
+        private static string Base64UrlEncode(byte[] input)
+        {
+            if (input == null || input.Length == 0) return string.Empty;
+            string base64 = Convert.ToBase64String(input);
+            return base64.TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        }
+
+        /// <summary>
+        /// Builds a CustomerToken (dynamic) JWT for XRDM: payload { "orgId": orgId }, signed with HMAC-SHA256 using fingerprint as secret.
+        /// </summary>
+        /// <param name="orgId">Customer org ID (e.g. from GetOrgId())</param>
+        /// <param name="fingerprint">Secret used to sign the JWT (e.g. GetFingerprint())</param>
+        /// <returns>JWT string in compact form, or null if inputs are invalid</returns>
+        internal static string BuildCustomerTokenDynamic(string orgId, string fingerprint)
+        {
+            if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(fingerprint))
+                return null;
+            try
+            {
+                const string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+                string payloadJson = JsonConvert.SerializeObject(new Dictionary<string, object> { { "orgId", orgId } });
+                byte[] headerBytes = Encoding.UTF8.GetBytes(headerJson);
+                byte[] payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
+                string headerB64 = Base64UrlEncode(headerBytes);
+                string payloadB64 = Base64UrlEncode(payloadBytes);
+                string message = headerB64 + "." + payloadB64;
+                byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+                byte[] secretKey = Encoding.UTF8.GetBytes(fingerprint);
+                using (var hmac = new HMACSHA256(secretKey))
+                {
+                    byte[] signature = hmac.ComputeHash(messageBytes);
+                    return message + "." + Base64UrlEncode(signature);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: BuildCustomerTokenDynamic failed: {ex.Message}");
+                return null;
+            }
         }
 
         private static string PadBase64(string input)
