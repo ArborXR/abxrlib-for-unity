@@ -413,7 +413,11 @@ namespace AbxrLib.Runtime.Core
                     return result;
                 }
                 result.appToken = config.appToken;
-                result.orgToken = config.orgToken;
+                // Production: do not include orgToken in build. Development and Production (Custom APK): include from config.
+                if (config.buildType == "production")
+                    result.orgToken = null;
+                else
+                    result.orgToken = config.orgToken;
                 // buildType stays from config above; appId/orgId/authSecret left default (unused when using tokens)
             }
             else //legacy AppID/OrgID/AuthSecret approach
@@ -428,9 +432,9 @@ namespace AbxrLib.Runtime.Core
                 // Use traditional appID/orgID/authSecret approach
                 result.appId = config.appID;
                
-                // Only include orgID and authSecret if buildType is development
+                // Only include orgID and authSecret if buildType is development or production_custom (custom APK)
                 // In production builds, these should be empty to avoid including credentials
-                if (config.buildType == "development")
+                if (config.buildType == "development" || config.buildType == "production_custom")
                 {
                     result.orgId = config.orgID;
                     result.authSecret = config.authSecret;

@@ -424,14 +424,21 @@ namespace AbxrLib.Runtime.Authentication
                     Debug.LogError("AbxrLib: App Token is missing. Cannot authenticate.");
                     return false;
                 }
-                if (string.IsNullOrEmpty(_orgToken))
-                {
-                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, or pass org_token in the URL. Cannot authenticate.");
-                    return false;
-                }
                 if (!LooksLikeJwt(_appToken))
                 {
                     Debug.LogError("AbxrLib: App Token does not look like a JWT (expected three dot-separated segments). Cannot authenticate.");
+                    return false;
+                }
+                // Development: use App Token as org token when none set from config/Arbor/URL
+                if (_buildType == "development" && string.IsNullOrEmpty(_orgToken))
+                {
+                    // Development: use App Token as org token when none set from config/Arbor/URL
+                    _orgToken = _appToken;
+                }
+                // API requires both appToken and orgToken when useAppTokens; _orgToken must be set by here (config, Arbor, URL, or development fallback)
+                if (string.IsNullOrEmpty(_orgToken))
+                {
+                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, or pass org_token in the URL. Cannot authenticate.");
                     return false;
                 }
                 if (!LooksLikeJwt(_orgToken))
@@ -556,22 +563,16 @@ namespace AbxrLib.Runtime.Authentication
                 ssoAccessToken = Abxr.GetAccessToken();
             }
             
-            // Production: do not send or use org token (it must not be in the binary; only Development builds may include it). Development: send configured org token if set, else App Token.
-            string effectiveOrgToken = null;
-            if (config.useAppTokens)
-            {
-                if (_buildType == "development")
-                    effectiveOrgToken = string.IsNullOrEmpty(_orgToken) ? _appToken : _orgToken;
-                // production: effectiveOrgToken stays null
-            }
+            // useAppTokens: _orgToken is resolved in ValidateConfigValues (required for API); we always send both appToken and orgToken when useAppTokens.
+            string payloadBuildType = (_buildType == "production_custom") ? "production" : _buildType;
             var data = new AuthPayload
             {
                 appId = config.useAppTokens ? null : _appId, //legacy only
                 orgId = config.useAppTokens ? null : _orgId, //legacy only
                 authSecret = config.useAppTokens ? null : _authSecret, //legacy only
                 appToken = config.useAppTokens ? null : _appToken, 
-                orgToken = config.useAppTokens ? effectiveOrgToken : null,
-                buildType = _buildType, // always set for service; REST uses same payload
+                orgToken = config.useAppTokens ? _orgToken : null,
+                buildType = payloadBuildType, // Production (Custom APK) sends "production" to API
                 deviceId = _deviceId,
                 userId = userId,
                 tags = _deviceTags,

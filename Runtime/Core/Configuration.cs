@@ -55,7 +55,7 @@ namespace AbxrLib.Runtime.Core
         }
     
         [Header("Build Type")]
-        [Tooltip("Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution). Development: OrgID and AuthSecret will be included in builds (for custom APKs only).")]
+        [Tooltip("Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution). Development: OrgID and AuthSecret will be included in builds (for custom APKs only). Production (Custom APK): like Production for the API but requires and includes Organization Token for single-customer builds.")]
         public string buildType = "production";
         
         [Header("Application Identity")]
@@ -95,7 +95,21 @@ namespace AbxrLib.Runtime.Core
                     Debug.LogError("AbxrLib: Configuration validation failed - appToken does not look like a JWT (expected three dot-separated segments).");
                     return false;
                 }
-                if (!string.IsNullOrEmpty(orgToken) && !LooksLikeJwt(orgToken))
+                // Production (Custom APK) requires orgToken to be set and JWT-shaped
+                if (buildType == "production_custom")
+                {
+                    if (string.IsNullOrEmpty(orgToken))
+                    {
+                        Debug.LogError("AbxrLib: Configuration validation failed - Organization Token is required when Build Type is Production (Custom APK).");
+                        return false;
+                    }
+                    if (!LooksLikeJwt(orgToken))
+                    {
+                        Debug.LogError("AbxrLib: Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
+                        return false;
+                    }
+                }
+                else if (!string.IsNullOrEmpty(orgToken) && !LooksLikeJwt(orgToken))
                 {
                     Debug.LogError("AbxrLib: Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
                     return false;

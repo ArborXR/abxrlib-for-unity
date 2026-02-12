@@ -79,12 +79,13 @@ namespace AbxrLib.Editor
 
         /// <summary>
         /// Gets the build type from Configuration, or extracts it from App Token if using app tokens.
-        /// Returns the buildType field value, or "production" as default.
+        /// Returns the buildType field value, or "production" as default. Production (Custom APK) returns "production" so manifest matches API.
         /// </summary>
         private static string GetBuildType()
         {
             var configData = GetCachedConfigData();
-            return configData.isValid ? configData.buildType : "production";
+            if (!configData.isValid) return "production";
+            return configData.buildType == "production_custom" ? "production" : configData.buildType;
         }
 
         /// <summary>
