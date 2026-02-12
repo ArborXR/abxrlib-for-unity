@@ -161,8 +161,8 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		// ---
 		public static String get_AppToken() => _client.Call<String>("get_AppToken");
 		public static void set_AppToken(String szAppToken) => _client.Call("set_AppToken", szAppToken);
-		// --- Customer Token (for InsightsToken/CustomerToken auth). AAR must support set_CustomerToken when using app tokens.
-		public static void set_CustomerToken(String szCustomerToken) => _client.Call("set_CustomerToken", szCustomerToken);
+		// --- Organization Token (for InsightsToken/OrgToken auth). AAR must support set_OrgToken when using app tokens.
+		public static void set_OrgToken(String szOrgToken) => _client.Call("set_OrgToken", szOrgToken);
 		// ---
 		public static String get_AppID() => _client.Call<String>("get_AppID");
 		public static void set_AppID(String szAppID) => _client.Call<int>("set_AppID", szAppID);
@@ -434,7 +434,7 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		// ---
 		public static void set_AppToken(String szAppToken) => ArborInsightServiceBridge.set_AppToken(szAppToken ?? "");
 		// ---
-		public static void set_CustomerToken(String szCustomerToken) => ArborInsightServiceBridge.set_CustomerToken(szCustomerToken ?? "");
+		public static void set_OrgToken(String szOrgToken) => ArborInsightServiceBridge.set_OrgToken(szOrgToken ?? "");
 		// ---
 		public static void set_AppID(String szAppID) => ArborInsightServiceBridge.set_AppID(szAppID ?? "");
 		// ---

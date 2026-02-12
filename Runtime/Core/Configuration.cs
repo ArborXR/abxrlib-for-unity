@@ -61,7 +61,7 @@ namespace AbxrLib.Runtime.Core
         [Header("App Tokens")]
         [Tooltip("When enabled, use App Tokens instead of appID/orgID/authSecret combination")] public bool useAppTokens = false;
         [Tooltip("App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on.")] public string appToken;
-        [Tooltip("Optional. Customer Token (JWT) from ArborXR Portal. Leave empty for shared production builds; set for single-customer or dev builds.")] public string customerToken;
+        [Tooltip("Optional. Organization Token (JWT) from ArborXR Portal. Leave empty for shared production builds; set for single-org or dev builds.")] public string orgToken;
         
         /// <summary>
         /// Validates that the configuration has the required fields set properly.

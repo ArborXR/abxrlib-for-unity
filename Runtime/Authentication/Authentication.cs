@@ -39,7 +39,7 @@ namespace AbxrLib.Runtime.Authentication
         private static string _orgId; //legacy only
         private static string _authSecret; //legacy only
         private static string _appToken;
-        private static string _customerToken;
+        private static string _orgToken;
         private static string _buildType;
         private static string _deviceId;
         private static Partner _partner = Partner.None;
@@ -328,11 +328,11 @@ namespace AbxrLib.Runtime.Authentication
             _orgId = configData.orgId; //legacy only
             _authSecret = configData.authSecret; //legacy only
             _appToken = configData.appToken;
-            _customerToken = configData.customerToken;
+            _orgToken = configData.orgToken;
             _buildType = configData.buildType;
             
             // Note: orgId and authSecret will still be overridden by GetArborData() if ArborServiceClient is connected (legacy path).
-            // When using app tokens and XRDM, GetArborData() sets _customerToken to dynamic token.
+            // When using app tokens and XRDM, GetArborData() sets _orgToken to dynamic token.
         }
     
         private static void GetArborData()
@@ -348,13 +348,13 @@ namespace AbxrLib.Runtime.Authentication
                 try
                 {
                     string fingerprint = Abxr.GetFingerprint();
-                    string dynamicToken = Utils.BuildCustomerTokenDynamic(_orgId, fingerprint);
+                    string dynamicToken = Utils.BuildOrgTokenDynamic(_orgId, fingerprint);
                     if (!string.IsNullOrEmpty(dynamicToken))
-                        _customerToken = dynamicToken;
+                        _orgToken = dynamicToken;
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"AbxrLib: BuildCustomerTokenDynamic failed: {ex.Message}\n" +
+                    Debug.LogError($"AbxrLib: BuildOrgTokenDynamic failed: {ex.Message}\n" +
                                   $"Exception Type: {ex.GetType().Name}\n" +
                                   $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 }
@@ -377,10 +377,10 @@ namespace AbxrLib.Runtime.Authentication
 #if UNITY_WEBGL && !UNITY_EDITOR
         private static void GetQueryData()
         {
-            string customerTokenQuery = Utils.GetQueryParam("customer_token", Application.absoluteURL);
-            if (!string.IsNullOrEmpty(customerTokenQuery))
+            string orgTokenQuery = Utils.GetQueryParam("org_token", Application.absoluteURL);
+            if (!string.IsNullOrEmpty(orgTokenQuery))
             {
-                _customerToken = customerTokenQuery;
+                _orgToken = orgTokenQuery;
             }
         }
         
@@ -409,14 +409,14 @@ namespace AbxrLib.Runtime.Authentication
                     Debug.LogError("AbxrLib: App Token is missing. Cannot authenticate.");
                     return false;
                 }
-                // Production: Customer Token is never added to the compiled binary; only Development builds can include it. When XRDM is connected, a dynamic token is supplied at runtime.
-                bool haveCustomerToken = _buildType == "production"
+                // Production: Organization Token is never added to the compiled binary; only Development builds can include it. When XRDM is connected, a dynamic token is supplied at runtime.
+                bool haveOrgToken = _buildType == "production"
                     || _buildType == "development"
                     || ArborServiceClient.IsConnected()
-                    || !string.IsNullOrEmpty(_customerToken);
-                if (!haveCustomerToken)
+                    || !string.IsNullOrEmpty(_orgToken);
+                if (!haveOrgToken)
                 {
-                    Debug.LogError("AbxrLib: Customer Token is missing. Set it in config, use Build Type Development, or connect via XRDM. Cannot authenticate.");
+                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, use Build Type Development, or connect via XRDM. Cannot authenticate.");
                     return false;
                 }
                 return true;
@@ -524,13 +524,13 @@ namespace AbxrLib.Runtime.Authentication
                 ssoAccessToken = Abxr.GetAccessToken();
             }
             
-            // Production: do not send or use customer token (it must not be in the binary; only Development builds may include it). Development: send configured customer token if set, else App Token.
-            string effectiveCustomerToken = null;
+            // Production: do not send or use org token (it must not be in the binary; only Development builds may include it). Development: send configured org token if set, else App Token.
+            string effectiveOrgToken = null;
             if (config.useAppTokens)
             {
                 if (_buildType == "development")
-                    effectiveCustomerToken = string.IsNullOrEmpty(_customerToken) ? _appToken : _customerToken;
-                // production: effectiveCustomerToken stays null
+                    effectiveOrgToken = string.IsNullOrEmpty(_orgToken) ? _appToken : _orgToken;
+                // production: effectiveOrgToken stays null
             }
             var data = new AuthPayload
             {
@@ -538,7 +538,7 @@ namespace AbxrLib.Runtime.Authentication
                 orgId = config.useAppTokens ? null : _orgId, //legacy only
                 authSecret = config.useAppTokens ? null : _authSecret, //legacy only
                 appToken = config.useAppTokens ? null : _appToken, 
-                customerToken = config.useAppTokens ? effectiveCustomerToken : null,
+                orgToken = config.useAppTokens ? effectiveOrgToken : null,
                 buildType = _buildType, // always set for service; REST uses same payload
                 deviceId = _deviceId,
                 userId = userId,
@@ -581,8 +581,8 @@ namespace AbxrLib.Runtime.Authentication
                             case nameof(AuthPayload.appToken):
                                 if (data.appToken != null) ArborInsightServiceClient.set_AppToken(data.appToken);
                                 break;
-                            case nameof(AuthPayload.customerToken):
-                                if (data.customerToken != null) ArborInsightServiceClient.set_CustomerToken(data.customerToken);
+                            case nameof(AuthPayload.orgToken):
+                                if (data.orgToken != null) ArborInsightServiceClient.set_OrgToken(data.orgToken);
                                 break;
                             case nameof(AuthPayload.buildType):
                                 if (data.buildType != null) ArborInsightServiceClient.set_BuildType(data.buildType);
@@ -1071,7 +1071,7 @@ namespace AbxrLib.Runtime.Authentication
             public string authSecret; //legacy only
             public string appToken;
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-            public string customerToken;
+            public string orgToken;
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
             public string buildType;
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]

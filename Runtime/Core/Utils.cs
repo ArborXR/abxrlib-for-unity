@@ -376,7 +376,7 @@ namespace AbxrLib.Runtime.Core
             public string orgId; //legacy only
             public string authSecret; //legacy only
             public string appToken;
-            public string customerToken;
+            public string orgToken;
             public string buildType;
             public bool isValid;
             public string errorMessage;
@@ -414,7 +414,7 @@ namespace AbxrLib.Runtime.Core
                 result.orgId = null; //legacy only
                 result.authSecret = null; //legacy only
                 result.appToken = config.appToken;
-                result.customerToken = config.customerToken;
+                result.orgToken = config.orgToken;
                 // buildType stays from config above
             }
             else
@@ -458,12 +458,12 @@ namespace AbxrLib.Runtime.Core
         }
 
         /// <summary>
-        /// Builds a CustomerToken (dynamic) JWT for XRDM: payload { "orgId": orgId }, signed with HMAC-SHA256 using fingerprint as secret.
+        /// Builds an OrgToken (dynamic) JWT for XRDM: payload { "orgId": orgId }, signed with HMAC-SHA256 using fingerprint as secret.
         /// </summary>
-        /// <param name="orgId">Customer org ID (e.g. from GetOrgId())</param>
+        /// <param name="orgId">Organization ID (e.g. from GetOrgId())</param>
         /// <param name="fingerprint">Secret used to sign the JWT (e.g. GetFingerprint())</param>
         /// <returns>JWT string in compact form, or null if inputs are invalid</returns>
-        internal static string BuildCustomerTokenDynamic(string orgId, string fingerprint)
+        internal static string BuildOrgTokenDynamic(string orgId, string fingerprint)
         {
             if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(fingerprint))
                 return null;
@@ -486,7 +486,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: BuildCustomerTokenDynamic failed: {ex.Message}");
+                Debug.LogError($"AbxrLib: BuildOrgTokenDynamic failed: {ex.Message}");
                 return null;
             }
         }
