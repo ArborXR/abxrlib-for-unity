@@ -204,6 +204,9 @@ namespace AbxrLib.Runtime.Authentication
             
             if (!ValidateConfigValues())
             {
+                // No API requests are made; DataBatcher/StorageBatcher will not send (Authenticated() is false).
+                // Notify subscribers so the app can continue; use GetUserData() to check if the user actually authenticated.
+                _keyboardAuthSuccess = false;
                 Abxr.OnAuthCompleted?.Invoke(false, null);
                 yield break;
             }
@@ -324,11 +327,17 @@ namespace AbxrLib.Runtime.Authentication
             }
             
             // Set Authentication static fields from extracted config data
-            _appId = configData.appId; //legacy only
-            _orgId = configData.orgId; //legacy only
-            _authSecret = configData.authSecret; //legacy only
-            _appToken = configData.appToken;
-            _orgToken = configData.orgToken;
+            if(configData.useAppTokens)
+            {
+                _appToken = configData.appToken;
+                _orgToken = configData.orgToken;
+            }
+            else //legacy AppID/OrgID/AuthSecret approach
+            {
+                _appId = configData.appId;
+                _orgId = configData.orgId;
+                _authSecret = configData.authSecret;
+            }
             _buildType = configData.buildType;
             
             // Note: orgId and authSecret will still be overridden by GetArborData() if ArborServiceClient is connected (legacy path).
@@ -340,7 +349,6 @@ namespace AbxrLib.Runtime.Authentication
             if (!ArborServiceClient.IsConnected()) return;
         
             _partner = Partner.ArborXR;
-            _orgId = Abxr.GetOrgId();
             _deviceId = Abxr.GetDeviceId();
             _deviceTags = Abxr.GetDeviceTags();
             if (Configuration.Instance.useAppTokens)
@@ -348,7 +356,8 @@ namespace AbxrLib.Runtime.Authentication
                 try
                 {
                     string fingerprint = Abxr.GetFingerprint();
-                    string dynamicToken = Utils.BuildOrgTokenDynamic(_orgId, fingerprint);
+                    string orgId = Abxr.GetOrgId();
+                    string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, fingerprint);
                     if (!string.IsNullOrEmpty(dynamicToken))
                         _orgToken = dynamicToken;
                 }
@@ -359,12 +368,12 @@ namespace AbxrLib.Runtime.Authentication
                                   $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 }
             }
-            else
+            else //legacy AppID/OrgID/AuthSecret approach
             {
                 try
                 {
-                    var authSecret = Abxr.GetFingerprint();
-                    _authSecret = authSecret;
+                    _orgId = Abxr.GetOrgId();
+                    _authSecret = Abxr.GetFingerprint();
                 }
                 catch (Exception ex)
                 {
@@ -374,6 +383,7 @@ namespace AbxrLib.Runtime.Authentication
                 }
             }
         }
+
 #if UNITY_WEBGL && !UNITY_EDITOR
         private static void GetQueryData()
         {
@@ -397,50 +407,72 @@ namespace AbxrLib.Runtime.Authentication
             return newGuid;
         }
 #endif
+        /// <summary>
+        /// Validates that we have the required auth data for the current mode before calling the API.
+        /// When useAppTokens: need both appToken and orgToken (orgToken may come from config, XRDM dynamic token, or URL).
+        /// When not useAppTokens: need appId, orgId, and authSecret. If validation fails, authentication fails immediately and no data is collected.
+        /// </summary>
         private static bool ValidateConfigValues()
         {
             var config = Configuration.Instance;
-            if (!config.useAppTokens && !Configuration.Instance.IsValid()) return false;
-            
+
             if (config.useAppTokens)
             {
+                // App-token mode: require both appToken and orgToken; appId/orgId/authSecret are ignored.
                 if (string.IsNullOrEmpty(_appToken))
                 {
                     Debug.LogError("AbxrLib: App Token is missing. Cannot authenticate.");
                     return false;
                 }
-                // Production: Organization Token is never added to the compiled binary; only Development builds can include it. When XRDM is connected, a dynamic token is supplied at runtime.
-                bool haveOrgToken = _buildType == "production"
-                    || _buildType == "development"
-                    || ArborServiceClient.IsConnected()
-                    || !string.IsNullOrEmpty(_orgToken);
-                if (!haveOrgToken)
+                if (string.IsNullOrEmpty(_orgToken))
                 {
-                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, use Build Type Development, or connect via XRDM. Cannot authenticate.");
+                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, or pass org_token in the URL. Cannot authenticate.");
                     return false;
                 }
-                return true;
+                if (!LooksLikeJwt(_appToken))
+                {
+                    Debug.LogError("AbxrLib: App Token does not look like a JWT (expected three dot-separated segments). Cannot authenticate.");
+                    return false;
+                }
+                if (!LooksLikeJwt(_orgToken))
+                {
+                    Debug.LogError("AbxrLib: Organization Token does not look like a JWT (expected three dot-separated segments). Cannot authenticate.");
+                    return false;
+                }
             }
-            
-            if (string.IsNullOrEmpty(_appId) && string.IsNullOrEmpty(_appToken))
+            else //legacy AppID/OrgID/AuthSecret approach: require appId, orgId, authSecret.
             {
-                Debug.LogError("AbxrLib: Need Application ID or Application Token. Cannot authenticate.");
+                if (string.IsNullOrEmpty(_appId))
+                {
+                    Debug.LogError("AbxrLib: Application ID is missing. Cannot authenticate.");
+                    return false;
+                }
+                if (string.IsNullOrEmpty(_orgId))
+                {
+                    Debug.LogError("AbxrLib: Organization ID is missing. Cannot authenticate.");
+                    return false;
+                }
+                if (string.IsNullOrEmpty(_authSecret))
+                {
+                    Debug.LogError("AbxrLib: Authentication Secret is missing. Cannot authenticate.");
+                    return false;
+                }
+            }
+
+            // Validate restUrl, numeric ranges, and auth field formats (IsValid handles both useAppTokens and legacy).
+            if (!config.IsValid())
+            {
                 return false;
             }
-            
-            if (string.IsNullOrEmpty(_orgId))
-            {
-                Debug.LogError("AbxrLib: Organization ID is missing. Cannot authenticate.");
-                return false;
-            }
-            
-            if (string.IsNullOrEmpty(_authSecret))
-            {
-                Debug.LogError("AbxrLib: Authentication Secret is missing. Cannot authenticate");
-                return false;
-            }
-            
             return true;
+        }
+
+        /// <summary>Lightweight check that a string looks like a JWT (three base64url segments separated by dots). Does not verify signature or payload.</summary>
+        private static bool LooksLikeJwt(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            var parts = value.Split('.');
+            return parts.Length == 3;
         }
 
         public static IEnumerator KeyboardAuthenticate(string keyboardInput = null, bool invalidQrCode = false)

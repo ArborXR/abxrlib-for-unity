@@ -29,20 +29,27 @@ namespace AbxrLib.Runtime.Core
     public class Configuration : ScriptableObject
     {
         private static Configuration _instance;
+        private static bool _validatedOnce;
         private const string CONFIG_NAME = "AbxrLib";
-    
+
         public static Configuration Instance
         {
             get
             {
                 if (_instance) return _instance;
-            
+
                 _instance = Resources.Load<Configuration>(CONFIG_NAME);
                 if (!_instance)
                 {
                     _instance = CreateInstance<Configuration>();
                 }
-            
+
+                // Run validation once on first load so numeric ranges are clamped early; return value is ignored here.
+                if (!_validatedOnce)
+                {
+                    _instance.IsValid();
+                    _validatedOnce = true;
+                }
                 return _instance;
             }
         }
@@ -64,35 +71,62 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("Optional. Organization Token (JWT) from ArborXR Portal. Leave empty for shared production builds; set for single-org or dev builds.")] public string orgToken;
         
         /// <summary>
-        /// Validates that the configuration has the required fields set properly.
-        /// Validates appID, orgID, authSecret, restUrl format, and numeric ranges for timeouts.
+        /// Validates configuration: required auth fields and restUrl can cause return false; numeric settings are clamped to valid range (log and continue).
+        /// When useAppTokens: requires appToken (non-empty, JWT shape). orgToken may be empty (can come from runtime); if set, validates JWT shape.
+        /// When not useAppTokens: requires appID (non-empty, UUID). orgID and authSecret may be empty; if set, validates format.
+        /// restUrl must be set and valid (return false otherwise). Numeric values below min or above max are clamped to range and a warning is logged; validation still returns true.
+        /// Called automatically on first access to Configuration.Instance so ranges are applied early in the loading process.
         /// </summary>
         /// <returns>True if configuration is valid, false otherwise</returns>
         public bool IsValid()
         {
             const string uuidPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
-            
-            // appID must pass format validation if set (UUID format)
-            if (!Regex.IsMatch(appID, uuidPattern))
+
+            if (useAppTokens)
             {
-                Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
-                return false;
+                // App-token mode: appToken is required and must be valid format. orgToken can come from runtime — only validate format when set.
+                if (string.IsNullOrEmpty(appToken))
+                {
+                    Debug.LogError("AbxrLib: Configuration validation failed - appToken is required when using app tokens.");
+                    return false;
+                }
+                if (!LooksLikeJwt(appToken))
+                {
+                    Debug.LogError("AbxrLib: Configuration validation failed - appToken does not look like a JWT (expected three dot-separated segments).");
+                    return false;
+                }
+                if (!string.IsNullOrEmpty(orgToken) && !LooksLikeJwt(orgToken))
+                {
+                    Debug.LogError("AbxrLib: Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
+                    return false;
+                }
             }
-            
-            // orgID is optional but must pass format validation if set (UUID format)
-            if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
+            else
             {
-                Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
-                return false;
+                // Legacy mode: appID is required and must be valid format. orgID and authSecret can come from runtime — only validate format when set.
+                if (string.IsNullOrEmpty(appID))
+                {
+                    Debug.LogError("AbxrLib: Configuration validation failed - Application ID is required when not using app tokens.");
+                    return false;
+                }
+                if (!Regex.IsMatch(appID, uuidPattern))
+                {
+                    Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
+                    return false;
+                }
+                if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
+                {
+                    Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
+                    return false;
+                }
+                if (!string.IsNullOrEmpty(authSecret) && string.IsNullOrWhiteSpace(authSecret))
+                {
+                    Debug.LogError("AbxrLib: Configuration validation failed - authSecret cannot be empty if set");
+                    return false;
+                }
             }
-            
-            // authSecret is optional but must not be empty if set
-            if (!string.IsNullOrEmpty(authSecret) && string.IsNullOrWhiteSpace(authSecret))
-            {
-                Debug.LogError("AbxrLib: Configuration validation failed - authSecret cannot be empty if set");
-                return false;
-            }
-            
+
+            // Validate restUrl and numeric ranges for both modes
             // Validate restUrl format - must be a valid HTTP/HTTPS URL
             if (string.IsNullOrEmpty(restUrl))
             {
@@ -106,99 +140,61 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
             
-            // Validate numeric ranges for timeouts and intervals
-            if (sendRetriesOnFailure < 0 || sendRetriesOnFailure > 10)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - sendRetriesOnFailure must be between 0 and 10, got {sendRetriesOnFailure}");
-                return false;
-            }
-            
-            if (sendRetryIntervalSeconds < 1 || sendRetryIntervalSeconds > 300)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - sendRetryIntervalSeconds must be between 1 and 300 seconds, got {sendRetryIntervalSeconds}");
-                return false;
-            }
-            
-            if (sendNextBatchWaitSeconds < 1 || sendNextBatchWaitSeconds > 3600)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - sendNextBatchWaitSeconds must be between 1 and 3600 seconds, got {sendNextBatchWaitSeconds}");
-                return false;
-            }
-            
-            if (requestTimeoutSeconds < 5 || requestTimeoutSeconds > 300)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - requestTimeoutSeconds must be between 5 and 300 seconds, got {requestTimeoutSeconds}");
-                return false;
-            }
-            
-            if (stragglerTimeoutSeconds < 0 || stragglerTimeoutSeconds > 3600)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - stragglerTimeoutSeconds must be between 0 and 3600 seconds, got {stragglerTimeoutSeconds}");
-                return false;
-            }
-            
-            if (maxCallFrequencySeconds < 0.1f || maxCallFrequencySeconds > 60f)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - maxCallFrequencySeconds must be between 0.1 and 60 seconds, got {maxCallFrequencySeconds}");
-                return false;
-            }
-            
-            if (dataEntriesPerSendAttempt < 1 || dataEntriesPerSendAttempt > 1000)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - dataEntriesPerSendAttempt must be between 1 and 1000, got {dataEntriesPerSendAttempt}");
-                return false;
-            }
-            
-            if (storageEntriesPerSendAttempt < 1 || storageEntriesPerSendAttempt > 1000)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - storageEntriesPerSendAttempt must be between 1 and 1000, got {storageEntriesPerSendAttempt}");
-                return false;
-            }
-            
-            if (pruneSentItemsOlderThanHours < 0 || pruneSentItemsOlderThanHours > 8760) // Max 1 year
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - pruneSentItemsOlderThanHours must be between 0 and 8760 hours (1 year), got {pruneSentItemsOlderThanHours}");
-                return false;
-            }
-            
-            if (maximumCachedItems < 10 || maximumCachedItems > 10000)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - maximumCachedItems must be between 10 and 10000, got {maximumCachedItems}");
-                return false;
-            }
-            
-            if (maxDictionarySize < 5 || maxDictionarySize > 1000)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - maxDictionarySize must be between 5 and 1000, got {maxDictionarySize}");
-                return false;
-            }
-            
-            // Validate tracking periods
-            if (positionTrackingPeriodSeconds < 0.1f || positionTrackingPeriodSeconds > 60f)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - positionTrackingPeriodSeconds must be between 0.1 and 60 seconds, got {positionTrackingPeriodSeconds}");
-                return false;
-            }
-            
-            if (frameRateTrackingPeriodSeconds < 0.1f || frameRateTrackingPeriodSeconds > 60f)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - frameRateTrackingPeriodSeconds must be between 0.1 and 60 seconds, got {frameRateTrackingPeriodSeconds}");
-                return false;
-            }
-            
-            if (telemetryTrackingPeriodSeconds < 1f || telemetryTrackingPeriodSeconds > 300f)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - telemetryTrackingPeriodSeconds must be between 1 and 300 seconds, got {telemetryTrackingPeriodSeconds}");
-                return false;
-            }
-            
-            if (authenticationStartDelay < 0f || authenticationStartDelay > 60f)
-            {
-                Debug.LogError($"AbxrLib: Configuration validation failed - authenticationStartDelay must be between 0 and 60 seconds, got {authenticationStartDelay}");
-                return false;
-            }
-            
+            // Clamp numeric ranges: empty/invalid (e.g. 0 from cleared Inspector) becomes default; out-of-range becomes min/max
+            ClampInt(nameof(sendRetriesOnFailure), ref sendRetriesOnFailure, 0, 10, 3);
+            ClampInt(nameof(sendRetryIntervalSeconds), ref sendRetryIntervalSeconds, 1, 300, 3);
+            ClampInt(nameof(sendNextBatchWaitSeconds), ref sendNextBatchWaitSeconds, 1, 3600, 30);
+            ClampInt(nameof(requestTimeoutSeconds), ref requestTimeoutSeconds, 5, 300, 30);
+            ClampInt(nameof(stragglerTimeoutSeconds), ref stragglerTimeoutSeconds, 0, 3600, 15);
+            ClampFloat(nameof(maxCallFrequencySeconds), ref maxCallFrequencySeconds, 0.1f, 60f, 1f);
+            ClampInt(nameof(dataEntriesPerSendAttempt), ref dataEntriesPerSendAttempt, 1, 1000, 32);
+            ClampInt(nameof(storageEntriesPerSendAttempt), ref storageEntriesPerSendAttempt, 1, 1000, 16);
+            ClampInt(nameof(pruneSentItemsOlderThanHours), ref pruneSentItemsOlderThanHours, 0, 8760, 12);
+            ClampInt(nameof(maximumCachedItems), ref maximumCachedItems, 10, 10000, 1024);
+            ClampInt(nameof(maxDictionarySize), ref maxDictionarySize, 5, 1000, 50);
+            ClampFloat(nameof(positionTrackingPeriodSeconds), ref positionTrackingPeriodSeconds, 0.1f, 60f, 1f);
+            ClampFloat(nameof(frameRateTrackingPeriodSeconds), ref frameRateTrackingPeriodSeconds, 0.1f, 60f, 0.5f);
+            ClampFloat(nameof(telemetryTrackingPeriodSeconds), ref telemetryTrackingPeriodSeconds, 1f, 300f, 10f);
+            ClampFloat(nameof(authenticationStartDelay), ref authenticationStartDelay, 0f, 60f, 0f);
+
             return true;
+        }
+
+        private static void ClampInt(string fieldName, ref int value, int min, int max, int defaultValue)
+        {
+            if (value < min)
+            {
+                int applied = Mathf.Clamp(defaultValue, min, max);
+                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
+                value = applied;
+            }
+            else if (value > max)
+            {
+                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value}, clamped to maximum {max}.");
+                value = max;
+            }
+        }
+
+        private static void ClampFloat(string fieldName, ref float value, float min, float max, float defaultValue)
+        {
+            if (value < min)
+            {
+                float applied = Mathf.Clamp(defaultValue, min, max);
+                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
+                value = applied;
+            }
+            else if (value > max)
+            {
+                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value}, clamped to maximum {max}.");
+                value = max;
+            }
+        }
+
+        private static bool LooksLikeJwt(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            var parts = value.Split('.');
+            return parts.Length == 3;
         }
 
         [Header("Service Provider")]

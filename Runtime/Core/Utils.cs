@@ -378,6 +378,7 @@ namespace AbxrLib.Runtime.Core
             public string appToken;
             public string orgToken;
             public string buildType;
+            public bool useAppTokens;
             public bool isValid;
             public string errorMessage;
         }
@@ -402,6 +403,7 @@ namespace AbxrLib.Runtime.Core
             result.buildType = !string.IsNullOrEmpty(config.buildType) ? config.buildType : "production";
 
             // Check if using App Tokens
+            result.useAppTokens = config.useAppTokens;
             if (config.useAppTokens)
             {
                 // Single appToken (App Token) required
@@ -410,18 +412,21 @@ namespace AbxrLib.Runtime.Core
                     result.errorMessage = "App Token (appToken) is not set.";
                     return result;
                 }
-                result.appId = null; //legacy only
-                result.orgId = null; //legacy only
-                result.authSecret = null; //legacy only
                 result.appToken = config.appToken;
                 result.orgToken = config.orgToken;
-                // buildType stays from config above
+                // buildType stays from config above; appId/orgId/authSecret left default (unused when using tokens)
             }
-            else
+            else //legacy AppID/OrgID/AuthSecret approach
             {
+                // Single appId required
+                if (string.IsNullOrEmpty(config.appID))
+                {
+                    result.errorMessage = "Application ID (appID) is not set.";
+                    return result;
+                }
+
                 // Use traditional appID/orgID/authSecret approach
                 result.appId = config.appID;
-                result.appToken = null;
                
                 // Only include orgID and authSecret if buildType is development
                 // In production builds, these should be empty to avoid including credentials
