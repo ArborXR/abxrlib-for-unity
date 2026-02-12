@@ -1,5 +1,5 @@
-using AbxrLib.Runtime.Authentication;
 using TMPro;
+using AbxrLib.Runtime.Services.Auth;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -9,6 +9,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
     public class KeyboardManager : MonoBehaviour
     {
         public static KeyboardManager Instance;
+        public static AbxrAuthService AuthService;
         public Button shiftButton1;
         public Button shiftButton2;
         public Button deleteButton;
@@ -196,8 +197,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 StartCoroutine(KeyboardHandler.ProcessingVisual());
                 // Ensure inputSource is set to "user" for manual keyboard input
-                Authentication.Authentication.SetInputSource("user");
-                StartCoroutine(Authentication.Authentication.KeyboardAuthenticate(inputField.text));
+                AuthService.SetInputSource("user");
+                AbxrManager.Instance.SubmitInput(inputField.text);
                 inputField.text = "";
             }
             catch (System.Exception ex)

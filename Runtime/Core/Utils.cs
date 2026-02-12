@@ -20,10 +20,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
-using AbxrLib.Runtime.Authentication;
-using AbxrLib.Runtime.Common;
-using AbxrLib.Runtime.Data;
-using AbxrLib.Runtime.Storage;
+using AbxrLib.Runtime.Types;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -577,7 +574,7 @@ namespace AbxrLib.Runtime.Core
         /// <returns>The argument value if found, empty string otherwise</returns>
         public static string GetCommandLineArg(string key)
         {
-            string[] args = System.Environment.GetCommandLineArgs();
+            string[] args = Environment.GetCommandLineArgs();
             
             // Pre-build the search strings to avoid repeated concatenation
             string keyEquals = key + "=";
@@ -681,33 +678,19 @@ namespace AbxrLib.Runtime.Core
             return "";
         }
     
-        public static long GetUnityTime() => (long)(Time.time * 1000f) + Initialize.StartTimeMs;
-
-        public static void SendAllData()
-        {
-            // Send all pending data from all batcher types
-            if (CoroutineRunner.Instance != null)
-            {
-                CoroutineRunner.Instance.StartCoroutine(DataBatcher.Send());
-                CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
-            }
-            else
-            {
-                Debug.LogWarning("AbxrLib: Cannot send data - CoroutineRunner.Instance is null");
-            }
-        }
+        public static long GetUnityTime() => (long)(Time.time * 1000f) + AbxrManager.StartTimeMs;
 
         /// <summary>
         /// Convert raw module dictionaries to typed ModuleData objects.
         /// Internal helper for processing authentication response modules. Modules are sorted by order.
         /// </summary>
-        public static List<Authentication.Authentication.ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
+        public static List<ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
         {
-            var moduleDataList = new List<Authentication.Authentication.ModuleData>();
+            var moduleDataList = new List<ModuleData>();
             if (rawModules == null) return moduleDataList;
             try
             {
-                var tempList = new List<Authentication.Authentication.ModuleData>();
+                var tempList = new List<ModuleData>();
                 foreach (var rawModule in rawModules)
                 {
                     var moduleId = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
@@ -716,7 +699,7 @@ namespace AbxrLib.Runtime.Core
                     var moduleOrder = 0;
                     if (rawModule.ContainsKey("order") && rawModule["order"] != null)
                         int.TryParse(rawModule["order"].ToString(), out moduleOrder);
-                    tempList.Add(new Authentication.Authentication.ModuleData { Id = moduleId, Name = moduleName, Target = moduleTarget, Order = moduleOrder });
+                    tempList.Add(new ModuleData { Id = moduleId, Name = moduleName, Target = moduleTarget, Order = moduleOrder });
                 }
                 moduleDataList = tempList.OrderBy(m => m.Order).ToList();
             }
