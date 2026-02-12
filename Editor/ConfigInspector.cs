@@ -28,20 +28,20 @@ namespace AbxrLib.Editor
             
             if (useAppTokens)
             {
-                // Insights Token (in code: appToken)
+                // App Token (in code: appToken)
                 config.appToken = EditorGUILayout.TextField(new GUIContent(
-                    "Insights Token", "Insights Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);
+                    "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);
                 
                 // Customer Token (optional; disabled in production – not sent in production builds)
                 EditorGUI.BeginDisabledGroup(isProduction);
                 config.customerToken = EditorGUILayout.TextField(new GUIContent(
-                    "Customer Token (optional)", "Optional. In Development: use this or leave empty to use Insights Token as customer token. In Production this field is not used."), config.customerToken);
+                    "Customer Token (optional)", "Optional. In Development: use this or leave empty to use App Token as customer token. In Production this field is not used."), config.customerToken);
                 EditorGUI.EndDisabledGroup();
                 if (isProduction)
                     EditorGUILayout.HelpBox("In Production, Customer Token from config is not sent. The field is disabled for shared production builds.", MessageType.Info);
                 else
                     EditorGUILayout.HelpBox(
-                        "In Development you can set a Customer Token, or leave empty to use the Insights Token as the customer token.",
+                        "In Development you can set a Customer Token, or leave empty to use the App Token as the customer token.",
                         MessageType.Info);
             }
             else

@@ -406,7 +406,7 @@ namespace AbxrLib.Runtime.Authentication
             {
                 if (string.IsNullOrEmpty(_appToken))
                 {
-                    Debug.LogError("AbxrLib: Insights Token (appToken) is missing. Cannot authenticate.");
+                    Debug.LogError("AbxrLib: App Token is missing. Cannot authenticate.");
                     return false;
                 }
                 // Production: Customer Token is never added to the compiled binary; only Development builds can include it. When XRDM is connected, a dynamic token is supplied at runtime.
@@ -524,7 +524,7 @@ namespace AbxrLib.Runtime.Authentication
                 ssoAccessToken = Abxr.GetAccessToken();
             }
             
-            // Production: do not send or use customer token (it must not be in the binary; only Development builds may include it). Development: send configured customer token if set, else Insights Token.
+            // Production: do not send or use customer token (it must not be in the binary; only Development builds may include it). Development: send configured customer token if set, else App Token.
             string effectiveCustomerToken = null;
             if (config.useAppTokens)
             {
@@ -539,7 +539,7 @@ namespace AbxrLib.Runtime.Authentication
                 authSecret = config.useAppTokens ? null : _authSecret, //legacy only
                 appToken = config.useAppTokens ? null : _appToken, 
                 customerToken = config.useAppTokens ? effectiveCustomerToken : null,
-                buildType = config.useAppTokens ? _buildType : null,
+                buildType = _buildType, // always set for service; REST uses same payload
                 deviceId = _deviceId,
                 userId = userId,
                 tags = _deviceTags,
@@ -563,26 +563,74 @@ namespace AbxrLib.Runtime.Authentication
             {
                 try
                 {
-                    ArborInsightServiceClient.set_AppID(_appId); //legacy only
-                    ArborInsightServiceClient.set_OrgID(_orgId); //legacy only
-                    ArborInsightServiceClient.set_AuthSecret(_authSecret); //legacy only
-                    ArborInsightServiceClient.set_RestUrl("https://lib-backend.xrdm.app/");
-                    ArborInsightServiceClient.set_AppToken(_appToken);
-                    ArborInsightServiceClient.set_CustomerToken(effectiveCustomerToken);
-                    ArborInsightServiceClient.set_BuildType(_buildType);
-                    ArborInsightServiceClient.set_DeviceID(_deviceId);
-                    if (userId != null) ArborInsightServiceClient.set_UserID(userId);
-                    ArborInsightServiceClient.set_Tags(_deviceTags?.ToList() ?? new List<string>());
-                    ArborInsightServiceClient.set_Partner((int)_partner);
-                    ArborInsightServiceClient.set_IpAddress(_ipAddress);
-                    ArborInsightServiceClient.set_DeviceModel(_deviceModel);
-                    ArborInsightServiceClient.set_GeoLocation(new Dictionary<string, string>());
-                    ArborInsightServiceClient.set_OsVersion(SystemInfo.operatingSystem);
-                    ArborInsightServiceClient.set_XrdmVersion(_xrdmVersion);
-                    ArborInsightServiceClient.set_AppVersion(Application.version);
-                    ArborInsightServiceClient.set_UnityVersion(Application.unityVersion);
-                    ArborInsightServiceClient.set_AbxrLibType("unity");
-                    ArborInsightServiceClient.set_AbxrLibVersion(AbxrLibVersion.Version);
+                    ArborInsightServiceClient.set_RestUrl(config.restUrl ?? "https://lib-backend.xrdm.app/");
+                    foreach (var fi in typeof(AuthPayload).GetFields(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        var field = fi.Name;
+                        switch (field)
+                        {
+                            case nameof(AuthPayload.appId):
+                                if (data.appId != null) ArborInsightServiceClient.set_AppID(data.appId);
+                                break;
+                            case nameof(AuthPayload.orgId):
+                                if (data.orgId != null) ArborInsightServiceClient.set_OrgID(data.orgId);
+                                break;
+                            case nameof(AuthPayload.authSecret):
+                                if (data.authSecret != null) ArborInsightServiceClient.set_AuthSecret(data.authSecret);
+                                break;
+                            case nameof(AuthPayload.appToken):
+                                if (data.appToken != null) ArborInsightServiceClient.set_AppToken(data.appToken);
+                                break;
+                            case nameof(AuthPayload.customerToken):
+                                if (data.customerToken != null) ArborInsightServiceClient.set_CustomerToken(data.customerToken);
+                                break;
+                            case nameof(AuthPayload.buildType):
+                                if (data.buildType != null) ArborInsightServiceClient.set_BuildType(data.buildType);
+                                break;
+                            case nameof(AuthPayload.deviceId):
+                                if (data.deviceId != null) ArborInsightServiceClient.set_DeviceID(data.deviceId);
+                                break;
+                            case nameof(AuthPayload.userId):
+                                if (data.userId != null) ArborInsightServiceClient.set_UserID(data.userId);
+                                break;
+                            case nameof(AuthPayload.tags):
+                                if (data.tags != null) ArborInsightServiceClient.set_Tags(data.tags.ToList());
+                                break;
+                            case nameof(AuthPayload.partner):
+                                ArborInsightServiceClient.set_Partner((int)_partner);
+                                break;
+                            case nameof(AuthPayload.ipAddress):
+                                if (data.ipAddress != null) ArborInsightServiceClient.set_IpAddress(data.ipAddress);
+                                break;
+                            case nameof(AuthPayload.deviceModel):
+                                if (data.deviceModel != null) ArborInsightServiceClient.set_DeviceModel(data.deviceModel);
+                                break;
+                            case nameof(AuthPayload.geolocation):
+                                ArborInsightServiceClient.set_GeoLocation(data.geolocation ?? new Dictionary<string, string>());
+                                break;
+                            case nameof(AuthPayload.osVersion):
+                                if (data.osVersion != null) ArborInsightServiceClient.set_OsVersion(data.osVersion);
+                                break;
+                            case nameof(AuthPayload.xrdmVersion):
+                                if (data.xrdmVersion != null) ArborInsightServiceClient.set_XrdmVersion(data.xrdmVersion);
+                                break;
+                            case nameof(AuthPayload.appVersion):
+                                if (data.appVersion != null) ArborInsightServiceClient.set_AppVersion(data.appVersion);
+                                break;
+                            case nameof(AuthPayload.unityVersion):
+                                if (data.unityVersion != null) ArborInsightServiceClient.set_UnityVersion(data.unityVersion);
+                                break;
+                            case nameof(AuthPayload.abxrLibType):
+                                if (data.abxrLibType != null) ArborInsightServiceClient.set_AbxrLibType(data.abxrLibType);
+                                break;
+                            case nameof(AuthPayload.abxrLibVersion):
+                                if (data.abxrLibVersion != null) ArborInsightServiceClient.set_AbxrLibVersion(data.abxrLibVersion);
+                                break;
+                            default:
+                                // AuthPayload fields without a service setter are ignored
+                                break;
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {

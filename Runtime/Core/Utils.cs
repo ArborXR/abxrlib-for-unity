@@ -351,7 +351,7 @@ namespace AbxrLib.Runtime.Core
 
             var result = new Dictionary<string, string>();
 
-            // Extract appId (Insights token payload may contain appId or insightsId; legacy only)
+            // Extract appId (App token payload may contain appId; legacy only)
             if (jwtPayload.ContainsKey("appId") && jwtPayload["appId"] != null)
             {
                 result["appId"] = jwtPayload["appId"].ToString();
@@ -404,10 +404,10 @@ namespace AbxrLib.Runtime.Core
             // Check if using App Tokens
             if (config.useAppTokens)
             {
-                // Single appToken (Insights Token) required
+                // Single appToken (App Token) required
                 if (string.IsNullOrEmpty(config.appToken))
                 {
-                    result.errorMessage = "Insights Token (appToken) is not set.";
+                    result.errorMessage = "App Token (appToken) is not set.";
                     return result;
                 }
                 result.appId = null; //legacy only
