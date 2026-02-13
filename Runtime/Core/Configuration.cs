@@ -129,7 +129,7 @@ namespace AbxrLib.Runtime.Core
             }
             else
             {
-                // Legacy mode: appID is required and must be valid format. orgID and authSecret can come from runtime — only validate format when set.
+                // Legacy mode: appID is required and must be valid format. orgID and authSecret can come from runtime — only validate format when set. Production (Custom APK) requires both.
                 if (string.IsNullOrEmpty(appID))
                 {
                     Debug.LogError("AbxrLib: Configuration validation failed - Application ID is required when not using app tokens.");
@@ -139,6 +139,25 @@ namespace AbxrLib.Runtime.Core
                 {
                     Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
                     return false;
+                }
+                if (buildType == "production_custom")
+                {
+                    if (string.IsNullOrEmpty(orgID))
+                    {
+                        if (PreferValidationWarnings)
+                            Debug.LogWarning("AbxrLib: Configuration validation - Organization ID is required when Build Type is Production (Custom APK) with legacy auth. Set the customer's org ID in AbxrLib configuration.");
+                        else
+                            Debug.LogError("AbxrLib: Configuration validation failed - Organization ID is required when Build Type is Production (Custom APK).");
+                        return false;
+                    }
+                    if (string.IsNullOrEmpty(authSecret) || string.IsNullOrWhiteSpace(authSecret))
+                    {
+                        if (PreferValidationWarnings)
+                            Debug.LogWarning("AbxrLib: Configuration validation - Authorization Secret is required when Build Type is Production (Custom APK) with legacy auth. Set it in AbxrLib configuration.");
+                        else
+                            Debug.LogError("AbxrLib: Configuration validation failed - Authorization Secret is required when Build Type is Production (Custom APK).");
+                        return false;
+                    }
                 }
                 if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
                 {

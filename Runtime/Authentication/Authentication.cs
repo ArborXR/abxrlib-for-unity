@@ -152,6 +152,8 @@ namespace AbxrLib.Runtime.Authentication
 #elif UNITY_WEBGL && !UNITY_EDITOR
             GetQueryData();
             _deviceId = GetOrCreateDeviceId();
+#elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
+            GetQueryData();
 #endif
             SetSessionData();
             _initialized = true;
@@ -351,6 +353,11 @@ namespace AbxrLib.Runtime.Authentication
             _partner = Partner.ArborXR;
             _deviceId = Abxr.GetDeviceId();
             _deviceTags = Abxr.GetDeviceTags();
+            if(_buildType == "production_custom")
+            {
+               return; //Production Custom APK does not need an org token
+            }
+
             if (Configuration.Instance.useAppTokens)
             {
                 try
@@ -387,13 +394,32 @@ namespace AbxrLib.Runtime.Authentication
 #if UNITY_WEBGL && !UNITY_EDITOR
         private static void GetQueryData()
         {
+            if(_buildType == "production_custom")
+            {
+               return; //Production Custom APK does not need an org token
+            }
             string orgTokenQuery = Utils.GetQueryParam("org_token", Application.absoluteURL);
             if (!string.IsNullOrEmpty(orgTokenQuery))
             {
                 _orgToken = orgTokenQuery;
             }
         }
-        
+#elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
+        private static void GetQueryData()
+        {
+            if (_buildType == "production_custom")
+            {
+                return; // Production Custom does not need an org token
+            }
+            string orgToken = Utils.GetOrgTokenFromDesktopSources();
+            if (!string.IsNullOrEmpty(orgToken))
+            {
+                _orgToken = orgToken;
+            }
+        }
+#endif
+
+#if UNITY_WEBGL && !UNITY_EDITOR
         private static string GetOrCreateDeviceId()
         {
             if (PlayerPrefs.HasKey(DeviceIdKey))
@@ -438,7 +464,7 @@ namespace AbxrLib.Runtime.Authentication
                 // API requires both appToken and orgToken when useAppTokens; _orgToken must be set by here (config, Arbor, URL, or development fallback)
                 if (string.IsNullOrEmpty(_orgToken))
                 {
-                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, or pass org_token in the URL. Cannot authenticate.");
+                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, pass org_token in the URL (WebGL), use --org_token or arborxr_org_token.key (desktop), or set in config. Cannot authenticate.");
                     return false;
                 }
                 if (!LooksLikeJwt(_orgToken))

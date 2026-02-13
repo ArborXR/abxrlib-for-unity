@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -609,6 +610,59 @@ namespace AbxrLib.Runtime.Core
             }
             return "";
         }
+
+#if (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
+        private const string OrgTokenFileName = "arborxr_org_token.key";
+
+        /// <summary>
+        /// Returns the directory that contains the game executable on standalone desktop builds.
+        /// Windows: folder containing the .exe (parent of the _Data folder).
+        /// Mac: folder containing the executable inside the .app bundle (Contents/MacOS).
+        /// </summary>
+        public static string GetStandaloneExecutableDirectory()
+        {
+#if UNITY_STANDALONE_WIN
+            var dataPath = Application.dataPath;
+            var parent = Directory.GetParent(dataPath);
+            return parent != null ? parent.FullName : "";
+#elif UNITY_STANDALONE_OSX
+            return Path.Combine(Application.dataPath, "MacOS");
+#else
+            return "";
+#endif
+        }
+
+        /// <summary>
+        /// Gets org_token for standalone desktop builds: first from command line (--org_token value or org_token=value),
+        /// then from a file named arborxr_org_token.key in the same directory as the executable.
+        /// </summary>
+        public static string GetOrgTokenFromDesktopSources()
+        {
+            string token = GetCommandLineArg("org_token");
+            if (!string.IsNullOrWhiteSpace(token))
+                return token.Trim();
+
+            string exeDir = GetStandaloneExecutableDirectory();
+            if (string.IsNullOrEmpty(exeDir)) return "";
+
+            string filePath = Path.Combine(exeDir, OrgTokenFileName);
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    string content = File.ReadAllText(filePath);
+                    if (!string.IsNullOrWhiteSpace(content))
+                        return content.Trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"AbxrLib: Could not read org token from {OrgTokenFileName}: {ex.Message}");
+            }
+
+            return "";
+        }
+#endif
 
         /// <summary>
         /// Get Android intent parameter value by key

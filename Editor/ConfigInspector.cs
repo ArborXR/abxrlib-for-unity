@@ -58,16 +58,27 @@ namespace AbxrLib.Editor
                 config.appID = EditorGUILayout.TextField(new GUIContent(
                     "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
                 
-                // Grey out orgID and authSecret when buildType is production
+                // Grey out orgID and authSecret when buildType is production only; enable for development and production_custom
+                bool isProductionCustomLegacy = config.buildType == "production_custom";
                 EditorGUI.BeginDisabledGroup(isProduction);
-                config.orgID = EditorGUILayout.TextField(new GUIContent(
-                    "Organization ID (*)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.orgID);
-                config.authSecret = EditorGUILayout.TextField("Authorization Secret (*)", config.authSecret);
+                string orgIdLabel = isProductionCustomLegacy ? "Organization ID (required)" : "Organization ID (*)";
+                string orgIdTooltip = isProductionCustomLegacy
+                    ? "Required for Production (Custom APK). Set the customer's organization ID from ArborXR Portal."
+                    : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
+                config.orgID = EditorGUILayout.TextField(new GUIContent(orgIdLabel, orgIdTooltip), config.orgID);
+                string authSecretLabel = isProductionCustomLegacy ? "Authorization Secret (required)" : "Authorization Secret (*)";
+                config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, "Required for Production (Custom APK) when using legacy auth."), config.authSecret);
                 EditorGUI.EndDisabledGroup();
                 
                 if (isProduction)
                 {
                     EditorGUILayout.HelpBox("OrgID and AuthSecret are disabled in Production builds. These values will NOT be included in builds.", MessageType.Info);
+                }
+                else if (isProductionCustomLegacy)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization Secret are required. The API receives buildType Production.",
+                        MessageType.Info);
                 }
             }
                     // Use App Tokens checkbox right under buildType dropdown
