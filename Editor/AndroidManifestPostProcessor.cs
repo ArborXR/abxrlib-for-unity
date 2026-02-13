@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Core;
 using UnityEditor;
 using UnityEditor.Android;
+using UnityEditor.Build;
 using UnityEditor.Callbacks;
 using UnityEngine;
 
@@ -125,6 +126,36 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// When Use App Tokens is on and appToken (or orgToken for Production Custom APK) is set but invalid, fails the build.
+        /// Production (Custom APK) requires Organization Token to be set. Empty appToken is allowed (build may not use app tokens yet).
+        /// </summary>
+        private static void ValidateAppTokensForBuild()
+        {
+            var configData = GetCachedConfigData();
+            if (!configData.useAppTokens) return;
+            if (!string.IsNullOrEmpty(configData.appToken) && !LooksLikeJwt(configData.appToken))
+                throw new BuildFailedException("AbxrLib: App Token is set but does not look like a JWT (expected three dot-separated segments). Fix or clear the App Token in AbxrLib configuration.");
+            if (configData.buildType == "production_custom")
+            {
+                // Only require orgToken when appToken is set (they are using app tokens); both empty is allowed
+                if (!string.IsNullOrEmpty(configData.appToken))
+                {
+                    if (string.IsNullOrEmpty(configData.orgToken))
+                        throw new BuildFailedException("AbxrLib: Production (Custom APK) requires Organization Token to be set when using App Tokens. Set the customer's org token in AbxrLib configuration.");
+                    if (!LooksLikeJwt(configData.orgToken))
+                        throw new BuildFailedException("AbxrLib: Organization Token is set but does not look like a JWT (expected three dot-separated segments). Fix the Organization Token in AbxrLib configuration.");
+                }
+            }
+        }
+
+        private static bool LooksLikeJwt(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            var parts = value.Split('.');
+            return parts.Length == 3;
+        }
+
+        /// <summary>
         /// Processes the AndroidManifest.xml to inject AbxrLib metadata.
         /// </summary>
         private static void ProcessManifest(string projectPath)
@@ -155,13 +186,26 @@ namespace AbxrLib.Editor
 
             try
             {
-                string manifestContent = File.ReadAllText(manifestPath);
-                string modifiedContent = InjectMetadata(manifestContent);
-                
-                if (modifiedContent != manifestContent)
+                Configuration.PreferValidationWarnings = true;
+                try
                 {
-                    File.WriteAllText(manifestPath, modifiedContent);
+                    ValidateAppTokensForBuild();
+                    string manifestContent = File.ReadAllText(manifestPath);
+                    string modifiedContent = InjectMetadata(manifestContent);
+                    
+                    if (modifiedContent != manifestContent)
+                    {
+                        File.WriteAllText(manifestPath, modifiedContent);
+                    }
                 }
+                finally
+                {
+                    Configuration.PreferValidationWarnings = false;
+                }
+            }
+            catch (BuildFailedException)
+            {
+                throw;
             }
             catch (System.Exception e)
             {

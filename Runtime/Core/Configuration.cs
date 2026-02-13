@@ -32,6 +32,12 @@ namespace AbxrLib.Runtime.Core
         private static bool _validatedOnce;
         private const string CONFIG_NAME = "AbxrLib";
 
+        /// <summary>
+        /// When true, validation logs warnings instead of errors for missing app/org token (e.g. during Editor build when config may be incomplete).
+        /// Set by Editor build scripts only.
+        /// </summary>
+        internal static bool PreferValidationWarnings { get; set; }
+
         public static Configuration Instance
         {
             get
@@ -87,7 +93,10 @@ namespace AbxrLib.Runtime.Core
                 // App-token mode: appToken is required and must be valid format. orgToken can come from runtime — only validate format when set.
                 if (string.IsNullOrEmpty(appToken))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - appToken is required when using app tokens.");
+                    if (PreferValidationWarnings)
+                        Debug.LogWarning("AbxrLib: Configuration validation - appToken is required when using app tokens. Set App Token in AbxrLib configuration or authentication will fail at runtime.");
+                    else
+                        Debug.LogError("AbxrLib: Configuration validation failed - appToken is required when using app tokens.");
                     return false;
                 }
                 if (!LooksLikeJwt(appToken))
@@ -100,7 +109,10 @@ namespace AbxrLib.Runtime.Core
                 {
                     if (string.IsNullOrEmpty(orgToken))
                     {
-                        Debug.LogError("AbxrLib: Configuration validation failed - Organization Token is required when Build Type is Production (Custom APK).");
+                        if (PreferValidationWarnings)
+                            Debug.LogWarning("AbxrLib: Configuration validation - Organization Token is required when Build Type is Production (Custom APK). Set the customer's org token in AbxrLib configuration.");
+                        else
+                            Debug.LogError("AbxrLib: Configuration validation failed - Organization Token is required when Build Type is Production (Custom APK).");
                         return false;
                     }
                     if (!LooksLikeJwt(orgToken))
