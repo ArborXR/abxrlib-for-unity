@@ -1,10 +1,10 @@
-# abxrlib-for-unity – AI instructions
+# AI instructions – abxrlib-for-unity
 
-Team-wide instructions are duplicated in sibling ArborXR repos (abxrlib-for-unreal, abxrlib-for-webxr); keep shared guidelines in sync when updating.
+Project-wide instructions are duplicated in sibling ArborXR repos (abxrlib-for-unreal, abxrlib-for-webxr); keep shared guidelines in sync when updating.
 
 ---
 
-## Overview
+## This repo: ABXRLib SDK for Unity
 
 This repo is the **ABXRLib SDK for Unity**: a C# Unity package for analytics, authentication, and data collection in XR applications. It can operate in two modes:
 
@@ -38,9 +38,9 @@ Unity App
     ↓
 AbxrLib: Authentication.cs, ArborInsightServiceClient (C#)
     ↓
-ArborInsightServiceBridge → UnityArborInsightServiceClient.java (in AAR)
+ArborInsightServiceBridge → client AAR (e.g. insights-client-service.aar)
     ↓
-AIDL → ArborInsightService.kt (separate APK)
+AIDL → ArborInsightService (separate APK)
 ```
 
 - **Initialize:** `Initialize.OnBeforeSceneLoad()` attaches `ArborServiceClient` and `ArborInsightServiceClient` only when `UNITY_ANDROID && !UNITY_EDITOR`. The bridge calls the Java client’s `bind()`; `Authentication.cs` polls `ServiceIsFullyInitialized()` (up to 40 × 250 ms) before proceeding with auth.
@@ -58,7 +58,7 @@ AIDL → ArborInsightService.kt (separate APK)
 - **Service client (Android):** `Runtime/ServiceClient/ArborInsightServiceClient.cs`, `Runtime/ServiceClient/ArborInsightService/ArborInsightServiceBridge` (JNI to Java), `Runtime/ServiceClient/ArborServiceClient.cs`
 - **Data / storage / telemetry:** `Runtime/Data/DataBatcher.cs`, `Runtime/Storage/StorageBatcher.cs`, `Runtime/Telemetry/` (TrackInputDevices, TrackObject, TrackSystemInfo)
 - **UI:** `Runtime/UI/` (ExitPoll, Keyboard, DebugWindow, HandTrackingButtonSystem, etc.)
-- **Plugins:** `Plugins/Android/` (client AAR, e.g. `insights-client-service.aar`, containing the UnityArborInsightServiceClient Java bridge; supplied separately, not built in this repo)
+- **Plugins:** `Plugins/Android/` (client AAR, e.g. `insights-client-service.aar`, containing the client bridge used by ArborInsightServiceClient; supplied separately, not built in this repo)
 
 ## Configuration and Data Sources
 
@@ -66,12 +66,12 @@ AIDL → ArborInsightService.kt (separate APK)
 - **GetConfigData()** (in Authentication) – Reads appID, orgID, authSecret from Configuration.
 - **GetArborData()** – Can override with ArborXR SDK values when connected (`ArborServiceClient.IsConnected()`, `Abxr.GetOrgId()`, `Abxr.GetFingerprint()`, deviceId, deviceTags). If Configuration has values, they take precedence; deviceId/deviceTags still come from ArborXR SDK when available.
 
-## How This Repo Works With Other Projects
+## How this repo works with other projects
 
-- **ArborInsightService:** This repo consumes the **client AAR** and (on device) the **service APK**. Both are supplied externally. On Android, `ArborInsightServiceClient` binds to the service via the AAR’s Java bridge. Do not assume access to the service’s source repo; guidance in this file is from the consumer’s perspective only.
+- **ArborInsightService:** This repo consumes the **client AAR** (e.g. `insights-client-service.aar`) and (on device) the **service APK**. Both are supplied externally (e.g. from your distribution channel); the AAR is produced by the same source that builds the ArborInsightService APK. On Android, `ArborInsightServiceClient` binds to the service via the client bridge in the AAR. Do not assume access to the ArborInsightService source repo; document only what is exposed to plugins via the AAR and APK.
 - **abxrlib-for-unity-demo-app:** Consumes this package (git URL or local); demonstrates integration and optional use of the device service on Android when the AAR and APK are available.
 
-## Build and Usage (for app developers)
+## Build and usage (for app developers)
 
 - **Install:** Add package from git URL `https://github.com/ArborXR/abxrlib-for-unity.git` (Package Manager → Add package from git URL). See README for configuration and quick start.
 - **Android + device service:** Obtain and install the ArborInsightService APK from your distribution channel. Ensure `Plugins/Android/` includes the **matching client AAR** (e.g. `insights-client-service.aar`) from the same source.
@@ -88,3 +88,7 @@ AIDL → ArborInsightService.kt (separate APK)
 - Default execution order: `Authentication` uses `[DefaultExecutionOrder(1)]` so it runs early.
 - Android-only code is behind `#if UNITY_ANDROID && !UNITY_EDITOR` (service client, HeadsetDetector, etc.); Editor and WebGL use standalone path only.
 - Authentication flow with the service mirrors the standalone flow: first auth, then config, then optional second auth with user input (same session, same endpoint).
+
+## Maintaining this file
+
+Update this file when you make changes that affect the documented architecture, key files, integration with other repos, or troubleshooting. Keep the outline and details in sync with the code.
