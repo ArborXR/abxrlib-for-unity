@@ -179,6 +179,8 @@ public static partial class Abxr
 	/// This is the userData object from the authentication response, containing user preferences and information
 	/// The API handles normalization and adds OrgId to the UserData
 	/// Returns null if authentication has not completed or UserData is not available
+	/// The returned dictionary always includes a "userId" key when possible, using the top-level userId
+	/// or falling back to userName/username, email/emailAddress, or full name (fullName/full_name or first+last).
 	/// </summary>
 	/// <returns>Dictionary containing learner data, or null if not authenticated or UserData is not available</returns>
 	public static Dictionary<string, string> GetUserData()
@@ -195,7 +197,42 @@ public static partial class Abxr
 		}
 		
 		// Return a copy of UserData to avoid modifying the original
-		return new Dictionary<string, string>(authResponse.UserData);
+		var result = new Dictionary<string, string>(authResponse.UserData);
+		// Ensure userId is always present; use top-level userId or fallbacks from UserData
+		string effectiveUserId = null;
+		var topLevel = authResponse.UserId != null ? authResponse.UserId.ToString().Trim() : null;
+		if (!string.IsNullOrEmpty(topLevel))
+			effectiveUserId = topLevel;
+		else if (result.Count > 0)
+		{
+			string value;
+			if (!string.IsNullOrEmpty(value = GetFirstNonEmpty(result, "userName", "username", "user_name", "user")))
+				effectiveUserId = value;
+			else if (!string.IsNullOrEmpty(value = GetFirstNonEmpty(result, "email", "emailAddress", "email_address")))
+				effectiveUserId = value;
+			else if (!string.IsNullOrEmpty(value = GetFirstNonEmpty(result, "fullname", "fullName", "full_name", "name")))
+				effectiveUserId = value;
+			else
+			{
+				var first = GetFirstNonEmpty(result, "firstName", "first_name", "first");
+				var last = GetFirstNonEmpty(result, "lastName", "last_name", "last");
+				if (!string.IsNullOrEmpty(first) || !string.IsNullOrEmpty(last))
+					effectiveUserId = (first ?? "").Trim() + (string.IsNullOrEmpty(first) || string.IsNullOrEmpty(last) ? "" : " ") + (last ?? "").Trim();
+			}
+		}
+		result["userId"] = effectiveUserId ?? string.Empty;
+		return result;
+	}
+
+	private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)
+	{
+		if (dict == null || keys == null) return null;
+		foreach (var key in keys)
+		{
+			if (dict.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v))
+				return v.Trim();
+		}
+		return null;
 	}
 	
 	/// <summary>
