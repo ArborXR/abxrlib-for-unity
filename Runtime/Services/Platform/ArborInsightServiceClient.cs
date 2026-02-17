@@ -91,21 +91,21 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void AbxrLibInitStart() => _client.Call<int>("abxrLibInitStart");
 		public static void AbxrLibInitEnd() => _client.Call<int>("abxrLibInitEnd");
 		// ---
-		public static int AuthRequest(String szUserId, String dictAdditionalUserData)
+		public static String AuthRequest(String szUserId, String dictAdditionalUserData)
 		{
 			if (_client == null)
 			{
 				Debug.LogError($"[ArborInsightServiceClient] AuthRequest called but _client is null!");
-				return 0;
+				return "{\"result\":0}";
 			}
 			try
 			{
-				return _client.Call<int>("authRequest", szUserId ?? "", dictAdditionalUserData ?? "");
+				return _client.Call<String>("authRequest", szUserId ?? "", dictAdditionalUserData ?? "") ?? "{\"result\":0}";
 			}
 			catch (Exception e)
 			{
 				Debug.LogError($"[ArborInsightServiceClient] AuthRequest exception: {e.GetType().Name}: {e.Message}\nStackTrace: {e.StackTrace}");
-				return 0;
+				return "{\"result\":0}";
 			}
 		}
 		// ---
@@ -216,7 +216,6 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static String get_DeviceModel() => _client.Call<String>("get_DeviceModel");
 		public static void set_DeviceModel(String szDeviceModel) => _client.Call<int>("set_DeviceModel", szDeviceModel);
 		// ---
-		public static String get_UserId() => _client.Call<String>("get_UserId");
 		public static void set_UserId(String szUserId) => _client.Call<int>("set_UserId", szUserId);
 		// ---
 		public static List<String> get_Tags() => Utils.StringToStringList(_client.Call<String>("get_Tags"));
@@ -378,7 +377,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void AbxrLibInitStart() => ArborInsightServiceBridge.AbxrLibInitStart();
 		public static void AbxrLibInitEnd() => ArborInsightServiceBridge.AbxrLibInitEnd();
 		// ---
-		public static int AuthRequest(String szUserId, String dictAdditionalUserData) => ArborInsightServiceBridge.AuthRequest(szUserId ?? "", dictAdditionalUserData ?? "");
+		public static string AuthRequest(String szUserId, String dictAdditionalUserData) => ArborInsightServiceBridge.AuthRequest(szUserId ?? "", dictAdditionalUserData ?? "");
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => ArborInsightServiceBridge.Authenticate(szAppId ?? "", szOrgId ?? "", szDeviceId ?? "", szAuthSecret ?? "", ePartner);
 		public static int FinalAuthenticate() => ArborInsightServiceBridge.FinalAuthenticate();
@@ -484,7 +483,6 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static String get_DeviceModel() => ArborInsightServiceBridge.get_DeviceModel();
 		public static void set_DeviceModel(String szDeviceModel) => ArborInsightServiceBridge.set_DeviceModel(szDeviceModel ?? "");
 		// ---
-		public static String get_UserId() => ArborInsightServiceBridge.get_UserId();
 		public static void set_UserId(String szUserId) => ArborInsightServiceBridge.set_UserId(szUserId ?? "");
 		// ---
 		public static List<String> get_Tags() => ArborInsightServiceBridge.get_Tags();

@@ -338,26 +338,37 @@ namespace AbxrLib.Runtime.Services.Auth
                         }
                     }
                     var authMechDict = CreateAuthMechanismDict();
-                    int ret = ArborInsightServiceClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(authMechDict));
-                    if (ret == (int)AbxrResult.OK)
+                    // Service returns auth response JSON with token/secret stripped; Unity uses service as API and does not need them.
+                    string authResponseJson = ArborInsightServiceClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(authMechDict));
+                    try
                     {
-                        try
+                        if (!string.IsNullOrEmpty(authResponseJson) &&
+                            !(authResponseJson.TrimStart().StartsWith("{\"result\":") && authResponseJson.Length < 25))
                         {
-                            string token = ArborInsightServiceClient.get_ApiToken();
-                            string secret = ArborInsightServiceClient.get_ApiSecret();
-                            if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(secret))
+                            var postResponse = JsonConvert.DeserializeObject<AuthResponse>(authResponseJson);
+                            if (postResponse != null)
                             {
-                                ResponseData = new AuthResponse { Token = token, Secret = secret };
-                                _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                                ResponseData = postResponse;
+                                if (ResponseData.Modules?.Count > 1)
+                                    ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
+                                if (!string.IsNullOrEmpty(_enteredAuthValue))
+                                {
+                                    ResponseData.UserData ??= new Dictionary<string, string>();
+                                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
+                                    ResponseData.UserData[keyName] = _enteredAuthValue;
+                                }
                                 _usedArborInsightServiceForSession = true;
+                                _payload.buildType = savedBuildType;
+                                _attemptActive = false;
+                                AuthSucceeded();
+                                onComplete(true);
+                                yield break;
                             }
                         }
-                        catch { }
-                        _payload.buildType = savedBuildType;
-                        _attemptActive = false;
-                        AuthSucceeded();
-                        onComplete(true);
-                        yield break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"AbxrLib: Service auth response handling failed: {ex.Message}");
                     }
                 }
                 catch (Exception ex)
@@ -471,7 +482,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private IEnumerator ReAuthPollCoroutine()
         {
-            while (!_stopping)
+            // When using ArborInsightService for data, re-auth is the service's responsibility; exit the loop.
+            while (!_stopping && !UsingArborInsightServiceForData())
             {
                 yield return new WaitForSeconds(ReAuthPollSeconds);
 
