@@ -149,6 +149,13 @@ namespace AbxrLib.Runtime.Authentication
             _deviceId = SystemInfo.deviceUniqueIdentifier;
 #if UNITY_ANDROID && !UNITY_EDITOR
             GetArborData();
+            // On non-XRDM devices, org_token can be provided via launch intent (e.g. adb shell am start --es org_token "JWT...")
+            if (Configuration.Instance.useAppTokens && string.IsNullOrEmpty(_orgToken))
+            {
+                string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
+                if (!string.IsNullOrEmpty(orgTokenIntent))
+                    _orgToken = orgTokenIntent;
+            }
 #elif UNITY_WEBGL && !UNITY_EDITOR
             GetQueryData();
             _deviceId = GetOrCreateDeviceId();
@@ -458,13 +465,12 @@ namespace AbxrLib.Runtime.Authentication
                 // Development: use App Token as org token when none set from config/Arbor/URL
                 if (_buildType == "development" && string.IsNullOrEmpty(_orgToken))
                 {
-                    // Development: use App Token as org token when none set from config/Arbor/URL
                     _orgToken = _appToken;
                 }
                 // API requires both appToken and orgToken when useAppTokens; _orgToken must be set by here (config, Arbor, URL, or development fallback)
                 if (string.IsNullOrEmpty(_orgToken))
                 {
-                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, pass org_token in the URL (WebGL), use --org_token or arborxr_org_token.key (desktop), or set in config. Cannot authenticate.");
+                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, pass org_token in the URL (WebGL), use --org_token or arborxr_org_token.key (desktop), pass org_token as Android intent extra (APK), or set in config. Cannot authenticate.");
                     return false;
                 }
                 if (!LooksLikeJwt(_orgToken))
@@ -596,7 +602,7 @@ namespace AbxrLib.Runtime.Authentication
                 appId = config.useAppTokens ? null : _appId, //legacy only
                 orgId = config.useAppTokens ? null : _orgId, //legacy only
                 authSecret = config.useAppTokens ? null : _authSecret, //legacy only
-                appToken = config.useAppTokens ? null : _appToken, 
+                appToken = config.useAppTokens ? _appToken : null,
                 orgToken = config.useAppTokens ? _orgToken : null,
                 buildType = payloadBuildType, // Production (Custom APK) sends "production" to API
                 deviceId = _deviceId,
