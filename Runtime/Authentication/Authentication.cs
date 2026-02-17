@@ -86,11 +86,12 @@ namespace AbxrLib.Runtime.Authentication
 
         public static bool Authenticated()
         {
-            // Check if we have a valid token and it hasn't expired
-            return !string.IsNullOrEmpty(_responseData?.Token) && 
-                   !string.IsNullOrEmpty(_responseData?.Secret) && 
-                   DateTime.UtcNow <= _tokenExpiry &&
-                   _keyboardAuthSuccess == true;
+            if (_keyboardAuthSuccess != true) return false;
+            if (UsingArborInsightServiceForData())
+                return _responseData != null;
+            return !string.IsNullOrEmpty(_responseData?.Token) &&
+                   !string.IsNullOrEmpty(_responseData?.Secret) &&
+                   DateTime.UtcNow <= _tokenExpiry;
         }
         
         public static bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
@@ -307,7 +308,7 @@ namespace AbxrLib.Runtime.Authentication
 
         private static IEnumerator PollForReAuth()
         {
-            while (true)
+            while (!UsingArborInsightServiceForData())
             {
                 yield return new WaitForSeconds(60);
                 if (_tokenExpiry - DateTime.UtcNow <= TimeSpan.FromMinutes(2))
@@ -707,12 +708,35 @@ namespace AbxrLib.Runtime.Authentication
                 bool bSuccess = false;
                 while (!bSuccess)
                 {
-                    var eRet = (AbxrResult)ArborInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(authMechanismDict));
-                    if (eRet == AbxrResult.OK)
+                    // Service returns auth response with token/secret stripped (service keeps credentials); Unity uses service as API and does not need them.
+                    string authResponseJson = ArborInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(authMechanismDict));
+                    try
                     {
-                        _keyboardAuthSuccess = true;
-                        bSuccess = true;
-                        break;
+                        if (!string.IsNullOrEmpty(authResponseJson) &&
+                            !(authResponseJson.TrimStart().StartsWith("{\"result\":") && authResponseJson.Length < 25))
+                        {
+                            var postResponse = JsonConvert.DeserializeObject<AuthResponse>(authResponseJson);
+                            if (postResponse != null)
+                            {
+                                _responseData = postResponse;
+                                if (_responseData.Modules?.Count > 1)
+                                    _responseData.Modules = _responseData.Modules.OrderBy(m => m.Order).ToList();
+                                if (!string.IsNullOrEmpty(_enteredAuthValue))
+                                {
+                                    _responseData.UserData ??= new Dictionary<string, string>();
+                                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
+                                    _responseData.UserData[keyName] = _enteredAuthValue;
+                                }
+                                if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
+                                bSuccess = true;
+                                _usedArborInsightServiceForSession = true;
+                                break;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"AbxrLib: Service auth response handling failed: {ex.Message}");
                     }
                     if (!withRetry)
                     {
@@ -721,22 +745,6 @@ namespace AbxrLib.Runtime.Authentication
                     }
                     Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {nRetrySeconds} seconds...");
                     yield return new WaitForSeconds(nRetrySeconds);
-                }
-
-                if (bSuccess)
-                {
-                    try
-                    {
-                        string token = ArborInsightServiceClient.get_ApiToken();
-                        string secret = ArborInsightServiceClient.get_ApiSecret();
-                        if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(secret))
-                        {
-                            _responseData = new AuthResponse { Token = token, Secret = secret };
-                            _tokenExpiry = DateTime.UtcNow.AddHours(24);
-                            _usedArborInsightServiceForSession = true; // This session uses the service for data; never switch to service later if we had started standalone
-                        }
-                    }
-                    catch { }
                 }
                 yield break;
             }
