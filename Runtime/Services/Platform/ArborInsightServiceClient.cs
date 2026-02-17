@@ -248,7 +248,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void set_SendRetryInterval(double tsValue) => _client.Call<int>("set_SendRetryInterval", tsValue);
 		// ---
 		public static double get_SendNextBatchWait() => _client.Call<double>("get_SendNextBatchWait");
-		public static void set_SendNextBatchWait(double tsValue) => _client.Call<int>("set_SendRetryInterval", tsValue);
+		public static void set_SendNextBatchWait(double tsValue) => _client.Call<int>("set_SendNextBatchWait", tsValue);
 		// ---
 		public static double get_StragglerTimeout() => _client.Call<double>("get_StragglerTimeout");
 		public static void set_StragglerTimeout(double tsValue) => _client.Call<int>("set_StragglerTimeout", tsValue);
@@ -516,7 +516,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void set_SendRetryInterval(double tsValue) => ArborInsightServiceBridge.set_SendRetryInterval(tsValue);
 		// ---
 		public static double get_SendNextBatchWait() => ArborInsightServiceBridge.get_SendNextBatchWait();
-		public static void set_SendNextBatchWait(double tsValue) => ArborInsightServiceBridge.set_SendRetryInterval(tsValue);
+		public static void set_SendNextBatchWait(double tsValue) => ArborInsightServiceBridge.set_SendNextBatchWait(tsValue);
 		// ---
 		public static double get_StragglerTimeout() => ArborInsightServiceBridge.get_StragglerTimeout();
 		public static void set_StragglerTimeout(double tsValue) => ArborInsightServiceBridge.set_StragglerTimeout(tsValue);
