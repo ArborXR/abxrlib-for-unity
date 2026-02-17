@@ -245,21 +245,24 @@ namespace AbxrLib.Runtime
 			var authResponse = _authService.ResponseData;
 			if (authResponse == null) return null;
 			
-			// Build a copy of UserData (or empty dict) and always include userId from top-level response
+			// Build a copy of UserData (or empty dict) and always include userId (from top-level or fallbacks)
 			var userData = authResponse.UserData != null
 				? new Dictionary<string, string>(authResponse.UserData)
 				: new Dictionary<string, string>();
 			var userIdStr = authResponse.UserId?.ToString();
 			if (string.IsNullOrEmpty(userIdStr))
 			{
-				// Fallback: fill userId from other fields in priority order
-				userIdStr = GetFirstNonEmpty(userData, "userName", "username", "user_name")
-					?? GetFirstNonEmpty(userData, "email", "emailAddress", "email_address")
-					?? GetFirstNonEmpty(userData, "fullname", "fullName", "full_name", "name");
+				// Fallback: fill userId from other fields in userData, in priority order
+				// 1) userId / id / userName variants
+				userIdStr = GetFirstNonEmpty(userData, "userId", "id", "userName", "username", "user_name", "user")
+					// 2) email variants
+					?? GetFirstNonEmpty(userData, "email", "emailAddress", "email_address", "e-mail", "e_mail")
+					// 3) full name variants or merge of first & last
+					?? GetFirstNonEmpty(userData, "fullname", "fullName", "full_name", "name", "displayName", "display_name");
 				if (string.IsNullOrEmpty(userIdStr))
 				{
-					var first = GetFirstNonEmpty(userData, "firstName", "first_name", "first");
-					var last = GetFirstNonEmpty(userData, "lastName", "last_name", "last");
+					var first = GetFirstNonEmpty(userData, "firstName", "first_name", "first", "givenName", "given_name");
+					var last = GetFirstNonEmpty(userData, "lastName", "last_name", "last", "surname", "familyName", "family_name");
 					if (!string.IsNullOrEmpty(first) && !string.IsNullOrEmpty(last))
 						userIdStr = (first + " " + last).Trim();
 					else if (!string.IsNullOrEmpty(first))
@@ -268,8 +271,8 @@ namespace AbxrLib.Runtime
 						userIdStr = last;
 				}
 			}
-			if (!string.IsNullOrEmpty(userIdStr))
-				userData["userId"] = userIdStr;
+			// Always set userId in the dictionary so callers can rely on the key being present
+			userData["userId"] = userIdStr ?? "";
 			return userData;
 		}
 
