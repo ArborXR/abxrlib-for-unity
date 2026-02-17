@@ -999,7 +999,7 @@ namespace AbxrLib.Runtime.Authentication
         public static void SetAuthHeaders(UnityWebRequest request, string json = "")
         {
             // Check if we have valid authentication tokens
-            if (string.IsNullOrEmpty(_responseData.Token) || string.IsNullOrEmpty(_responseData.Secret))
+            if (_responseData == null || string.IsNullOrEmpty(_responseData.Token) || string.IsNullOrEmpty(_responseData.Secret))
             {
                 Debug.LogError("AbxrLib: Cannot set auth headers - authentication tokens are missing");
                 return;
