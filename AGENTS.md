@@ -24,7 +24,7 @@ Related:
 ```
 Unity App
     ↓
-AbxrLib (this package): Authentication.cs, DataBatcher, StorageBatcher, Telemetry
+AbxrLib (this package): AbxrManager, AbxrAuthService, AbxrDataService, AbxrStorageService, AbxrTelemetryService
     ↓
 HTTP/REST → ArborXR Insights (or custom backend)
 ```
@@ -36,35 +36,37 @@ Config and credentials come from `Configuration.Instance` (appID, orgID, authSec
 ```
 Unity App
     ↓
-AbxrLib: Authentication.cs, ArborInsightServiceClient (C#)
+AbxrLib: AbxrAuthService, ArborInsightServiceClient (C#)
     ↓
-ArborInsightServiceBridge → UnityArborInsightServiceClient.java (in AAR)
+ArborInsightServiceBridge → client AAR (e.g. insights-client-service.aar)
     ↓
-AIDL → ArborInsightService.kt (separate APK)
+AIDL → ArborInsightService (separate APK)
 ```
 
-- **Initialize:** `Initialize.OnBeforeSceneLoad()` attaches `ArborServiceClient` and `ArborInsightServiceClient` only when `UNITY_ANDROID && !UNITY_EDITOR`. The bridge calls the Java client’s `bind()`; `Authentication.cs` polls `ServiceIsFullyInitialized()` (up to 40 × 250 ms) before proceeding with auth.
+- **Initialize:** `Initialize.OnBeforeSceneLoad()` attaches `ArborServiceClient` and `ArborInsightServiceClient` only when `UNITY_ANDROID && !UNITY_EDITOR`. The bridge calls the Java client’s `bind()`; `AbxrAuthService` polls `ServiceIsFullyInitialized()` (up to 40 × 250 ms) before proceeding with auth. When the service is ready, auth payload (including appToken/orgToken when useAppTokens) is pushed to the service and `AuthRequest()` is called.
 - **Auth/config:** When the service is used, auth runs through the service (same flow as standalone: first auth, then config, then optional second auth with user input). Data sources: `GetConfigData()` from Unity `Configuration.Instance`, `GetArborData()` can override with ArborXR SDK values when connected.
 
 ### Initialization (this package)
 
-- **Runtime:** `Initialize.cs` uses `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]` to attach core components: `CoroutineRunner`, `DeviceModel`, `KeyboardHandler`, `Authentication`, `ExitPollHandler`, `SceneChangeDetector`, `DataBatcher`, `StorageBatcher`, `TrackSystemInfo`, `ApplicationQuitHandler`; on Android build, also `ArborServiceClient`, `ArborInsightServiceClient`, `HeadsetDetector`, and optionally `TrackInputDevices` and platform QR readers (Pico/Meta).
+- **Runtime:** `Initialize.cs` uses `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]` to attach core components including `AbxrManager`, `AbxrAuthService`, data/telemetry services, `DeviceModel`, UI (ExitPoll, Keyboard, etc.); on Android build, also `ArborServiceClient`, `ArborInsightServiceClient`, `HeadsetDetector`, and optionally platform QR readers (Pico/Meta).
 - **Service readiness:** On Android, auth waits for `ArborInsightServiceClient.ServiceIsFullyInitialized()` before sending auth requests to the service. Init and readiness are handled by the client AAR and the service APK; this package only polls until ready.
 
 ## Key Files
 
-- **Entry / config:** `Runtime/Core/Initialize.cs`, `Runtime/Core/Configuration.cs`, `Runtime/Core/Abxr.cs`
-- **Auth:** `Runtime/Authentication/Authentication.cs` (device/user auth, session, GetConfigData/GetArborData, optional keyboard UI)
-- **Service client (Android):** `Runtime/ServiceClient/ArborInsightServiceClient.cs`, `Runtime/ServiceClient/ArborInsightService/ArborInsightServiceBridge` (JNI to Java), `Runtime/ServiceClient/ArborServiceClient.cs`
-- **Data / storage / telemetry:** `Runtime/Data/DataBatcher.cs`, `Runtime/Storage/StorageBatcher.cs`, `Runtime/Telemetry/` (TrackInputDevices, TrackObject, TrackSystemInfo)
+- **Entry / config:** `Runtime/Core/Initialize.cs`, `Runtime/Core/Configuration.cs`, `Runtime/Abxr.cs`, `Runtime/AbxrManager.cs`
+- **Auth:** `Runtime/Services/Auth/AbxrAuthService.cs` (device/user auth, session, GetConfigData/GetArborData, appToken/orgToken, optional keyboard UI; on Android pushes payload to service and calls AuthRequest when service is ready)
+- **Service client (Android):** `Runtime/Services/Platform/ArborInsightServiceClient.cs` (ArborInsightServiceBridge in same file), `Runtime/Services/Platform/ArborServiceClient.cs`
+- **Data / storage / telemetry:** `Runtime/Services/Data/AbxrDataService.cs`, `Runtime/Services/Data/AbxrStorageService.cs`, `Runtime/Services/Telemetry/AbxrTelemetryService.cs`, `Runtime/Services/Telemetry/TrackObject.cs`
 - **UI:** `Runtime/UI/` (ExitPoll, Keyboard, DebugWindow, HandTrackingButtonSystem, etc.)
-- **Plugins:** `Plugins/Android/` (client AAR, e.g. `insights-client-service.aar`, containing the UnityArborInsightServiceClient Java bridge; supplied separately, not built in this repo)
+- **Plugins:** `Plugins/Android/` (client AAR, e.g. `insights-client-service.aar`, containing the client bridge used by ArborInsightServiceClient; supplied separately, not built in this repo)
 
 ## Configuration and Data Sources
 
-- **Configuration.Instance** – ScriptableObject from `Resources/AbxrLib.asset`. Holds appID, orgID, authSecret, buildType (production/development), REST URLs, telemetry/batching options, UI prefab references.
-- **GetConfigData()** (in Authentication) – Reads appID, orgID, authSecret from Configuration.
-- **GetArborData()** – Can override with ArborXR SDK values when connected (`ArborServiceClient.IsConnected()`, `Abxr.GetOrgId()`, `Abxr.GetFingerprint()`, deviceId, deviceTags). If Configuration has values, they take precedence; deviceId/deviceTags still come from ArborXR SDK when available.
+- **Configuration.Instance** – ScriptableObject from `Resources/AbxrLib.asset`. Holds appID, orgID, authSecret, buildType (production/development/production_custom), useAppTokens, appToken, orgToken, REST URLs, telemetry/batching options, UI prefab references.
+- **Auth modes:** When **Use App Tokens** is on: single appToken (required) and optional orgToken; buildType production_custom requires orgToken for single-customer builds; API receives appToken + orgToken. When off (legacy): appID, orgID, authSecret; GetArborData() can override with ArborXR SDK when connected.
+- **GetConfigData()** (in AbxrAuthService) – Uses `Utils.ExtractConfigData()` to populate payload (appToken/orgToken/buildType or appID/orgID/authSecret).
+- **GetArborData()** – When useAppTokens and not production_custom: builds dynamic org token via `Utils.BuildOrgTokenDynamic(GetOrgId(), GetFingerprint())`. Legacy: overrides orgID, authSecret from ArborXR SDK. deviceId/deviceTags from ArborXR when available.
+- **Production (Custom APK):** buildType production_custom; requires org token (or legacy orgID+authSecret); API receives buildType "production"; Android manifest injects build_type "production".
 
 ## How This Repo Works With Other Projects
 
@@ -80,7 +82,8 @@ AIDL → ArborInsightService.kt (separate APK)
 
 - **Auth fails / wrong orgId or authSecret:** Confirm Unity Configuration (AbxrLib.asset) and buildType; remember GetArborData() can override with ArborXR SDK when connected.
 - **Empty app_id / org_id / auth_secret or HTTP 422:** Check GetConfigData()/GetArborData() and that Configuration or ArborXR SDK is providing values; inspect auth payload in logs.
-- **Service “not ready” or bind fails on Android:** Ensure the ArborInsightService APK is installed and the client AAR in `Plugins/Android/` matches that service version. Check logcat for `ArborInsightServiceClient` and `AbxrLib:`.
+- **App/org token validation (useAppTokens):** Ensure appToken and orgToken are valid JWTs (three dot-separated segments). For production_custom, orgToken is required. Development can use app token as org token if org token is empty.
+- **Service “not ready” or bind fails on Android:** Ensure the ArborInsightService APK is installed and the client AAR in `Plugins/Android/` matches that service version (AAR must support set_OrgToken when using app tokens). Check logcat for `ArborInsightServiceClient` and `AbxrLib:`.
 - **Missing AAR:** If you see “bridge not initialized” or “AAR may be missing”, add the client AAR (e.g. `insights-client-service.aar`) to `Plugins/Android/`. Obtain it from your distribution channel; it is not built in this repo.
 
 ## Technical Notes

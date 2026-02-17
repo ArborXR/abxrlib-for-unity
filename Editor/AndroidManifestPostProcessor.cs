@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Core;
 using UnityEditor;
 using UnityEditor.Android;
+using UnityEditor.Build;
 using UnityEditor.Callbacks;
 using UnityEngine;
 
@@ -79,12 +80,59 @@ namespace AbxrLib.Editor
 
         /// <summary>
         /// Gets the build type from Configuration, or extracts it from App Token if using app tokens.
-        /// Returns the buildType field value, or "production" as default.
+        /// Returns the buildType field value, or "production" as default. Production (Custom APK) returns "production" so manifest matches API.
         /// </summary>
         private static string GetBuildType()
         {
             var configData = GetCachedConfigData();
-            return configData.isValid ? configData.buildType : "production";
+            if (!configData.isValid) return "production";
+            return configData.buildType == "production_custom" ? "production" : configData.buildType;
+        }
+
+        /// <summary>
+        /// Validates app/org tokens or legacy orgID/authSecret for Production (Custom APK). Fails the build when set but invalid or incomplete.
+        /// </summary>
+        private static void ValidateAppTokensForBuild()
+        {
+            var configData = GetCachedConfigData();
+            if (configData.useAppTokens)
+            {
+                if (!string.IsNullOrEmpty(configData.appToken) && !LooksLikeJwt(configData.appToken))
+                    throw new BuildFailedException("AbxrLib: App Token is set but does not look like a JWT (expected three dot-separated segments). Fix or clear the App Token in Analytics for XR configuration.");
+                if (configData.buildType == "production_custom")
+                {
+                    if (!string.IsNullOrEmpty(configData.appToken))
+                    {
+                        if (string.IsNullOrEmpty(configData.orgToken))
+                            throw new BuildFailedException("AbxrLib: Production (Custom APK) requires Organization Token to be set for Custom APK builds. Set the customer's org token in Analytics for XR configuration.");
+                        if (!LooksLikeJwt(configData.orgToken))
+                            throw new BuildFailedException("AbxrLib: Organization Token is set but does not look like a JWT (expected three dot-separated segments). Fix the Organization Token in Analytics for XR configuration.");
+                    }
+                }
+                return;
+            }
+            if (configData.buildType == "production_custom" && !string.IsNullOrEmpty(configData.appId))
+            {
+                if (string.IsNullOrEmpty(configData.orgId))
+                    throw new BuildFailedException("AbxrLib: Production (Custom APK) requires Organization ID to be set for Custom APK builds. Set the customer's org ID in Analytics for XR configuration.");
+                if (string.IsNullOrEmpty(configData.authSecret) || string.IsNullOrWhiteSpace(configData.authSecret))
+                    throw new BuildFailedException("AbxrLib: Production (Custom APK) requires Authorization Secret to be set for Custom APK builds. Set it in Analytics for XR configuration.");
+                if (!LooksLikeUuid(configData.orgId))
+                    throw new BuildFailedException("AbxrLib: Organization ID does not look like a valid UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Fix the Organization ID in Analytics for XR configuration.");
+            }
+        }
+
+        private static bool LooksLikeUuid(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            return Regex.IsMatch(value, "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$");
+        }
+
+        private static bool LooksLikeJwt(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            var parts = value.Split('.');
+            return parts.Length == 3;
         }
 
         /// <summary>
@@ -154,13 +202,26 @@ namespace AbxrLib.Editor
 
             try
             {
-                string manifestContent = File.ReadAllText(manifestPath);
-                string modifiedContent = InjectMetadata(manifestContent);
-                
-                if (modifiedContent != manifestContent)
+                Configuration.PreferValidationWarnings = true;
+                try
                 {
-                    File.WriteAllText(manifestPath, modifiedContent);
+                    ValidateAppTokensForBuild();
+                    string manifestContent = File.ReadAllText(manifestPath);
+                    string modifiedContent = InjectMetadata(manifestContent);
+                    
+                    if (modifiedContent != manifestContent)
+                    {
+                        File.WriteAllText(manifestPath, modifiedContent);
+                    }
                 }
+                finally
+                {
+                    Configuration.PreferValidationWarnings = false;
+                }
+            }
+            catch (BuildFailedException)
+            {
+                throw;
             }
             catch (System.Exception e)
             {

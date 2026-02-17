@@ -159,6 +159,8 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static String get_AppToken() => _client.Call<String>("get_AppToken");
 		public static void set_AppToken(String szAppToken) => _client.Call("set_AppToken", szAppToken);
+		// --- Organization Token (for InsightsToken/OrgToken auth). AAR must support set_OrgToken when using app tokens.
+		public static void set_OrgToken(String szOrgToken) => _client.Call("set_OrgToken", szOrgToken);
 		// ---
 		public static String get_AppID() => _client.Call<String>("get_AppID");
 		public static void set_AppID(String szAppID) => _client.Call<int>("set_AppID", szAppID);
@@ -419,17 +421,16 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static int AddTelemetryEntryDeferred(String szName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.AddTelemetryEntryDeferred(szName ?? "", dictMeta);
 		// ---
 		//boolean platformIsWindows();
-		// --- Authentication fields.
-		public static String get_ApiToken() => ArborInsightServiceBridge.get_ApiToken();
+		// --- Authentication fields. get_ApiToken and get_ApiSecret are internal for post-auth use; setters stay public to push auth payload.
+		internal static String get_ApiToken() => ArborInsightServiceBridge.get_ApiToken();
 		public static void set_ApiToken(String szApiToken) => ArborInsightServiceBridge.set_ApiToken(szApiToken ?? "");
 		// ---
-		public static String get_ApiSecret() => ArborInsightServiceBridge.get_ApiSecret();
+		internal static String get_ApiSecret() => ArborInsightServiceBridge.get_ApiSecret();
 		public static void set_ApiSecret(String szApiSecret) => ArborInsightServiceBridge.set_ApiSecret(szApiSecret ?? "");
 		// ---
-		public static String get_AppToken() => ArborInsightServiceBridge.get_AppToken();
 		public static void set_AppToken(String szAppToken) => ArborInsightServiceBridge.set_AppToken(szAppToken ?? "");
+		public static void set_OrgToken(String szOrgToken) => ArborInsightServiceBridge.set_OrgToken(szOrgToken ?? "");
 		// ---
-		public static String get_AppID() => ArborInsightServiceBridge.get_AppID();
 		public static void set_AppID(String szAppID) => ArborInsightServiceBridge.set_AppID(szAppID ?? "");
 		// ---
 		public static String get_OrgID() => ArborInsightServiceBridge.get_OrgID();

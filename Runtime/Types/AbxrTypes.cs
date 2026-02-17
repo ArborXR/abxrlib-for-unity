@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace AbxrLib.Runtime.Types
 {
@@ -29,13 +30,19 @@ namespace AbxrLib.Runtime.Types
     [Serializable]
     public class AuthPayload
     {
-        public string appToken;  // optional - either appToken or appId will be set
-        public string appId;  // optional - either appToken or appId will be set
-        public string orgId;
-        public string authSecret;
+        public string appId; // legacy only
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string orgId; // legacy only
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string authSecret; // legacy only
+        public string appToken;
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string orgToken;
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string buildType; // Production (Custom APK) sends "production" to API
         public string deviceId;
         public string userId;
-        public string SSOAccessToken;  // optional - SSO access token when SSO is active
+        public string SSOAccessToken;
         public string[] tags;
         public string sessionId;
         public string partner;
@@ -48,7 +55,7 @@ namespace AbxrLib.Runtime.Types
         public string unityVersion;
         public string abxrLibType;
         public string abxrLibVersion;
-        public string buildFingerprint;  // optional - set on Android devices
+        public string buildFingerprint;
         public Dictionary<string, string> authMechanism;
     }
 

@@ -12,11 +12,11 @@ namespace AbxrLib.Editor
             var config = (Configuration)target;
             EditorGUILayout.LabelField("Application Identity", EditorStyles.boldLabel);
             
-            string[] buildTypeValues = { "production", "development" };
-            string[] buildTypeDisplayNames = { "Production", "Development" };
-            int currentSelection = config.buildType == "production" ? 0 : 1;
+            string[] buildTypeValues = { "production", "development", "production_custom" };
+            string[] buildTypeDisplayNames = { "Production", "Development", "Production (Custom APK)" };
+            int currentSelection = config.buildType == "production" ? 0 : (config.buildType == "development" ? 1 : 2);
             int newSelection = EditorGUILayout.Popup(new GUIContent(
-                "Build Type", "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only)."), 
+                "Build Type", "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only).\nProduction (Custom APK): For single-customer builds; requires Organization Token; API receives buildType Production."),
                 currentSelection, buildTypeDisplayNames);
             
             config.buildType = buildTypeValues[newSelection];
@@ -28,39 +28,53 @@ namespace AbxrLib.Editor
             
             if (useAppTokens)
             {
-                // Show App Token fields
-                // Indicate which token will be used based on buildType
+                config.appToken = EditorGUILayout.TextField(new GUIContent(
+                    "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);
                 
-                // Production Token
-                string productionLabel = isProduction ? "Production Token ▶" : "Production Token";
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField(productionLabel, isProduction ? EditorStyles.boldLabel : EditorStyles.label, GUILayout.Width(EditorGUIUtility.labelWidth));
-                config.appTokenProduction = EditorGUILayout.TextField(config.appTokenProduction);
-                EditorGUILayout.EndHorizontal();
-                
-                // Development Token
-                string developmentLabel = isProduction ? "Development Token" : "Development Token ▶";
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField(developmentLabel, isProduction ? EditorStyles.label : EditorStyles.boldLabel, GUILayout.Width(EditorGUIUtility.labelWidth));
-                config.appTokenDevelopment = EditorGUILayout.TextField(config.appTokenDevelopment);
-                EditorGUILayout.EndHorizontal();
+                bool isProductionCustom = config.buildType == "production_custom";
+                EditorGUI.BeginDisabledGroup(isProduction);
+                string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token (optional)";
+                string orgTokenTooltip = isProductionCustom
+                    ? "Required for Production (Custom APK). Set the customer's org token from ArborXR Portal."
+                    : "Optional. In Development: use this or leave empty to use App Token as org token. In Production this field is not used.";
+                config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
+                EditorGUI.EndDisabledGroup();
+                if (isProduction)
+                    EditorGUILayout.HelpBox("In Production, Organization Token from config is not sent. The field is disabled for shared production builds.", MessageType.Info);
+                else if (isProductionCustom)
+                    EditorGUILayout.HelpBox(
+                        "Production (Custom APK): For custom APKs per customer. Organization Token is required. The API receives buildType Production.",
+                        MessageType.Info);
+                else
+                    EditorGUILayout.HelpBox(
+                        "In Development you can set an Organization Token, or leave empty to use the App Token as the org token.",
+                        MessageType.Info);
             }
             else
             {
-                // Show traditional appID/orgID/authSecret fields
                 config.appID = EditorGUILayout.TextField(new GUIContent(
                     "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
                 
-                // Grey out orgID and authSecret when buildType is production
+                bool isProductionCustomLegacy = config.buildType == "production_custom";
                 EditorGUI.BeginDisabledGroup(isProduction);
-                config.orgID = EditorGUILayout.TextField(new GUIContent(
-                    "Organization ID (*)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.orgID);
-                config.authSecret = EditorGUILayout.TextField("Authorization Secret (*)", config.authSecret);
+                string orgIdLabel = isProductionCustomLegacy ? "Organization ID (required)" : "Organization ID (*)";
+                string orgIdTooltip = isProductionCustomLegacy
+                    ? "Required for Production (Custom APK). Set the customer's organization ID from ArborXR Portal."
+                    : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
+                config.orgID = EditorGUILayout.TextField(new GUIContent(orgIdLabel, orgIdTooltip), config.orgID);
+                string authSecretLabel = isProductionCustomLegacy ? "Authorization Secret (required)" : "Authorization Secret (*)";
+                config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, "Required for Production (Custom APK) when using legacy auth."), config.authSecret);
                 EditorGUI.EndDisabledGroup();
                 
                 if (isProduction)
                 {
                     EditorGUILayout.HelpBox("OrgID and AuthSecret are disabled in Production builds. These values will NOT be included in builds.", MessageType.Info);
+                }
+                else if (isProductionCustomLegacy)
+                {
+                    EditorGUILayout.HelpBox(
+                        "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization Secret are required. The API receives buildType Production.",
+                        MessageType.Info);
                 }
             }
                     // Use App Tokens checkbox right under buildType dropdown

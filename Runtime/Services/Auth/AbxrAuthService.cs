@@ -87,9 +87,18 @@ namespace AbxrLib.Runtime.Services.Auth
             GetConfigData();
 #if UNITY_ANDROID && !UNITY_EDITOR
             GetArborData();
+            // On non-XRDM devices, org_token can be provided via launch intent (e.g. adb shell am start --es org_token "JWT...")
+            if (Configuration.Instance.useAppTokens && string.IsNullOrEmpty(_payload.orgToken))
+            {
+                string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
+                if (!string.IsNullOrEmpty(orgTokenIntent))
+                    _payload.orgToken = orgTokenIntent;
+            }
 #elif UNITY_WEBGL && !UNITY_EDITOR
             GetQueryData();
             _payload.deviceId = GetOrCreateDeviceId();
+#elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
+            GetQueryData();
 #endif
             SetSessionData();
 
@@ -250,7 +259,121 @@ namespace AbxrLib.Runtime.Services.Auth
             
             _payload.authMechanism = CreateAuthMechanismDict();
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (ArborInsightServiceClient.ServiceIsFullyInitialized())
+            {
+                string savedBuildType = _payload.buildType;
+                if (_payload.buildType == "production_custom")
+                    _payload.buildType = "production";
+                try
+                {
+                    var config = Configuration.Instance;
+                    ArborInsightServiceClient.set_RestUrl(config.restUrl ?? "https://lib-backend.xrdm.app/");
+                    foreach (var fi in typeof(AuthPayload).GetFields(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        var field = fi.Name;
+                        object value = fi.GetValue(_payload);
+                        switch (field)
+                        {
+                            case nameof(AuthPayload.appId):
+                                if (value is string s1 && !string.IsNullOrEmpty(s1)) ArborInsightServiceClient.set_AppID(s1);
+                                break;
+                            case nameof(AuthPayload.orgId):
+                                if (value is string s2 && !string.IsNullOrEmpty(s2)) ArborInsightServiceClient.set_OrgID(s2);
+                                break;
+                            case nameof(AuthPayload.authSecret):
+                                if (value is string s3 && !string.IsNullOrEmpty(s3)) ArborInsightServiceClient.set_AuthSecret(s3);
+                                break;
+                            case nameof(AuthPayload.appToken):
+                                if (value is string s4 && !string.IsNullOrEmpty(s4)) ArborInsightServiceClient.set_AppToken(s4);
+                                break;
+                            case nameof(AuthPayload.orgToken):
+                                if (value is string s5 && !string.IsNullOrEmpty(s5)) ArborInsightServiceClient.set_OrgToken(s5);
+                                break;
+                            case nameof(AuthPayload.buildType):
+                                if (value is string s6 && !string.IsNullOrEmpty(s6)) ArborInsightServiceClient.set_BuildType(s6);
+                                break;
+                            case nameof(AuthPayload.deviceId):
+                                if (value is string s7 && !string.IsNullOrEmpty(s7)) ArborInsightServiceClient.set_DeviceID(s7);
+                                break;
+                            case nameof(AuthPayload.userId):
+                                if (value is string s8 && !string.IsNullOrEmpty(s8)) ArborInsightServiceClient.set_UserID(s8);
+                                break;
+                            case nameof(AuthPayload.tags):
+                                if (value is string[] tags && tags != null) ArborInsightServiceClient.set_Tags(tags.ToList());
+                                break;
+                            case nameof(AuthPayload.partner):
+                                int partnerInt = string.Equals(_payload.partner, "arborxr", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+                                ArborInsightServiceClient.set_Partner(partnerInt);
+                                break;
+                            case nameof(AuthPayload.ipAddress):
+                                if (value is string s9 && !string.IsNullOrEmpty(s9)) ArborInsightServiceClient.set_IpAddress(s9);
+                                break;
+                            case nameof(AuthPayload.deviceModel):
+                                if (value is string s10 && !string.IsNullOrEmpty(s10)) ArborInsightServiceClient.set_DeviceModel(s10);
+                                break;
+                            case nameof(AuthPayload.geolocation):
+                                ArborInsightServiceClient.set_GeoLocation(_payload.geolocation ?? new Dictionary<string, string>());
+                                break;
+                            case nameof(AuthPayload.osVersion):
+                                if (value is string s11 && !string.IsNullOrEmpty(s11)) ArborInsightServiceClient.set_OsVersion(s11);
+                                break;
+                            case nameof(AuthPayload.xrdmVersion):
+                                if (value is string s12 && !string.IsNullOrEmpty(s12)) ArborInsightServiceClient.set_XrdmVersion(s12);
+                                break;
+                            case nameof(AuthPayload.appVersion):
+                                if (value is string s13 && !string.IsNullOrEmpty(s13)) ArborInsightServiceClient.set_AppVersion(s13);
+                                break;
+                            case nameof(AuthPayload.unityVersion):
+                                if (value is string s14 && !string.IsNullOrEmpty(s14)) ArborInsightServiceClient.set_UnityVersion(s14);
+                                break;
+                            case nameof(AuthPayload.abxrLibType):
+                                if (value is string s15 && !string.IsNullOrEmpty(s15)) ArborInsightServiceClient.set_AbxrLibType(s15);
+                                break;
+                            case nameof(AuthPayload.abxrLibVersion):
+                                if (value is string s16 && !string.IsNullOrEmpty(s16)) ArborInsightServiceClient.set_AbxrLibVersion(s16);
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    var authMechDict = CreateAuthMechanismDict();
+                    int ret = ArborInsightServiceClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(authMechDict));
+                    if (ret == (int)AbxrResult.OK)
+                    {
+                        try
+                        {
+                            string token = ArborInsightServiceClient.get_ApiToken();
+                            string secret = ArborInsightServiceClient.get_ApiSecret();
+                            if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(secret))
+                            {
+                                ResponseData = new AuthResponse { Token = token, Secret = secret };
+                                _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                                _usedArborInsightServiceForSession = true;
+                            }
+                        }
+                        catch { }
+                        _payload.buildType = savedBuildType;
+                        _attemptActive = false;
+                        AuthSucceeded();
+                        onComplete(true);
+                        yield break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: Failed to set service properties for auth: {ex.Message}");
+                }
+                _payload.buildType = savedBuildType;
+            }
+#endif
+
+            // API receives buildType "production" when config is Production (Custom APK)
+            string savedBuildType = _payload.buildType;
+            if (_payload.buildType == "production_custom")
+                _payload.buildType = "production";
             string json = JsonConvert.SerializeObject(_payload);
+            _payload.buildType = savedBuildType;
             string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token").ToString();
             
             for (int attempt = 1; attempt <= RetryMaxAttempts; attempt++)
@@ -363,9 +486,19 @@ namespace AbxrLib.Runtime.Services.Auth
         private void LoadConfigIntoPayload()
         {
             var s = Configuration.Instance;
-            _payload.appId = s.appID;
-            _payload.orgId = s.orgID;
-            _payload.authSecret = s.authSecret;
+            if (s.useAppTokens)
+            {
+                _payload.appToken = s.appToken;
+                _payload.orgToken = s.orgToken;
+                _payload.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
+            }
+            else
+            {
+                _payload.appId = s.appID;
+                _payload.orgId = s.orgID;
+                _payload.authSecret = s.authSecret;
+                _payload.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
+            }
         }
 
         private void RequestKeyboardInput()
@@ -526,98 +659,161 @@ namespace AbxrLib.Runtime.Services.Auth
         private void GetConfigData()
         {
             var config = Configuration.Instance;
-            
-            // Extract all config data using centralized helper
+
             var configData = Utils.ExtractConfigData(config);
-            
+
             if (!configData.isValid)
             {
                 Debug.LogError($"AbxrLib: {configData.errorMessage} Cannot authenticate.");
                 return;
             }
-            
-            // Set Authentication static fields from extracted config data
-            _payload.appId = configData.appId;
-            _payload.appToken = configData.appToken;
-            _payload.orgId = configData.orgId;
-            _payload.authSecret = configData.authSecret;
-            
-            // Note: orgId and authSecret will still be overridden by GetArborData() if ArborServiceClient is connected
+
+            if (configData.useAppTokens)
+            {
+                _payload.appToken = configData.appToken;
+                _payload.orgToken = configData.orgToken;
+                _payload.buildType = configData.buildType;
+            }
+            else
+            {
+                _payload.appId = configData.appId;
+                _payload.orgId = configData.orgId;
+                _payload.authSecret = configData.authSecret;
+                _payload.buildType = configData.buildType;
+            }
         }
-    
+
         private void GetArborData()
         {
             if (!_arborServiceClient?.IsConnected() == true) return;
-        
+
             _payload.partner = "arborxr";
-            _payload.orgId = Abxr.GetOrgId();
             _payload.deviceId = Abxr.GetDeviceId();
             _payload.tags = Abxr.GetDeviceTags();
-            try
+
+            if (_payload.buildType == "production_custom")
+                return;
+
+            if (Configuration.Instance.useAppTokens)
             {
-                var authSecret = Abxr.GetFingerprint();
-                _payload.authSecret = authSecret;
+                try
+                {
+                    string fingerprint = Abxr.GetFingerprint();
+                    string orgId = Abxr.GetOrgId();
+                    string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, fingerprint);
+                    if (!string.IsNullOrEmpty(dynamicToken))
+                        _payload.orgToken = dynamicToken;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: BuildOrgTokenDynamic failed: {ex.Message}\n" +
+                                  $"Exception Type: {ex.GetType().Name}\n" +
+                                  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+                }
             }
-            catch (Exception ex)
+            else
             {
-                // Log error with consistent format and include authentication context
-                Debug.LogError($"AbxrLib: Authentication initialization failed: {ex.Message}\n" +
-                              $"Exception Type: {ex.GetType().Name}\n" +
-                              $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+                _payload.orgId = Abxr.GetOrgId();
+                try
+                {
+                    _payload.authSecret = Abxr.GetFingerprint();
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: Authentication initialization failed: {ex.Message}\n" +
+                                  $"Exception Type: {ex.GetType().Name}\n" +
+                                  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
+                }
             }
         }
+
 #if UNITY_WEBGL && !UNITY_EDITOR
         private void GetQueryData()
         {
-            string orgIdQuery = Utils.GetQueryParam("abxr_orgid", Application.absoluteURL);
-            if (!string.IsNullOrEmpty(orgIdQuery))
-            {
-                _payload.orgId = orgIdQuery;
-            }
-            
-            string authSecretQuery = Utils.GetQueryParam("abxr_auth_secret", Application.absoluteURL);
-            if (!string.IsNullOrEmpty(authSecretQuery))
-            {
-                _payload.authSecret = authSecretQuery;
-            }
+            if (_payload.buildType == "production_custom")
+                return;
+            string orgTokenQuery = Utils.GetQueryParam("org_token", Application.absoluteURL);
+            if (!string.IsNullOrEmpty(orgTokenQuery))
+                _payload.orgToken = orgTokenQuery;
         }
-        
+
         private static string GetOrCreateDeviceId()
         {
             if (PlayerPrefs.HasKey(DeviceIdKey))
-            {
                 return PlayerPrefs.GetString(DeviceIdKey);
-            }
-
             string newGuid = Guid.NewGuid().ToString();
             PlayerPrefs.SetString(DeviceIdKey, newGuid);
             PlayerPrefs.Save();
             return newGuid;
         }
+#elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
+        private void GetQueryData()
+        {
+            if (_payload.buildType == "production_custom")
+                return;
+            string orgToken = Utils.GetOrgTokenFromDesktopSources();
+            if (!string.IsNullOrEmpty(orgToken))
+                _payload.orgToken = orgToken;
+        }
 #endif
+
+        private static bool LooksLikeJwt(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            var parts = value.Split('.');
+            return parts.Length == 3;
+        }
+
         private bool ValidateConfigValues()
         {
             var config = Configuration.Instance;
-            if (!config.useAppTokens && !Configuration.Instance.IsValid()) return false;
-            
-            if (string.IsNullOrEmpty(_payload.appId) && string.IsNullOrEmpty(_payload.appToken))
+
+            if (config.useAppTokens)
             {
-                Debug.LogError("AbxrLib: Need Application ID or Application Token. Cannot authenticate.");
-                return false;
+                if (string.IsNullOrEmpty(_payload.appToken))
+                {
+                    Debug.LogError("AbxrLib: App Token is missing. Cannot authenticate.");
+                    return false;
+                }
+                if (!LooksLikeJwt(_payload.appToken))
+                {
+                    Debug.LogError("AbxrLib: App Token does not look like a JWT (expected three dot-separated segments). Cannot authenticate.");
+                    return false;
+                }
+                if (_payload.buildType == "development" && string.IsNullOrEmpty(_payload.orgToken))
+                    _payload.orgToken = _payload.appToken;
+                if (string.IsNullOrEmpty(_payload.orgToken))
+                {
+                    Debug.LogError("AbxrLib: Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, pass org_token in the URL (WebGL), use --org_token or arborxr_org_token.key (desktop), pass org_token as Android intent extra (APK), or set in config. Cannot authenticate.");
+                    return false;
+                }
+                if (!LooksLikeJwt(_payload.orgToken))
+                {
+                    Debug.LogError("AbxrLib: Organization Token does not look like a JWT (expected three dot-separated segments). Cannot authenticate.");
+                    return false;
+                }
             }
-            
-            if (string.IsNullOrEmpty(_payload.orgId))
+            else
             {
-                Debug.LogError("AbxrLib: Organization ID is missing. Cannot authenticate.");
-                return false;
+                if (string.IsNullOrEmpty(_payload.appId))
+                {
+                    Debug.LogError("AbxrLib: Application ID is missing. Cannot authenticate.");
+                    return false;
+                }
+                if (string.IsNullOrEmpty(_payload.orgId))
+                {
+                    Debug.LogError("AbxrLib: Organization ID is missing. Cannot authenticate.");
+                    return false;
+                }
+                if (string.IsNullOrEmpty(_payload.authSecret))
+                {
+                    Debug.LogError("AbxrLib: Authentication Secret is missing. Cannot authenticate.");
+                    return false;
+                }
             }
-            
-            if (string.IsNullOrEmpty(_payload.authSecret))
-            {
-                Debug.LogError("AbxrLib: Authentication Secret is missing. Cannot authenticate");
+
+            if (!config.IsValid())
                 return false;
-            }
-            
             return true;
         }
 

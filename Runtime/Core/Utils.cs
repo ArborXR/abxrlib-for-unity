@@ -15,6 +15,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -329,12 +330,10 @@ namespace AbxrLib.Runtime.Core
         }
 
         /// <summary>
-        /// Extracts authentication data from an App Token (JWT).
-        /// Production tokens include: appId, buildType
-        /// Development tokens include: appId, orgId, authSecret, buildType
+        /// Extracts authentication data from an App Token (JWT) payload. Used only for legacy or optional appId/orgId extraction.
         /// </summary>
         /// <param name="appToken">The App Token JWT string</param>
-        /// <returns>Dictionary containing extracted fields (appId, orgId, authSecret, buildType), or null if token is invalid</returns>
+        /// <returns>Dictionary containing extracted fields (appId, orgId if present), or null if token is invalid</returns>
         public static Dictionary<string, string> ExtractAppTokenData(string appToken)
         {
             if (string.IsNullOrEmpty(appToken))
@@ -350,28 +349,16 @@ namespace AbxrLib.Runtime.Core
 
             var result = new Dictionary<string, string>();
 
-            // Extract appId (required in both production and development tokens)
+            // Extract appId (App token payload may contain appId; legacy only)
             if (jwtPayload.ContainsKey("appId") && jwtPayload["appId"] != null)
             {
                 result["appId"] = jwtPayload["appId"].ToString();
             }
 
-            // Extract buildType (required in both production and development tokens)
-            if (jwtPayload.ContainsKey("buildType") && jwtPayload["buildType"] != null)
-            {
-                result["buildType"] = jwtPayload["buildType"].ToString();
-            }
-
-            // Extract orgId (only in development tokens)
+            // Extract orgId (optional in token payload)
             if (jwtPayload.ContainsKey("orgId") && jwtPayload["orgId"] != null)
             {
                 result["orgId"] = jwtPayload["orgId"].ToString();
-            }
-
-            // Extract authSecret (only in development tokens)
-            if (jwtPayload.ContainsKey("authSecret") && jwtPayload["authSecret"] != null)
-            {
-                result["authSecret"] = jwtPayload["authSecret"].ToString();
             }
 
             return result;
@@ -383,11 +370,13 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         internal struct AuthConfigData
         {
-            public string appId;
+            public string appId; // legacy only
+            public string orgId; // legacy only
+            public string authSecret; // legacy only
             public string appToken;
-            public string orgId;
-            public string authSecret;
+            public string orgToken;
             public string buildType;
+            public bool useAppTokens;
             public bool isValid;
             public string errorMessage;
         }
@@ -408,71 +397,47 @@ namespace AbxrLib.Runtime.Core
                 return result;
             }
 
-            // Get buildType from config (will be overridden from token if using app tokens)
+            // Get buildType from config (no longer taken from token)
             result.buildType = !string.IsNullOrEmpty(config.buildType) ? config.buildType : "production";
 
             // Check if using App Tokens
+            result.useAppTokens = config.useAppTokens;
             if (config.useAppTokens)
             {
-                // Get the appropriate token based on buildType
-                string tokenToUse = config.buildType == "production" 
-                    ? config.appTokenProduction 
-                    : config.appTokenDevelopment;
-                
-                if (string.IsNullOrEmpty(tokenToUse))
+                // Single appToken (App Token) required
+                if (string.IsNullOrEmpty(config.appToken))
                 {
-                    result.errorMessage = $"App Token for {config.buildType} build is not set.";
+                    result.errorMessage = "App Token (appToken) is not set.";
                     return result;
                 }
-                
-                // Store the token
-                result.appToken = tokenToUse;
-                
-                // Extract data from the JWT token
-                var tokenData = ExtractAppTokenData(tokenToUse);
-                if (tokenData == null)
-                {
-                    result.errorMessage = "Failed to decode App Token.";
-                    return result;
-                }
-                
-                // Extract appId (required)
-                if (tokenData.ContainsKey("appId"))
-                {
-                    result.appId = tokenData["appId"];
-                }
+                result.appToken = config.appToken;
+                // Production: do not include orgToken in build. Development and Production (Custom APK): include from config.
+                if (config.buildType == "production")
+                    result.orgToken = null;
                 else
+                    result.orgToken = config.orgToken;
+                // buildType stays from config above; appId/orgId/authSecret left default (unused when using tokens)
+            }
+            else // legacy AppID/OrgID/AuthSecret approach
+            {
+                // Single appId required
+                if (string.IsNullOrEmpty(config.appID))
                 {
-                    result.errorMessage = "App Token missing appId.";
+                    result.errorMessage = "Application ID (appID) is not set.";
                     return result;
                 }
-                
-                // Extract buildType from token (overrides config value)
-                if (tokenData.ContainsKey("buildType"))
-                {
-                    result.buildType = tokenData["buildType"];
-                }
-                
-                // Extract orgId and authSecret (only in development tokens)
-                result.orgId = tokenData.ContainsKey("orgId") ? tokenData["orgId"] : null;
-                result.authSecret = tokenData.ContainsKey("authSecret") ? tokenData["authSecret"] : null;
-            }
-            else
-            {
+
                 // Use traditional appID/orgID/authSecret approach
                 result.appId = config.appID;
-                result.appToken = null;
-               
-                // Only include orgID and authSecret if buildType is development
-                // In production builds, these should be empty to avoid including credentials
-                if (config.buildType == "development")
+
+                // Only include orgID and authSecret if buildType is development or production_custom (custom APK)
+                if (config.buildType == "development" || config.buildType == "production_custom")
                 {
                     result.orgId = config.orgID;
                     result.authSecret = config.authSecret;
                 }
                 else
                 {
-                    // Production build - use empty values
                     result.orgId = null;
                     result.authSecret = null;
                 }
@@ -485,6 +450,50 @@ namespace AbxrLib.Runtime.Core
         private static string Base64UrlDecode(string input)
         {
             return input.Replace('-', '+').Replace('_', '/');
+        }
+
+        /// <summary>
+        /// Base64url-encodes bytes (no padding). Used for JWT compact serialization.
+        /// </summary>
+        private static string Base64UrlEncode(byte[] input)
+        {
+            if (input == null || input.Length == 0) return string.Empty;
+            string base64 = Convert.ToBase64String(input);
+            return base64.TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        }
+
+        /// <summary>
+        /// Builds an OrgToken (dynamic) JWT for XRDM: payload { "orgId": orgId }, signed with HMAC-SHA256 using fingerprint as secret.
+        /// </summary>
+        /// <param name="orgId">Organization ID (e.g. from GetOrgId())</param>
+        /// <param name="fingerprint">Secret used to sign the JWT (e.g. GetFingerprint())</param>
+        /// <returns>JWT string in compact form, or null if inputs are invalid</returns>
+        internal static string BuildOrgTokenDynamic(string orgId, string fingerprint)
+        {
+            if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(fingerprint))
+                return null;
+            try
+            {
+                const string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
+                string payloadJson = JsonConvert.SerializeObject(new Dictionary<string, object> { { "orgId", orgId } });
+                byte[] headerBytes = Encoding.UTF8.GetBytes(headerJson);
+                byte[] payloadBytes = Encoding.UTF8.GetBytes(payloadJson);
+                string headerB64 = Base64UrlEncode(headerBytes);
+                string payloadB64 = Base64UrlEncode(payloadBytes);
+                string message = headerB64 + "." + payloadB64;
+                byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+                byte[] secretKey = Encoding.UTF8.GetBytes(fingerprint);
+                using (var hmac = new HMACSHA256(secretKey))
+                {
+                    byte[] signature = hmac.ComputeHash(messageBytes);
+                    return message + "." + Base64UrlEncode(signature);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: BuildOrgTokenDynamic failed: {ex.Message}");
+                return null;
+            }
         }
 
         private static string PadBase64(string input)
@@ -596,6 +605,57 @@ namespace AbxrLib.Runtime.Core
             }
             return "";
         }
+
+#if (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
+        private const string OrgTokenFileName = "arborxr_org_token.key";
+
+        /// <summary>
+        /// Returns the directory that contains the game executable on standalone desktop builds.
+        /// </summary>
+        public static string GetStandaloneExecutableDirectory()
+        {
+#if UNITY_STANDALONE_WIN
+            var dataPath = Application.dataPath;
+            var parent = Directory.GetParent(dataPath);
+            return parent != null ? parent.FullName : "";
+#elif UNITY_STANDALONE_OSX
+            return Path.Combine(Application.dataPath, "MacOS");
+#else
+            return "";
+#endif
+        }
+
+        /// <summary>
+        /// Gets org_token for standalone desktop builds: first from command line (--org_token value or org_token=value),
+        /// then from a file named arborxr_org_token.key in the same directory as the executable.
+        /// </summary>
+        public static string GetOrgTokenFromDesktopSources()
+        {
+            string token = GetCommandLineArg("org_token");
+            if (!string.IsNullOrWhiteSpace(token))
+                return token.Trim();
+
+            string exeDir = GetStandaloneExecutableDirectory();
+            if (string.IsNullOrEmpty(exeDir)) return "";
+
+            string filePath = Path.Combine(exeDir, OrgTokenFileName);
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    string content = File.ReadAllText(filePath);
+                    if (!string.IsNullOrWhiteSpace(content))
+                        return content.Trim();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"AbxrLib: Could not read org token from {OrgTokenFileName}: {ex.Message}");
+            }
+
+            return "";
+        }
+#endif
 
         /// <summary>
         /// Get Android intent parameter value by key
