@@ -205,6 +205,7 @@ namespace AbxrLib.Runtime.Authentication
         }
 
 
+        /// <summary>Used internally by Abxr.StartNewSession() to set a new session ID before re-auth. Affects standalone auth payload only; when using ArborInsightService, the service owns and generates session ID.</summary>
         public static void SetSessionId(string sessionId) => _sessionId = sessionId;
 
         public static IEnumerator Authenticate()
@@ -691,6 +692,9 @@ namespace AbxrLib.Runtime.Authentication
                                 break;
                             case nameof(AuthPayload.abxrLibVersion):
                                 if (data.abxrLibVersion != null) ArborInsightServiceClient.set_AbxrLibVersion(data.abxrLibVersion);
+                                break;
+                            case nameof(AuthPayload.buildFingerprint):
+                                if (data.buildFingerprint != null) ArborInsightServiceClient.set_BuildFingerprint(data.buildFingerprint);
                                 break;
                             default:
                                 // AuthPayload fields without a service setter are ignored
