@@ -653,7 +653,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <param name="inputSource">The input source value (defaults to "user" if not set)</param>
         public void SetInputSource(string inputSource)
         {
-            if (_payload.authMechanism != null) _authMechanism.inputSource = inputSource;
+            if (_authMechanism != null) _authMechanism.inputSource = inputSource;
         }
 
         private void GetConfigData()
