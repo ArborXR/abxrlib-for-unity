@@ -128,14 +128,28 @@ namespace AbxrLib.Runtime.Services.Auth
             StopReAuthPolling();
             ClearAuthenticationState();
 
+            // Load config into payload first, then re-apply Arbor/device overrides so they are not lost.
+            LoadConfigIntoPayload();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            GetArborData();
+            if (Configuration.Instance.useAppTokens && string.IsNullOrEmpty(_payload.orgToken))
+            {
+                string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
+                if (!string.IsNullOrEmpty(orgTokenIntent))
+                    _payload.orgToken = orgTokenIntent;
+            }
+#elif UNITY_WEBGL && !UNITY_EDITOR
+            GetQueryData();
+#elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
+            GetQueryData();
+#endif
+
             if (!ValidateConfigValues())
             {
                 _attemptActive = false;
                 OnFailed?.Invoke("Abxr settings are invalid");
                 return;
             }
-
-            LoadConfigIntoPayload();
 
             // Check auth handoff (command-line / intent)
             if (CheckAuthHandoff()) return;
@@ -333,6 +347,9 @@ namespace AbxrLib.Runtime.Services.Auth
                             case nameof(AuthPayload.abxrLibVersion):
                                 if (value is string s16 && !string.IsNullOrEmpty(s16)) ArborInsightServiceClient.set_AbxrLibVersion(s16);
                                 break;
+                            case nameof(AuthPayload.buildFingerprint):
+                                if (value is string s17 && !string.IsNullOrEmpty(s17)) ArborInsightServiceClient.set_BuildFingerprint(s17);
+                                break;
                             default:
                                 break;
                         }
@@ -426,6 +443,10 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         // ── GET /v1/storage/config ───────────────────────────────────
+        // When auth was done via ArborInsightService, the service returns auth response with token/secret stripped.
+        // ResponseData.Token/Secret are then null, so SetAuthHeaders produces an invalid request and this config
+        // call will fail (401). Fix: either have the service return token/secret to Unity for this request, or
+        // add a service getConfig() AIDL and use it here when UsingArborInsightServiceForData().
 
         private IEnumerator GetConfigurationCoroutine(Action<bool> onComplete)
         {

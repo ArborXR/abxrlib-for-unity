@@ -215,6 +215,12 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static String get_DeviceModel() => _client.Call<String>("get_DeviceModel");
 		public static void set_DeviceModel(String szDeviceModel) => _client.Call<int>("set_DeviceModel", szDeviceModel);
+		// --- Build fingerprint (optional on AAR; no-op if AAR does not expose yet).
+		public static void set_BuildFingerprint(String szBuildFingerprint)
+		{
+			if (_client == null) return;
+			try { _client.Call("set_BuildFingerprint", szBuildFingerprint ?? ""); } catch (Exception) { /* AAR may not support yet */ }
+		}
 		// ---
 		public static void set_UserId(String szUserId) => _client.Call<int>("set_UserId", szUserId);
 		// ---
@@ -482,6 +488,8 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static String get_DeviceModel() => ArborInsightServiceBridge.get_DeviceModel();
 		public static void set_DeviceModel(String szDeviceModel) => ArborInsightServiceBridge.set_DeviceModel(szDeviceModel ?? "");
+		// --- Build fingerprint (optional on AAR)
+		public static void set_BuildFingerprint(String szBuildFingerprint) => ArborInsightServiceBridge.set_BuildFingerprint(szBuildFingerprint ?? "");
 		// ---
 		public static void set_UserId(String szUserId) => ArborInsightServiceBridge.set_UserId(szUserId ?? "");
 		// ---
