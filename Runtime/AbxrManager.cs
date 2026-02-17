@@ -243,12 +243,48 @@ namespace AbxrLib.Runtime
 			if (!_authService.Authenticated) return null;
 			
 			var authResponse = _authService.ResponseData;
-			if (authResponse?.UserData == null) return null;
+			if (authResponse == null) return null;
 			
-			// Return a copy of UserData to avoid modifying the original
-			return new Dictionary<string, string>(authResponse.UserData);
+			// Build a copy of UserData (or empty dict) and always include userId from top-level response
+			var userData = authResponse.UserData != null
+				? new Dictionary<string, string>(authResponse.UserData)
+				: new Dictionary<string, string>();
+			var userIdStr = authResponse.UserId?.ToString();
+			if (string.IsNullOrEmpty(userIdStr))
+			{
+				// Fallback: fill userId from other fields in priority order
+				userIdStr = GetFirstNonEmpty(userData, "userName", "username", "user_name")
+					?? GetFirstNonEmpty(userData, "email", "emailAddress", "email_address")
+					?? GetFirstNonEmpty(userData, "fullname", "fullName", "full_name", "name");
+				if (string.IsNullOrEmpty(userIdStr))
+				{
+					var first = GetFirstNonEmpty(userData, "firstName", "first_name", "first");
+					var last = GetFirstNonEmpty(userData, "lastName", "last_name", "last");
+					if (!string.IsNullOrEmpty(first) && !string.IsNullOrEmpty(last))
+						userIdStr = (first + " " + last).Trim();
+					else if (!string.IsNullOrEmpty(first))
+						userIdStr = first;
+					else if (!string.IsNullOrEmpty(last))
+						userIdStr = last;
+				}
+			}
+			if (!string.IsNullOrEmpty(userIdStr))
+				userData["userId"] = userIdStr;
+			return userData;
 		}
-		
+
+		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
+		private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)
+		{
+			if (dict == null) return null;
+			foreach (var key in keys)
+			{
+				if (dict.TryGetValue(key, out var v) && !string.IsNullOrWhiteSpace(v))
+					return v.Trim();
+			}
+			return null;
+		}
+
 		internal void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null) =>
 			_authService.SetUserData(userId, additionalUserData);
 		
