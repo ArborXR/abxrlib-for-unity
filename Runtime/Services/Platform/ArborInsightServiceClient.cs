@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Types;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Services.Platform
@@ -538,6 +539,34 @@ namespace AbxrLib.Runtime.Services.Platform
 		// --- Configuration fields.
 		public static String get_RestUrl() => ArborInsightServiceBridge.get_RestUrl();
 		public static void set_RestUrl(String szValue) => ArborInsightServiceBridge.set_RestUrl(szValue ?? "");
+		// ---
+		/// <summary>Sets REST URL and all auth-related session fields on the service from the given auth payload. Call once per auth request before AuthRequest(). Keeps service-path auth setup in one place and limits divergence from the standalone auth path.</summary>
+		public static void SetAuthPayloadForRequest(string restUrl, AuthPayload data)
+		{
+			set_RestUrl(restUrl ?? "https://lib-backend.xrdm.app/");
+			if (!string.IsNullOrEmpty(data.appId)) set_AppID(data.appId);
+			if (!string.IsNullOrEmpty(data.orgId)) set_OrgID(data.orgId);
+			if (!string.IsNullOrEmpty(data.authSecret)) set_AuthSecret(data.authSecret);
+			if (!string.IsNullOrEmpty(data.appToken)) set_AppToken(data.appToken);
+			if (!string.IsNullOrEmpty(data.orgToken)) set_OrgToken(data.orgToken);
+			if (!string.IsNullOrEmpty(data.SSOAccessToken)) set_SSOAccessToken(data.SSOAccessToken);
+			if (!string.IsNullOrEmpty(data.buildType)) set_BuildType(data.buildType);
+			if (!string.IsNullOrEmpty(data.deviceId)) set_DeviceID(data.deviceId);
+			if (!string.IsNullOrEmpty(data.userId)) set_UserID(data.userId);
+			int partner = string.Equals(data.partner, "arborxr", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+			set_Partner(partner);
+			if (!string.IsNullOrEmpty(data.ipAddress)) set_IpAddress(data.ipAddress);
+			if (!string.IsNullOrEmpty(data.deviceModel)) set_DeviceModel(data.deviceModel);
+			set_GeoLocation(data.geolocation ?? new Dictionary<string, string>());
+			if (!string.IsNullOrEmpty(data.osVersion)) set_OsVersion(data.osVersion);
+			if (!string.IsNullOrEmpty(data.xrdmVersion)) set_XrdmVersion(data.xrdmVersion);
+			if (!string.IsNullOrEmpty(data.appVersion)) set_AppVersion(data.appVersion);
+			if (!string.IsNullOrEmpty(data.unityVersion)) set_UnityVersion(data.unityVersion);
+			if (!string.IsNullOrEmpty(data.abxrLibType)) set_AbxrLibType(data.abxrLibType);
+			if (!string.IsNullOrEmpty(data.abxrLibVersion)) set_AbxrLibVersion(data.abxrLibVersion);
+			if (!string.IsNullOrEmpty(data.buildFingerprint)) set_BuildFingerprint(data.buildFingerprint);
+			if (data.tags != null) set_Tags(new List<string>(data.tags));
+		}
 		// ---
 		public static int get_SendRetriesOnFailure() => ArborInsightServiceBridge.get_SendRetriesOnFailure();
 		public static void set_SendRetriesOnFailure(int nValue) => ArborInsightServiceBridge.set_SendRetriesOnFailure(nValue);

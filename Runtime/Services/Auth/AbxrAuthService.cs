@@ -181,6 +181,13 @@ namespace AbxrLib.Runtime.Services.Auth
         
         public void SetAuthHeaders(UnityWebRequest request, string json = null)
         {
+            // When using ArborInsightService for data, Token/Secret are not set; only REST path should call this.
+            if (ResponseData == null || string.IsNullOrEmpty(ResponseData.Token) || string.IsNullOrEmpty(ResponseData.Secret))
+            {
+                Debug.LogError("AbxrLib: Cannot set auth headers - authentication tokens are missing");
+                return;
+            }
+
             request.SetRequestHeader("Authorization", "Bearer " + ResponseData.Token);
         
             string unixTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
@@ -253,181 +260,152 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── POST /v1/auth/token ──────────────────────────────────────
 
+        /// <summary>Holds the response body from a single REST auth attempt (used so coroutine can "return" it).</summary>
+        private class AuthResponseHolder
+        {
+            public string Response;
+        }
+
         private IEnumerator AuthRequestCoroutine(Action<bool> onComplete)
         {
             if (_stopping || !_attemptActive) { onComplete(false); yield break; }
-            
-            if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
-            
-            _payload.authMechanism = CreateAuthMechanismDict();
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (ArborInsightServiceClient.ServiceIsFullyInitialized())
-            {
-                string savedBuildType = _payload.buildType;
-                if (_payload.buildType == "production_custom")
-                    _payload.buildType = "production";
-                try
-                {
-                    var config = Configuration.Instance;
-                    ArborInsightServiceClient.set_RestUrl(config.restUrl ?? "https://lib-backend.xrdm.app/");
-                    foreach (var fi in typeof(AuthPayload).GetFields(BindingFlags.Public | BindingFlags.Instance))
-                    {
-                        var field = fi.Name;
-                        object value = fi.GetValue(_payload);
-                        switch (field)
-                        {
-                            case nameof(AuthPayload.appId):
-                                if (value is string s1 && !string.IsNullOrEmpty(s1)) ArborInsightServiceClient.set_AppID(s1);
-                                break;
-                            case nameof(AuthPayload.orgId):
-                                if (value is string s2 && !string.IsNullOrEmpty(s2)) ArborInsightServiceClient.set_OrgID(s2);
-                                break;
-                            case nameof(AuthPayload.authSecret):
-                                if (value is string s3 && !string.IsNullOrEmpty(s3)) ArborInsightServiceClient.set_AuthSecret(s3);
-                                break;
-                            case nameof(AuthPayload.appToken):
-                                if (value is string s4 && !string.IsNullOrEmpty(s4)) ArborInsightServiceClient.set_AppToken(s4);
-                                break;
-                            case nameof(AuthPayload.orgToken):
-                                if (value is string s5 && !string.IsNullOrEmpty(s5)) ArborInsightServiceClient.set_OrgToken(s5);
-                                break;
-                            case nameof(AuthPayload.buildType):
-                                if (value is string s6 && !string.IsNullOrEmpty(s6)) ArborInsightServiceClient.set_BuildType(s6);
-                                break;
-                            case nameof(AuthPayload.deviceId):
-                                if (value is string s7 && !string.IsNullOrEmpty(s7)) ArborInsightServiceClient.set_DeviceID(s7);
-                                break;
-                            case nameof(AuthPayload.userId):
-                                if (value is string s8 && !string.IsNullOrEmpty(s8)) ArborInsightServiceClient.set_UserID(s8);
-                                break;
-                            case nameof(AuthPayload.tags):
-                                if (value is string[] tags && tags != null) ArborInsightServiceClient.set_Tags(tags.ToList());
-                                break;
-                            case nameof(AuthPayload.partner):
-                                int partnerInt = string.Equals(_payload.partner, "arborxr", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-                                ArborInsightServiceClient.set_Partner(partnerInt);
-                                break;
-                            case nameof(AuthPayload.ipAddress):
-                                if (value is string s9 && !string.IsNullOrEmpty(s9)) ArborInsightServiceClient.set_IpAddress(s9);
-                                break;
-                            case nameof(AuthPayload.deviceModel):
-                                if (value is string s10 && !string.IsNullOrEmpty(s10)) ArborInsightServiceClient.set_DeviceModel(s10);
-                                break;
-                            case nameof(AuthPayload.geolocation):
-                                ArborInsightServiceClient.set_GeoLocation(_payload.geolocation ?? new Dictionary<string, string>());
-                                break;
-                            case nameof(AuthPayload.osVersion):
-                                if (value is string s11 && !string.IsNullOrEmpty(s11)) ArborInsightServiceClient.set_OsVersion(s11);
-                                break;
-                            case nameof(AuthPayload.xrdmVersion):
-                                if (value is string s12 && !string.IsNullOrEmpty(s12)) ArborInsightServiceClient.set_XrdmVersion(s12);
-                                break;
-                            case nameof(AuthPayload.appVersion):
-                                if (value is string s13 && !string.IsNullOrEmpty(s13)) ArborInsightServiceClient.set_AppVersion(s13);
-                                break;
-                            case nameof(AuthPayload.unityVersion):
-                                if (value is string s14 && !string.IsNullOrEmpty(s14)) ArborInsightServiceClient.set_UnityVersion(s14);
-                                break;
-                            case nameof(AuthPayload.abxrLibType):
-                                if (value is string s15 && !string.IsNullOrEmpty(s15)) ArborInsightServiceClient.set_AbxrLibType(s15);
-                                break;
-                            case nameof(AuthPayload.abxrLibVersion):
-                                if (value is string s16 && !string.IsNullOrEmpty(s16)) ArborInsightServiceClient.set_AbxrLibVersion(s16);
-                                break;
-                            case nameof(AuthPayload.buildFingerprint):
-                                if (value is string s17 && !string.IsNullOrEmpty(s17)) ArborInsightServiceClient.set_BuildFingerprint(s17);
-                                break;
-                            default:
-                                break;
-                        }
-                    }
-                    var authMechDict = CreateAuthMechanismDict();
-                    // Service returns auth response JSON with token/secret stripped; Unity uses service as API and does not need them.
-                    string authResponseJson = ArborInsightServiceClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(authMechDict));
-                    try
-                    {
-                        // Service returns empty string "" on failure. Treat empty as failure so we don't set _usedArborInsightServiceForSession.
-                        if (!string.IsNullOrEmpty(authResponseJson))
-                        {
-                            var postResponse = JsonConvert.DeserializeObject<AuthResponse>(authResponseJson);
-                            if (postResponse != null)
-                            {
-                                ResponseData = postResponse;
-                                if (ResponseData.Modules?.Count > 1)
-                                    ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
-                                if (!string.IsNullOrEmpty(_enteredAuthValue))
-                                {
-                                    ResponseData.UserData ??= new Dictionary<string, string>();
-                                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
-                                    ResponseData.UserData[keyName] = _enteredAuthValue;
-                                }
-                                _usedArborInsightServiceForSession = true;
-                                _payload.buildType = savedBuildType;
-                                _attemptActive = false;
-                                AuthSucceeded();
-                                onComplete(true);
-                                yield break;
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"AbxrLib: Service auth response handling failed: {ex.Message}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"AbxrLib: Failed to set service properties for auth: {ex.Message}");
-                }
-                _payload.buildType = savedBuildType;
-            }
-#endif
+            if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
+            _payload.authMechanism = CreateAuthMechanismDict();
 
             // API receives buildType "production" when config is Production (Custom APK)
             string savedBuildType = _payload.buildType;
             if (_payload.buildType == "production_custom")
                 _payload.buildType = "production";
+
+            if (Abxr.GetIsAuthenticated())
+                _payload.SSOAccessToken = Abxr.GetAccessToken();
+
             string json = JsonConvert.SerializeObject(_payload);
-            _payload.buildType = savedBuildType;
-            string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token").ToString();
-            
+
             for (int attempt = 1; attempt <= RetryMaxAttempts; attempt++)
             {
                 if (_stopping || !_attemptActive) { onComplete(false); yield break; }
 
-                using var request = new UnityWebRequest(url, "POST");
-                byte[] body = Encoding.UTF8.GetBytes(json);
-                request.uploadHandler = new UploadHandlerRaw(body);
-                request.downloadHandler = new DownloadHandlerBuffer();
-                request.SetRequestHeader("Content-Type", "application/json");
-                yield return request.SendWebRequest();
+                bool useService = false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+                useService = ArborInsightServiceClient.ServiceIsFullyInitialized();
+#endif
 
-                if (_stopping || !_attemptActive) { onComplete(false); yield break; }
-                
-                if (request.result == UnityWebRequest.Result.Success &&
-                    request.responseCode >= 200 && request.responseCode < 300)
+                string responseJson = null;
+                if (useService)
                 {
-                    if (!ParseAuthResponse(request.downloadHandler.text))
+                    try
                     {
-                        onComplete(false);
-                        yield break;
+                        var config = Configuration.Instance;
+                        ArborInsightServiceClient.SetAuthPayloadForRequest(config.restUrl ?? "https://lib-backend.xrdm.app/", _payload);
+                        responseJson = ArborInsightServiceClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(_payload.authMechanism));
                     }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"AbxrLib: Failed to set service properties for auth: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    var holder = new AuthResponseHolder();
+                    yield return SendAuthRequestRest(json, holder);
+                    responseJson = holder.Response;
+                }
+
+                if (ApplyAuthResponse(responseJson, fromService: useService))
+                {
+                    if (useService)
+                        _usedArborInsightServiceForSession = true;
+                    _payload.buildType = savedBuildType;
+                    _attemptActive = false;
+                    AuthSucceeded();
                     onComplete(true);
                     yield break;
                 }
 
-                Debug.LogWarning($"AbxrLib: AuthRequest attempt {attempt} failed: {request.responseCode} - {request.downloadHandler?.text}");
-                if (ShouldRetry(request) && attempt < RetryMaxAttempts)
-                {
+                Debug.LogWarning($"AbxrLib: AuthRequest attempt {attempt} failed, retrying in {RetryDelaySeconds} seconds...");
+                if (attempt < RetryMaxAttempts)
                     yield return new WaitForSeconds(RetryDelaySeconds);
-                    continue;
-                }
-
-                break;
             }
 
+            _payload.buildType = savedBuildType;
             onComplete(false);
+        }
+
+        /// <summary>Performs one POST to /v1/auth/token and sets holder.Response to the response body or null on failure.</summary>
+        private IEnumerator SendAuthRequestRest(string json, AuthResponseHolder holder)
+        {
+            holder.Response = null;
+            string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token").ToString();
+            using var request = new UnityWebRequest(url, "POST");
+            byte[] body = Encoding.UTF8.GetBytes(json);
+            request.uploadHandler = new UploadHandlerRaw(body);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.timeout = Configuration.Instance.requestTimeoutSeconds;
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success && request.responseCode >= 200 && request.responseCode < 300)
+                holder.Response = request.downloadHandler?.text;
+            else if (!string.IsNullOrEmpty(request.downloadHandler?.text))
+                Debug.LogWarning($"AbxrLib: AuthRequest REST failed: {request.responseCode} - {request.downloadHandler.text}");
+        }
+
+        /// <summary>Parses auth response and applies it. When fromService: no token/expiry validation. When !fromService: require Token and set expiry from JWT. Single place for ResponseData, UserData, Modules, and (when fromService) _usedArborInsightServiceForSession.</summary>
+        private bool ApplyAuthResponse(string responseText, bool fromService)
+        {
+            if (string.IsNullOrEmpty(responseText)) return false;
+            try
+            {
+                var postResponse = JsonConvert.DeserializeObject<AuthResponse>(responseText);
+                if (postResponse == null) return false;
+
+                if (!fromService)
+                {
+                    if (string.IsNullOrEmpty(postResponse.Token))
+                    {
+                        Debug.LogError("AbxrLib: Invalid authentication response: missing token");
+                        return false;
+                    }
+                    Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
+                    if (decodedJwt == null)
+                    {
+                        Debug.LogError("AbxrLib: Failed to decode JWT token");
+                        return false;
+                    }
+                    if (!decodedJwt.ContainsKey("exp"))
+                    {
+                        Debug.LogError("AbxrLib: JWT token missing expiration field");
+                        return false;
+                    }
+                    try
+                    {
+                        _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.LogError($"AbxrLib: Invalid JWT token expiration: {ex.Message}");
+                        return false;
+                    }
+                }
+
+                ResponseData = postResponse;
+                if (ResponseData.Modules?.Count > 1)
+                    ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
+                if (!string.IsNullOrEmpty(_enteredAuthValue))
+                {
+                    ResponseData.UserData ??= new Dictionary<string, string>();
+                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
+                    ResponseData.UserData[keyName] = _enteredAuthValue;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Authentication response handling failed: {ex.Message}");
+                return false;
+            }
         }
 
         // ── GET /v1/storage/config (or from service when auth was via ArborInsightService) ───
@@ -443,36 +421,9 @@ namespace AbxrLib.Runtime.Services.Auth
 #endif
             if (string.IsNullOrEmpty(configJson))
             {
-                string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config").ToString();
-                for (int attempt = 1; attempt <= RetryMaxAttempts; attempt++)
-                {
-                    if (_stopping || !_attemptActive) { onComplete(false); yield break; }
-
-                    using var request = UnityWebRequest.Get(url);
-                    request.SetRequestHeader("Content-Type", "application/json");
-                    SetAuthHeaders(request);
-
-                    yield return request.SendWebRequest();
-
-                    if (_stopping || !_attemptActive) { onComplete(false); yield break; }
-
-                    if (request.result == UnityWebRequest.Result.Success &&
-                        request.responseCode >= 200 && request.responseCode < 300)
-                    {
-                        configJson = request.downloadHandler?.text;
-                        break;
-                    }
-
-                    Debug.LogWarning($"AbxrLib: GetConfiguration attempt {attempt} failed: {request.downloadHandler?.text}");
-                    if (ShouldRetry(request) && attempt < RetryMaxAttempts)
-                    {
-                        yield return new WaitForSeconds(RetryDelaySeconds);
-                        continue;
-                    }
-                    Debug.LogError("[AbxrLib] GetConfiguration failed (no more retries)");
-                    onComplete(false);
-                    yield break;
-                }
+                string restJson = null;
+                yield return SendConfigRequestRest(j => restJson = j);
+                configJson = restJson;
             }
 
             if (!string.IsNullOrEmpty(configJson))
@@ -497,6 +448,61 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             onComplete(false);
+        }
+
+        /// <summary>Performs one GET to /v1/storage/config with auth headers. Invokes onComplete with the response body JSON (or null on failure).</summary>
+        private IEnumerator SendConfigRequestRest(Action<string> onComplete)
+        {
+            string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config").ToString();
+            UnityWebRequest request = null;
+            try
+            {
+                request = UnityWebRequest.Get(url);
+                request.SetRequestHeader("Accept", "application/json");
+                request.timeout = Configuration.Instance.requestTimeoutSeconds;
+                SetAuthHeaders(request);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
+                onComplete(null);
+                yield break;
+            }
+
+            yield return request.SendWebRequest();
+
+            try
+            {
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    string errorMessage = request.result switch
+                    {
+                        UnityWebRequest.Result.ConnectionError => $"Connection error: {request.error}",
+                        UnityWebRequest.Result.DataProcessingError => $"Data processing error: {request.error}",
+                        UnityWebRequest.Result.ProtocolError => $"Protocol error ({request.responseCode}): {request.error}",
+                        _ => $"Unknown error: {request.error}"
+                    };
+                    if (!string.IsNullOrEmpty(request.downloadHandler?.text))
+                        errorMessage += $" - Response: {request.downloadHandler.text}";
+                    Debug.LogWarning($"AbxrLib: GetConfiguration failed: {errorMessage}");
+                    onComplete(null);
+                    yield break;
+                }
+
+                string responseJson = request.downloadHandler?.text;
+                if (string.IsNullOrEmpty(responseJson))
+                    Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
+                onComplete(responseJson);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
+                onComplete(null);
+            }
+            finally
+            {
+                request?.Dispose();
+            }
         }
         
         // ────────────────────────────────────────────────────────────────
