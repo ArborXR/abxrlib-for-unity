@@ -103,19 +103,7 @@ namespace AbxrLib.Runtime.Services.Auth
             SetSessionData();
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-            // Only wait for service readiness if the ArborInsightService APK is installed; otherwise fail fast and use standalone mode.
-            if (ArborInsightServiceClient.IsServicePackageInstalled())
-            {
-                for (int i = 0; i < 40; i++)
-                {
-                    try
-                    {
-                        if (ArborInsightServiceClient.ServiceIsFullyInitialized()) break;
-                    }
-                    catch { }
-                    System.Threading.Thread.Sleep(250);
-                }
-            }
+            ArborInsightServiceClient.WaitForServiceReady();
 #endif
         }
         
@@ -442,54 +430,72 @@ namespace AbxrLib.Runtime.Services.Auth
             onComplete(false);
         }
 
-        // ── GET /v1/storage/config ───────────────────────────────────
-        // When auth was done via ArborInsightService, the service returns auth response with token/secret stripped.
-        // ResponseData.Token/Secret are then null, so SetAuthHeaders produces an invalid request and this config
-        // call will fail (401). Fix: either have the service return token/secret to Unity for this request, or
-        // add a service getConfig() AIDL and use it here when UsingArborInsightServiceForData().
+        // ── GET /v1/storage/config (or from service when auth was via ArborInsightService) ───
 
         private IEnumerator GetConfigurationCoroutine(Action<bool> onComplete)
         {
             if (_stopping || !_attemptActive) { onComplete(false); yield break; }
-            
-            string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config").ToString();
 
-            for (int attempt = 1; attempt <= RetryMaxAttempts; attempt++)
+            string configJson = null;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (ArborInsightServiceClient.ServiceIsFullyInitialized())
+                configJson = ArborInsightServiceClient.GetAppConfig();
+#endif
+            if (string.IsNullOrEmpty(configJson))
             {
-                if (_stopping || !_attemptActive) { onComplete(false); yield break; }
-
-                using var request = UnityWebRequest.Get(url);
-                request.SetRequestHeader("Content-Type", "application/json");
-                SetAuthHeaders(request);
-
-                yield return request.SendWebRequest();
-
-                if (_stopping || !_attemptActive) { onComplete(false); yield break; }
-
-                if (request.result == UnityWebRequest.Result.Success &&
-                    request.responseCode >= 200 && request.responseCode < 300)
+                string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config").ToString();
+                for (int attempt = 1; attempt <= RetryMaxAttempts; attempt++)
                 {
-                    var config = JsonConvert.DeserializeObject<ConfigPayload>(request.downloadHandler.text);
-                    Configuration.Instance.ApplyConfigPayload(config);
-                    _authMechanism = config.authMechanism ?? new AuthMechanism();
-                    if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
-                    
-                    Debug.Log("AbxrLib: GetConfiguration successful");
-                    onComplete(true);
+                    if (_stopping || !_attemptActive) { onComplete(false); yield break; }
+
+                    using var request = UnityWebRequest.Get(url);
+                    request.SetRequestHeader("Content-Type", "application/json");
+                    SetAuthHeaders(request);
+
+                    yield return request.SendWebRequest();
+
+                    if (_stopping || !_attemptActive) { onComplete(false); yield break; }
+
+                    if (request.result == UnityWebRequest.Result.Success &&
+                        request.responseCode >= 200 && request.responseCode < 300)
+                    {
+                        configJson = request.downloadHandler?.text;
+                        break;
+                    }
+
+                    Debug.LogWarning($"AbxrLib: GetConfiguration attempt {attempt} failed: {request.downloadHandler?.text}");
+                    if (ShouldRetry(request) && attempt < RetryMaxAttempts)
+                    {
+                        yield return new WaitForSeconds(RetryDelaySeconds);
+                        continue;
+                    }
+                    Debug.LogError("[AbxrLib] GetConfiguration failed (no more retries)");
+                    onComplete(false);
                     yield break;
                 }
-
-                Debug.LogWarning($"AbxrLib: GetConfiguration attempt {attempt} failed: {request.downloadHandler?.text}");
-                if (ShouldRetry(request) && attempt < RetryMaxAttempts)
-                {
-                    yield return new WaitForSeconds(RetryDelaySeconds);
-                    continue;
-                }
-
-                break;
             }
 
-            Debug.LogError("[AbxrLib] GetConfiguration failed (no more retries)");
+            if (!string.IsNullOrEmpty(configJson))
+            {
+                try
+                {
+                    var config = JsonConvert.DeserializeObject<ConfigPayload>(configJson);
+                    if (config != null)
+                    {
+                        Configuration.Instance.ApplyConfigPayload(config);
+                        _authMechanism = config.authMechanism ?? new AuthMechanism();
+                        if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
+                        Debug.Log("AbxrLib: GetConfiguration successful");
+                        onComplete(true);
+                        yield break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
+                }
+            }
+
             onComplete(false);
         }
         

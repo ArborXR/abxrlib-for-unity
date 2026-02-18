@@ -86,7 +86,13 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static string WhatTimeIsIt() => _client.Call<string>("whatTimeIsIt");
 		public static bool IsServiceBound() => _client.Call<bool>("isServiceBound");
 		public static bool IsServiceAvailable() => _client.Call<bool>("isServiceAvailable");
-		public static bool ServiceIsFullyInitialized() => _client.Call<bool>("serviceIsFullyInitialized");
+		/// <summary>True if the service reports fully initialized. Never throws; returns false if the bridge is unavailable or JNI fails.</summary>
+		public static bool ServiceIsFullyInitialized()
+		{
+			if (_client == null) return false;
+			try { return _client.Call<bool>("serviceIsFullyInitialized"); }
+			catch { return false; }
+		}
 		// --- API code.
 		public static void AbxrLibInitStart() => _client.Call<int>("abxrLibInitStart");
 		public static void AbxrLibInitEnd() => _client.Call<int>("abxrLibInitEnd");
@@ -161,6 +167,8 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void set_AppToken(String szAppToken) => _client.Call("set_AppToken", szAppToken);
 		// --- Organization Token (for InsightsToken/OrgToken auth). AAR must support set_OrgToken when using app tokens.
 		public static void set_OrgToken(String szOrgToken) => _client.Call("set_OrgToken", szOrgToken);
+		// --- SSO access token (optional; when set, sent in auth body to match REST path).
+		public static void set_SSOAccessToken(String szSSOAccessToken) { try { _client?.Call("set_SSOAccessToken", szSSOAccessToken ?? ""); } catch (Exception) { /* AAR may not support yet */ } }
 		// ---
 		public static String get_AppID() => _client.Call<String>("get_AppID");
 		public static void set_AppID(String szAppID) => _client.Call<int>("set_AppID", szAppID);
@@ -290,6 +298,8 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static Dictionary<String, String> get_AppConfigAuthMechanism() => Utils.StringToDict(_client.Call<String>("get_AppConfigAuthMechanism"));
 		public static void set_AppConfigAuthMechanism(Dictionary<String, String> dictValue) => _client.Call<int>("set_AppConfigAuthMechanism", Utils.DictToString(dictValue));
+		/// <summary>Full app config as JSON (same shape as GET /v1/storage/config). Returns empty string if AAR does not support.</summary>
+		public static string GetAppConfig() { try { return _client?.Call<String>("get_AppConfig") ?? ""; } catch (Exception) { return ""; } }
 		// ---
 		public static bool ReadConfig() => _client.Call<bool>("readConfig");
 	}
@@ -378,7 +388,20 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static bool IsServiceAvailable() => ArborInsightServiceBridge.IsServiceAvailable();
 		/// <summary>True if the ArborInsightService APK is installed. Use to fail fast and skip the readiness poll when running standalone.</summary>
 		public static bool IsServicePackageInstalled() => ArborInsightServiceBridge.IsServicePackageInstalled();
+		/// <summary>True if the service reports fully initialized. Never throws; returns false if the bridge is unavailable or JNI fails.</summary>
 		public static bool ServiceIsFullyInitialized() => ArborInsightServiceBridge.ServiceIsFullyInitialized();
+		/// <summary>Blocks until the service reports ready or maxAttempts is reached. Only runs on Android when the service APK is installed; no-op otherwise. Call from main thread at startup so auth can proceed.</summary>
+		public static void WaitForServiceReady(int maxAttempts = 40, int delayMs = 250)
+		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (!IsServicePackageInstalled()) return;
+			for (int i = 0; i < maxAttempts; i++)
+			{
+				if (ServiceIsFullyInitialized()) return;
+				System.Threading.Thread.Sleep(delayMs);
+			}
+#endif
+		}
 		// --- API code.
 		public static void AbxrLibInitStart() => ArborInsightServiceBridge.AbxrLibInitStart();
 		public static void AbxrLibInitEnd() => ArborInsightServiceBridge.AbxrLibInitEnd();
@@ -435,6 +458,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static void set_AppToken(String szAppToken) => ArborInsightServiceBridge.set_AppToken(szAppToken ?? "");
 		public static void set_OrgToken(String szOrgToken) => ArborInsightServiceBridge.set_OrgToken(szOrgToken ?? "");
+		public static void set_SSOAccessToken(String szSSOAccessToken) => ArborInsightServiceBridge.set_SSOAccessToken(szSSOAccessToken ?? "");
 		// ---
 		public static void set_AppID(String szAppID) => ArborInsightServiceBridge.set_AppID(szAppID ?? "");
 		// ---
@@ -559,6 +583,8 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static Dictionary<String, String> get_AppConfigAuthMechanism() => ArborInsightServiceBridge.get_AppConfigAuthMechanism();
 		public static void set_AppConfigAuthMechanism(Dictionary<String, String> dictValue) => ArborInsightServiceBridge.set_AppConfigAuthMechanism(dictValue);
+		/// <summary>Full app config as JSON (same shape as GET /v1/storage/config).</summary>
+		public static string GetAppConfig() => ArborInsightServiceBridge.GetAppConfig();
 		// ---
 		public static bool ReadConfig() => ArborInsightServiceBridge.ReadConfig();
 	}
