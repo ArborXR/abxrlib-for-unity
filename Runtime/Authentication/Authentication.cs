@@ -104,7 +104,7 @@ namespace AbxrLib.Runtime.Authentication
         /// <summary>
         /// Returns true when the ArborInsight (Kotlin) service is fully initialized and ready for calls.
         /// </summary>
-        public static bool ServiceIsFullyInitialized() => ArborInsightServiceClient.ServiceIsFullyInitializedSafe();
+        public static bool ServiceIsFullyInitialized() => ArborInsightServiceClient.ServiceIsFullyInitialized();
         
         /// <summary>
         /// Clears authentication state and stops data transmission
@@ -700,11 +700,7 @@ namespace AbxrLib.Runtime.Authentication
                 var postResponse = JsonConvert.DeserializeObject<AuthResponse>(responseText);
                 if (postResponse == null) return false;
 
-                if (fromService)
-                {
-                    _tokenExpiry = DateTime.UtcNow.AddYears(1);
-                }
-                else
+                if (!fromService)
                 {
                     if (string.IsNullOrEmpty(postResponse.Token))
                     {

@@ -386,11 +386,10 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		public static bool IsServiceAvailable() => ArborInsightServiceBridge.IsServiceAvailable();
 		/// <summary>True if the ArborInsightService APK is installed. Use to fail fast and skip the readiness poll when running standalone.</summary>
 		public static bool IsServicePackageInstalled() => ArborInsightServiceBridge.IsServicePackageInstalled();
-		public static bool ServiceIsFullyInitialized() => ArborInsightServiceBridge.ServiceIsFullyInitialized();
-		/// <summary>Like ServiceIsFullyInitialized() but never throws; returns false if the bridge is unavailable or JNI fails.</summary>
-		public static bool ServiceIsFullyInitializedSafe()
+		/// <summary>True when the service is fully initialized and ready for calls. Never throws; returns false if the bridge is unavailable or JNI fails.</summary>
+		public static bool ServiceIsFullyInitialized()
 		{
-			try { return ServiceIsFullyInitialized(); }
+			try { return ArborInsightServiceBridge.ServiceIsFullyInitialized(); }
 			catch { return false; }
 		}
 		/// <summary>Blocks until the service reports ready or maxAttempts is reached. Only runs on Android when the service APK is installed; no-op otherwise. Call from main thread at startup so auth can proceed.</summary>
@@ -400,7 +399,7 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 			if (!IsServicePackageInstalled()) return;
 			for (int i = 0; i < maxAttempts; i++)
 			{
-				if (ServiceIsFullyInitializedSafe()) return;
+				if (ServiceIsFullyInitialized()) return;
 				System.Threading.Thread.Sleep(delayMs);
 			}
 #endif
