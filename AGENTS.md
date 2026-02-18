@@ -82,6 +82,7 @@ AIDL → ArborInsightService (separate APK)
 - **Empty app_id / org_id / auth_secret or HTTP 422:** Check GetConfigData()/GetArborData() and that Configuration or ArborXR SDK is providing values; inspect auth payload in logs.
 - **Service “not ready” or bind fails on Android:** Ensure the ArborInsightService APK is installed and the client AAR in `Plugins/Android/` matches that service version. Check logcat for `ArborInsightServiceClient` and `AbxrLib:`.
 - **Missing AAR:** If you see “bridge not initialized” or “AAR may be missing”, add the client AAR (e.g. `insights-client-service.aar`) to `Plugins/Android/`. Obtain it from your distribution channel; it is not built in this repo.
+- **Service auth returns but Unity stays unauthenticated:** The service returns an empty string on auth failure so Unity’s normal “empty response = failure” path applies. If the service keeps failing, check service logs and backend connectivity. On success the service returns the auth payload with token/secret stripped (Unity does not need them for the service path).
 
 ## Technical Notes
 
