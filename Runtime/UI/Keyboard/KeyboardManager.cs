@@ -1,4 +1,5 @@
 using TMPro;
+using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -102,7 +103,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
             }
 #endif
-#if META_QR_AVAILABLE
+#if UNITY_ANDROID && !UNITY_EDITOR && META_QR_AVAILABLE
             if (MetaQRCodeReader.Instance != null)
             {
                 // Only show button if QR scanning is available (device supported, features enabled, permissions granted)
@@ -220,7 +221,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 PicoQRCodeReader.Instance.ScanQRCode();
             }
 #endif
-#if META_QR_AVAILABLE
+#if UNITY_ANDROID && !UNITY_EDITOR && META_QR_AVAILABLE
             // Toggle: if already scanning, cancel; otherwise start scanning
             if (MetaQRCodeReader.Instance != null)
             {
@@ -270,7 +271,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
 #if PICO_ENTERPRISE_SDK_3
             // PICO doesn't have IsScanning, so we can't toggle text for it
 #endif
-#if META_QR_AVAILABLE
+#if UNITY_ANDROID && !UNITY_EDITOR && META_QR_AVAILABLE
             if (MetaQRCodeReader.Instance != null)
             {
                 isScanning = MetaQRCodeReader.Instance.IsScanning();

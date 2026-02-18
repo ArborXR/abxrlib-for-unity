@@ -418,10 +418,17 @@ namespace AbxrLib.Runtime.Services.Auth
 
             string configJson = null;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (ArborInsightServiceClient.ServiceIsFullyInitialized())
+            if (ArborInsightServiceClient.ServiceIsFullyInitialized()) {
                 configJson = ArborInsightServiceClient.GetAppConfig();
+                if (string.IsNullOrEmpty(configJson))
+                {
+                    Debug.LogWarning("AbxrLib: GetAppConfig returned empty; not falling back to REST when using ArborInsightService.");
+                    onComplete(false);
+                    yield break;
+                }
+            }
 #endif
-            if (string.IsNullOrEmpty(configJson))
+            if (string.IsNullOrEmpty(configJson)) // If the service is not fully initialized, fall back to REST.
             {
                 string restJson = null;
                 yield return SendConfigRequestRest(j => restJson = j);

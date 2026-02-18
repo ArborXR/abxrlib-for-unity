@@ -119,12 +119,14 @@ namespace AbxrLib.Runtime.Services.Data
 
 		private IEnumerator Send()
 		{
+			if (_authService.UsingArborInsightServiceForData()) yield break; // When using ArborInsightService, never make our own HTTP requests.
+
 			if (Time.time - _lastCallTime < Configuration.Instance.maxCallFrequencySeconds) yield break;
 
 			_lastCallTime = Time.time;
 			_nextSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
 			if (!_authService.Authenticated) yield break;
-			
+
 			lock (_lock)
 			{
 				if (_payloads.Count == 0) yield break;
@@ -147,6 +149,8 @@ namespace AbxrLib.Runtime.Services.Data
 		/// </summary>
 		private IEnumerator SendWithRetry(List<StoragePayload> storagesToSend)
 		{
+			if (_authService.UsingArborInsightServiceForData()) yield break; // When using ArborInsightService, never make our own HTTP requests.
+
 			int retryCount = 0;
 			int maxRetries = Configuration.Instance.sendRetriesOnFailure;
 			bool success = false;
