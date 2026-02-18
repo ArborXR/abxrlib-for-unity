@@ -347,8 +347,8 @@ namespace AbxrLib.Runtime.Services.Auth
                     string authResponseJson = ArborInsightServiceClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(authMechDict));
                     try
                     {
-                        if (!string.IsNullOrEmpty(authResponseJson) &&
-                            !(authResponseJson.TrimStart().StartsWith("{\"result\":") && authResponseJson.Length < 25))
+                        // Service returns empty string "" on failure. Treat empty as failure so we don't set _usedArborInsightServiceForSession.
+                        if (!string.IsNullOrEmpty(authResponseJson))
                         {
                             var postResponse = JsonConvert.DeserializeObject<AuthResponse>(authResponseJson);
                             if (postResponse != null)
@@ -724,7 +724,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private void GetArborData()
         {
-            if (!_arborServiceClient?.IsConnected() == true) return;
+            // Only apply Arbor SDK overrides when we have a connected client (avoid overwriting config with empty when null/disconnected).
+            if (_arborServiceClient?.IsConnected() != true) return;
 
             _payload.partner = "arborxr";
             _payload.deviceId = Abxr.GetDeviceId();
