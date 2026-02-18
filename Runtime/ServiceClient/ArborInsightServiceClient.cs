@@ -163,6 +163,8 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		public static void set_AppToken(String szAppToken) => _client.Call("set_AppToken", szAppToken);
 		// --- Organization Token (for InsightsToken/OrgToken auth). AAR must support set_OrgToken when using app tokens.
 		public static void set_OrgToken(String szOrgToken) => _client.Call("set_OrgToken", szOrgToken);
+		// --- SSO access token (optional; when set, sent in auth body to match REST path).
+		public static void set_SSOAccessToken(String szSSOAccessToken) => _client.Call("set_SSOAccessToken", szSSOAccessToken ?? "");
 		// ---
 		public static String get_AppID() => _client.Call<String>("get_AppID");
 		public static void set_AppID(String szAppID) => _client.Call<int>("set_AppID", szAppID);
@@ -292,6 +294,8 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		// ---
 		public static Dictionary<String, String> get_AppConfigAuthMechanism() => Utils.StringToDict(_client.Call<String>("get_AppConfigAuthMechanism"));
 		public static void set_AppConfigAuthMechanism(Dictionary<String, String> dictValue) => _client.Call<int>("set_AppConfigAuthMechanism", Utils.DictToString(dictValue));
+		/** Full app config as JSON (same shape as GET /v1/storage/config). */
+		public static string GetAppConfig() => _client.Call<String>("get_AppConfig") ?? "";
 		// ---
 		public static bool ReadConfig() => _client.Call<bool>("readConfig");
 	}
@@ -383,11 +387,38 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		/// <summary>True if the ArborInsightService APK is installed. Use to fail fast and skip the readiness poll when running standalone.</summary>
 		public static bool IsServicePackageInstalled() => ArborInsightServiceBridge.IsServicePackageInstalled();
 		public static bool ServiceIsFullyInitialized() => ArborInsightServiceBridge.ServiceIsFullyInitialized();
+		/// <summary>Like ServiceIsFullyInitialized() but never throws; returns false if the bridge is unavailable or JNI fails.</summary>
+		public static bool ServiceIsFullyInitializedSafe()
+		{
+			try { return ServiceIsFullyInitialized(); }
+			catch { return false; }
+		}
+		/// <summary>Blocks until the service reports ready or maxAttempts is reached. Only runs on Android when the service APK is installed; no-op otherwise. Call from main thread at startup so auth can proceed.</summary>
+		public static void WaitForServiceReady(int maxAttempts = 40, int delayMs = 250)
+		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (!IsServicePackageInstalled()) return;
+			for (int i = 0; i < maxAttempts; i++)
+			{
+				if (ServiceIsFullyInitializedSafe()) return;
+				System.Threading.Thread.Sleep(delayMs);
+			}
+#endif
+		}
 		// --- API code.
 		public static void AbxrLibInitStart() => ArborInsightServiceBridge.AbxrLibInitStart();
 		public static void AbxrLibInitEnd() => ArborInsightServiceBridge.AbxrLibInitEnd();
 		// ---
 		public static String AuthRequest(String szUserId, String dictAdditionalUserData) => ArborInsightServiceBridge.AuthRequest(szUserId ?? "", dictAdditionalUserData ?? "");
+		/// <summary>Calls the service auth endpoint and returns true with the response body when the response looks like a successful auth payload (same shape as REST). Returns false when the service returned a failure or empty/short result so the caller can retry or use one response-handling path.</summary>
+		public static bool TryAuthRequest(string userId, string authMechanismDict, out string responseJson)
+		{
+			responseJson = ArborInsightServiceBridge.AuthRequest(userId ?? "", authMechanismDict ?? "");
+			if (string.IsNullOrEmpty(responseJson)) return false;
+			var trimmed = responseJson.TrimStart();
+			if (trimmed.StartsWith("{\"result\":") && responseJson.Length < 25) return false;
+			return true;
+		}
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => ArborInsightServiceBridge.Authenticate(szAppId ?? "", szOrgId ?? "", szDeviceId ?? "", szAuthSecret ?? "", ePartner);
 		public static int FinalAuthenticate() => ArborInsightServiceBridge.FinalAuthenticate();
@@ -440,6 +471,7 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		public static void set_AppToken(String szAppToken) => ArborInsightServiceBridge.set_AppToken(szAppToken ?? "");
 		// ---
 		public static void set_OrgToken(String szOrgToken) => ArborInsightServiceBridge.set_OrgToken(szOrgToken ?? "");
+		public static void set_SSOAccessToken(String szSSOAccessToken) => ArborInsightServiceBridge.set_SSOAccessToken(szSSOAccessToken ?? "");
 		// ---
 		public static void set_AppID(String szAppID) => ArborInsightServiceBridge.set_AppID(szAppID ?? "");
 		// ---
@@ -497,6 +529,33 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		// --- Configuration fields.
 		public static void set_RestUrl(String szValue) => ArborInsightServiceBridge.set_RestUrl(szValue ?? "");
 		// ---
+		/// <summary>Sets REST URL and all auth-related session fields on the service from the given auth payload. Call once per auth request before AuthRequest(). Keeps service-path auth setup in one place and limits divergence from the standalone auth path. Internal so AuthPayload can stay internal.</summary>
+		internal static void SetAuthPayloadForRequest(string restUrl, AbxrLib.Runtime.Authentication.Authentication.AuthPayload data, int partner)
+		{
+			set_RestUrl(restUrl ?? "https://lib-backend.xrdm.app/");
+			if (data.appId != null) set_AppID(data.appId);
+			if (data.orgId != null) set_OrgID(data.orgId);
+			if (data.authSecret != null) set_AuthSecret(data.authSecret);
+			if (data.appToken != null) set_AppToken(data.appToken);
+			if (data.orgToken != null) set_OrgToken(data.orgToken);
+			if (data.SSOAccessToken != null) set_SSOAccessToken(data.SSOAccessToken);
+			if (data.buildType != null) set_BuildType(data.buildType);
+			if (data.deviceId != null) set_DeviceID(data.deviceId);
+			if (data.userId != null) set_UserID(data.userId);
+			set_Partner(partner);
+			if (data.ipAddress != null) set_IpAddress(data.ipAddress);
+			if (data.deviceModel != null) set_DeviceModel(data.deviceModel);
+			set_GeoLocation(data.geolocation ?? new Dictionary<string, string>());
+			if (data.osVersion != null) set_OsVersion(data.osVersion);
+			if (data.xrdmVersion != null) set_XrdmVersion(data.xrdmVersion);
+			if (data.appVersion != null) set_AppVersion(data.appVersion);
+			if (data.unityVersion != null) set_UnityVersion(data.unityVersion);
+			if (data.abxrLibType != null) set_AbxrLibType(data.abxrLibType);
+			if (data.abxrLibVersion != null) set_AbxrLibVersion(data.abxrLibVersion);
+			if (data.buildFingerprint != null) set_BuildFingerprint(data.buildFingerprint);
+			if (data.tags != null) set_Tags(data.tags.ToList());
+		}
+		// ---
 		public static void set_SendRetriesOnFailure(int nValue) => ArborInsightServiceBridge.set_SendRetriesOnFailure(nValue);
 		// ---
 		public static void set_SendRetryInterval(double tsValue) => ArborInsightServiceBridge.set_SendRetryInterval(tsValue);
@@ -527,6 +586,7 @@ namespace AbxrLib.Runtime.ServiceClient.ArborInsightService
 		// ---
 		internal static Dictionary<String, String> get_AppConfigAuthMechanism() => ArborInsightServiceBridge.get_AppConfigAuthMechanism();
 		public static void set_AppConfigAuthMechanism(Dictionary<String, String> dictValue) => ArborInsightServiceBridge.set_AppConfigAuthMechanism(dictValue);
+		internal static string GetAppConfig() => ArborInsightServiceBridge.GetAppConfig();
 		// ---
 		public static bool ReadConfig() => ArborInsightServiceBridge.ReadConfig();
 	}

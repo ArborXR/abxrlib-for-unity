@@ -104,17 +104,7 @@ namespace AbxrLib.Runtime.Authentication
         /// <summary>
         /// Returns true when the ArborInsight (Kotlin) service is fully initialized and ready for calls.
         /// </summary>
-        public static bool ServiceIsFullyInitialized()
-        {
-            try
-            {
-                return ArborInsightServiceClient.ServiceIsFullyInitialized();
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        public static bool ServiceIsFullyInitialized() => ArborInsightServiceClient.ServiceIsFullyInitializedSafe();
         
         /// <summary>
         /// Clears authentication state and stops data transmission
@@ -167,19 +157,7 @@ namespace AbxrLib.Runtime.Authentication
             _initialized = true;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-            // Only wait for service readiness if the ArborInsightService APK is installed; otherwise fail fast and use standalone mode.
-            if (ArborInsightServiceClient.IsServicePackageInstalled())
-            {
-                for (int i = 0; i < 40; i++)
-                {
-                    try
-                    {
-                        if (ServiceIsFullyInitialized()) break;
-                    }
-                    catch { }
-                    System.Threading.Thread.Sleep(250);
-                }
-            }
+            ArborInsightServiceClient.WaitForServiceReady();
 #endif
 
             // Start the deferred authentication system
@@ -626,266 +604,160 @@ namespace AbxrLib.Runtime.Authentication
                 authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
             };
 
-            if (ServiceIsFullyInitialized())
+            int nRetrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
+            bool bSuccess = false;
+            while (!bSuccess)
             {
-                try
-                {
-                    ArborInsightServiceClient.set_RestUrl(config.restUrl ?? "https://lib-backend.xrdm.app/");
-                    foreach (var fi in typeof(AuthPayload).GetFields(BindingFlags.Public | BindingFlags.Instance))
-                    {
-                        var field = fi.Name;
-                        switch (field)
-                        {
-                            case nameof(AuthPayload.appId):
-                                if (data.appId != null) ArborInsightServiceClient.set_AppID(data.appId);
-                                break;
-                            case nameof(AuthPayload.orgId):
-                                if (data.orgId != null) ArborInsightServiceClient.set_OrgID(data.orgId);
-                                break;
-                            case nameof(AuthPayload.authSecret):
-                                if (data.authSecret != null) ArborInsightServiceClient.set_AuthSecret(data.authSecret);
-                                break;
-                            case nameof(AuthPayload.appToken):
-                                if (data.appToken != null) ArborInsightServiceClient.set_AppToken(data.appToken);
-                                break;
-                            case nameof(AuthPayload.orgToken):
-                                if (data.orgToken != null) ArborInsightServiceClient.set_OrgToken(data.orgToken);
-                                break;
-                            case nameof(AuthPayload.buildType):
-                                if (data.buildType != null) ArborInsightServiceClient.set_BuildType(data.buildType);
-                                break;
-                            case nameof(AuthPayload.deviceId):
-                                if (data.deviceId != null) ArborInsightServiceClient.set_DeviceID(data.deviceId);
-                                break;
-                            case nameof(AuthPayload.userId):
-                                if (data.userId != null) ArborInsightServiceClient.set_UserID(data.userId);
-                                break;
-                            case nameof(AuthPayload.tags):
-                                if (data.tags != null) ArborInsightServiceClient.set_Tags(data.tags.ToList());
-                                break;
-                            case nameof(AuthPayload.partner):
-                                ArborInsightServiceClient.set_Partner((int)_partner);
-                                break;
-                            case nameof(AuthPayload.ipAddress):
-                                if (data.ipAddress != null) ArborInsightServiceClient.set_IpAddress(data.ipAddress);
-                                break;
-                            case nameof(AuthPayload.deviceModel):
-                                if (data.deviceModel != null) ArborInsightServiceClient.set_DeviceModel(data.deviceModel);
-                                break;
-                            case nameof(AuthPayload.geolocation):
-                                ArborInsightServiceClient.set_GeoLocation(data.geolocation ?? new Dictionary<string, string>());
-                                break;
-                            case nameof(AuthPayload.osVersion):
-                                if (data.osVersion != null) ArborInsightServiceClient.set_OsVersion(data.osVersion);
-                                break;
-                            case nameof(AuthPayload.xrdmVersion):
-                                if (data.xrdmVersion != null) ArborInsightServiceClient.set_XrdmVersion(data.xrdmVersion);
-                                break;
-                            case nameof(AuthPayload.appVersion):
-                                if (data.appVersion != null) ArborInsightServiceClient.set_AppVersion(data.appVersion);
-                                break;
-                            case nameof(AuthPayload.unityVersion):
-                                if (data.unityVersion != null) ArborInsightServiceClient.set_UnityVersion(data.unityVersion);
-                                break;
-                            case nameof(AuthPayload.abxrLibType):
-                                if (data.abxrLibType != null) ArborInsightServiceClient.set_AbxrLibType(data.abxrLibType);
-                                break;
-                            case nameof(AuthPayload.abxrLibVersion):
-                                if (data.abxrLibVersion != null) ArborInsightServiceClient.set_AbxrLibVersion(data.abxrLibVersion);
-                                break;
-                            case nameof(AuthPayload.buildFingerprint):
-                                if (data.buildFingerprint != null) ArborInsightServiceClient.set_BuildFingerprint(data.buildFingerprint);
-                                break;
-                            default:
-                                // AuthPayload fields without a service setter are ignored
-                                break;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"AbxrLib: Failed to set service properties for auth: {ex.Message}");
-                }
+                bool useService = ServiceIsFullyInitialized();
+                string responseJson = null;
 
-                var authMechanismDict = CreateAuthMechanismDict(userId, additionalUserData);
-                int nRetrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
-                bool bSuccess = false;
-                while (!bSuccess)
+                if (useService)
                 {
-                    // Service returns auth response with token/secret stripped (service keeps credentials); Unity uses service as API and does not need them.
-                    string authResponseJson = ArborInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(authMechanismDict));
                     try
                     {
-                        if (!string.IsNullOrEmpty(authResponseJson) &&
-                            !(authResponseJson.TrimStart().StartsWith("{\"result\":") && authResponseJson.Length < 25))
-                        {
-                            var postResponse = JsonConvert.DeserializeObject<AuthResponse>(authResponseJson);
-                            if (postResponse != null)
-                            {
-                                _responseData = postResponse;
-                                if (_responseData.Modules?.Count > 1)
-                                    _responseData.Modules = _responseData.Modules.OrderBy(m => m.Order).ToList();
-                                if (!string.IsNullOrEmpty(_enteredAuthValue))
-                                {
-                                    _responseData.UserData ??= new Dictionary<string, string>();
-                                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
-                                    _responseData.UserData[keyName] = _enteredAuthValue;
-                                }
-                                if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
-                                bSuccess = true;
-                                _usedArborInsightServiceForSession = true;
-                                break;
-                            }
-                        }
+                        ArborInsightServiceClient.SetAuthPayloadForRequest(config.restUrl ?? "https://lib-backend.xrdm.app/", data, (int)_partner);
+                        responseJson = ArborInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(data.authMechanism));
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"AbxrLib: Service auth response handling failed: {ex.Message}");
-                    }
-                    if (!withRetry)
-                    {
-                        Abxr.OnAuthCompleted?.Invoke(false, null);
-                        break;
-                    }
-                    Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {nRetrySeconds} seconds...");
-                    yield return new WaitForSeconds(nRetrySeconds);
-                }
-                yield break;
-            }
-
-            string json = JsonConvert.SerializeObject(data);
-            var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
-            
-            bool success = false;
-            while (!success)
-            {
-                // Create request and handle creation errors
-                UnityWebRequest request;
-                
-                // Request creation with error handling (no yield statements)
-                try
-                {
-                    request = new UnityWebRequest(fullUri.ToString(), "POST");
-                    Utils.BuildRequest(request, json);
-                    
-                    // Set timeout to prevent hanging requests
-                    request.timeout = Configuration.Instance.requestTimeoutSeconds;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"AbxrLib: Authentication request creation failed: {ex.Message}");
-                    break; // Exit retry loop - this is a non-retryable error
-                }
-                
-                // Send request (yield outside try-catch)
-                yield return request.SendWebRequest();
-                
-                try
-                {
-                    if (request.result == UnityWebRequest.Result.Success)
-                    {
-                        if (HandleAuthResponse(request.downloadHandler.text))
-                        {
-                            success = true;
-                            break; // don't invoke completion yet; additional auth may be required
-                        }
-                    }
-                    else
-                    {
-                        string errorMessage = HandleNetworkError(request);
-                        Debug.LogWarning($"AbxrLib: AuthRequest failed: {errorMessage}");
+                        Debug.LogError($"AbxrLib: Failed to set service properties for auth: {ex.Message}");
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    Debug.LogError($"AbxrLib: Authentication response handling failed: {ex.Message}");
-                }
-                finally
-                {
-                    // Always dispose of request
-                    request?.Dispose();
+                    var restHolder = new AuthResponseHolder();
+                    yield return SendAuthRequestRest(JsonConvert.SerializeObject(data), restHolder);
+                    responseJson = restHolder.Response;
                 }
 
+                if (HandleAuthResponse(responseJson, fromService: useService, handoff: false))
+                {
+                    bSuccess = true;
+                    break;
+                }
                 if (!withRetry)
                 {
                     Abxr.OnAuthCompleted?.Invoke(false, null);
                     break;
                 }
-
-                int retrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
-                Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {retrySeconds} seconds...");
-                yield return new WaitForSeconds(retrySeconds);
+                Debug.LogWarning($"AbxrLib: Authentication attempt failed, retrying in {nRetrySeconds} seconds...");
+                yield return new WaitForSeconds(nRetrySeconds);
             }
         }
-        
-        private static bool HandleAuthResponse(string responseText, bool handoff = false)
+
+        /// <summary>Holds the response body from a single REST auth attempt (used so coroutine can "return" it).</summary>
+        private class AuthResponseHolder
         {
+            public string Response;
+        }
+
+        /// <summary>Performs one POST to /v1/auth/token and sets holder.Response to the response body or null on failure.</summary>
+        private static IEnumerator SendAuthRequestRest(string json, AuthResponseHolder holder)
+        {
+            holder.Response = null;
+            var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
+            UnityWebRequest request = null;
             try
             {
-                AuthResponse postResponse = JsonConvert.DeserializeObject<AuthResponse>(responseText);
+                request = new UnityWebRequest(fullUri.ToString(), "POST");
+                Utils.BuildRequest(request, json);
+                request.timeout = Configuration.Instance.requestTimeoutSeconds;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Authentication request creation failed: {ex.Message}");
+                yield break;
+            }
 
-                // Validate response data
-                if (postResponse == null || string.IsNullOrEmpty(postResponse.Token))
+            yield return request.SendWebRequest();
+
+            try
+            {
+                if (request.result == UnityWebRequest.Result.Success)
+                    holder.Response = request.downloadHandler?.text;
+                else
                 {
-                    throw new Exception("Invalid authentication response: missing token");
+                    string errorMessage = HandleNetworkError(request);
+                    Debug.LogWarning($"AbxrLib: AuthRequest failed: {errorMessage}");
                 }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: Authentication response handling failed: {ex.Message}");
+            }
+            finally
+            {
+                request?.Dispose();
+            }
+        }
 
-                if (handoff)
+        /// <summary>Parses auth response text and applies it. If fromService: no JWT validation, set safe expiry. Else: validate token and set expiry (handoff or JWT). All response data (Modules, UserData, etc.) is applied the same in one place.</summary>
+        private static bool HandleAuthResponse(string responseText, bool fromService, bool handoff = false)
+        {
+            if (string.IsNullOrEmpty(responseText)) return false;
+            try
+            {
+                var postResponse = JsonConvert.DeserializeObject<AuthResponse>(responseText);
+                if (postResponse == null) return false;
+
+                if (fromService)
                 {
-                    // Set token expiry to far in the future since we're trusting the handoff
-                    _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                    _tokenExpiry = DateTime.UtcNow.AddYears(1);
                 }
                 else
                 {
-                    // Decode JWT with error handling
-                    Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
-                    if (decodedJwt == null)
+                    if (string.IsNullOrEmpty(postResponse.Token))
                     {
-                        throw new Exception("Failed to decode JWT token - authentication cannot proceed");
+                        Debug.LogError("AbxrLib: Invalid authentication response: missing token");
+                        return false;
                     }
-                        
-                    if (!decodedJwt.ContainsKey("exp"))
+                    if (handoff)
+                        _tokenExpiry = DateTime.UtcNow.AddHours(24);
+                    else
                     {
-                        throw new Exception("Invalid JWT token: missing expiration field");
-                    }
-                        
-                    try
-                    {
-                        _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
-                    }
-                    catch (Exception ex)
-                    {
-                        throw new Exception($"Invalid JWT token expiration: {ex.Message}");
+                        var decodedJwt = Utils.DecodeJwt(postResponse.Token);
+                        if (decodedJwt == null)
+                        {
+                            Debug.LogError("AbxrLib: Failed to decode JWT token - authentication cannot proceed");
+                            return false;
+                        }
+                        if (!decodedJwt.ContainsKey("exp"))
+                        {
+                            Debug.LogError("AbxrLib: Invalid JWT token: missing expiration field");
+                            return false;
+                        }
+                        try
+                        {
+                            _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"AbxrLib: Invalid JWT token expiration: {ex.Message}");
+                            return false;
+                        }
                     }
                 }
 
                 _responseData = postResponse;
-                if (_responseData.Modules?.Count > 1)
-                {
+                if (_responseData?.Modules?.Count > 1)
                     _responseData.Modules = _responseData.Modules.OrderBy(m => m.Order).ToList();
-                }
-                
-                // Add entered email/text value to UserData if we have one stored
-                if (!string.IsNullOrEmpty(_enteredAuthValue))
+                if (!string.IsNullOrEmpty(_enteredAuthValue) && _responseData != null)
                 {
-                    // Initialize UserData if it's null
                     _responseData.UserData ??= new Dictionary<string, string>();
-                            
-                    // Determine the key name based on auth type
-                    string keyName = _authMechanism?.type == "email" ? "email" : "text";
+                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
                     _responseData.UserData[keyName] = _enteredAuthValue;
                 }
-
                 if (_keyboardAuthSuccess == false) _keyboardAuthSuccess = true;
+                if (fromService)
+                    _usedArborInsightServiceForSession = true;
 
-                if (handoff)
+                if (!fromService && handoff)
                 {
                     Debug.Log($"AbxrLib: Authentication handoff successful. Modules: {_responseData?.Modules?.Count}");
                     Abxr.NotifyAuthCompleted();
                     _keyboardAuthSuccess = true;
                     _sessionUsedAuthHandoff = true;
                 }
-                
                 return true;
             }
             catch (Exception ex)
@@ -894,7 +766,7 @@ namespace AbxrLib.Runtime.Authentication
                 return false;
             }
         }
-        
+
         /// <summary>
         /// Handles network errors and determines appropriate error messages
         /// </summary>
@@ -928,27 +800,51 @@ namespace AbxrLib.Runtime.Authentication
 
         private static IEnumerator GetConfiguration()
         {
+            _authMechanism = new AuthMechanism();
+
+            string configJson = null;
             if (ServiceIsFullyInitialized())
+                configJson = ArborInsightServiceClient.GetAppConfig();
+            else
             {
-                _dictAuthMechanism = ArborInsightServiceClient.get_AppConfigAuthMechanism();
-                if (_dictAuthMechanism != null && _dictAuthMechanism.Count > 0)
-                {
-                    _authMechanism = new AuthMechanism();
-                    if (_dictAuthMechanism.TryGetValue("type", out var type)) _authMechanism.type = type;
-                    if (_dictAuthMechanism.TryGetValue("prompt", out var prompt)) _authMechanism.prompt = prompt;
-                    if (_dictAuthMechanism.TryGetValue("domain", out var domain)) _authMechanism.domain = domain;
-                    if (_dictAuthMechanism.TryGetValue("inputSource", out var inputSource)) _authMechanism.inputSource = inputSource;
-                    if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
-                }
-                yield break;
+                string restJson = null;
+                yield return SendConfigRequestRest(j => restJson = j);
+                configJson = restJson;
             }
 
+            if (string.IsNullOrEmpty(configJson)) yield break;
+
+            try
+            {
+                var payload = JsonConvert.DeserializeObject<ConfigPayload>(configJson);
+                if (payload == null)
+                {
+                    Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
+                    yield break;
+                }
+                SetConfigFromPayload(payload);
+                if (payload.authMechanism != null)
+                {
+                    _authMechanism.type = payload.authMechanism.type;
+                    _authMechanism.prompt = payload.authMechanism.prompt;
+                    _authMechanism.domain = payload.authMechanism.domain;
+                    _authMechanism.inputSource = payload.authMechanism.inputSource;
+                }
+                if (string.IsNullOrEmpty(_authMechanism.inputSource))
+                    _authMechanism.inputSource = "user";
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
+            }
+        }
+
+        /// <summary>Performs one GET to /v1/storage/config with auth headers. Invokes onComplete with the response body JSON (or null on failure).</summary>
+        private static IEnumerator SendConfigRequestRest(System.Action<string> onComplete)
+        {
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config");
-            
-            // Create request and handle creation errors
-            UnityWebRequest request;
-            
-            // Request creation with error handling (no yield statements)
+
+            UnityWebRequest request = null;
             try
             {
                 request = UnityWebRequest.Get(fullUri.ToString());
@@ -959,53 +855,36 @@ namespace AbxrLib.Runtime.Authentication
             catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
+                onComplete(null);
                 yield break;
             }
-            
-            // Send request (yield outside try-catch)
+
             yield return request.SendWebRequest();
-            
+
             try
             {
-                if (request.result == UnityWebRequest.Result.Success)
-                {
-                    string response = request.downloadHandler.text;
-                    if (string.IsNullOrEmpty(response))
-                    {
-                        Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
-                    }
-                    else
-                    {
-                        var config = JsonConvert.DeserializeObject<ConfigPayload>(response);
-                        if (config == null)
-                        {
-                            Debug.LogWarning("AbxrLib: Failed to deserialize configuration response, using default configuration");
-                        }
-                        else
-                        {
-                            SetConfigFromPayload(config);
-                            _authMechanism = config.authMechanism;
-                            // Ensure inputSource is initialized to "user" if not set
-                            if (_authMechanism != null && string.IsNullOrEmpty(_authMechanism.inputSource))
-                            {
-                                _authMechanism.inputSource = "user";
-                            }
-                        }
-                    }
-                }
-                else
+                if (request.result != UnityWebRequest.Result.Success)
                 {
                     string errorMessage = HandleNetworkError(request);
                     Debug.LogWarning($"AbxrLib: GetConfiguration failed: {errorMessage}");
+                    onComplete(null);
+                    yield break;
                 }
+
+                string responseJson = request.downloadHandler?.text;
+                if (string.IsNullOrEmpty(responseJson))
+                    Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
+                onComplete(responseJson);
             }
             catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
+                onComplete(null);
             }
-            
-            // Always dispose of request
-            request?.Dispose();
+            finally
+            {
+                request?.Dispose();
+            }
         }
     
         public static void SetAuthHeaders(UnityWebRequest request, string json = "")
@@ -1077,6 +956,13 @@ namespace AbxrLib.Runtime.Authentication
             if (!string.IsNullOrEmpty(payload.pruneSentItemsOlderThan)) Configuration.Instance.pruneSentItemsOlderThanHours = Convert.ToInt32(payload.pruneSentItemsOlderThan);
             if (!string.IsNullOrEmpty(payload.maximumCachedItems)) Configuration.Instance.maximumCachedItems = Convert.ToInt32(payload.maximumCachedItems);
             if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) Configuration.Instance.retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
+            // Performance / tracking periods (backend may send as numeric strings, e.g. "1", "0.5", "10")
+            if (!string.IsNullOrEmpty(payload.positionCapturePeriod) && float.TryParse(payload.positionCapturePeriod, out float positionPeriod))
+                Configuration.Instance.positionTrackingPeriodSeconds = Mathf.Clamp(positionPeriod, 0.1f, 60f);
+            if (!string.IsNullOrEmpty(payload.frameRateCapturePeriod) && float.TryParse(payload.frameRateCapturePeriod, out float frameRatePeriod))
+                Configuration.Instance.frameRateTrackingPeriodSeconds = Mathf.Clamp(frameRatePeriod, 0.1f, 60f);
+            if (!string.IsNullOrEmpty(payload.telemetryCapturePeriod) && float.TryParse(payload.telemetryCapturePeriod, out float telemetryPeriod))
+                Configuration.Instance.telemetryTrackingPeriodSeconds = Mathf.Clamp(telemetryPeriod, 1f, 300f);
         }
 
         /// <summary>
@@ -1102,7 +988,7 @@ namespace AbxrLib.Runtime.Authentication
             if (string.IsNullOrEmpty(handoffJson)) return false;
             
             Debug.Log("AbxrLib: Processing authentication handoff from external launcher");
-            return HandleAuthResponse(handoffJson, true);
+            return HandleAuthResponse(handoffJson, fromService: false, handoff: true);
         }
     
         [Preserve]
@@ -1139,7 +1025,7 @@ namespace AbxrLib.Runtime.Authentication
             public ConfigPayload() {}
         }
 
-        private class AuthPayload
+        internal class AuthPayload
         {
             public string appId; //legacy only
             [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
