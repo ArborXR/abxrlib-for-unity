@@ -26,8 +26,6 @@ namespace AbxrLib.Runtime.Services.Auth
         public AuthResponse ResponseData { get; private set; } = new();
 
         // ── Constants ────────────────────────────────────────────────
-        private const int RetryMaxAttempts = 3;
-        private const float RetryDelaySeconds = 1f;
         private const float ReAuthPollSeconds = 60f;
         private const int ReAuthThresholdSeconds = 120;
 
@@ -176,7 +174,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     RequestKeyboardInput();
                 }
-            }));
+            }, withRetry: false));
         }
         
         public void SetAuthHeaders(UnityWebRequest request, string json = null)
@@ -266,7 +264,8 @@ namespace AbxrLib.Runtime.Services.Auth
             public string Response;
         }
 
-        private IEnumerator AuthRequestCoroutine(Action<bool> onComplete)
+        /// <summary>Attempts auth via service (when available) or REST. When withRetry is true, retries the same path until success (parity with main). When false (e.g. keyboard auth), one attempt only.</summary>
+        private IEnumerator AuthRequestCoroutine(Action<bool> onComplete, bool withRetry = true)
         {
             if (_stopping || !_attemptActive) { onComplete(false); yield break; }
 
@@ -282,8 +281,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 _payload.SSOAccessToken = Abxr.GetAccessToken();
 
             string json = JsonConvert.SerializeObject(_payload);
+            int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
 
-            for (int attempt = 1; attempt <= RetryMaxAttempts; attempt++)
+            while (true)
             {
                 if (_stopping || !_attemptActive) { onComplete(false); yield break; }
 
@@ -319,18 +319,20 @@ namespace AbxrLib.Runtime.Services.Auth
                         _usedArborInsightServiceForSession = true;
                     _payload.buildType = savedBuildType;
                     _attemptActive = false;
-                    AuthSucceeded();
                     onComplete(true);
                     yield break;
                 }
 
-                Debug.LogWarning($"AbxrLib: AuthRequest attempt {attempt} failed, retrying in {RetryDelaySeconds} seconds...");
-                if (attempt < RetryMaxAttempts)
-                    yield return new WaitForSeconds(RetryDelaySeconds);
-            }
+                if (!withRetry)
+                {
+                    _payload.buildType = savedBuildType;
+                    onComplete(false);
+                    yield break;
+                }
 
-            _payload.buildType = savedBuildType;
-            onComplete(false);
+                Debug.LogWarning($"AbxrLib: AuthRequest failed, retrying in {retryIntervalSeconds} seconds...");
+                yield return new WaitForSeconds(retryIntervalSeconds);
+            }
         }
 
         /// <summary>Performs one POST to /v1/auth/token and sets holder.Response to the response body or null on failure.</summary>
