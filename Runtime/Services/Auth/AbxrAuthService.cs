@@ -636,23 +636,18 @@ namespace AbxrLib.Runtime.Services.Auth
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
         
         /// <summary>
-        /// Update user data (UserId and UserData) and reauthenticate to sync with server
-        /// Updates the authentication response with new user information without clearing authentication state
-        /// The server API allows reauthenticate to update these values
+        /// Update user data (UserId and UserData) and reauthenticate to sync with server.
+        /// Merges existing UserData with the optional userId and additionalUserData, then sends the updated list via re-auth (REST or ArborInsightService as appropriate).
         /// </summary>
-        /// <param name="userId">Optional user ID to update</param>
-        /// <param name="additionalUserData">Optional additional user data dictionary to merge with existing UserData</param>
+        /// <param name="userId">Optional user ID to set or update</param>
+        /// <param name="additionalUserData">Optional key-value pairs to merge with existing UserData (overwrites existing keys)</param>
         public void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null)
         {
-            // Update _responseData with new values before reauthenticating
             if (!Authenticated)
             {
                 Debug.LogWarning("AbxrLib: Cannot set user data - not authenticated. Call Authenticate() first.");
                 return;
             }
-
-            _payload.userId = userId;
-            _userData = additionalUserData;
 
             if (_stopping || _attemptActive)
             {
@@ -660,7 +655,34 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
 
-            // Reauthenticate to sync with server
+            // Build merged user data: start from current response, then apply userId and additionalUserData
+            var merged = ResponseData?.UserData != null
+                ? new Dictionary<string, string>(ResponseData.UserData)
+                : new Dictionary<string, string>();
+
+            if (!string.IsNullOrEmpty(userId))
+            {
+                _payload.userId = userId;
+                merged["userId"] = userId;
+            }
+            else
+            {
+                // Retain original: do not overwrite _payload.userId; keep merged["userId"] from existing data when present
+                if (merged.TryGetValue("userId", out var existingUserId) && !string.IsNullOrEmpty(existingUserId))
+                    merged["userId"] = existingUserId;
+                else
+                    merged["userId"] = ResponseData?.UserId?.ToString() ?? _payload.userId ?? "";
+            }
+
+            if (additionalUserData != null)
+            {
+                foreach (var kvp in additionalUserData)
+                    merged[kvp.Key] = kvp.Value;
+            }
+
+            _userData = merged;
+
+            // Reauthenticate to sync with server (REST or service as appropriate)
             _attemptActive = true;
             _runner.StartCoroutine(AuthRequestCoroutine(_ =>
             {
