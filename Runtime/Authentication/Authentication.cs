@@ -229,10 +229,10 @@ namespace AbxrLib.Runtime.Authentication
 
         /// <summary>
         /// Update user data (UserId and UserData) and reauthenticate to sync with server
-        /// Updates the authentication response with new user information without clearing authentication state
-        /// The server API allows reauthenticate to update these values
+        /// Merges additionalUserData into existing UserData and sends the full updated list to the REST API or service.
+        /// If userId is not provided, the current UserId is retained and not overwritten.
         /// </summary>
-        /// <param name="userId">Optional user ID to update</param>
+        /// <param name="userId">Optional user ID to update; when null, the current value is retained</param>
         /// <param name="additionalUserData">Optional additional user data dictionary to merge with existing UserData</param>
         public static void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null)
         {
@@ -243,13 +243,15 @@ namespace AbxrLib.Runtime.Authentication
                 return;
             }
 
-            // Update UserId if provided
+            // Update UserId only if provided; otherwise retain current value
             if (!string.IsNullOrEmpty(userId))
             {
                 _responseData.UserId = userId;
+                _responseData.UserData ??= new Dictionary<string, string>();
+                _responseData.UserData["userId"] = userId;
             }
 
-            // Merge additionalUserData into existing UserData
+            // Merge additionalUserData into existing UserData (append/update keys)
             if (additionalUserData != null && additionalUserData.Count > 0)
             {
                 _responseData.UserData ??= new Dictionary<string, string>();
@@ -259,17 +261,17 @@ namespace AbxrLib.Runtime.Authentication
                 }
             }
 
-            // Reauthenticate to sync with server (without clearing authentication state)
-            CoroutineRunner.Instance.StartCoroutine(ReAuthenticateWithUserData(userId, additionalUserData));
+            // Reauthenticate with effective userId (current if not provided) and full merged UserData so API gets updated list
+            string effectiveUserId = !string.IsNullOrEmpty(userId) ? userId : _responseData?.UserId?.ToString();
+            var fullUserData = _responseData?.UserData;
+            CoroutineRunner.Instance.StartCoroutine(ReAuthenticateWithUserData(effectiveUserId, fullUserData));
         }
 
-        private static IEnumerator ReAuthenticateWithUserData(string userId, Dictionary<string, string> additionalUserData)
+        private static IEnumerator ReAuthenticateWithUserData(string effectiveUserId, Dictionary<string, string> fullUserData)
         {
-            // Call AuthRequest with user data parameters
-            yield return AuthRequest(true, userId, additionalUserData);
-            
-            // Note: AuthRequest will update _responseData with server response
-            // The server should return the updated UserId and UserData
+            // Send full merged user data to REST or service so the backend receives the updated list
+            yield return AuthRequest(true, effectiveUserId, fullUserData);
+            // AuthRequest will update _responseData with server response
         }
 
         /// <summary>
@@ -575,6 +577,9 @@ namespace AbxrLib.Runtime.Authentication
                 ssoAccessToken = Abxr.GetAccessToken();
             }
             
+            // When userId param is null, use current response userId so we do not overwrite it on the wire (e.g. SetUserData(null, additionalUserData))
+            string payloadUserId = !string.IsNullOrEmpty(userId) ? userId : _responseData?.UserId?.ToString();
+            
             // useAppTokens: _orgToken is resolved in ValidateConfigValues (required for API); we always send both appToken and orgToken when useAppTokens.
             string payloadBuildType = (_buildType == "production_custom") ? "production" : _buildType;
             var data = new AuthPayload
@@ -586,7 +591,7 @@ namespace AbxrLib.Runtime.Authentication
                 orgToken = config.useAppTokens ? _orgToken : null,
                 buildType = payloadBuildType, // Production (Custom APK) sends "production" to API
                 deviceId = _deviceId,
-                userId = userId,
+                userId = payloadUserId,
                 tags = _deviceTags,
                 sessionId = _sessionId,
                 partner = _partner.ToString().ToLower(),
@@ -601,7 +606,7 @@ namespace AbxrLib.Runtime.Authentication
                 abxrLibVersion = AbxrLibVersion.Version,
                 buildFingerprint = _buildFingerprint,
                 SSOAccessToken = ssoAccessToken,
-                authMechanism = CreateAuthMechanismDict(userId, additionalUserData)
+                authMechanism = CreateAuthMechanismDict(payloadUserId, additionalUserData)
             };
 
             int nRetrySeconds = Configuration.Instance.sendRetryIntervalSeconds;
@@ -616,7 +621,7 @@ namespace AbxrLib.Runtime.Authentication
                     try
                     {
                         ArborInsightServiceClient.SetAuthPayloadForRequest(config.restUrl ?? "https://lib-backend.xrdm.app/", data, (int)_partner);
-                        responseJson = ArborInsightServiceClient.AuthRequest(userId ?? "", Utils.DictToString(data.authMechanism));
+                        responseJson = ArborInsightServiceClient.AuthRequest(payloadUserId ?? "", Utils.DictToString(data.authMechanism));
                     }
                     catch (Exception ex)
                     {
@@ -910,7 +915,8 @@ namespace AbxrLib.Runtime.Authentication
         private static Dictionary<string, string> CreateAuthMechanismDict(string userId = null, Dictionary<string, string> additionalUserData = null)
         {
             var dict = new Dictionary<string, string>();
-            if (_authMechanism == null && string.IsNullOrEmpty(userId)) return dict;
+            bool hasUserData = additionalUserData != null && additionalUserData.Count > 0;
+            if (_authMechanism == null && string.IsNullOrEmpty(userId) && !hasUserData) return dict;
 
             if (!string.IsNullOrEmpty(userId))
             {
@@ -932,11 +938,24 @@ namespace AbxrLib.Runtime.Authentication
                 return dict;
             }
 
-            if (_authMechanism == null) return dict;
-            if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
-            if (!string.IsNullOrEmpty(_authMechanism.prompt)) dict["prompt"] = _authMechanism.prompt;
-            if (!string.IsNullOrEmpty(_authMechanism.domain)) dict["domain"] = _authMechanism.domain;
-            if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
+            if (_authMechanism != null)
+            {
+                if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
+                if (!string.IsNullOrEmpty(_authMechanism.prompt)) dict["prompt"] = _authMechanism.prompt;
+                if (!string.IsNullOrEmpty(_authMechanism.domain)) dict["domain"] = _authMechanism.domain;
+                if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
+            }
+            // Include full user data when provided (e.g. SetUserData reauth with no userId change) so API gets updated list
+            if (additionalUserData != null)
+            {
+                foreach (var item in additionalUserData)
+                {
+                    if (item.Key != "type" && item.Key != "prompt")
+                    {
+                        dict[item.Key] = item.Value;
+                    }
+                }
+            }
             return dict;
         }
     

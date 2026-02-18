@@ -179,10 +179,10 @@ public static partial class Abxr
 	/// This is the userData object from the authentication response, containing user preferences and information
 	/// The API handles normalization and adds OrgId to the UserData
 	/// Returns null if authentication has not completed or UserData is not available
-	/// The returned dictionary always includes a "userId" key when possible, using the top-level userId
-	/// or falling back to userName/username, email/emailAddress, or full name (fullName/full_name or first+last).
+	/// When non-null, the returned dictionary always includes a "userId" key (using top-level userId or falling back
+	/// to userName/username, email/emailAddress, or full name); only the whole result is null when not available.
 	/// </summary>
-	/// <returns>Dictionary containing learner data, or null if not authenticated or UserData is not available</returns>
+	/// <returns>Dictionary containing learner data (always includes "userId" when non-null), or null if not authenticated or UserData is not available</returns>
 	public static Dictionary<string, string> GetUserData()
 	{
 		if (!Authentication.Authenticated())
