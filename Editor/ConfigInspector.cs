@@ -140,21 +140,21 @@ namespace AbxrLib.Editor
 
             EditorGUILayout.LabelField("Player Tracking", EditorStyles.boldLabel);
         
-            // Disable headset tracking UI if telemetry is disabled
-            config.disableAutomaticTelemetry = !EditorGUILayout.Toggle("Enable Automatic Telemetry", !config.disableAutomaticTelemetry);
-            EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
+            // Disable headset tracking UI when automatic telemetry is off
+            config.enableAutomaticTelemetry = EditorGUILayout.Toggle("Enable Automatic Telemetry", config.enableAutomaticTelemetry);
+            EditorGUI.BeginDisabledGroup(!config.enableAutomaticTelemetry);
                 config.headsetTracking = EditorGUILayout.Toggle(new GUIContent(
                     "Headset/Controller Tracking", "Track the Headset and Controllers"), config.headsetTracking);
                 config.positionTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
                     "Position Capture Period (seconds)", config.positionTrackingPeriodSeconds), 0.1f, 60f);
-                config.disableSceneEvents = !EditorGUILayout.Toggle("Enable Scene Events", !config.disableSceneEvents);
+                config.enableSceneEvents = EditorGUILayout.Toggle("Enable Scene Events", config.enableSceneEvents);
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Control", EditorStyles.boldLabel);
-            config.disableAutoStartAuthentication = !EditorGUILayout.Toggle(new GUIContent(
-                "Enable Auto Start Authentication", "When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()"), !config.disableAutoStartAuthentication);
-            
-            EditorGUI.BeginDisabledGroup(config.disableAutoStartAuthentication);
+            config.enableAutoStartAuthentication = EditorGUILayout.Toggle(new GUIContent(
+                "Enable Auto Start Authentication", "When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()"), config.enableAutoStartAuthentication);
+
+            EditorGUI.BeginDisabledGroup(!config.enableAutoStartAuthentication);
                 config.authenticationStartDelay = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
                     "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay), 0f, 60f);
             EditorGUI.EndDisabledGroup();
@@ -203,6 +203,8 @@ namespace AbxrLib.Editor
                 "Prune Sent Items Older Than (hours)", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours), 0, 8760);
             config.maximumCachedItems = Mathf.Clamp(EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems), 10, 10000);
 
+            config.enableArborInsightServiceClient = EditorGUILayout.Toggle(new GUIContent(
+                "Enable Insights Device Service Usage", "When enabled, the app will use the ArborInsightService device APK for auth and data on Android when installed. When disabled, only REST/cloud is used."), config.enableArborInsightServiceClient);
 
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
@@ -222,7 +224,7 @@ namespace AbxrLib.Editor
                 config.positionTrackingPeriodSeconds = defaultConfig.positionTrackingPeriodSeconds;
                 
                 // Authentication Control
-                config.disableAutoStartAuthentication = defaultConfig.disableAutoStartAuthentication;
+                config.enableAutoStartAuthentication = defaultConfig.enableAutoStartAuthentication;
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
                 config.returnToLauncherAfterAssessmentComplete = defaultConfig.returnToLauncherAfterAssessmentComplete;
                 
@@ -244,8 +246,9 @@ namespace AbxrLib.Editor
                 config.pruneSentItemsOlderThanHours = defaultConfig.pruneSentItemsOlderThanHours;
                 config.maximumCachedItems = defaultConfig.maximumCachedItems;
                 config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
-                config.disableAutomaticTelemetry = defaultConfig.disableAutomaticTelemetry;
-                config.disableSceneEvents = defaultConfig.disableSceneEvents;
+                config.enableArborInsightServiceClient = defaultConfig.enableArborInsightServiceClient;
+                config.enableAutomaticTelemetry = defaultConfig.enableAutomaticTelemetry;
+                config.enableSceneEvents = defaultConfig.enableSceneEvents;
                 
                 // Clean up the temporary instance
                 DestroyImmediate(defaultConfig);

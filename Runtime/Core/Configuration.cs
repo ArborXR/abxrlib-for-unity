@@ -18,6 +18,7 @@ using System;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Types;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace AbxrLib.Runtime.Core
 {
@@ -51,6 +52,8 @@ namespace AbxrLib.Runtime.Core
                 {
                     _instance = CreateInstance<Configuration>();
                 }
+
+                _instance.MigrateIfNeeded();
 
                 // Run validation once on first load so numeric ranges are clamped early; return value is ignored here.
                 if (!_validatedOnce)
@@ -282,9 +285,10 @@ namespace AbxrLib.Runtime.Core
         public float positionTrackingPeriodSeconds = 1f;
 
         [Header("Authentication Control")]
-        [Tooltip("When enabled, authentication will NOT start automatically on app launch. You must manually call Abxr.StartAuthentication()")]
-        public bool disableAutoStartAuthentication = false;
-        
+        [Tooltip("When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()")]
+        [FormerlySerializedAs("disableAutoStartAuthentication")]
+        public bool enableAutoStartAuthentication = true;
+
         [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
         public float authenticationStartDelay = 0f;
         
@@ -315,10 +319,30 @@ namespace AbxrLib.Runtime.Core
         public int pruneSentItemsOlderThanHours = 12;
         public int maximumCachedItems = 1024;
         public bool retainLocalAfterSent;
-        public bool disableAutomaticTelemetry;
-        public bool disableSceneEvents;
 
-        [HideInInspector] 
+        [Tooltip("When enabled, the app will use the ArborInsightService device APK for auth and data on Android when installed. When disabled, only REST/cloud is used.")]
+        public bool enableArborInsightServiceClient = true;
+
+        [FormerlySerializedAs("disableAutomaticTelemetry")]
+        public bool enableAutomaticTelemetry = true;
+
+        [FormerlySerializedAs("disableSceneEvents")]
+        public bool enableSceneEvents = true;
+
+        [SerializeField, HideInInspector]
+        private int _configSerializedVersion = 1;
+
+        [HideInInspector]
         public int maxDictionarySize = 50;
+
+        private void MigrateIfNeeded()
+        {
+            if (_configSerializedVersion >= 1) return;
+
+            enableAutoStartAuthentication = !enableAutoStartAuthentication;
+            enableAutomaticTelemetry = !enableAutomaticTelemetry;
+            enableSceneEvents = !enableSceneEvents;
+            _configSerializedVersion = 1;
+        }
     }
 }

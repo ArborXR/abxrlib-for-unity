@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine.SceneManagement;
 
@@ -34,7 +34,7 @@ namespace AbxrLib.Runtime.Core
             // Clear RigDetector cache since scene objects have changed
             RigDetector.ClearCache();
             
-            if (!Configuration.Instance.disableSceneEvents)
+            if (Configuration.Instance.enableSceneEvents)
             {
                 Abxr.Event("Scene Changed", new Dictionary<string, string> { ["Scene Name"] = newScene.name });
             }
@@ -42,7 +42,7 @@ namespace AbxrLib.Runtime.Core
     
         private static void OnActiveSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            if (!Configuration.Instance.disableSceneEvents)
+            if (Configuration.Instance.enableSceneEvents)
             {
                 Abxr.Event("Scene Loaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
             }
@@ -50,7 +50,7 @@ namespace AbxrLib.Runtime.Core
     
         private static void OnActiveSceneUnloaded(Scene scene)
         {
-            if (!Configuration.Instance.disableSceneEvents)
+            if (Configuration.Instance.enableSceneEvents)
             {
                 Abxr.Event("Scene Unloaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
             }

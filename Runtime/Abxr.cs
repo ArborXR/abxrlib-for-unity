@@ -201,7 +201,7 @@ public static partial class Abxr
 	
 	/// <summary>
 	/// Manually start the authentication process
-	/// Use this when autoStartAuthentication is disabled in configuration
+	/// Use this when Enable Auto Start Authentication is off in configuration
 	/// or when you want to trigger authentication at a specific time in your app
 	/// </summary>
 	public static void StartAuthentication() => X?.StartAuthentication();
@@ -432,8 +432,8 @@ public static partial class Abxr
 	// ── Telemetry ───────────────────────────────────────────────────────────────────────────────────────────────────
 	
 	/// <summary>
-	/// Manual telemetry activation for disabled automatic telemetry
-	/// If you select 'Disable Automatic Telemetry' in the AbxrLib configuration,
+	/// Manual telemetry activation when automatic telemetry is off.
+	/// If Enable Automatic Telemetry is unchecked in the AbxrLib configuration,
 	/// you can manually start tracking system telemetry with this function call.
 	/// This captures headset/controller movements, performance metrics, and environmental data.
 	/// </summary>

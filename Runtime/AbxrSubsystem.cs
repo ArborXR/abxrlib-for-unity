@@ -85,8 +85,9 @@ namespace AbxrLib.Runtime
 
             // Create services
 #if UNITY_ANDROID && !UNITY_EDITOR
-            _arborInsightService = new ArborInsightServiceClient();
             _arborClient = new ArborServiceClient();
+            if (Configuration.Instance.enableArborInsightServiceClient)
+                _arborInsightService = new ArborInsightServiceClient();
 #endif
             _authService = new AbxrAuthService(this, _arborClient);
             _dataService = new AbxrDataService(_authService, this);
@@ -119,7 +120,8 @@ namespace AbxrLib.Runtime
             
 #if UNITY_ANDROID && !UNITY_EDITOR
             _arborClient.Initialize();
-            _arborInsightService.Start();
+            if (_arborInsightService != null)
+                _arborInsightService.Start();
 #if PICO_ENTERPRISE_SDK_3
 			PicoQRCodeReader.AuthService = _authService;
 #endif
@@ -130,7 +132,7 @@ namespace AbxrLib.Runtime
 
             // Auto-start auth
             var settings = Configuration.Instance;
-            if (!settings.disableAutoStartAuthentication)
+            if (settings.enableAutoStartAuthentication)
             {
                 if (settings.authenticationStartDelay > 0)
                 {
@@ -143,11 +145,11 @@ namespace AbxrLib.Runtime
             }
             else
             {
-                Debug.Log("AbxrLib: Auto-start auth disabled. Call Abxr.Authenticate() manually when ready.");
+                Debug.Log("AbxrLib: Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
             }
 
             // Telemetry collector
-            if (!settings.disableAutomaticTelemetry)
+            if (settings.enableAutomaticTelemetry)
             {
                 _telemetryService.Start();
             }

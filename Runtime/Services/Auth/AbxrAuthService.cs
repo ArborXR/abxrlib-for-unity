@@ -101,7 +101,8 @@ namespace AbxrLib.Runtime.Services.Auth
             SetSessionData();
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-            ArborInsightServiceClient.WaitForServiceReady();
+            if (Configuration.Instance.enableArborInsightServiceClient)
+                ArborInsightServiceClient.WaitForServiceReady();
 #endif
         }
         
@@ -293,7 +294,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 bool useService = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
-                useService = ArborInsightServiceClient.ServiceIsFullyInitialized();
+                useService = Configuration.Instance.enableArborInsightServiceClient && ArborInsightServiceClient.ServiceIsFullyInitialized();
 #endif
 
                 string responseJson = null;
@@ -422,7 +423,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
             string configJson = null;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (ArborInsightServiceClient.ServiceIsFullyInitialized()) {
+            if (Configuration.Instance.enableArborInsightServiceClient && ArborInsightServiceClient.ServiceIsFullyInitialized()) {
                 configJson = ArborInsightServiceClient.GetAppConfig();
                 if (string.IsNullOrEmpty(configJson))
                 {
