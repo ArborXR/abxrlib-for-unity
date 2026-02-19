@@ -122,11 +122,9 @@ namespace AbxrLib.Runtime
             _arborClient.Initialize();
             if (_arborInsightService != null)
                 _arborInsightService.Start();
+            QRCodeReader.AuthService = _authService;
 #if PICO_ENTERPRISE_SDK_3
-			PicoQRCodeReader.AuthService = _authService;
-#endif
-#if META_QR_AVAILABLE
-	        MetaQRCodeReader.AuthService = _authService;
+            QRCodeReaderPico.AuthService = _authService;
 #endif
 #endif
 

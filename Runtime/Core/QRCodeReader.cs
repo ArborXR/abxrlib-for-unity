@@ -1,28 +1,18 @@
 /*
  * Copyright (c) 2025 ArborXR. All rights reserved.
  *
- * AbxrLib for Unity - Meta Quest QR Code Reader
+ * AbxrLib for Unity - Unified QR Code Reader
  *
- * This component handles QR code reading on Meta Quest headsets using Meta's Passthrough Camera API.
- * 
- * Requirements:
- * - Quest 3 (or 3S) running Horizon OS v74+ (when Passthrough Camera API was released)
- * - Unity 6+ with Meta XR Core SDK v74+
- * - horizonos.permission.HEADSET_CAMERA permission in AndroidManifest
- * 
- * Implementation:
- * - Uses WebCamTexture as primary method (Meta's Passthrough Camera API routes through WebCamTexture on Quest)
- * - Falls back to reflection-based OVR/OpenXR Passthrough Camera API if WebCamTexture fails
- * 
- * It only activates when:
- * - Running on a supported Meta Quest headset (Quest 3, Quest 3S, Quest Pro)
- * - Quest 2 is excluded due to insufficient camera quality
- * - Authentication mechanism type is "assessmentPin"
+ * Standard QR code reader for Android XR devices other than PICO. Uses WebCamTexture and ZXing.
+ * PICO devices use QRCodeReaderPico (PICO SDK) instead, as platform camera access requires their SDK.
+ *
+ * Supported devices: Meta Quest 3/3S/Pro and others in SupportedDevices (PICO excluded).
  *
  * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
  */
-#if UNITY_ANDROID && !UNITY_EDITOR && META_QR_AVAILABLE
+#if UNITY_ANDROID && !UNITY_EDITOR
 
+using System;
 using System.Collections;
 using System.Linq;
 using System.Reflection;
@@ -36,16 +26,16 @@ using ZXing;
 namespace AbxrLib.Runtime.Core
 {
     /// <summary>
-    /// QR code reader for Meta Quest headsets using forward-facing camera via Meta's Passthrough Camera API.
-    /// Only activates on supported Meta Quest headsets when assessmentPin authentication is required.
+    /// Unified QR code reader for Android XR devices (Meta Quest, PICO, etc.). Uses WebCamTexture + ZXing.
+    /// Only activates on supported devices; camera discovery is device-aware for different headset vendors.
     /// </summary>
-    public class MetaQRCodeReader : MonoBehaviour
+    public class QRCodeReader : MonoBehaviour
     {
-        public static MetaQRCodeReader Instance;
+        public static QRCodeReader Instance;
         public static AbxrAuthService AuthService;
-        
-        // List of supported Meta Quest devices (excludes Quest 2 due to camera quality)
-        private static readonly string[] SupportedDevices = 
+
+        // Supported devices: Meta Quest and other non-PICO XR devices. PICO uses QRCodeReaderPico (SDK) instead.
+        private static readonly string[] SupportedDevices =
         {
             "Oculus Quest 3",
             "Oculus Quest 3S",
@@ -105,11 +95,11 @@ namespace AbxrLib.Runtime.Core
             if (Instance == null)
             {
                 Instance = this;
-                Debug.Log("AbxrLib: MetaQRCodeReader Instance activated successfully.");
+                Debug.Log("AbxrLib: QRCodeReader Instance activated successfully.");
             }
             else
             {
-                Debug.LogWarning("AbxrLib: MetaQRCodeReader Instance already exists. Destroying duplicate.");
+                Debug.LogWarning("AbxrLib: QRCodeReader Instance already exists. Destroying duplicate.");
                 Destroy(gameObject);
             }
         }
@@ -125,6 +115,8 @@ namespace AbxrLib.Runtime.Core
         
         private void OnDestroy()
         {
+            if (Instance == this)
+                Instance = null;
             if (_webCamRenderTexture != null)
             {
                 _webCamRenderTexture.Release();
@@ -203,8 +195,19 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         private static bool IsDeviceSupported()
         {
-            // Check supported devices
-            return SupportedDevices.Any(supportedDevice => DeviceModel.deviceModel.Equals(supportedDevice, System.StringComparison.OrdinalIgnoreCase));
+            string model = DeviceModel.deviceModel ?? "";
+            return SupportedDevices.Any(supportedDevice => model.Equals(supportedDevice, System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// True when the device is a Meta Quest (Quest 3, 3S, Pro). Used for Quest-specific permissions and OpenXR checks.
+        /// </summary>
+        private static bool IsMetaDevice()
+        {
+            string model = DeviceModel.deviceModel ?? "";
+            return model.Equals("Oculus Quest 3", System.StringComparison.OrdinalIgnoreCase) ||
+                   model.Equals("Oculus Quest 3S", System.StringComparison.OrdinalIgnoreCase) ||
+                   model.Equals("Oculus Quest Pro", System.StringComparison.OrdinalIgnoreCase);
         }
         
         /// <summary>
@@ -387,7 +390,7 @@ namespace AbxrLib.Runtime.Core
                 if (!allFeaturesEnabled)
                 {
                     Debug.LogError($"AbxrLib: Missing required OpenXR features: {missingFeatures.TrimEnd(',', ' ')}");
-                    Debug.LogError("AbxrLib: Please enable these features in Project Settings > XR Plug-in Management > OpenXR > OpenXR Feature Groups");
+                    LogMetaOpenXRHelp();
                     return false;
                 }
                 
@@ -398,6 +401,15 @@ namespace AbxrLib.Runtime.Core
                 Debug.LogWarning($"AbxrLib: Error checking OpenXR features: {ex.Message}. Assuming features are enabled.");
                 return true; // Don't block if we can't check
             }
+        }
+        
+        private static void LogMetaOpenXRHelp()
+        {
+            if (!IsMetaDevice()) return;
+            Debug.LogError("AbxrLib: Please enable the following in Project Settings > XR Plug-in Management > OpenXR > OpenXR Feature Groups:");
+            Debug.LogError("AbxrLib:   - Meta Quest Support");
+            Debug.LogError("AbxrLib:   - Meta Quest: Camera (Passthrough)");
+            Debug.LogError("AbxrLib:   - Meta Quest: Session");
         }
         
         /// <summary>
@@ -480,32 +492,27 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
             
-            // Check HEADSET_CAMERA permission (Quest-specific, required for passthrough camera)
-            try
+            // On Meta Quest, HEADSET_CAMERA is required for passthrough camera; other devices use standard Camera only
+            if (IsMetaDevice())
             {
-                using AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-                using AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-                using AndroidJavaClass contextClass = new AndroidJavaClass("android.content.Context");
-                using AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager");
-                int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA", 
-                    currentActivity.Call<string>("getPackageName"));
-                    
-                // 0 = PERMISSION_GRANTED, -1 = PERMISSION_DENIED
-                if (permissionCheck != 0)
+                try
+                {
+                    using AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                    using AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                    using AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager");
+                    int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA",
+                        currentActivity.Call<string>("getPackageName"));
+                    if (permissionCheck != 0)
+                    {
+                        Debug.LogWarning("AbxrLib: QR scanning not available - HEADSET_CAMERA permission check failed (Quest)");
+                        return false;
+                    }
+                }
+                catch (System.Exception)
                 {
                     Debug.LogWarning("AbxrLib: QR scanning not available - HEADSET_CAMERA permission check failed");
-                    Debug.LogWarning("AbxrLib: To enable HEADSET_CAMERA permission:");
-                    Debug.LogWarning("AbxrLib: 1. Open Quest Settings > Privacy & Safety > App Permissions > Headset Cameras");
-                    Debug.LogWarning("AbxrLib: 2. Find your app and enable camera access");
-                    Debug.LogWarning("AbxrLib: 3. The 'Scan QR Code' button will appear automatically once enabled");
                     return false;
                 }
-            }
-            catch (System.Exception)
-            {
-                // If we can't check the permission, assume it's not available
-                Debug.LogWarning("AbxrLib: QR scanning not available - HEADSET_CAMERA permission check failed");
-                return false;
             }
 #endif
             return true;
@@ -556,31 +563,20 @@ namespace AbxrLib.Runtime.Core
         public static bool AreCameraPermissionsDenied()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            // Check standard camera permission
             if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
-            {
                 return true;
-            }
-            
-            // Check HEADSET_CAMERA permission
-            try
+            if (IsMetaDevice())
             {
-                using AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-                using AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-                using AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager");
-                int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA", 
-                    currentActivity.Call<string>("getPackageName"));
-                    
-                // -1 = PERMISSION_DENIED
-                if (permissionCheck == -1)
+                try
                 {
-                    return true;
+                    using AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                    using AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                    using AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager");
+                    int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA",
+                        currentActivity.Call<string>("getPackageName"));
+                    if (permissionCheck == -1) return true;
                 }
-            }
-            catch (System.Exception)
-            {
-                // If we can't check, assume not denied (unknown state)
-                return false;
+                catch (System.Exception) { return false; }
             }
 #endif
             return false;
@@ -591,18 +587,15 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         private IEnumerator InitializeCamera()
         {
-            // Verify OpenXR features are enabled before attempting camera initialization
-            if (!CheckOpenXRFeatures())
+            // On Meta Quest, verify OpenXR camera features are enabled; other devices skip this
+            if (IsMetaDevice() && !CheckOpenXRFeatures())
             {
                 Debug.LogError("AbxrLib: Cannot initialize camera - required OpenXR features are not enabled.");
-                Debug.LogError("AbxrLib: Please enable the following in Project Settings > XR Plug-in Management > OpenXR > OpenXR Feature Groups:");
-                Debug.LogError("AbxrLib:   - Meta Quest Support");
-                Debug.LogError("AbxrLib:   - Meta Quest: Camera (Passthrough)");
-                Debug.LogError("AbxrLib:   - Meta Quest: Session");
-                _isInitializing = false; // Reset on failure
+                LogMetaOpenXRHelp();
+                _isInitializing = false;
                 yield break;
             }
-            
+
             // Request camera permission on Android
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
@@ -619,7 +612,6 @@ namespace AbxrLib.Runtime.Core
             }
 #endif
             
-            // Initialize WebCamTexture (Meta's Passthrough Camera API is accessed via WebCamTexture on Quest)
             yield return StartCoroutine(InitializeWebCamTexture());
             
             if (!_cameraInitialized)
@@ -630,7 +622,48 @@ namespace AbxrLib.Runtime.Core
         }
         
         /// <summary>
-        /// Initialize WebCamTexture (Meta's Passthrough Camera API routes through WebCamTexture on Quest 3+)
+        /// Select the best camera for the current device. Device-aware so Meta, PICO, and future devices can use different names/paths.
+        /// </summary>
+        private static WebCamDevice? SelectCameraForDevice(WebCamDevice[] devices)
+        {
+            if (devices == null || devices.Length == 0) return null;
+
+            string model = DeviceModel.deviceModel ?? "";
+            string[] preferredNames = null;
+            string[] nameContains = null;
+
+            if (IsMetaDevice())
+            {
+                preferredNames = new[] { "Camera 1" };
+                nameContains = new[] { "front", "passthrough" };
+            }
+            else
+            {
+                preferredNames = Array.Empty<string>();
+                nameContains = new[] { "front", "camera", "passthrough" };
+            }
+
+            foreach (WebCamDevice device in devices)
+            {
+                if (preferredNames != null && preferredNames.Any(p => device.name.Equals(p, System.StringComparison.OrdinalIgnoreCase)))
+                    return device;
+            }
+            foreach (WebCamDevice device in devices)
+            {
+                if (device.isFrontFacing) return device;
+            }
+            foreach (WebCamDevice device in devices)
+            {
+                string lower = device.name.ToLower();
+                if (nameContains != null && nameContains.Any(k => lower.Contains(k)))
+                    return device;
+            }
+            Debug.Log($"AbxrLib: No preferred camera found for device '{model}'. Using first available: '{devices[0].name}'");
+            return devices[0];
+        }
+
+        /// <summary>
+        /// Initialize WebCamTexture with device-aware camera selection.
         /// </summary>
         private IEnumerator InitializeWebCamTexture()
         {
@@ -650,83 +683,24 @@ namespace AbxrLib.Runtime.Core
                 }
             }
             
-            // Check headset camera permission (Quest-specific)
-            // Note: This permission may need to be granted in system settings
-            try
+            if (IsMetaDevice())
             {
-                using AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-                using AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-                using AndroidJavaClass contextClass = new AndroidJavaClass("android.content.Context");
-                using AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager");
-                // Check if permission exists in manifest
-                int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA", 
-                    currentActivity.Call<string>("getPackageName"));
-                    
-                if (permissionCheck == 0) // PERMISSION_GRANTED
+                try
                 {
+                    using AndroidJavaClass unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                    using AndroidJavaObject currentActivity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                    using AndroidJavaObject packageManager = currentActivity.Call<AndroidJavaObject>("getPackageManager");
+                    int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA",
+                        currentActivity.Call<string>("getPackageName"));
+                    if (permissionCheck != 0)
+                        Debug.LogWarning("AbxrLib: HEADSET_CAMERA permission not granted. Quest camera may not work.");
                 }
-                else
-                {
-                    Debug.LogWarning("AbxrLib: HEADSET_CAMERA permission check returned: " + permissionCheck + " (0=granted, -1=denied).");
-                    Debug.LogWarning("AbxrLib: IMPORTANT: To enable camera access on Quest:");
-                    Debug.LogWarning("AbxrLib: 1. Enable 'Meta Quest Camera Passthrough' feature in OpenXR Package Settings");
-                    Debug.LogWarning("AbxrLib: 2. Grant camera permission in Quest Settings > Privacy > Camera Access");
-                    Debug.LogWarning("AbxrLib: 3. Ensure Meta XR Core SDK v74+ is installed");
-                }
-            }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"AbxrLib: Could not check HEADSET_CAMERA permission: {ex.Message}");
+                catch (System.Exception ex) { Debug.LogWarning($"AbxrLib: Could not check HEADSET_CAMERA: {ex.Message}"); }
             }
 #endif
-            
-            // Find the camera - prioritize based on known working patterns for Quest 3
+
             WebCamDevice[] devices = WebCamTexture.devices;
-            WebCamDevice? selectedCamera = null;
-            
-            // Strategy 1: Try "Camera 1" first (known to work on Quest 3)
-            foreach (WebCamDevice device in devices)
-            {
-                if (device.name == "Camera 1")
-                {
-                    selectedCamera = device;
-                    break;
-                }
-            }
-            
-            // Strategy 2: Try front-facing camera (standard Quest 3 passthrough camera)
-            if (!selectedCamera.HasValue)
-            {
-                foreach (WebCamDevice device in devices)
-                {
-                    if (device.isFrontFacing)
-                    {
-                        selectedCamera = device;
-                        break;
-                    }
-                }
-            }
-            
-            // Strategy 3: Try name pattern matching (passthrough, front, etc.)
-            if (!selectedCamera.HasValue)
-            {
-                foreach (WebCamDevice device in devices)
-                {
-                    string deviceName = device.name.ToLower();
-                    if (deviceName.Contains("front") || deviceName.Contains("passthrough"))
-                    {
-                        selectedCamera = device;
-                        break;
-                    }
-                }
-            }
-            
-            // Strategy 4: Last resort - use first available camera
-            if (!selectedCamera.HasValue && devices.Length > 0)
-            {
-                selectedCamera = devices[0];
-                Debug.LogWarning($"AbxrLib: No preferred camera found. Using first available camera: '{devices[0].name}'");
-            }
+            WebCamDevice? selectedCamera = SelectCameraForDevice(devices);
             
             if (!selectedCamera.HasValue)
             {
@@ -850,10 +824,7 @@ namespace AbxrLib.Runtime.Core
             {
                 Debug.LogError($"AbxrLib: Failed to initialize WebCamTexture. Final state: isPlaying={_webCamTexture.isPlaying}, size={_webCamTexture.width}x{_webCamTexture.height}");
                 Debug.LogError("AbxrLib: TROUBLESHOOTING:");
-                Debug.LogError("AbxrLib: 1. Check Quest Settings > Privacy > Camera Access - ensure app has permission");
-                Debug.LogError("AbxrLib: 2. Enable 'Meta Quest Camera Passthrough' in OpenXR Package Settings");
-                Debug.LogError("AbxrLib: 3. Verify HEADSET_CAMERA permission is in AndroidManifest.xml (should be auto-added)");
-                Debug.LogError("AbxrLib: 4. On Quest 3+, WebCamTexture should route to Passthrough Camera API if properly configured");
+                Debug.LogError("AbxrLib: Check camera permissions and that a camera is available for this device.");
                 _isInitializing = false; // Reset on failure
                 if (_webCamTexture != null)
                 {
@@ -1278,7 +1249,7 @@ namespace AbxrLib.Runtime.Core
             }
             
             // Create canvas root
-            _overlayCanvas = new GameObject("MetaQRScanOverlay");
+            _overlayCanvas = new GameObject("QRScanOverlay");
             _overlayCanvas.transform.SetParent(transform);
             
             // Add Canvas component (World Space)
