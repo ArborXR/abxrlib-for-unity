@@ -276,6 +276,9 @@ namespace AbxrLib.Runtime
 			return userData;
 		}
 
+		/// <summary>Returns the full auth response from the last successful authentication (Token, UserData, AppId, Modules, PackageName, etc.). Null if not authenticated.</summary>
+		internal AuthResponse GetAuthResponse() => _authService?.ResponseData;
+
 		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
 		private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)
 		{
