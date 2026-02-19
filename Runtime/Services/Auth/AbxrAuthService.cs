@@ -138,7 +138,11 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             // Check auth handoff (command-line / intent)
-            if (CheckAuthHandoff()) return;
+            if (CheckAuthHandoff())
+            {
+                _attemptActive = false;
+                return;
+            }
 
             _runner.StartCoroutine(AuthenticateCoroutine());
         }
