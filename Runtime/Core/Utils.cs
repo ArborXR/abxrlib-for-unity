@@ -738,7 +738,7 @@ namespace AbxrLib.Runtime.Core
             return "";
         }
     
-        public static long GetUnityTime() => (long)(Time.time * 1000f) + AbxrManager.StartTimeMs;
+        public static long GetUnityTime() => (long)(Time.time * 1000f) + AbxrSubsystem.StartTimeMs;
 
         /// <summary>
         /// Convert raw module dictionaries to typed ModuleData objects.

@@ -199,7 +199,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 StartCoroutine(KeyboardHandler.ProcessingVisual());
                 // Ensure inputSource is set to "user" for manual keyboard input
                 AuthService.SetInputSource("user");
-                AbxrManager.Instance.SubmitInput(inputField.text);
+                AbxrSubsystem.Instance.SubmitInput(inputField.text);
                 inputField.text = "";
             }
             catch (System.Exception ex)

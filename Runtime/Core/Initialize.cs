@@ -19,9 +19,9 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<MetaQRCodeReader>("MetaQRCodeReader");
 #endif
 #endif
-            if (AbxrManager.Instance != null) return;
+            if (AbxrSubsystem.Instance != null) return;
             var go = new GameObject("[AbxrLib]");
-            go.AddComponent<AbxrManager>();
+            go.AddComponent<AbxrSubsystem>();
         }
     }
 }

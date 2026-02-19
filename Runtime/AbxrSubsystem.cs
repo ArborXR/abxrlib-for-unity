@@ -17,10 +17,10 @@ using UnityEngine;
 namespace AbxrLib.Runtime
 {
     [DefaultExecutionOrder(-100)]
-    public class AbxrManager : MonoBehaviour
+    internal class AbxrSubsystem : MonoBehaviour
     {
         // ── Singleton ────────────────────────────────────────────────
-        internal static AbxrManager Instance { get; private set; }
+        internal static AbxrSubsystem Instance { get; private set; }
 
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
@@ -890,10 +890,7 @@ namespace AbxrLib.Runtime
 		/// </summary>
 		/// <param name="key">The key to validate</param>
 		/// <returns>True if the key is reserved, false otherwise</returns>
-		private static bool IsReservedSuperMetaDataKey(string key)
-		{
-			return key == "module" || key == "moduleName" || key == "moduleId" || key == "moduleOrder";
-		}
+		private static bool IsReservedSuperMetaDataKey(string key) => ReservedKeys.Contains(key);
 
 		private void LoadSuperMetaData()
 		{

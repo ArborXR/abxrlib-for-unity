@@ -161,7 +161,7 @@ public static partial class Abxr
 	/// <param name="responses">If a multiple choice poll, you need to provide between 2 and 8 possible responses</param>
 	/// <param name="callback">Optional callback that will be called with the selected string value (Multiple-choice poll only)</param>
 	public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null) =>
-		M?.PollUser(prompt, pollType, responses, callback);
+		X?.PollUser(prompt, pollType, responses, callback);
 	
 	/// <summary>
 	/// Allow the user to toggle whether the authentication UI follows them or stay
@@ -179,7 +179,7 @@ public static partial class Abxr
 	/// Returns null if authentication has not completed or UserData is not available
 	/// </summary>
 	/// <returns>Dictionary containing learner data, or null if not authenticated or UserData is not available</returns>
-	public static Dictionary<string, string> GetUserData() => M?.GetUserData();
+	public static Dictionary<string, string> GetUserData() => X?.GetUserData();
 	
 	/// <summary>
 	/// Update user data (UserId and UserData) and reauthenticate to sync with server
@@ -189,22 +189,22 @@ public static partial class Abxr
 	/// <param name="userId">Optional user ID to update</param>
 	/// <param name="additionalUserData">Optional additional user data dictionary to merge with existing UserData</param>
 	public static void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null) =>
-		M?.SetUserData(userId, additionalUserData);
+		X?.SetUserData(userId, additionalUserData);
 	
 	/// <summary>
 	/// Manually start the authentication process
 	/// Use this when autoStartAuthentication is disabled in configuration
 	/// or when you want to trigger authentication at a specific time in your app
 	/// </summary>
-	public static void StartAuthentication() => M?.StartAuthentication();
-	public static void ReAuthenticate() => M?.StartAuthentication();
+	public static void StartAuthentication() => X?.StartAuthentication();
+	public static void ReAuthenticate() => X?.StartAuthentication();
 
 	/// <summary>
 	/// Start a new session with a fresh session identifier
 	/// Generates a new session ID and performs fresh authentication
 	/// Useful for starting new training experiences or resetting user context
 	/// </summary>
-	public static void StartNewSession() => M?.StartNewSession();
+	public static void StartNewSession() => X?.StartNewSession();
 	
 	
 	// ── Custom Events ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ public static partial class Abxr
 	/// <param name="metadata">Any additional information (optional)</param>
 	/// <param name="sendTelemetry">Send telemetry with the event (optional)</param>
 	public static void Event(string eventName, Dictionary<string, string> metadata = null, bool sendTelemetry = true) =>
-		M?.Event(eventName, metadata, sendTelemetry);
+		X?.Event(eventName, metadata, sendTelemetry);
 
 	/// <summary>
 	/// Add event information
@@ -225,7 +225,7 @@ public static partial class Abxr
 	/// <param name="position">Adds position tracking of the object</param>
 	/// <param name="metadata">Any additional information (optional)</param>
 	public static void Event(string eventName, Vector3 position, Dictionary<string, string> metadata = null) =>
-		M?.Event(eventName, position, metadata);
+		X?.Event(eventName, position, metadata);
 
 	/// <summary>
 	/// Start timing an event
@@ -233,7 +233,7 @@ public static partial class Abxr
 	/// Works with all event methods since they use Event() internally
 	/// </summary>
 	/// <param name="eventName">Name of the event to start timing</param>
-	public static void StartTimedEvent(string eventName) => M?.StartTimedEvent(eventName);
+	public static void StartTimedEvent(string eventName) => X?.StartTimedEvent(eventName);
 	
 	/// <summary>
 	/// Start tracking an assessment - essential for LMS integration and analytics
@@ -244,7 +244,7 @@ public static partial class Abxr
 	/// <param name="assessmentName">Name of the assessment to start</param>
 	/// <param name="meta">Optional metadata with assessment details</param>
 	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null) =>
-		M?.EventAssessmentStart(assessmentName, meta);
+		X?.EventAssessmentStart(assessmentName, meta);
 
 	/// <summary>
 	/// Complete an assessment with score and status - triggers LMS grade recording
@@ -255,7 +255,7 @@ public static partial class Abxr
 	/// <param name="status">Result status of the assessment (Pass, Fail, Complete, etc.)</param>
 	/// <param name="meta">Optional metadata with completion details</param>
 	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
-		M?.EventAssessmentComplete(assessmentName, score, status, meta);
+		X?.EventAssessmentComplete(assessmentName, score, status, meta);
 	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		EventAssessmentComplete(assessmentName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
@@ -269,7 +269,7 @@ public static partial class Abxr
 	/// <param name="experienceName">Name of the experience to start</param>
 	/// <param name="meta">Optional metadata with experience details</param>
 	public static void EventExperienceStart(string experienceName, Dictionary<string, string> meta = null) =>
-		M?.EventExperienceStart(experienceName, meta);
+		X?.EventExperienceStart(experienceName, meta);
 	
 	/// <summary>
 	/// Complete an experience - developer-friendly wrapper for EventAssessmentComplete
@@ -279,7 +279,7 @@ public static partial class Abxr
 	/// <param name="experienceName">Name of the experience (must match the start event)</param>
 	/// <param name="meta">Optional metadata with completion details</param>
 	public static void EventExperienceComplete(string experienceName, Dictionary<string, string> meta = null) =>
-		M?.EventExperienceComplete(experienceName, meta);
+		X?.EventExperienceComplete(experienceName, meta);
 	
 	/// <summary>
 	/// Start tracking an objective - individual learning goals within assessments
@@ -288,7 +288,7 @@ public static partial class Abxr
 	/// <param name="objectiveName">Name of the objective to start</param>
 	/// <param name="meta">Optional metadata with objective details</param>
 	public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null) =>
-		M?.EventObjectiveStart(objectiveName, meta);
+		X?.EventObjectiveStart(objectiveName, meta);
 
 	/// <summary>
 	/// Complete an objective with score and status - contributes to overall assessment
@@ -299,7 +299,7 @@ public static partial class Abxr
 	/// <param name="status">Result status (Complete, Pass, Fail, etc.)</param>
 	/// <param name="meta">Optional metadata with completion details</param>
 	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
-		M?.EventObjectiveComplete(objectiveName, score, status, meta);
+		X?.EventObjectiveComplete(objectiveName, score, status, meta);
 	public static void EventObjectiveComplete(string objectiveName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		EventObjectiveComplete(objectiveName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	
@@ -310,7 +310,7 @@ public static partial class Abxr
 	/// <param name="interactionName">Name of the interaction to start</param>
 	/// <param name="meta">Optional metadata with interaction context</param>
 	public static void EventInteractionStart(string interactionName, Dictionary<string, string> meta = null) =>
-		M?.EventInteractionStart(interactionName, meta);
+		X?.EventInteractionStart(interactionName, meta);
 
 	/// <summary>
 	/// Complete an interaction with type, response, and optional metadata
@@ -322,7 +322,7 @@ public static partial class Abxr
 	/// <param name="response">User's response (e.g., "A", "red_pill", "blue_pill")</param>
 	/// <param name="meta">Optional metadata with interaction details</param>
 	public static void EventInteractionComplete(string interactionName, InteractionType type, InteractionResult result = InteractionResult.Neutral, string response = null, Dictionary<string, string> meta = null) =>
-		M?.EventInteractionComplete(interactionName, type, result, response, meta);
+		X?.EventInteractionComplete(interactionName, type, result, response, meta);
 	public static void EventInteractionComplete(string interactionName, InteractionType type, string response = "", Dictionary<string, string> meta = null) =>
 		EventInteractionComplete(interactionName, type, InteractionResult.Neutral, response, meta); // Just here for backwards compatability
 	// backwards compatibility for very old method signature (string, string, string, InteractionType, meta)
@@ -346,7 +346,7 @@ public static partial class Abxr
 	/// <param name="levelName">Name of the level to start</param>
 	/// <param name="meta">Optional metadata with level details</param>
 	public static void EventLevelStart(string levelName, Dictionary<string, string> meta = null) =>
-		M?.EventLevelStart(levelName, meta);
+		X?.EventLevelStart(levelName, meta);
 	
 	/// <summary>
 	/// Complete a level with score and optional metadata
@@ -356,7 +356,7 @@ public static partial class Abxr
 	/// <param name="score">Numerical score achieved for this level</param>
 	/// <param name="meta">Optional metadata with completion details</param>
 	public static void EventLevelComplete(string levelName, string score, Dictionary<string, string> meta = null) =>
-		M?.EventLevelComplete(levelName, score, meta);
+		X?.EventLevelComplete(levelName, score, meta);
 	
 	/// <summary>
 	/// Flag critical training events for auto-inclusion in the Critical Choices Chart
@@ -366,7 +366,7 @@ public static partial class Abxr
 	/// <param name="label">Label for the critical event (will be prefixed with CRITICAL_ABXR_)</param>
 	/// <param name="meta">Optional metadata with critical event details</param>
 	public static void EventCritical(string label, Dictionary<string, string> meta = null) =>
-		M?.EventCritical(label, meta);
+		X?.EventCritical(label, meta);
 	
 	
 	// ── Logging ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -378,7 +378,7 @@ public static partial class Abxr
 	/// <param name="logLevel">Log level (defaults to LogLevel.Info)</param>
 	/// <param name="metadata">Any additional information (optional)</param>
 	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null) =>
-		M?.Log(logMessage, logLevel, metadata);
+		X?.Log(logMessage, logLevel, metadata);
 
 	/// <summary>
 	/// Add log information at the 'Debug' level
@@ -429,7 +429,7 @@ public static partial class Abxr
 	/// you can manually start tracking system telemetry with this function call.
 	/// This captures headset/controller movements, performance metrics, and environmental data.
 	/// </summary>
-	public static void TrackAutoTelemetry() => M?.TrackAutoTelemetry();
+	public static void TrackAutoTelemetry() => X?.TrackAutoTelemetry();
 	
 	/// <summary>
 	/// Send spatial, hardware, or system telemetry data for XR analytics
@@ -438,11 +438,11 @@ public static partial class Abxr
 	/// <param name="telemetryName">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
 	/// <param name="telemetryData">Key-value pairs of telemetry measurements</param>
 	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData) =>
-		M?.Telemetry(telemetryName, telemetryData);
+		X?.Telemetry(telemetryName, telemetryData);
 	
 	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
 	public static void TelemetryEntry(string telemetryName, Dictionary<string, string> telemetryData) =>
-		M?.Telemetry(telemetryName, telemetryData);
+		X?.Telemetry(telemetryName, telemetryData);
 	
 	
 	// ── Storage ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -458,7 +458,7 @@ public static partial class Abxr
 	/// <param name="callback">Return value when finished</param>
 	/// <returns>All the session data stored under the default name 'state'</returns>
 	public static IEnumerator StorageGetDefaultEntry(StorageScope scope, Action<List<Dictionary<string, string>>> callback) =>
-		M?.StorageGetDefaultEntry(scope, callback);
+		X?.StorageGetDefaultEntry(scope, callback);
 	
 	/// <summary>
 	/// Get the session data with the given name
@@ -472,7 +472,7 @@ public static partial class Abxr
 	/// <param name="callback">Return value when finished</param>
 	/// <returns>All the session data stored under the given name</returns>
 	public static IEnumerator StorageGetEntry(string entryName, StorageScope scope, Action<List<Dictionary<string, string>>> callback) =>
-		M?.StorageGetEntry(entryName, scope, callback);
+		X?.StorageGetEntry(entryName, scope, callback);
 	
 	/// <summary>
 	/// Set the session data with the default name 'state'
@@ -481,7 +481,7 @@ public static partial class Abxr
 	/// <param name="scope">Store under 'device' or 'user'</param>
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
 	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest) =>
-		M?.StorageSetDefaultEntry(entry, scope, policy);
+		X?.StorageSetDefaultEntry(entry, scope, policy);
 	
 	/// <summary>
 	/// Set the session data with the given name
@@ -491,14 +491,14 @@ public static partial class Abxr
 	/// <param name="scope">Store under 'device' or 'user'</param>
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
 	public static void StorageSetEntry(string entryName, Dictionary<string, string> entryData, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest) =>
-		M?.StorageSetEntry(entryName, entryData, scope, policy);
+		X?.StorageSetEntry(entryName, entryData, scope, policy);
 	
 	/// <summary>
 	/// Remove the session data stored under the default name 'state'
 	/// </summary>
 	/// <param name="scope">Remove from 'device' or 'user' (defaults to 'user')</param>
 	public static void StorageRemoveDefaultEntry(StorageScope scope = StorageScope.User) =>
-		M?.StorageRemoveDefaultEntry(scope);
+		X?.StorageRemoveDefaultEntry(scope);
 	
 	/// <summary>
 	/// Remove the session data stored under the given name
@@ -506,14 +506,14 @@ public static partial class Abxr
 	/// <param name="entryName">The name of the entry to remove</param>
 	/// <param name="scope">Remove from 'device' or 'user' (defaults to 'user')</param>
 	public static void StorageRemoveEntry(string entryName, StorageScope scope = StorageScope.User) =>
-		M?.StorageRemoveEntry(entryName, scope);
+		X?.StorageRemoveEntry(entryName, scope);
 	
 	/// <summary>
 	/// Remove all the session data stored on the device or for the current user
 	/// </summary>
 	/// <param name="scope">Remove all from 'device' or 'user' (defaults to 'user')</param>
 	public static void StorageRemoveMultipleEntries(StorageScope scope = StorageScope.User) =>
-		M?.StorageRemoveMultipleEntries(scope);
+		X?.StorageRemoveMultipleEntries(scope);
 	
 	
 	// ── AI Proxy ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -529,7 +529,7 @@ public static partial class Abxr
 	/// <param name="callback">Return value when finished</param>
 	/// <returns>The string returned by the LLM</returns>
 	public static IEnumerator AIProxy(string prompt, string llmProvider, Action<string> callback) =>
-		M?.AIProxy(prompt, llmProvider, callback);
+		X?.AIProxy(prompt, llmProvider, callback);
 	
 	///  <summary>
 	///  Send a prompt to the LLM provider
@@ -543,7 +543,7 @@ public static partial class Abxr
 	///  <param name="callback">Return value when finished</param>
 	///  <returns>The string returned by the LLM</returns>
 	public static IEnumerator AIProxy(string prompt, List<string> pastMessages, string llmProvider, Action<string> callback) =>
-		M?.AIProxy(prompt, pastMessages, llmProvider, callback);
+		X?.AIProxy(prompt, pastMessages, llmProvider, callback);
 
 	/// <summary>
 	/// Register a super metadata that will be automatically included in all events
@@ -552,7 +552,7 @@ public static partial class Abxr
 	/// <param name="key">Metadata name</param>
 	/// <param name="value">Metadata value</param>
 	/// <param name="overwrite">Overwrite existing super metadata (optional)</param>
-	public static void Register(string key, string value, bool overwrite = true) => M?.Register(key, value, overwrite);
+	public static void Register(string key, string value, bool overwrite = true) => X?.Register(key, value, overwrite);
 	
 	
 	// ── Super Metadata ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -563,30 +563,30 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="key">Metadata name</param>
 	/// <param name="value">Metadata value</param>
-	public static void RegisterOnce(string key, string value) => M?.RegisterOnce(key, value);
+	public static void RegisterOnce(string key, string value) => X?.RegisterOnce(key, value);
 	
 	/// <summary>
 	/// Remove a super metadata entry
 	/// </summary>
 	/// <param name="key">Metadata name to remove</param>
-	public static void Unregister(string key) => M?.Unregister(key);
+	public static void Unregister(string key) => X?.Unregister(key);
 
 	/// <summary>
 	/// Clear all super metadata
 	/// Clears all super metadata from persistent storage (matches Mixpanel.Reset())
 	/// </summary>
-	public static void Reset() => M?.Reset();
+	public static void Reset() => X?.Reset();
 
 	/// <summary>
 	/// Get a copy of all current super metadata
 	/// </summary>
 	/// <returns>Dictionary containing all super metadata</returns>
-	public static Dictionary<string, string> GetSuperMetaData() => M?.GetSuperMetaData();
+	public static Dictionary<string, string> GetSuperMetaData() => X?.GetSuperMetaData();
 	
 	
 	// ── Modules ─────────────────────────────────────────────────────────────────────────────────────────────────────
 	
-	public static bool StartModuleAtIndex(int moduleIndex) => M?.StartModuleAtIndex(moduleIndex) ?? false;
+	public static bool StartModuleAtIndex(int moduleIndex) => X?.StartModuleAtIndex(moduleIndex) ?? false;
 	
 	/// <summary>
 	/// Get all available modules from the authentication response
@@ -594,79 +594,79 @@ public static partial class Abxr
 	/// Returns empty list if no authentication has completed yet
 	/// </summary>
 	/// <returns>List of ModuleData objects with complete module information</returns>
-	public static List<ModuleData> GetModuleList() => M?.GetModuleList();
+	public static List<ModuleData> GetModuleList() => X?.GetModuleList();
 	
 	
 	// ── Arbor MDM API ───────────────────────────────────────────────────────────────────────────────────────────────
 	
 	/// <summary>Gets the UUID assigned to device by ArborXR.</summary>
 	/// <returns>UUID is provided as a string.</returns>
-	public static string GetDeviceId() => M?.GetDeviceId();
+	public static string GetDeviceId() => X?.GetDeviceId();
 
 	/// <summary>Gets the serial number assigned to device by OEM.</summary>
 	/// <returns>Serial number is provided as a string.</returns>
-	public static string GetDeviceSerial() => M?.GetDeviceSerial();
+	public static string GetDeviceSerial() => X?.GetDeviceSerial();
 
 	/// <summary>Gets the title given to device by admin through the ArborXR Web Portal.</summary>
-	public static string GetDeviceTitle() => M?.GetDeviceTitle();
+	public static string GetDeviceTitle() => X?.GetDeviceTitle();
 
 	/// <summary>Gets the tags added to device by admin through the ArborXR Web Portal.</summary>
 	/// <returns>Tags are represented as a string array. Array will be empty if no tags are assigned to device.</returns>
-	public static string[] GetDeviceTags() => M?.GetDeviceTags();
+	public static string[] GetDeviceTags() => X?.GetDeviceTags();
 
 	/// <summary>
 	///   Gets the UUID of the organization where the device is assigned. Organizations are created in the
 	///   ArborXR Web Portal.
 	/// </summary>
 	/// <returns>UUID is provided as a string.</returns>
-	public static string GetOrgId() => M?.GetOrgId();
+	public static string GetOrgId() => X?.GetOrgId();
 
 	/// <summary>Gets the name assigned to organization by admin through the ArborXR Web Portal.</summary>
-	public static string GetOrgTitle() => M?.GetOrgTitle();
+	public static string GetOrgTitle() => X?.GetOrgTitle();
 
 	/// <summary>Gets the identifier generated by ArborXR when admin assigns title to organization.</summary>
-	public static string GetOrgSlug() => M?.GetOrgSlug();
+	public static string GetOrgSlug() => X?.GetOrgSlug();
 
 	/// <summary>Gets the physical MAC address assigned to device by OEM.</summary>
 	/// <returns>MAC address is provided as a string.</returns>
-	public static string GetMacAddressFixed() => M?.GetMacAddressFixed();
+	public static string GetMacAddressFixed() => X?.GetMacAddressFixed();
 
 	/// <summary>Gets the randomized MAC address for the current WiFi connection.</summary>
 	/// <returns>MAC address is provided as a string.</returns>
-	public static string GetMacAddressRandom() => M?.GetMacAddressRandom();
+	public static string GetMacAddressRandom() => X?.GetMacAddressRandom();
 
 	/// <summary>Gets whether the device is SSO authenticated.</summary>
 	/// <returns>Whether the device is SSO authenticated.</returns>
-	public static bool GetIsAuthenticated() => M?.GetIsAuthenticated() ?? false;
+	public static bool GetIsAuthenticated() => X?.GetIsAuthenticated() ?? false;
 
 	/// <summary>Gets SSO access token.</summary>
 	/// <returns>SSO access token.</returns>
-	public static string GetAccessToken() => M?.GetAccessToken();
+	public static string GetAccessToken() => X?.GetAccessToken();
 
 	/// <summary>Gets SSO refresh token.</summary>
 	/// <returns>SSO refresh token.</returns>
-	public static string GetRefreshToken() => M?.GetRefreshToken();
+	public static string GetRefreshToken() => X?.GetRefreshToken();
 
 	/// <summary>Gets SSO token remaining lifetime.</summary>
 	/// <returns>The remaining lifetime of the access token in seconds.</returns>
-	public static DateTime? GetExpiresDateUtc() => M?.GetExpiresDateUtc();
+	public static DateTime? GetExpiresDateUtc() => X?.GetExpiresDateUtc();
 
 	// <summary>Gets the device fingerprint.</summary>
 	/// <returns>The device fingerprint.</returns>
-	public static string GetFingerprint() => M?.GetFingerprint();
+	public static string GetFingerprint() => X?.GetFingerprint();
 	
 	// ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 	
-	private static AbxrManager M
+	private static AbxrSubsystem X
 	{
 		get
 		{
-			if (AbxrManager.Instance == null)
+			if (AbxrSubsystem.Instance == null)
 			{
 				Debug.LogWarning("AbxrLib: Not initialized yet.");
 				return null;
 			}
-			return AbxrManager.Instance;
+			return AbxrSubsystem.Instance;
 		}
 	}
 }
