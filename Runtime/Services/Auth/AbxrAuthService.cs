@@ -263,10 +263,11 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── POST /v1/auth/token ──────────────────────────────────────
 
-        /// <summary>Holds the response body from a single REST auth attempt (used so coroutine can "return" it).</summary>
+        /// <summary>Holds the response body and status from a single REST auth attempt (used so coroutine can "return" it).</summary>
         private class AuthResponseHolder
         {
             public string Response;
+            public long ResponseCode;
         }
 
         /// <summary>Attempts auth via service (when available) or REST. When withRetry is true, retries the same path until success (parity with main). When false (e.g. keyboard auth), one attempt only.</summary>
@@ -316,6 +317,15 @@ namespace AbxrLib.Runtime.Services.Auth
                     var holder = new AuthResponseHolder();
                     yield return SendAuthRequestRest(json, holder);
                     responseJson = holder.Response;
+
+                    // 4xx client errors (Invalid org_id, Invalid app_id, invalid fingerprint/auth_secret, etc.)
+                    // require config or build or headset changes; retrying will not change the API response.
+                    if (holder.ResponseCode >= 400 && holder.ResponseCode < 500)
+                    {
+                        _payload.buildType = savedBuildType;
+                        onComplete(false);
+                        yield break;
+                    }
                 }
 
                 if (ApplyAuthResponse(responseJson, fromService: useService))
@@ -340,10 +350,11 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        /// <summary>Performs one POST to /v1/auth/token and sets holder.Response to the response body or null on failure.</summary>
+        /// <summary>Performs one POST to /v1/auth/token and sets holder.Response and holder.ResponseCode.</summary>
         private IEnumerator SendAuthRequestRest(string json, AuthResponseHolder holder)
         {
             holder.Response = null;
+            holder.ResponseCode = 0;
             string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token").ToString();
             using var request = new UnityWebRequest(url, "POST");
             byte[] body = Encoding.UTF8.GetBytes(json);
@@ -353,6 +364,7 @@ namespace AbxrLib.Runtime.Services.Auth
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
             yield return request.SendWebRequest();
 
+            holder.ResponseCode = request.responseCode;
             if (request.result == UnityWebRequest.Result.Success && request.responseCode >= 200 && request.responseCode < 300)
                 holder.Response = request.downloadHandler?.text;
             else if (!string.IsNullOrEmpty(request.downloadHandler?.text))

@@ -330,7 +330,7 @@ namespace AbxrLib.Runtime.Core
         public bool enableSceneEvents = true;
 
         [SerializeField, HideInInspector]
-        private int _configSerializedVersion = 1;
+        private int _configSerializedVersion = 0;
 
         [HideInInspector]
         public int maxDictionarySize = 50;
@@ -343,6 +343,9 @@ namespace AbxrLib.Runtime.Core
             enableAutomaticTelemetry = !enableAutomaticTelemetry;
             enableSceneEvents = !enableSceneEvents;
             _configSerializedVersion = 1;
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+#endif
         }
     }
 }
