@@ -241,15 +241,24 @@ namespace AbxrLib.Runtime.Services.Auth
 
             // Fetch config (which may contain an auth mechanism / pin prompt)
             bool configOk = false;
-            yield return _runner.StartCoroutine(GetConfigurationCoroutine(ok => configOk = ok));
+            string configFailureDetail = null;
+            yield return _runner.StartCoroutine(GetConfigurationCoroutine((ok, detail) => { configOk = ok; configFailureDetail = detail; }));
             if (!configOk)
             {
                 _attemptActive = false;
-                OnFailed?.Invoke("AbxrLib: Config request failed");
+                string message = string.IsNullOrEmpty(configFailureDetail)
+                    ? "AbxrLib: Config request failed"
+                    : $"AbxrLib: Config request failed: {configFailureDetail}";
+                OnFailed?.Invoke(message);
                 yield break;
             }
 
-            if (_stopping || !_attemptActive) yield break;
+            if (_stopping || !_attemptActive)
+            {
+                _attemptActive = false;
+                OnFailed?.Invoke("AbxrLib: Auth stopped or attempt inactive");
+                yield break;
+            }
 
             if (!string.IsNullOrEmpty(_authMechanism.prompt))
             {
@@ -333,7 +342,6 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (useService)
                         _usedArborInsightServiceForSession = true;
                     _payload.buildType = savedBuildType;
-                    _attemptActive = false;
                     onComplete(true);
                     yield break;
                 }
@@ -429,27 +437,24 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── GET /v1/storage/config (or from service when auth was via ArborInsightService) ───
 
-        private IEnumerator GetConfigurationCoroutine(Action<bool> onComplete)
+        private IEnumerator GetConfigurationCoroutine(Action<bool, string> onComplete)
         {
-            if (_stopping || !_attemptActive) { onComplete(false); yield break; }
+            if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
             string configJson = null;
+            string failureDetail = null;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (Configuration.Instance.enableArborInsightServiceClient && ArborInsightServiceClient.ServiceIsFullyInitialized()) {
+            if (Configuration.Instance.enableArborInsightServiceClient && ArborInsightServiceClient.ServiceIsFullyInitialized())
                 configJson = ArborInsightServiceClient.GetAppConfig();
-                if (string.IsNullOrEmpty(configJson))
-                {
-                    Debug.LogWarning("AbxrLib: GetAppConfig returned empty; not falling back to REST when using ArborInsightService.");
-                    onComplete(false);
-                    yield break;
-                }
-            }
+            if (!string.IsNullOrEmpty(configJson))
+                Debug.Log("AbxrLib: GetConfiguration from ArborInsightService");
 #endif
-            if (string.IsNullOrEmpty(configJson)) // If the service is not fully initialized, fall back to REST.
+            if (string.IsNullOrEmpty(configJson)) // Service not initialized, or GetAppConfig returned empty (e.g. second-step auth); fall back to REST.
             {
-                string restJson = null;
-                yield return SendConfigRequestRest(j => restJson = j);
-                configJson = restJson;
+                var restHolder = new ConfigRequestHolder();
+                yield return SendConfigRequestRest(restHolder);
+                configJson = restHolder.Json;
+                failureDetail = restHolder.ErrorMessage;
             }
 
             if (!string.IsNullOrEmpty(configJson))
@@ -463,22 +468,31 @@ namespace AbxrLib.Runtime.Services.Auth
                         _authMechanism = config.authMechanism ?? new AuthMechanism();
                         if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
                         Debug.Log("AbxrLib: GetConfiguration successful");
-                        onComplete(true);
+                        onComplete(true, null);
                         yield break;
                     }
                 }
                 catch (Exception ex)
                 {
+                    failureDetail = ex.Message;
                     Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
                 }
             }
 
-            onComplete(false);
+            onComplete(false, failureDetail ?? "no config returned");
         }
 
-        /// <summary>Performs one GET to /v1/storage/config with auth headers. Invokes onComplete with the response body JSON (or null on failure).</summary>
-        private IEnumerator SendConfigRequestRest(Action<string> onComplete)
+        private class ConfigRequestHolder
         {
+            public string Json;
+            public string ErrorMessage;
+        }
+
+        /// <summary>Performs one GET to /v1/storage/config with auth headers. Sets holder.Json and holder.ErrorMessage.</summary>
+        private IEnumerator SendConfigRequestRest(ConfigRequestHolder holder)
+        {
+            holder.Json = null;
+            holder.ErrorMessage = null;
             string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config").ToString();
             UnityWebRequest request = null;
             try
@@ -491,7 +505,7 @@ namespace AbxrLib.Runtime.Services.Auth
             catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: GetConfiguration request creation failed: {ex.Message}");
-                onComplete(null);
+                holder.ErrorMessage = ex.Message;
                 yield break;
             }
 
@@ -510,20 +524,20 @@ namespace AbxrLib.Runtime.Services.Auth
                     };
                     if (!string.IsNullOrEmpty(request.downloadHandler?.text))
                         errorMessage += $" - Response: {request.downloadHandler.text}";
+                    holder.ErrorMessage = errorMessage;
                     Debug.LogWarning($"AbxrLib: GetConfiguration failed: {errorMessage}");
-                    onComplete(null);
                     yield break;
                 }
 
                 string responseJson = request.downloadHandler?.text;
                 if (string.IsNullOrEmpty(responseJson))
                     Debug.LogWarning("AbxrLib: Empty configuration response, using default configuration");
-                onComplete(responseJson);
+                holder.Json = responseJson;
             }
             catch (Exception ex)
             {
                 Debug.LogError($"AbxrLib: GetConfiguration response handling failed: {ex.Message}");
-                onComplete(null);
+                holder.ErrorMessage = ex.Message;
             }
             finally
             {
