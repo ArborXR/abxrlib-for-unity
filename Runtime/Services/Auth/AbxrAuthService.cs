@@ -100,10 +100,8 @@ namespace AbxrLib.Runtime.Services.Auth
 #endif
             SetSessionData();
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (Configuration.Instance.enableArborInsightServiceClient)
-                ArborInsightServiceClient.WaitForServiceReady();
-#endif
+            // Do not block on ArborInsightService here: bind is started before this constructor runs,
+            // and auth waits for service ready in a coroutine so the scene can load without lag.
         }
         
         // ── Public API ───────────────────────────────────────────────
@@ -305,6 +303,16 @@ namespace AbxrLib.Runtime.Services.Auth
                 bool useService = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
                 useService = Configuration.Instance.enableArborInsightServiceClient && ArborInsightServiceClient.ServiceIsFullyInitialized();
+                // When service is enabled and APK is installed but not ready yet, wait in this coroutine
+                // (non-blocking) so the scene can keep loading; auth starts once bind is complete.
+                if (Configuration.Instance.enableArborInsightServiceClient && !useService && ArborInsightServiceClient.IsServicePackageInstalled())
+                {
+                    const int waitAttempts = 40;  // 40 * 0.25s = 10s max for bind + service init
+                    const float waitSeconds = 0.25f;
+                    for (int i = 0; i < waitAttempts && !ArborInsightServiceClient.ServiceIsFullyInitialized() && !_stopping && _attemptActive; i++)
+                        yield return new WaitForSecondsRealtime(waitSeconds);
+                    useService = ArborInsightServiceClient.ServiceIsFullyInitialized();
+                }
 #endif
 
                 string responseJson = null;
