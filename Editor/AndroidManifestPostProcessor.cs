@@ -300,6 +300,8 @@ namespace AbxrLib.Editor
             
             // Add headset camera permission for Meta Quest Passthrough Camera API
             manifestContent = AddHeadsetCameraPermission(manifestContent);
+
+            manifestContent = AddNetworkPermissions(manifestContent);
             
             // Handle version metadata
             manifestContent = InjectOrUpdateMetadata(manifestContent, MetaDataVersionName, GetVersion());
@@ -466,6 +468,37 @@ namespace AbxrLib.Editor
             Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Headset camera permission not added.");
             return manifestContent;
         }
+
+        // Adds INTERNET and ACCESS_NETWORK_STATE permissions to the manifest if they don't already exist
+        private static string AddNetworkPermissions(string manifestContent)
+        {
+            string manifestPattern = @"(<manifest[\s\S]*?>)";
+            Match match = Regex.Match(manifestContent, manifestPattern, RegexOptions.IgnoreCase);
+
+            if (!match.Success)
+            {
+                Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Network permissions not added.");
+                return manifestContent;
+            }
+
+            int insertPosition = match.Index + match.Length;
+            int newlineAfter = manifestContent.IndexOf('\n', insertPosition);
+            if (newlineAfter > 0) insertPosition = newlineAfter + 1;
+
+            if (!manifestContent.Contains("android.permission.INTERNET"))
+            {
+                manifestContent = manifestContent.Insert(insertPosition,
+                    "    <uses-permission android:name=\"android.permission.INTERNET\" />\n");
+            }
+
+            if (!manifestContent.Contains("android.permission.ACCESS_NETWORK_STATE"))
+            {
+                manifestContent = manifestContent.Insert(insertPosition,
+                    "    <uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\" />\n");
+            }
+
+            return manifestContent;
+        }        
     }
 }
 
