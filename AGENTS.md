@@ -43,13 +43,13 @@ ArborInsightServiceBridge → client AAR (e.g. insights-client-service.aar)
 AIDL → ArborInsightService (separate APK)
 ```
 
-- **Initialize:** `Initialize.OnBeforeSceneLoad()` attaches `ArborServiceClient` and `ArborInsightServiceClient` only when `UNITY_ANDROID && !UNITY_EDITOR`. The bridge calls the Java client’s `bind()`; `AbxrAuthService` polls `ServiceIsFullyInitialized()` (up to 40 × 250 ms) before proceeding with auth. When the service is ready, auth payload (including appToken/orgToken when useAppTokens) is pushed to the service and `AuthRequest()` is called.
+- **Initialize:** `Initialize.OnBeforeSceneLoad()` attaches `ArborServiceClient` and `ArborInsightServiceClient` only when `UNITY_ANDROID && !UNITY_EDITOR`. In `AbxrSubsystem.Awake()`, the bridge’s Init and Bind are started **before** creating `AbxrAuthService`, so the scene can load without blocking. Auth runs in a coroutine that waits for `ServiceIsFullyInitialized()` (up to 40 × 0.25 s) only when the ArborInsightService APK is installed; when ready, auth payload (including appToken/orgToken when useAppTokens) is pushed to the service and `AuthRequest()` is called. If the service is not installed, `IsServicePackageInstalled()` is false and the app uses the built-in REST path immediately.
 - **Auth/config:** When the service is used, auth runs through the service (same flow as standalone: first auth, then config, then optional second auth with user input). Data sources: `GetConfigData()` from Unity `Configuration.Instance`, `GetArborData()` can override with ArborXR SDK values when connected.
 
 ### Initialization (this package)
 
 - **Runtime:** `Initialize.cs` uses `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]` to attach core components including `AbxrManager`, `AbxrAuthService`, data/telemetry services, `DeviceModel`, UI (ExitPoll, Keyboard, etc.); on Android build, also `ArborServiceClient`, `ArborInsightServiceClient`, `HeadsetDetector`, and optionally platform QR readers (Pico/Meta).
-- **Service readiness:** On Android, auth waits for `ArborInsightServiceClient.ServiceIsFullyInitialized()` before sending auth requests to the service. Init and readiness are handled by the client AAR and the service APK; this package only polls until ready.
+- **Service readiness:** On Android, bind is started early in Awake (before creating the auth service). Auth runs in a coroutine and waits for `ServiceIsFullyInitialized()` (non-blocking, up to 40 × 0.25 s) only when `IsServicePackageInstalled()` is true, so the scene keeps loading. Init and readiness are handled by the client AAR and the service APK.
 
 ## Key Files
 

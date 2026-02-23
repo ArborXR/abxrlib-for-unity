@@ -88,6 +88,10 @@ namespace AbxrLib.Runtime
             _arborClient = new ArborServiceClient();
             if (Configuration.Instance.enableArborInsightServiceClient)
                 _arborInsightService = new ArborInsightServiceClient();
+            // Start bind early so it can complete while the scene loads; auth will wait for ready in a coroutine.
+            _arborClient.Initialize();
+            if (_arborInsightService != null)
+                _arborInsightService.Start();
 #endif
             _authService = new AbxrAuthService(this, _arborClient);
             _dataService = new AbxrDataService(_authService, this);
@@ -119,9 +123,6 @@ namespace AbxrLib.Runtime
             KeyboardManager.AuthService = _authService;
             
 #if UNITY_ANDROID && !UNITY_EDITOR
-            _arborClient.Initialize();
-            if (_arborInsightService != null)
-                _arborInsightService.Start();
             QRCodeReader.AuthService = _authService;
 #if PICO_ENTERPRISE_SDK_3
             QRCodeReaderPico.AuthService = _authService;
