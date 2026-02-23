@@ -76,7 +76,7 @@ namespace AbxrLib.Runtime.Services.Data
 #if UNITY_ANDROID && !UNITY_EDITOR
 			if (_authService.UsingArborInsightServiceForData())
 			{
-				ArborInsightServiceClient.EventDeferred(name, meta ?? new Dictionary<string, string>());
+				ArborInsightServiceClient.Event(name, meta ?? new Dictionary<string, string>());
 				return;
 			}
 #endif
@@ -113,7 +113,7 @@ namespace AbxrLib.Runtime.Services.Data
 #if UNITY_ANDROID && !UNITY_EDITOR
 			if (_authService.UsingArborInsightServiceForData())
 			{
-				ArborInsightServiceClient.AddTelemetryEntryDeferred(name, meta ?? new Dictionary<string, string>());
+				ArborInsightServiceClient.AddTelemetryEntry(name, meta ?? new Dictionary<string, string>());
 				return;
 			}
 #endif
@@ -153,17 +153,17 @@ namespace AbxrLib.Runtime.Services.Data
 				var dict = meta ?? new Dictionary<string, string>();
 				string level = logLevel?.ToUpperInvariant() ?? "";
 				if (level == "DEBUG")
-					ArborInsightServiceClient.LogDebugDeferred(text ?? "", dict);
+					ArborInsightServiceClient.LogDebug(text ?? "", dict);
 				else if (level == "INFO")
-					ArborInsightServiceClient.LogInfoDeferred(text ?? "", dict);
+					ArborInsightServiceClient.LogInfo(text ?? "", dict);
 				else if (level == "WARN")
-					ArborInsightServiceClient.LogWarnDeferred(text ?? "", dict);
+					ArborInsightServiceClient.LogWarn(text ?? "", dict);
 				else if (level == "ERROR")
-					ArborInsightServiceClient.LogErrorDeferred(text ?? "", dict);
+					ArborInsightServiceClient.LogError(text ?? "", dict);
 				else if (level == "CRITICAL")
-					ArborInsightServiceClient.LogCriticalDeferred(text ?? "", dict);
+					ArborInsightServiceClient.LogCritical(text ?? "", dict);
 				else
-					ArborInsightServiceClient.LogInfoDeferred(text ?? "", dict);
+					ArborInsightServiceClient.LogInfo(text ?? "", dict);
 				return;
 			}
 #endif
@@ -239,24 +239,24 @@ namespace AbxrLib.Runtime.Services.Data
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 		/// <summary>
-		/// Pushes queued events, telemetry, and logs to ArborInsightService via Deferred APIs (no HTTP from Unity).
+		/// Pushes queued events, telemetry, and logs to ArborInsightService via default (non-blocking) APIs (no HTTP from Unity).
 		/// </summary>
 		private void PushQueuedToService(List<EventPayload> events, List<TelemetryPayload> telemetries, List<LogPayload> logs)
 		{
 			foreach (var p in events)
-				ArborInsightServiceClient.EventDeferred(p.name, p.meta ?? new Dictionary<string, string>());
+				ArborInsightServiceClient.Event(p.name, p.meta ?? new Dictionary<string, string>());
 			foreach (var p in telemetries)
-				ArborInsightServiceClient.AddTelemetryEntryDeferred(p.name, p.meta ?? new Dictionary<string, string>());
+				ArborInsightServiceClient.AddTelemetryEntry(p.name, p.meta ?? new Dictionary<string, string>());
 			foreach (var p in logs)
 			{
 				string level = (p.logLevel ?? "").ToUpperInvariant();
 				var dict = p.meta ?? new Dictionary<string, string>();
-				if (level == "DEBUG") ArborInsightServiceClient.LogDebugDeferred(p.text ?? "", dict);
-				else if (level == "INFO") ArborInsightServiceClient.LogInfoDeferred(p.text ?? "", dict);
-				else if (level == "WARN") ArborInsightServiceClient.LogWarnDeferred(p.text ?? "", dict);
-				else if (level == "ERROR") ArborInsightServiceClient.LogErrorDeferred(p.text ?? "", dict);
-				else if (level == "CRITICAL") ArborInsightServiceClient.LogCriticalDeferred(p.text ?? "", dict);
-				else ArborInsightServiceClient.LogInfoDeferred(p.text ?? "", dict);
+				if (level == "DEBUG") ArborInsightServiceClient.LogDebug(p.text ?? "", dict);
+				else if (level == "INFO") ArborInsightServiceClient.LogInfo(p.text ?? "", dict);
+				else if (level == "WARN") ArborInsightServiceClient.LogWarn(p.text ?? "", dict);
+				else if (level == "ERROR") ArborInsightServiceClient.LogError(p.text ?? "", dict);
+				else if (level == "CRITICAL") ArborInsightServiceClient.LogCritical(p.text ?? "", dict);
+				else ArborInsightServiceClient.LogInfo(p.text ?? "", dict);
 			}
 		}
 #endif

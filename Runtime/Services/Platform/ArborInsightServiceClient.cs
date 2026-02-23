@@ -124,19 +124,20 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void CaptureTimeStamp() => _client.Call<int>("captureTimeStamp");
 		public static void UnCaptureTimeStamp() => _client.Call<int>("unCaptureTimeStamp");
 		// ---
+		// Default = non-blocking; use *Blocking for sync/debugging.
 		public static int LogDebug(String szText, Dictionary<string, string> dictMeta) => _client.Call<int>("logDebug", szText, Utils.DictToString(dictMeta));
-		public static int LogDebugDeferred(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logDebugDeferred", szText, Utils.DictToString(dictMeta));
+		public static int LogDebugBlocking(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logDebugBlocking", szText, Utils.DictToString(dictMeta));
 		public static int LogInfo(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logInfo", szText, Utils.DictToString(dictMeta));
-		public static int LogInfoDeferred(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logInfoDeferred", szText, Utils.DictToString(dictMeta));
+		public static int LogInfoBlocking(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logInfoBlocking", szText, Utils.DictToString(dictMeta));
 		public static int LogWarn(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logWarn", szText, Utils.DictToString(dictMeta));
-		public static int LogWarnDeferred(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logWarnDeferred", szText, Utils.DictToString(dictMeta));
+		public static int LogWarnBlocking(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logWarnBlocking", szText, Utils.DictToString(dictMeta));
 		public static int LogError(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logError", szText, Utils.DictToString(dictMeta));
-		public static int LogErrorDeferred(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logErrorDeferred", szText, Utils.DictToString(dictMeta));
+		public static int LogErrorBlocking(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logErrorBlocking", szText, Utils.DictToString(dictMeta));
 		public static int LogCritical(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logCritical", szText, Utils.DictToString(dictMeta));
-		public static int LogCriticalDeferred(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logCriticalDeferred", szText, Utils.DictToString(dictMeta));
+		public static int LogCriticalBlocking(String szText, Dictionary<String, String> dictMeta) => _client.Call<int>("logCriticalBlocking", szText, Utils.DictToString(dictMeta));
 		// ---
-		public static int Event (String szMessage, Dictionary<String, String> dictMeta) => _client.Call<int>("event", szMessage, Utils.DictToString(dictMeta));
-		public static int EventDeferred(String szMessage, Dictionary<String, String> dictMeta) => _client.Call<int>("eventDeferred", szMessage, Utils.DictToString(dictMeta));
+		public static int Event(String szMessage, Dictionary<String, String> dictMeta) => _client.Call<int>("event", szMessage, Utils.DictToString(dictMeta));
+		public static int EventBlocking(String szMessage, Dictionary<String, String> dictMeta) => _client.Call<int>("eventBlocking", szMessage, Utils.DictToString(dictMeta));
 		// --- Convenient wrappers for particular forms of events.
 		public static int EventAssessmentStart(String szAssessmentName, Dictionary<String, String> dictMeta) => _client.Call<int>("eventAssessmentStart", szAssessmentName, Utils.DictToString(dictMeta));
 		public static int EventAssessmentComplete(String szAssessmentName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => _client.Call<int>("eventAssessmentComplete", szAssessmentName, szScore, eResultOptions, Utils.DictToString(dictMeta));
@@ -151,10 +152,10 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static int EventLevelComplete(String szLevelName, String szScore, Dictionary<String, String> dictMeta) => _client.Call<int>("eventLevelComplete", szLevelName, szScore, Utils.DictToString(dictMeta));
 		// ---
 		public static int AddAIProxy(String szPrompt, String szPastMessages, String szLMMProvider) => _client.Call<int>("addAIProxy", szPrompt, szPastMessages, szLMMProvider);
-		public static int AddAIProxyDeferred(String szPrompt, String szPastMessages, String szLMMProvider) => _client.Call<int>("addAIProxyDeferred", szPrompt, szPastMessages, szLMMProvider);
+		public static int AddAIProxyBlocking(String szPrompt, String szPastMessages, String szLMMProvider) => _client.Call<int>("addAIProxyBlocking", szPrompt, szPastMessages, szLMMProvider);
 		// ---
 		public static int AddTelemetryEntry(String szName, Dictionary<String, String> dictMeta) => _client.Call<int>("addTelemetryEntry", szName, Utils.DictToString(dictMeta));
-		public static int AddTelemetryEntryDeferred(String szName, Dictionary<String, String> dictMeta) => _client.Call<int>("addTelemetryEntryDeferred", szName, Utils.DictToString(dictMeta));
+		public static int AddTelemetryEntryBlocking(String szName, Dictionary<String, String> dictMeta) => _client.Call<int>("addTelemetryEntryBlocking", szName, Utils.DictToString(dictMeta));
 		// ---
 		//boolean platformIsWindows();
 		// --- Authentication fields.
@@ -418,18 +419,18 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void UnCaptureTimeStamp() => ArborInsightServiceBridge.UnCaptureTimeStamp();
 		// ---
 		public static int LogDebug(String szText, Dictionary<string, string> dictMeta) => ArborInsightServiceBridge.LogDebug(szText ?? "", dictMeta);
-		public static int LogDebugDeferred(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogDebugDeferred(szText ?? "", dictMeta);
+		public static int LogDebugBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogDebugBlocking(szText ?? "", dictMeta);
 		public static int LogInfo(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogInfo(szText ?? "", dictMeta);
-		public static int LogInfoDeferred(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogInfoDeferred(szText, dictMeta);
+		public static int LogInfoBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogInfoBlocking(szText, dictMeta);
 		public static int LogWarn(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogWarn(szText ?? "", dictMeta);
-		public static int LogWarnDeferred(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogWarnDeferred(szText ?? "", dictMeta);
+		public static int LogWarnBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogWarnBlocking(szText ?? "", dictMeta);
 		public static int LogError(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogError(szText ?? "", dictMeta);
-		public static int LogErrorDeferred(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogErrorDeferred(szText ?? "", dictMeta);
+		public static int LogErrorBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogErrorBlocking(szText ?? "", dictMeta);
 		public static int LogCritical(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogCritical(szText ?? "", dictMeta);
-		public static int LogCriticalDeferred(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogCriticalDeferred(szText ?? "", dictMeta);
+		public static int LogCriticalBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogCriticalBlocking(szText ?? "", dictMeta);
 		// ---
 		public static int Event(String szMessage, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.Event(szMessage ?? "", dictMeta);
-		public static int EventDeferred(String szMessage, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventDeferred(szMessage ?? "", dictMeta);
+		public static int EventBlocking(String szMessage, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventBlocking(szMessage ?? "", dictMeta);
 		// --- Convenient wrappers for particular forms of events.
 		public static int EventAssessmentStart(String szAssessmentName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventAssessmentStart(szAssessmentName ?? "", dictMeta);
 		public static int EventAssessmentComplete(String szAssessmentName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventAssessmentComplete(szAssessmentName ?? "", szScore ?? "", eResultOptions, dictMeta);
@@ -444,10 +445,10 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static int EventLevelComplete(String szLevelName, String szScore, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventLevelComplete(szLevelName ?? "", szScore ?? "", dictMeta);
 		// ---
 		public static int AddAIProxy(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightServiceBridge.AddAIProxy(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
-		public static int AddAIProxyDeferred(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightServiceBridge.AddAIProxyDeferred(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
+		public static int AddAIProxyBlocking(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightServiceBridge.AddAIProxyBlocking(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
 		// ---
 		public static int AddTelemetryEntry(String szName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.AddTelemetryEntry(szName ?? "", dictMeta);
-		public static int AddTelemetryEntryDeferred(String szName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.AddTelemetryEntryDeferred(szName ?? "", dictMeta);
+		public static int AddTelemetryEntryBlocking(String szName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.AddTelemetryEntryBlocking(szName ?? "", dictMeta);
 		// ---
 		//boolean platformIsWindows();
 		// --- Authentication fields. get_ApiToken and get_ApiSecret are internal for post-auth use; setters stay public to push auth payload.
