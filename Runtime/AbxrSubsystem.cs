@@ -75,8 +75,6 @@ namespace AbxrLib.Runtime
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            AbxrLogToFile.RegisterLogMessageReceived();
-
             var jsonVersion = typeof(JsonConvert).Assembly.GetName().Version;
             Debug.Log($"AbxrLib: Using Newtonsoft.Json version: {jsonVersion}");
 
