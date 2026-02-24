@@ -17,7 +17,12 @@ namespace AbxrLib.Runtime.Services.Auth
     public class AbxrAuthService
     {
         // ── Callbacks ────────────────────────────────────────────────
-        public Action<AuthMechanism> OnInputRequested;
+        /// <summary>
+        /// Invoked when authentication needs user input (e.g. PIN or username).
+        /// Handler receives the request (mechanism) and a callback; call the callback with the user's entered value when done.
+        /// For OnInputRequested only one handler is allowed at a time; use assignment (=), not subscribe (+=).
+        /// </summary>
+        public Action<AuthMechanism, Action<string>> OnInputRequested;
         public Action OnSucceeded;
         public Action<string> OnFailed;
 
@@ -603,13 +608,16 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             prompt += _authMechanism.prompt;
-            
-            OnInputRequested?.Invoke(new AuthMechanism
+
+            var mechanism = new AuthMechanism
             {
                 type = _authMechanism.type,
                 prompt = prompt,
                 domain = _authMechanism.domain
-            });
+            };
+
+            Action<string> submitValue = value => KeyboardAuthenticate(value);
+            OnInputRequested?.Invoke(mechanism, submitValue);
 
             _failedAuthAttempts++;
         }

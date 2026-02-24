@@ -64,6 +64,12 @@ namespace AbxrLib.Runtime
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
 
+        /// <summary>
+        /// When the default keyboard/PIN pad is shown, this is set so that when the user submits,
+        /// SubmitInput invokes it with the value instead of calling KeyboardAuthenticate directly.
+        /// </summary>
+        private Action<string> _pendingSubmitCallback;
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -102,7 +108,8 @@ namespace AbxrLib.Runtime
             // Subscribe to OnAuthCompleted to start delayed DEFAULT assessment timer
             Abxr.OnAuthCompleted += OnAuthCompletedHandler;
 
-            // Wire auth callbacks
+            // Wire auth callbacks. Our internal keyboard handling is the initial OnInputRequested handler
+            // so the native keyboard (including when the user replaces prefabs in Configuration) uses the exact same flow.
             _authService.OnInputRequested = PresentKeyboard;
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
@@ -193,17 +200,32 @@ namespace AbxrLib.Runtime
 	        Debug.Log("AbxrLib: Application quitting, automatically closing running events");
 	        CloseRunningEvents();
 #if UNITY_ANDROID && !UNITY_EDITOR
-            // When this session used ArborInsightService for auth/data, ask the service to flush before we exit.
             if (_authService.UsingArborInsightServiceForData())
             {
                 ArborInsightServiceClient.ForceSendUnsent();
             }
+            else
 #endif
+            {
+                SendAll();
+            }
         }
         
         internal void DoAuthenticate() => _authService.Authenticate();
 
-        internal void SubmitInput(string input) => _authService.KeyboardAuthenticate(input);
+        internal void SubmitInput(string input)
+        {
+            if (_pendingSubmitCallback != null)
+            {
+                var cb = _pendingSubmitCallback;
+                _pendingSubmitCallback = null;
+                cb(input);
+            }
+            else
+            {
+                _authService.KeyboardAuthenticate(input);
+            }
+        }
 
         private void HandleAuthCompleted(bool success)
         {
@@ -725,11 +747,20 @@ namespace AbxrLib.Runtime
 			_storageService.Add(entryName, entryData, scope, policy);
 		}
 
-		internal void StorageRemoveDefaultEntry(Abxr.StorageScope scope) { }
+		internal void StorageRemoveDefaultEntry(Abxr.StorageScope scope)
+		{
+			StartCoroutine(_storageService.Delete(scope, "state"));
+		}
 
-		internal void StorageRemoveEntry(string entryName, Abxr.StorageScope scope) { }
+		internal void StorageRemoveEntry(string entryName, Abxr.StorageScope scope)
+		{
+			StartCoroutine(_storageService.Delete(scope, entryName ?? ""));
+		}
 
-		internal void StorageRemoveMultipleEntries(Abxr.StorageScope scope) { }
+		internal void StorageRemoveMultipleEntries(Abxr.StorageScope scope)
+		{
+			StartCoroutine(_storageService.Delete(scope, ""));
+		}
 
 		internal IEnumerator AIProxy(string prompt, string llmProvider, Action<string> callback)
 		{
@@ -981,8 +1012,9 @@ namespace AbxrLib.Runtime
 			return result.ToString();
 		}
 
-		private static void PresentKeyboard(AuthMechanism mechanism)
+		private void PresentKeyboard(AuthMechanism mechanism, Action<string> submitValue)
 		{
+			_pendingSubmitCallback = submitValue;
 			if (mechanism.type is "text" or null)
 			{
 				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);

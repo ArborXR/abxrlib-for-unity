@@ -78,6 +78,11 @@ AIDL → ArborInsightService (separate APK)
 - **Install:** Add package from git URL `https://github.com/ArborXR/abxrlib-for-unity.git` (Package Manager → Add package from git URL). See README for configuration and quick start.
 - **Android + device service:** Obtain and install the ArborInsightService APK from your distribution channel. Ensure `Plugins/Android/` includes the **matching client AAR** (e.g. `insights-client-service.aar`) from the same source.
 
+## Input request (auth keyboard/PIN pad)
+
+- When auth needs user input, the SDK invokes **OnInputRequested** (AuthMechanism + submitValue callback). The SDK assigns its **internal keyboard handler** (PresentKeyboard) first, so the native keyboard—including when the user replaces prefabs in Configuration—uses the exact same flow. Only one handler is allowed at a time; use **assignment** (`=`), not subscribe (`+=`). If the app assigns its own handler, it replaces the default; if no handler is assigned, the default shows the keyboard/PIN pad from config or built-in prefabs.
+- **PresentKeyboard / PresentPinPad** are not public; there is no public API to show the keyboard directly. For custom UI: (1) set keyboard/PIN pad prefabs in Configuration and do not assign OnInputRequested, or (2) **assign** **OnInputRequested** and call the provided **submitValue** callback with the user’s input. See developer portal docs on custom prefabs for details.
+
 ## Troubleshooting
 
 - **Auth fails / wrong orgId or authSecret:** Confirm Unity Configuration (AbxrLib.asset) and buildType; remember GetArborData() can override with ArborXR SDK when connected.
