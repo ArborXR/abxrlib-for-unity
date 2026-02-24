@@ -284,6 +284,22 @@ public static partial class Abxr
 	}
 
 	/// <summary>
+	/// Get learner/participant data (Cognitive3D compatibility).
+	/// Returns the same data as GetUserData(), formatted for Cognitive3D migration.
+	/// Ensures "userId" and "participantId" are present when authenticated.
+	/// </summary>
+	/// <returns>Dictionary of learner/participant key-value pairs, or null if not authenticated</returns>
+	public static Dictionary<string, string> GetLearnerData()
+	{
+		var userData = GetUserData();
+		if (userData == null) return null;
+		var result = new Dictionary<string, string>(userData);
+		if (!result.ContainsKey("participantId") && result.TryGetValue("userId", out var userId))
+			result["participantId"] = userId;
+		return result;
+	}
+
+	/// <summary>
 	/// Set participant property (stub for Cognitive3D compatibility - not implemented)
 	/// This method exists for string replacement compatibility but does not store data
 	/// Use AbxrLib's authentication system and GetLearnerData() instead

@@ -208,6 +208,17 @@ public static partial class Abxr
 	public static void ReAuthenticate() => X?.StartAuthentication();
 
 	/// <summary>
+	/// Assign your handler to collect auth input (e.g. PIN, email) instead of the default keyboard/PIN UI.
+	/// Only one handler is allowed; use assignment (=), not subscribe (+=). Your handler receives (mechanism, submitValue)—call submitValue(enteredValue) when the user submits.
+	/// The mechanism argument is an object with .type ("text" | "assessmentPin" | "email"), .prompt, .domain (use dynamic or cast as needed). Set to null in OnDestroy when your component is no longer responsible.
+	/// </summary>
+	public static Action<object, Action<string>> OnInputRequested
+	{
+		get => X?.OnInputRequested;
+		set { if (X != null) X.OnInputRequested = value; }
+	}
+
+	/// <summary>
 	/// Start a new session with a fresh session identifier
 	/// Generates a new session ID and performs fresh authentication
 	/// Useful for starting new training experiences or resetting user context

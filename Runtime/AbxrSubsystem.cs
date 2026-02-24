@@ -37,6 +37,7 @@ namespace AbxrLib.Runtime
 
         // ── Module state ─────────────────────────────────────────────
         private int _currentModuleIndex;
+        private Action<object, Action<string>> _appOnInputRequested;
 
         // ── Super metadata ───────────────────────────────────────────
         private const string SuperMetaDataPrefsKey = "AbxrSuperMetaData";
@@ -318,6 +319,20 @@ namespace AbxrLib.Runtime
 			_authService.SetUserData(userId, additionalUserData);
 		
 		internal void StartAuthentication() => _authService.Authenticate();
+
+		/// <summary>
+		/// Get or set the single OnInputRequested handler (forwarded to auth service). Public API uses object so app code does not need to reference AuthMechanism.
+		/// </summary>
+		internal Action<object, Action<string>> OnInputRequested
+		{
+			get => _appOnInputRequested;
+			set
+			{
+				_appOnInputRequested = value;
+				if (_authService != null)
+					_authService.OnInputRequested = value != null ? (m, s) => value(m, s) : null;
+			}
+		}
 		
 		internal void StartNewSession()
 		{
