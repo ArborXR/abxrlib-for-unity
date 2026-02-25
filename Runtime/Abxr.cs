@@ -682,7 +682,7 @@ public static partial class Abxr
 		{
 			if (AbxrSubsystem.Instance == null)
 			{
-				Debug.LogWarning("AbxrLib: Not initialized yet.");
+				Debug.LogWarning("[AbxrLib] Not initialized yet.");
 				return null;
 			}
 			return AbxrSubsystem.Instance;

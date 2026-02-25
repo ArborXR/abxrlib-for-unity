@@ -39,7 +39,7 @@ namespace AbxrLib.Editor
             _config = AssetDatabase.LoadAssetAtPath<Configuration>(newConfigPath);
             if (_config) 
             {
-                Debug.Log($"AbxrLib: Loaded existing config via AssetDatabase fallback - {newConfigPath}");
+                Debug.Log($"[AbxrLib] Loaded existing config via AssetDatabase fallback - {newConfigPath}");
                 return _config;
             }
         
@@ -63,7 +63,7 @@ namespace AbxrLib.Editor
             }
         
             // Only create new config if file genuinely doesn't exist
-            Debug.Log("AbxrLib: No existing configuration found, creating new default configuration");
+            Debug.Log("[AbxrLib] No existing configuration found, creating new default configuration");
             _config = ScriptableObject.CreateInstance<Configuration>();
             const string filepath = "Assets/Resources";
             if (!AssetDatabase.IsValidFolder(filepath))
@@ -93,11 +93,11 @@ namespace AbxrLib.Editor
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
             
-                Debug.Log($"AbxrLib: ArborXR configuration has been migrated to {NEW_CONFIG_NAME}");
+                Debug.Log($"[AbxrLib] ArborXR configuration has been migrated to {NEW_CONFIG_NAME}");
             }
             else if (AssetDatabase.LoadAssetAtPath<Configuration>(oldPath))
             {
-                Debug.LogWarning($"AbxrLib: Migration skipped - {NEW_CONFIG_NAME} already exists alongside {OLD_CONFIG_NAME}");
+                Debug.LogWarning($"[AbxrLib] Migration skipped - {NEW_CONFIG_NAME} already exists alongside {OLD_CONFIG_NAME}");
             }
         }
     }

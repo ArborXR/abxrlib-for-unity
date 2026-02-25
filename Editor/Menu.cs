@@ -61,7 +61,7 @@ namespace AbxrLib.Editor
             string locationInfo = parentTransform != null
                 ? $"parented to '{parentTransform.name}'"
                 : $"at position {targetPosition}";
-            Debug.Log($"AbxrLib: Created AbxrTarget GameObject with targetName '{abxrTarget.GetTargetName()}' {locationInfo}. You can edit the 'Target Name' field in the Inspector to customize it.");
+            Debug.Log($"[AbxrLib] Created AbxrTarget GameObject with targetName '{abxrTarget.GetTargetName()}' {locationInfo}. You can edit the 'Target Name' field in the Inspector to customize it.");
         }
 
         private static string GenerateUniqueTargetName()

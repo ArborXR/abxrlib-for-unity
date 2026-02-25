@@ -87,7 +87,7 @@ namespace AbxrLib.Runtime.Core
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogWarning($"AbxrLib: Generic FindObjectsOfType method failed for {typeName}: {ex.Message}");
+                    Debug.LogWarning($"[AbxrLib] Generic FindObjectsOfType method failed for {typeName}: {ex.Message}");
                 }
 
                 try
@@ -102,7 +102,7 @@ namespace AbxrLib.Runtime.Core
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogWarning($"AbxrLib: Type-based FindObjectsOfType method failed for {typeName}: {ex.Message}");
+                    Debug.LogWarning($"[AbxrLib] Type-based FindObjectsOfType method failed for {typeName}: {ex.Message}");
                 }
 
                 try
@@ -117,7 +117,7 @@ namespace AbxrLib.Runtime.Core
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogWarning($"AbxrLib: FindObjectsOfType with includeInactive method failed for {typeName}: {ex.Message}");
+                    Debug.LogWarning($"[AbxrLib] FindObjectsOfType with includeInactive method failed for {typeName}: {ex.Message}");
                 }
 
                 // Fallback to the original method if all reflection approaches fail
@@ -125,7 +125,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib: Type detection failed for {typeName}: {ex.Message}");
+                Debug.LogError($"[AbxrLib] Type detection failed for {typeName}: {ex.Message}");
                 return false;
             }
         }
@@ -147,7 +147,7 @@ namespace AbxrLib.Runtime.Core
                     }
                     catch (System.Exception ex)
                     {
-                        Debug.LogWarning($"AbxrLib: Error checking components on GameObject {gameObject.name}: {ex.Message}");
+                        Debug.LogWarning($"[AbxrLib] Error checking components on GameObject {gameObject.name}: {ex.Message}");
                         continue;
                     }
                 }
@@ -155,7 +155,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib: Fallback type detection failed: {ex.Message}");
+                Debug.LogError($"[AbxrLib] Fallback type detection failed: {ex.Message}");
                 return false;
             }
         }
@@ -210,7 +210,7 @@ namespace AbxrLib.Runtime.Core
                     }
                     catch (System.Exception ex)
                     {
-                        Debug.LogWarning($"AbxrLib: Error searching assembly {assemblyName} for type {typeName}: {ex.Message}");
+                        Debug.LogWarning($"[AbxrLib] Error searching assembly {assemblyName} for type {typeName}: {ex.Message}");
                     }
                 }
 
@@ -225,14 +225,14 @@ namespace AbxrLib.Runtime.Core
                     }
                     catch (System.Exception ex)
                     {
-                        Debug.LogWarning($"AbxrLib: Error searching assembly {assembly.GetName().Name} for type {typeName}: {ex.Message}");
+                        Debug.LogWarning($"[AbxrLib] Error searching assembly {assembly.GetName().Name} for type {typeName}: {ex.Message}");
                     }
                 }
                 return null;
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib: Type finding failed for {typeName}: {ex.Message}");
+                Debug.LogError($"[AbxrLib] Type finding failed for {typeName}: {ex.Message}");
                 return null;
             }
         }

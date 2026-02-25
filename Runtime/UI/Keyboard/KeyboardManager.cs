@@ -91,7 +91,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 qrCodeButton.gameObject.SetActive(isAvailable);
                 if (isAvailable)
-                    Debug.Log("AbxrLib: QR Code button enabled");
+                    Debug.Log("[AbxrLib] QR Code button enabled");
                 _lastQRButtonState = isAvailable;
             }
 #endif
@@ -163,7 +163,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib: KeyboardManager - Error during authentication submission: {ex.Message}");
+                Debug.LogError($"[AbxrLib] KeyboardManager - Error during authentication submission: {ex.Message}");
                 // Stop processing visual and clear input on error
                 inputField.text = "";
             }

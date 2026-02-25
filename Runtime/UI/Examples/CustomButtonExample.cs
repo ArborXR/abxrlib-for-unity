@@ -113,7 +113,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleStartButton()
         {
-            Debug.Log("AbxrLib: CustomButtonExample - Start button clicked - Starting application");
+            Debug.Log("[AbxrLib] CustomButtonExample - Start button clicked - Starting application");
             
             // Log a level start event
             Abxr.EventLevelStart("custom_button_example", new Abxr.Dict
@@ -125,7 +125,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleSettingsButton()
         {
-            Debug.Log("AbxrLib: CustomButtonExample - Settings button clicked - Opening settings");
+            Debug.Log("[AbxrLib] CustomButtonExample - Settings button clicked - Opening settings");
             
             // Log an interaction event
             Abxr.EventInteractionComplete("settings_button_click", 
@@ -136,7 +136,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleExitButton()
         {
-            Debug.Log("AbxrLib: CustomButtonExample - Exit button clicked - Exiting application");
+            Debug.Log("[AbxrLib] CustomButtonExample - Exit button clicked - Exiting application");
             
             // Log an interaction event
             Abxr.EventInteractionComplete("exit_button_click", 
@@ -154,7 +154,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleHelpButton()
         {
-            Debug.Log("AbxrLib: CustomButtonExample - Help button clicked - Showing help");
+            Debug.Log("[AbxrLib] CustomButtonExample - Help button clicked - Showing help");
             
             // Log an interaction event
             Abxr.EventInteractionComplete("help_button_click", 
@@ -165,7 +165,7 @@ namespace AbxrLib.Runtime.UI.Examples
         
         private void HandleGenericButton(string buttonName)
         {
-            Debug.Log($"AbxrLib: CustomButtonExample - Generic button '{buttonName}' clicked");
+            Debug.Log($"[AbxrLib] CustomButtonExample - Generic button '{buttonName}' clicked");
             
             // Log a generic interaction event
             Abxr.EventInteractionComplete($"generic_button_click", 
@@ -218,7 +218,7 @@ namespace AbxrLib.Runtime.UI.Examples
             
             // This would require more complex implementation to toggle at runtime
             // For now, just log the change
-            Debug.Log($"AbxrLib: CustomButtonExample - Face camera toggled to {!currentSetting}");
+            Debug.Log($"[AbxrLib] CustomButtonExample - Face camera toggled to {!currentSetting}");
             
             if (feedbackText != null)
             {

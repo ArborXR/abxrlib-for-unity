@@ -32,13 +32,13 @@ namespace AbxrLib.Runtime.Core
                 // Check if XR is available before trying to get devices
                 if (!IsXRAvailable())
                 {
-                    Debug.LogWarning("AbxrLib: HeadsetDetector - XR not available, headset detection disabled");
+                    Debug.LogWarning("[AbxrLib] HeadsetDetector - XR not available, headset detection disabled");
                     return;
                 }
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: HeadsetDetector - Failed to initialize XR device tracking: {ex.Message}");
+                Debug.LogWarning($"[AbxrLib] HeadsetDetector - Failed to initialize XR device tracking: {ex.Message}");
                 return;
             }
             
@@ -85,7 +85,7 @@ namespace AbxrLib.Runtime.Core
                 // Check if XR is available
                 if (!IsXRAvailable()) 
                 {
-                    Debug.LogWarning("AbxrLib: XR not available, assuming non-VR mode");
+                    Debug.LogWarning("[AbxrLib] XR not available, assuming non-VR mode");
                     return true; // Fallback to assuming headset is on
                 }
                 
@@ -122,12 +122,12 @@ namespace AbxrLib.Runtime.Core
                 }
                 else
                 {
-                    Debug.LogWarning("AbxrLib: No valid headset device found");
+                    Debug.LogWarning("[AbxrLib] No valid headset device found");
                 }
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: Proximity sensor check failed: {ex.Message}");
+                Debug.LogWarning($"[AbxrLib] Proximity sensor check failed: {ex.Message}");
             }
         
             // Fallback: assume headset is on if no proximity data
@@ -146,7 +146,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: XR availability check failed: {ex.Message}");
+                Debug.LogWarning($"[AbxrLib] XR availability check failed: {ex.Message}");
                 return false;
             }
         }
@@ -161,7 +161,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: PICO headset detection failed: {ex.Message}");
+                Debug.LogWarning($"[AbxrLib] PICO headset detection failed: {ex.Message}");
                 return false;
             }
         }
@@ -192,12 +192,12 @@ namespace AbxrLib.Runtime.Core
                     return rotation != Quaternion.identity;
                 }
                 
-                Debug.LogWarning("AbxrLib: PICO proximity detection methods failed, assuming headset is on");
+                Debug.LogWarning("[AbxrLib] PICO proximity detection methods failed, assuming headset is on");
                 return true; // Fallback for PICO
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: PICO proximity check failed: {ex.Message}");
+                Debug.LogWarning($"[AbxrLib] PICO proximity check failed: {ex.Message}");
                 return true; // Fallback for PICO
             }
         }
@@ -226,7 +226,7 @@ namespace AbxrLib.Runtime.Core
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogError($"AbxrLib: HeadsetDetector - Error during re-authentication: {ex.Message}");
+                    Debug.LogError($"[AbxrLib] HeadsetDetector - Error during re-authentication: {ex.Message}");
                 }
             }
         }

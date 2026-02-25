@@ -300,7 +300,7 @@ namespace AbxrLib.Runtime.Services.Data
 				catch (Exception ex)
 				{
 					lastError = $"Data request creation failed: {ex.Message}";
-					Debug.LogError($"AbxrLib: {lastError}");
+					Debug.LogError($"[AbxrLib] {lastError}");
 
 					if (IsDataRetryableException(ex) && retryCount < maxRetries)
 					{
@@ -312,7 +312,7 @@ namespace AbxrLib.Runtime.Services.Data
 				if (shouldRetry)
 				{
 					retryCount++;
-					Debug.LogWarning($"AbxrLib: Data request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+					Debug.LogWarning($"[AbxrLib] Data request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
 					yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
 					continue;
 				}
@@ -349,7 +349,7 @@ namespace AbxrLib.Runtime.Services.Data
 				catch (Exception ex)
 				{
 					lastError = $"Data response handling failed: {ex.Message}";
-					Debug.LogError($"AbxrLib: {lastError}");
+					Debug.LogError($"[AbxrLib] {lastError}");
 
 					if (IsDataRetryableException(ex) && retryCount < maxRetries)
 					{
@@ -368,7 +368,7 @@ namespace AbxrLib.Runtime.Services.Data
 					retryCount++;
 					if (retryCount <= maxRetries)
 					{
-						Debug.LogWarning($"AbxrLib: Data POST Request failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+						Debug.LogWarning($"[AbxrLib] Data POST Request failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
 						yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
 					}
 				}
@@ -382,7 +382,7 @@ namespace AbxrLib.Runtime.Services.Data
 			// If all retries failed, put data back in queue (with size limits enforced)
 			if (!success)
 			{
-				Debug.LogError($"AbxrLib: Data POST Request failed after {retryCount} attempts: {lastError}");
+				Debug.LogError($"[AbxrLib] Data POST Request failed after {retryCount} attempts: {lastError}");
 				_nextSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
 				lock (_lock)
 				{
@@ -391,7 +391,7 @@ namespace AbxrLib.Runtime.Services.Data
 					{
 						if (IsQueueAtLimit(_eventPayloads, "Event"))
 						{
-							Debug.LogWarning("AbxrLib: Cannot re-insert failed events - queue at limit, dropping event");
+							Debug.LogWarning("[AbxrLib] Cannot re-insert failed events - queue at limit, dropping event");
 							break; // Stop re-inserting if queue is at limit
 						}
 						_eventPayloads.Insert(0, eventPayload);
@@ -402,7 +402,7 @@ namespace AbxrLib.Runtime.Services.Data
 					{
 						if (IsQueueAtLimit(_telemetryPayloads, "Telemetry"))
 						{
-							Debug.LogWarning("AbxrLib: Cannot re-insert failed telemetry - queue at limit, dropping telemetry");
+							Debug.LogWarning("[AbxrLib] Cannot re-insert failed telemetry - queue at limit, dropping telemetry");
 							break; // Stop re-inserting if queue is at limit
 						}
 						_telemetryPayloads.Insert(0, telemetryPayload);
@@ -413,7 +413,7 @@ namespace AbxrLib.Runtime.Services.Data
 					{
 						if (IsQueueAtLimit(_logPayloads, "Log"))
 						{
-							Debug.LogWarning("AbxrLib: Cannot re-insert failed logs - queue at limit, dropping log");
+							Debug.LogWarning("[AbxrLib] Cannot re-insert failed logs - queue at limit, dropping log");
 							break; // Stop re-inserting if queue is at limit
 						}
 						_logPayloads.Insert(0, logPayload);
@@ -491,7 +491,7 @@ namespace AbxrLib.Runtime.Services.Data
 			int maxSize = Configuration.Instance.maximumCachedItems;
 			if (maxSize > 0 && queue.Count >= maxSize)
 			{
-				Debug.LogWarning($"AbxrLib: {queueType} queue limit reached ({maxSize}), rejecting new items");
+				Debug.LogWarning($"[AbxrLib] {queueType} queue limit reached ({maxSize}), rejecting new items");
 				return true;
 			}
 			return false;

@@ -36,7 +36,7 @@ Config and credentials come from `Configuration.Instance` (appID, orgID, authSec
 ```
 Unity App
     ↓
-AbxrLib: AbxrAuthService, ArborInsightServiceClient (C#)
+[AbxrLib] AbxrAuthService, ArborInsightServiceClient (C#)
     ↓
 ArborInsightServiceBridge → client AAR (e.g. insights-client-service.aar)
     ↓
@@ -88,7 +88,7 @@ AIDL → ArborInsightService (separate APK)
 - **Auth fails / wrong orgId or authSecret:** Confirm Unity Configuration (AbxrLib.asset) and buildType; remember GetArborData() can override with ArborXR SDK when connected.
 - **Empty app_id / org_id / auth_secret or HTTP 422:** Check GetConfigData()/GetArborData() and that Configuration or ArborXR SDK is providing values; inspect auth payload in logs.
 - **App/org token validation (useAppTokens):** Ensure appToken and orgToken are valid JWTs (three dot-separated segments). For production_custom, orgToken is required. Development can use app token as org token if org token is empty.
-- **Service “not ready” or bind fails on Android:** Ensure the ArborInsightService APK is installed and the client AAR in `Plugins/Android/` matches that service version (AAR must support set_OrgToken when using app tokens). Check logcat for `ArborInsightServiceClient` and `AbxrLib:`.
+- **Service “not ready” or bind fails on Android:** Ensure the ArborInsightService APK is installed and the client AAR in `Plugins/Android/` matches that service version (AAR must support set_OrgToken when using app tokens). Check logcat for `ArborInsightServiceClient` and `[AbxrLib]`.
 - **Missing AAR:** If you see “bridge not initialized” or “AAR may be missing”, add the client AAR (e.g. `insights-client-service.aar`) to `Plugins/Android/`. Obtain it from your distribution channel; it is not built in this repo.
 
 ## Technical Notes

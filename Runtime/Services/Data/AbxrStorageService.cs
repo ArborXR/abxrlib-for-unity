@@ -180,7 +180,7 @@ namespace AbxrLib.Runtime.Services.Data
 				catch (Exception ex)
 				{
 					lastError = $"Storage request creation failed: {ex.Message}";
-					Debug.LogError($"AbxrLib: {lastError}");
+					Debug.LogError($"[AbxrLib] {lastError}");
 
 					if (IsStorageRetryableException(ex) && retryCount < maxRetries)
 					{
@@ -192,7 +192,7 @@ namespace AbxrLib.Runtime.Services.Data
 				if (shouldRetry)
 				{
 					retryCount++;
-					Debug.LogWarning($"AbxrLib: Storage request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+					Debug.LogWarning($"[AbxrLib] Storage request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
 					yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
 					continue;
 				}
@@ -229,7 +229,7 @@ namespace AbxrLib.Runtime.Services.Data
 				catch (Exception ex)
 				{
 					lastError = $"Storage response handling failed: {ex.Message}";
-					Debug.LogError($"AbxrLib: {lastError}");
+					Debug.LogError($"[AbxrLib] {lastError}");
 
 					if (IsStorageRetryableException(ex) && retryCount < maxRetries)
 					{
@@ -248,7 +248,7 @@ namespace AbxrLib.Runtime.Services.Data
 					retryCount++;
 					if (retryCount <= maxRetries)
 					{
-						Debug.LogWarning($"AbxrLib: Storage POST Request failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+						Debug.LogWarning($"[AbxrLib] Storage POST Request failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
 						yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
 					}
 				}
@@ -262,7 +262,7 @@ namespace AbxrLib.Runtime.Services.Data
 			// If all retries failed, put data back in queue (with size limits enforced)
 			if (!success)
 			{
-				Debug.LogError($"AbxrLib: Storage POST Request failed after {retryCount} attempts: {lastError}");
+				Debug.LogError($"[AbxrLib] Storage POST Request failed after {retryCount} attempts: {lastError}");
 				_nextSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
 				lock (_lock)
 				{
@@ -271,7 +271,7 @@ namespace AbxrLib.Runtime.Services.Data
 					{
 						if (IsQueueAtLimit(_payloads, "Storage"))
 						{
-							Debug.LogWarning("AbxrLib: Cannot re-insert failed storage - queue at limit, dropping storage");
+							Debug.LogWarning("[AbxrLib] Cannot re-insert failed storage - queue at limit, dropping storage");
 							break; // Stop re-inserting if queue is at limit
 						}
 						_payloads.Insert(0, storagePayload); // Insert at front for priority
@@ -367,7 +367,7 @@ namespace AbxrLib.Runtime.Services.Data
 					}
 					catch (Exception ex)
 					{
-						Debug.LogWarning($"AbxrLib: Storage GET parse failed: {ex.Message}");
+						Debug.LogWarning($"[AbxrLib] Storage GET parse failed: {ex.Message}");
 					}
 				}
 				callback?.Invoke(result);
@@ -393,7 +393,7 @@ namespace AbxrLib.Runtime.Services.Data
 			}
 			else
 			{
-				Debug.LogWarning($"AbxrLib: Storage GET failed: {request.error} - {request.downloadHandler.text}");
+				Debug.LogWarning($"[AbxrLib] Storage GET failed: {request.error} - {request.downloadHandler.text}");
 				callback?.Invoke(null);
 			}
 		}
@@ -438,7 +438,7 @@ namespace AbxrLib.Runtime.Services.Data
 			}
 			else
 			{
-				Debug.LogWarning($"AbxrLib: Storage DELETE failed: {request.error} - {request.downloadHandler.text}");
+				Debug.LogWarning($"[AbxrLib] Storage DELETE failed: {request.error} - {request.downloadHandler.text}");
 			}
 		}
 
@@ -450,7 +450,7 @@ namespace AbxrLib.Runtime.Services.Data
 			int maxSize = Configuration.Instance.maximumCachedItems;
 			if (maxSize > 0 && queue.Count >= maxSize)
 			{
-				Debug.LogWarning($"AbxrLib: {queueType} queue limit reached ({maxSize}), rejecting new items");
+				Debug.LogWarning($"[AbxrLib] {queueType} queue limit reached ({maxSize}), rejecting new items");
 				return true;
 			}
 			return false;

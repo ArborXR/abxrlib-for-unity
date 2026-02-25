@@ -3,7 +3,7 @@
  * 
  * AbxrLib for Unity - Utility Functions
  * 
- * This file contains utility functions and helper methods used throughout AbxrLib:
+ * This file contains utility functions and helper methods used throughout AbxrLib
  * - Cryptographic functions (SHA256, CRC32)
  * - JWT token decoding and validation
  * - Network utilities (IP address detection, URL building)
@@ -275,21 +275,21 @@ namespace AbxrLib.Runtime.Core
             {
                 if (string.IsNullOrEmpty(token))
                 {
-                    Debug.LogError("AbxrLib: JWT token is null or empty");
+                    Debug.LogError("[AbxrLib] JWT token is null or empty");
                     return null;
                 }
 
                 string[] parts = token.Split('.');
                 if (parts.Length != 3)
                 {
-                    Debug.LogError($"AbxrLib: Invalid JWT token format - expected 3 parts, got {parts.Length}");
+                    Debug.LogError($"[AbxrLib] Invalid JWT token format - expected 3 parts, got {parts.Length}");
                     return null;
                 }
 
                 string payload = parts[1];
                 if (string.IsNullOrEmpty(payload))
                 {
-                    Debug.LogError("AbxrLib: JWT payload is empty");
+                    Debug.LogError("[AbxrLib] JWT payload is empty");
                     return null;
                 }
 
@@ -299,14 +299,14 @@ namespace AbxrLib.Runtime.Core
 
                 if (string.IsNullOrEmpty(json))
                 {
-                    Debug.LogError("AbxrLib: JWT payload decoded to empty JSON");
+                    Debug.LogError("[AbxrLib] JWT payload decoded to empty JSON");
                     return null;
                 }
 
                 var result = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
                 if (result == null)
                 {
-                    Debug.LogError("AbxrLib: Failed to deserialize JWT payload JSON");
+                    Debug.LogError("[AbxrLib] Failed to deserialize JWT payload JSON");
                     return null;
                 }
 
@@ -314,17 +314,17 @@ namespace AbxrLib.Runtime.Core
             }
             catch (FormatException ex)
             {
-                Debug.LogError($"AbxrLib: JWT token format error: {ex.Message}");
+                Debug.LogError($"[AbxrLib] JWT token format error: {ex.Message}");
                 return null;
             }
             catch (JsonException ex)
             {
-                Debug.LogError($"AbxrLib: JWT JSON parsing error: {ex.Message}");
+                Debug.LogError($"[AbxrLib] JWT JSON parsing error: {ex.Message}");
                 return null;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: JWT decoding error: {ex.Message}");
+                Debug.LogError($"[AbxrLib] JWT decoding error: {ex.Message}");
                 return null;
             }
         }
@@ -491,7 +491,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: BuildOrgTokenDynamic failed: {ex.Message}");
+                Debug.LogError($"[AbxrLib] BuildOrgTokenDynamic failed: {ex.Message}");
                 return null;
             }
         }
@@ -524,7 +524,7 @@ namespace AbxrLib.Runtime.Core
             catch (Exception ex)
             {
                 // Log error with consistent format and include network context
-                Debug.LogError($"AbxrLib: Failed to get local IP address: {ex.Message}\n" +
+                Debug.LogError($"[AbxrLib] Failed to get local IP address: {ex.Message}\n" +
                               $"Exception Type: {ex.GetType().Name}\n" +
                               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
@@ -650,7 +650,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: Could not read org token from {OrgTokenFileName}: {ex.Message}");
+                Debug.LogWarning($"[AbxrLib] Could not read org token from {OrgTokenFileName}: {ex.Message}");
             }
 
             return "";
@@ -682,7 +682,7 @@ namespace AbxrLib.Runtime.Core
             catch (System.Exception ex)
             {
                 // Log warning with consistent format and include Android context
-                Debug.LogWarning($"AbxrLib: Failed to get Android intent parameter '{key}': {ex.Message}\n" +
+                Debug.LogWarning($"[AbxrLib] Failed to get Android intent parameter '{key}': {ex.Message}\n" +
                                 $"Exception Type: {ex.GetType().Name}\n" +
                                 $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
@@ -730,7 +730,7 @@ namespace AbxrLib.Runtime.Core
             catch (System.Exception ex)
             {
                 // Log warning with consistent format and include Android context
-                Debug.LogWarning($"AbxrLib: Failed to get Android manifest metadata '{key}': {ex.Message}\n" +
+                Debug.LogWarning($"[AbxrLib] Failed to get Android manifest metadata '{key}': {ex.Message}\n" +
                                 $"Exception Type: {ex.GetType().Name}\n" +
                                 $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
@@ -765,7 +765,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: Failed to convert module data: {ex.Message}\nException Type: {ex.GetType().Name}\nStack Trace: {ex.StackTrace ?? "No stack trace available"}");
+                Debug.LogError($"[AbxrLib] Failed to convert module data: {ex.Message}\nException Type: {ex.GetType().Name}\nStack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
             return moduleDataList;
         }

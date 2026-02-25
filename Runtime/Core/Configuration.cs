@@ -99,14 +99,14 @@ namespace AbxrLib.Runtime.Core
                 if (string.IsNullOrEmpty(appToken))
                 {
                     if (PreferValidationWarnings)
-                        Debug.LogWarning("AbxrLib: Configuration validation - appToken is required when using app tokens. Set App Token in AbxrLib configuration or authentication will fail at runtime.");
+                        Debug.LogWarning("[AbxrLib] Configuration validation - appToken is required when using app tokens. Set App Token in AbxrLib configuration or authentication will fail at runtime.");
                     else
-                        Debug.LogError("AbxrLib: Configuration validation failed - appToken is required when using app tokens.");
+                        Debug.LogError("[AbxrLib] Configuration validation failed - appToken is required when using app tokens.");
                     return false;
                 }
                 if (!LooksLikeJwt(appToken))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - appToken does not look like a JWT (expected three dot-separated segments).");
+                    Debug.LogError("[AbxrLib] Configuration validation failed - appToken does not look like a JWT (expected three dot-separated segments).");
                     return false;
                 }
                 // Production (Custom APK) requires orgToken to be set and JWT-shaped
@@ -115,20 +115,20 @@ namespace AbxrLib.Runtime.Core
                     if (string.IsNullOrEmpty(orgToken))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("AbxrLib: Configuration validation - Organization Token is required when Build Type is Production (Custom APK). Set the customer's org token in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Configuration validation - Organization Token is required when Build Type is Production (Custom APK). Set the customer's org token in AbxrLib configuration.");
                         else
-                            Debug.LogError("AbxrLib: Configuration validation failed - Organization Token is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Configuration validation failed - Organization Token is required when Build Type is Production (Custom APK).");
                         return false;
                     }
                     if (!LooksLikeJwt(orgToken))
                     {
-                        Debug.LogError("AbxrLib: Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
+                        Debug.LogError("[AbxrLib] Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
                         return false;
                     }
                 }
                 else if (!string.IsNullOrEmpty(orgToken) && !LooksLikeJwt(orgToken))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
+                    Debug.LogError("[AbxrLib] Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
                     return false;
                 }
             }
@@ -137,12 +137,12 @@ namespace AbxrLib.Runtime.Core
                 // Legacy mode: appID is required and must be valid format. orgID and authSecret can come from runtime — only validate format when set. Production (Custom APK) requires both.
                 if (string.IsNullOrEmpty(appID))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - Application ID is required when not using app tokens.");
+                    Debug.LogError("[AbxrLib] Configuration validation failed - Application ID is required when not using app tokens.");
                     return false;
                 }
                 if (!Regex.IsMatch(appID, uuidPattern))
                 {
-                    Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
                     return false;
                 }
                 if (buildType == "production_custom")
@@ -150,28 +150,28 @@ namespace AbxrLib.Runtime.Core
                     if (string.IsNullOrEmpty(orgID))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("AbxrLib: Configuration validation - Organization ID is required when Build Type is Production (Custom APK) with legacy auth. Set the customer's org ID in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Configuration validation - Organization ID is required when Build Type is Production (Custom APK) with legacy auth. Set the customer's org ID in AbxrLib configuration.");
                         else
-                            Debug.LogError("AbxrLib: Configuration validation failed - Organization ID is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Configuration validation failed - Organization ID is required when Build Type is Production (Custom APK).");
                         return false;
                     }
                     if (string.IsNullOrEmpty(authSecret) || string.IsNullOrWhiteSpace(authSecret))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("AbxrLib: Configuration validation - Authorization Secret is required when Build Type is Production (Custom APK) with legacy auth. Set it in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Configuration validation - Authorization Secret is required when Build Type is Production (Custom APK) with legacy auth. Set it in AbxrLib configuration.");
                         else
-                            Debug.LogError("AbxrLib: Configuration validation failed - Authorization Secret is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Configuration validation failed - Authorization Secret is required when Build Type is Production (Custom APK).");
                         return false;
                     }
                 }
                 if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
                 {
-                    Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
                     return false;
                 }
                 if (!string.IsNullOrEmpty(authSecret) && string.IsNullOrWhiteSpace(authSecret))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - authSecret cannot be empty if set");
+                    Debug.LogError("[AbxrLib] Configuration validation failed - authSecret cannot be empty if set");
                     return false;
                 }
             }
@@ -179,13 +179,13 @@ namespace AbxrLib.Runtime.Core
             // Validate restUrl and numeric ranges for both modes
             if (string.IsNullOrEmpty(restUrl))
             {
-                Debug.LogError("AbxrLib: Configuration validation failed - restUrl is required but not set");
+                Debug.LogError("[AbxrLib] Configuration validation failed - restUrl is required but not set");
                 return false;
             }
             
             if (!Utils.IsValidUrl(restUrl))
             {
-                Debug.LogError($"AbxrLib: Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL");
+                Debug.LogError($"[AbxrLib] Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL");
                 return false;
             }
             
@@ -215,12 +215,12 @@ namespace AbxrLib.Runtime.Core
             if (value < min)
             {
                 int applied = Mathf.Clamp(defaultValue, min, max);
-                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
+                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
                 value = applied;
             }
             else if (value > max)
             {
-                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value}, clamped to maximum {max}.");
+                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value}, clamped to maximum {max}.");
                 value = max;
             }
         }
@@ -230,12 +230,12 @@ namespace AbxrLib.Runtime.Core
             if (value < min)
             {
                 float applied = Mathf.Clamp(defaultValue, min, max);
-                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
+                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
                 value = applied;
             }
             else if (value > max)
             {
-                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value}, clamped to maximum {max}.");
+                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value}, clamped to maximum {max}.");
                 value = max;
             }
         }

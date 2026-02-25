@@ -19,13 +19,13 @@ namespace AbxrLib.Runtime.Services.Platform
                 else
                 {
                     var error = result?.Call<string>("getError") ?? "Unknown SDK error";
-                    Debug.LogWarning($"AbxrLib: SDK call {methodName} failed: {error}");
+                    Debug.LogWarning($"[AbxrLib] SDK call {methodName} failed: {error}");
                     return default(T)!;
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: SDK call {methodName} threw exception: {ex.Message}");
+                Debug.LogError($"[AbxrLib] SDK call {methodName} threw exception: {ex.Message}");
                 return default(T)!;
             }
         }
@@ -53,7 +53,7 @@ namespace AbxrLib.Runtime.Services.Platform
             {
                 if (_sdk is null)
                 {
-                    Debug.LogWarning("AbxrLib: ArborServiceClient SDK is not initialized. This MonoBehaviour may not be enabled.");
+                    Debug.LogWarning("[AbxrLib] ArborServiceClient SDK is not initialized. This MonoBehaviour may not be enabled.");
                 }
 
                 return _sdk;

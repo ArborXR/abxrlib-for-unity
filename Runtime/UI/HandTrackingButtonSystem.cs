@@ -89,7 +89,7 @@ namespace AbxrLib.Runtime.UI
             
             isInitialized = true;
             
-            Debug.Log($"AbxrLib: HandTrackingButtonSystem - Initialized with {(useConfigurationSettings ? "configuration" : "custom")} settings");
+            Debug.Log($"[AbxrLib] HandTrackingButtonSystem - Initialized with {(useConfigurationSettings ? "configuration" : "custom")} settings");
         }
         
         private void SetupInteractionMethod(bool useDirectTouch)
@@ -97,11 +97,11 @@ namespace AbxrLib.Runtime.UI
             if (useDirectTouch && LaserPointerManager.IsXRInteractionToolkitAvailable())
             {
                 LaserPointerManager.EnableLaserPointersForInteraction();
-                Debug.Log("AbxrLib: HandTrackingButtonSystem - Direct touch interaction enabled for hand tracking");
+                Debug.Log("[AbxrLib] HandTrackingButtonSystem - Direct touch interaction enabled for hand tracking");
             }
             else
             {
-                Debug.Log("AbxrLib: HandTrackingButtonSystem - Ray casting interaction enabled for hand tracking");
+                Debug.Log("[AbxrLib] HandTrackingButtonSystem - Ray casting interaction enabled for hand tracking");
             }
         }
         
@@ -116,12 +116,12 @@ namespace AbxrLib.Runtime.UI
                     faceCameraComponent = gameObject.AddComponent<FaceCamera>();
                     faceCameraComponent.useConfigurationValues = useConfigurationSettings;
                 }
-                Debug.Log("AbxrLib: HandTrackingButtonSystem - Face camera behavior enabled");
+                Debug.Log("[AbxrLib] HandTrackingButtonSystem - Face camera behavior enabled");
             }
             else if (useCustomPositioning)
             {
                 transform.position = customPosition;
-                Debug.Log($"AbxrLib: HandTrackingButtonSystem - Custom positioning set to {customPosition}");
+                Debug.Log($"[AbxrLib] HandTrackingButtonSystem - Custom positioning set to {customPosition}");
             }
         }
         
@@ -129,7 +129,7 @@ namespace AbxrLib.Runtime.UI
         {
             if (handTrackingButtons == null || handTrackingButtons.Length == 0)
             {
-                Debug.LogWarning("AbxrLib: HandTrackingButtonSystem - No hand tracking buttons assigned");
+                Debug.LogWarning("[AbxrLib] HandTrackingButtonSystem - No hand tracking buttons assigned");
                 return;
             }
             
@@ -139,7 +139,7 @@ namespace AbxrLib.Runtime.UI
                 {
                     // Set up the hand tracking button
                     handTrackingButtons[i].Initialize(this, i, analyticsPrefix);
-                    Debug.Log($"AbxrLib: HandTrackingButtonSystem - Set up hand tracking button {i}");
+                    Debug.Log($"[AbxrLib] HandTrackingButtonSystem - Set up hand tracking button {i}");
                 }
             }
         }
@@ -153,7 +153,7 @@ namespace AbxrLib.Runtime.UI
         {
             if (buttonIndex < 0 || buttonIndex >= handTrackingButtons.Length || handTrackingButtons[buttonIndex] == null)
             {
-                Debug.LogError($"AbxrLib: HandTrackingButtonSystem - Invalid button index {buttonIndex}");
+                Debug.LogError($"[AbxrLib] HandTrackingButtonSystem - Invalid button index {buttonIndex}");
                 return;
             }
             
@@ -165,7 +165,7 @@ namespace AbxrLib.Runtime.UI
                 Abxr.InteractionResult.Neutral, 
                 buttonName);
             
-            Debug.Log($"AbxrLib: HandTrackingButtonSystem - Hand tracking button '{buttonName}' activated, logged as '{eventName}'");
+            Debug.Log($"[AbxrLib] HandTrackingButtonSystem - Hand tracking button '{buttonName}' activated, logged as '{eventName}'");
             
             // Call custom button handler
             OnHandTrackingButtonClick(buttonIndex, buttonName);
@@ -179,7 +179,7 @@ namespace AbxrLib.Runtime.UI
         protected virtual void OnHandTrackingButtonClick(int buttonIndex, string buttonName)
         {
             // Override in derived classes for custom behavior
-            Debug.Log($"AbxrLib: HandTrackingButtonSystem - Hand tracking button click handler - Button {buttonIndex}: {buttonName}");
+            Debug.Log($"[AbxrLib] HandTrackingButtonSystem - Hand tracking button click handler - Button {buttonIndex}: {buttonName}");
         }
         
         /// <summary>
@@ -207,7 +207,7 @@ namespace AbxrLib.Runtime.UI
                 LaserPointerManager.RestoreLaserPointerStates();
             }
             
-            Debug.Log($"AbxrLib: HandTrackingButtonSystem - Direct touch interaction {(enable ? "enabled" : "disabled")}");
+            Debug.Log($"[AbxrLib] HandTrackingButtonSystem - Direct touch interaction {(enable ? "enabled" : "disabled")}");
         }
         
         private void OnDestroy()
@@ -228,7 +228,7 @@ namespace AbxrLib.Runtime.UI
                 {
                     if (handTrackingButtons[i] == null)
                     {
-                        Debug.LogWarning($"AbxrLib: HandTrackingButtonSystem - Hand tracking button at index {i} is null");
+                        Debug.LogWarning($"[AbxrLib] HandTrackingButtonSystem - Hand tracking button at index {i} is null");
                     }
                 }
             }
@@ -304,11 +304,11 @@ namespace AbxrLib.Runtime.UI
             }
             else
             {
-                Debug.LogError($"AbxrLib: HandTrackingButton - No collider found for button '{buttonName}'");
+                Debug.LogError($"[AbxrLib] HandTrackingButton - No collider found for button '{buttonName}'");
             }
             
             isInitialized = true;
-            Debug.Log($"AbxrLib: HandTrackingButton - Initialized button '{buttonName}'");
+            Debug.Log($"[AbxrLib] HandTrackingButton - Initialized button '{buttonName}'");
         }
         
         /// <summary>
@@ -318,7 +318,7 @@ namespace AbxrLib.Runtime.UI
         {
             if (!isInitialized)
             {
-                Debug.LogWarning($"AbxrLib: HandTrackingButton - Button '{buttonName}' not initialized");
+                Debug.LogWarning($"[AbxrLib] HandTrackingButton - Button '{buttonName}' not initialized");
                 return;
             }
             

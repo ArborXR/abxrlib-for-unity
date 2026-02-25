@@ -34,18 +34,18 @@ namespace AbxrLib.Runtime.Core
             string productName = Unity.XR.PXR.PXR_System.GetProductName().ToLower();
             if (!productName.Contains("enterprise"))
             {
-                Debug.LogWarning("AbxrLib: Disabling PICO QR Code Scanner. Must be run on PICO Enterprise device.");
+                Debug.LogWarning("[AbxrLib] Disabling PICO QR Code Scanner. Must be run on PICO Enterprise device.");
                 return;
             }
 
             if (Instance == null)
             {
                 Instance = this;
-                Debug.Log("AbxrLib: QRCodeReaderPico Instance activated successfully.");
+                Debug.Log("[AbxrLib] QRCodeReaderPico Instance activated successfully.");
             }
             else
             {
-                Debug.LogWarning("AbxrLib: QRCodeReaderPico Instance already exists. Destroying duplicate.");
+                Debug.LogWarning("[AbxrLib] QRCodeReaderPico Instance already exists. Destroying duplicate.");
                 Destroy(gameObject);
             }
         }
@@ -79,12 +79,12 @@ namespace AbxrLib.Runtime.Core
             if (match.Success)
             {
                 string pin = match.Value;
-                Debug.Log($"AbxrLib: Extracted PIN from QR code: {pin}");
+                Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
                 AuthService.KeyboardAuthenticate(pin);
             }
             else
             {
-                Debug.LogWarning($"AbxrLib: Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
+                Debug.LogWarning($"[AbxrLib] Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
                 AuthService.KeyboardAuthenticate(null);
             }
         }

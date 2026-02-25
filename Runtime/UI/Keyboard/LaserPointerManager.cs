@@ -55,7 +55,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
                 _originalStates = newDictionary;
                 
-                Debug.Log($"AbxrLib: LaserPointerManager - Cleaned up {keysToRemove.Count} destroyed ray interactor references");
+                Debug.Log($"[AbxrLib] LaserPointerManager - Cleaned up {keysToRemove.Count} destroyed ray interactor references");
             }
         }
         
@@ -68,7 +68,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _isManagingLaserPointers = false;
             _cachedRayInteractors = null; // Clear cache
             _cacheValid = false; // Invalidate cache
-            Debug.Log("AbxrLib: LaserPointerManager - Force cleanup completed");
+            Debug.Log("[AbxrLib] LaserPointerManager - Force cleanup completed");
         }
         
         /// <summary>
@@ -79,7 +79,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (_isManagingLaserPointers)
             {
-                Debug.Log("AbxrLib: LaserPointerManager - Scene changed while managing laser pointers, performing cleanup");
+                Debug.Log("[AbxrLib] LaserPointerManager - Scene changed while managing laser pointers, performing cleanup");
                 ForceCleanup();
             }
             else
@@ -122,7 +122,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 if (validInteractors.Count != _cachedRayInteractors.Length)
                 {
                     _cachedRayInteractors = validInteractors.ToArray();
-                    Debug.Log($"AbxrLib: LaserPointerManager - Updated cache, removed {_cachedRayInteractors.Length - validInteractors.Count} destroyed ray interactors");
+                    Debug.Log($"[AbxrLib] LaserPointerManager - Updated cache, removed {_cachedRayInteractors.Length - validInteractors.Count} destroyed ray interactors");
                 }
                 
                 return _cachedRayInteractors;
@@ -172,12 +172,12 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     if (!wasActive)
                     {
                         rayInteractor.gameObject.SetActive(true);
-                        Debug.Log($"AbxrLib: LaserPointerManager - Enabled ray interactor on {rayInteractor.gameObject.name}");
+                        Debug.Log($"[AbxrLib] LaserPointerManager - Enabled ray interactor on {rayInteractor.gameObject.name}");
                     }
                 }
                 else if (_originalStates.Count >= Configuration.Instance.maxDictionarySize)
                 {
-                    Debug.LogWarning($"AbxrLib: LaserPointerManager - Maximum dictionary size ({Configuration.Instance.maxDictionarySize}) reached, skipping additional ray interactors");
+                    Debug.LogWarning($"[AbxrLib] LaserPointerManager - Maximum dictionary size ({Configuration.Instance.maxDictionarySize}) reached, skipping additional ray interactors");
                     break;
                 }
             }
@@ -199,7 +199,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 if (canvas.GetComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>() != null)
                     continue;
                 canvas.gameObject.AddComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>();
-                Debug.Log($"AbxrLib: LaserPointerManager - Added TrackedDeviceGraphicRaycaster to canvas on {canvas.gameObject.name}");
+                Debug.Log($"[AbxrLib] LaserPointerManager - Added TrackedDeviceGraphicRaycaster to canvas on {canvas.gameObject.name}");
             }
         }
 

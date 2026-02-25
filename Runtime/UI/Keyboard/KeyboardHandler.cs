@@ -48,7 +48,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
             else
             {
-                Debug.Log("AbxrLib: KeyboardHandler - Using custom keyboard prefab from configuration");
+                Debug.Log("[AbxrLib] KeyboardHandler - Using custom keyboard prefab from configuration");
             }
             
             if (!_pinPadPrefab)
@@ -57,13 +57,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
             else
             {
-                Debug.Log("AbxrLib: KeyboardHandler - Using custom PIN pad prefab from configuration");
+                Debug.Log("[AbxrLib] KeyboardHandler - Using custom PIN pad prefab from configuration");
             }
             
             
             if (!_keyboardPrefab)
             {
-                Debug.LogError("AbxrLib: KeyboardHandler - Failed to load keyboard prefab from both configuration and Resources");
+                Debug.LogError("[AbxrLib] KeyboardHandler - Failed to load keyboard prefab from both configuration and Resources");
             }
         }
     
@@ -94,7 +94,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             if (keyboardHandler != null)
             {
                 keyboardHandler.LoadPrefabs();
-                Debug.Log("AbxrLib: KeyboardHandler - Prefabs refreshed from configuration");
+                Debug.Log("[AbxrLib] KeyboardHandler - Prefabs refreshed from configuration");
             }
         }
 

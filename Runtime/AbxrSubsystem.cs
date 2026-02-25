@@ -86,11 +86,11 @@ namespace AbxrLib.Runtime
                 gameObject.AddComponent<TrackTargetGaze>();
 
             var jsonVersion = typeof(JsonConvert).Assembly.GetName().Version;
-            Debug.Log($"AbxrLib: Using Newtonsoft.Json version: {jsonVersion}");
+            Debug.Log($"[AbxrLib] Using Newtonsoft.Json version: {jsonVersion}");
 
             if (jsonVersion < new Version(13, 0, 0))
             {
-	            Debug.LogError("AbxrLib: Incompatible Newtonsoft.Json version loaded.");
+	            Debug.LogError("[AbxrLib] Incompatible Newtonsoft.Json version loaded.");
             }
 
             // Create services
@@ -118,7 +118,7 @@ namespace AbxrLib.Runtime
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
             {
-                Debug.LogWarning($"AbxrLib: Auth failed: {error}");
+                Debug.LogWarning($"[AbxrLib] Auth failed: {error}");
                 HandleAuthCompleted(false);
             };
 
@@ -155,7 +155,7 @@ namespace AbxrLib.Runtime
             }
             else
             {
-                Debug.Log("AbxrLib: Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
+                Debug.Log("[AbxrLib] Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
             }
 
             // Telemetry collector
@@ -164,7 +164,7 @@ namespace AbxrLib.Runtime
                 _telemetryService.Start();
             }
             
-            Debug.Log($"AbxrLib: Version {AbxrLibVersion.Version} Initialized.");
+            Debug.Log($"[AbxrLib] Version {AbxrLibVersion.Version} Initialized.");
         }
 
         private void OnDestroy()
@@ -201,7 +201,7 @@ namespace AbxrLib.Runtime
         
         private void OnApplicationQuit()
         {
-	        Debug.Log("AbxrLib: Application quitting, automatically closing running events");
+	        Debug.Log("[AbxrLib] Application quitting, automatically closing running events");
 	        CloseRunningEvents();
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (_authService.UsingArborInsightServiceForData())
@@ -255,7 +255,7 @@ namespace AbxrLib.Runtime
 
 	        if (Abxr.OnModuleTarget == null)
 	        {
-		        Debug.LogError("AbxrLib: Subscribe to OnModuleTarget before running modules");
+		        Debug.LogError("[AbxrLib] Subscribe to OnModuleTarget before running modules");
 		        return;
 	        }
 
@@ -348,19 +348,19 @@ namespace AbxrLib.Runtime
 			var response = _authService.ResponseData;
 			if (response?.Modules == null || response.Modules.Count == 0)
 			{
-				Debug.LogError("AbxrLib: No modules available");
+				Debug.LogError("[AbxrLib] No modules available");
 				return false;
 			}
 		
 			if (moduleIndex >= response.Modules.Count || moduleIndex < 0)
 			{
-				Debug.LogError($"AbxrLib: Invalid module index - {moduleIndex}");
+				Debug.LogError($"[AbxrLib] Invalid module index - {moduleIndex}");
 				return false;
 			}
 
 			if (Abxr.OnModuleTarget == null)
 			{
-				Debug.LogError("AbxrLib: Need to subscribe to OnModuleTarget before running modules");
+				Debug.LogError("[AbxrLib] Need to subscribe to OnModuleTarget before running modules");
 				return false;
 			}
 		
@@ -379,14 +379,14 @@ namespace AbxrLib.Runtime
 			_currentModuleIndex++;
 			if (_currentModuleIndex < _authService.ResponseData.Modules.Count)
 			{
-				Debug.Log($"AbxrLib: Module '{_authService.ResponseData.Modules[_currentModuleIndex-1].Name}' complete. " +
+				Debug.Log($"[AbxrLib] Module '{_authService.ResponseData.Modules[_currentModuleIndex-1].Name}' complete. " +
 				          $"Advancing to next module - '{_authService.ResponseData.Modules[_currentModuleIndex].Name}'");
 				Abxr.OnModuleTarget?.Invoke(_authService.ResponseData.Modules[_currentModuleIndex].Target);
 			}
 			else
 			{
 				Abxr.OnAllModulesCompleted?.Invoke();
-				Debug.Log("AbxrLib: All modules complete");
+				Debug.Log("[AbxrLib] All modules complete");
 			}
 		}
 		
@@ -607,7 +607,7 @@ namespace AbxrLib.Runtime
 		private IEnumerator ExitAfterAssessmentComplete()
 		{
 			SendAll();
-			Debug.Log("AbxrLib: Assessment complete with auth handoff - returning to launcher in 2 seconds");
+			Debug.Log("[AbxrLib] Assessment complete with auth handoff - returning to launcher in 2 seconds");
 			yield return new WaitForSeconds(2f);
 	#if UNITY_EDITOR
 			UnityEditor.EditorApplication.isPlaying = false;
@@ -797,7 +797,7 @@ namespace AbxrLib.Runtime
 			// Validate prompt
 			if (string.IsNullOrWhiteSpace(prompt))
 			{
-				Debug.LogError("AbxrLib: Poll prompt cannot be null or empty");
+				Debug.LogError("[AbxrLib] Poll prompt cannot be null or empty");
 				return;
 			}
 
@@ -805,13 +805,13 @@ namespace AbxrLib.Runtime
 			{
 				if (responses == null)
 				{
-					Debug.LogError("AbxrLib: List of responses required for multiple choice poll");
+					Debug.LogError("[AbxrLib] List of responses required for multiple choice poll");
 					return;
 				}
 
 				if (responses.Count is < 2 or > 8)
 				{
-					Debug.LogError("AbxrLib: Multiple choice poll must have at least two and no more than 8 responses");
+					Debug.LogError("[AbxrLib] Multiple choice poll must have at least two and no more than 8 responses");
 					return;
 				}
 
@@ -820,7 +820,7 @@ namespace AbxrLib.Runtime
 				{
 					if (string.IsNullOrWhiteSpace(responses[i]))
 					{
-						Debug.LogError($"AbxrLib: Response at index {i} cannot be null or empty");
+						Debug.LogError($"[AbxrLib] Response at index {i} cannot be null or empty");
 						return;
 					}
 				}
@@ -871,7 +871,7 @@ namespace AbxrLib.Runtime
 		{
 			if (IsReservedSuperMetaDataKey(key))
 			{
-				string errorMessage = $"AbxrLib: Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
+				string errorMessage = $"[AbxrLib] Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
 				Debug.LogWarning(errorMessage);
 				Abxr.LogInfo(errorMessage, new Dictionary<string, string> { 
 					{ "attempted_key", key }, 
@@ -965,7 +965,7 @@ namespace AbxrLib.Runtime
 			catch (Exception ex)
 			{
 				// Log error with consistent format and include stack trace for debugging
-				Debug.LogError($"AbxrLib: Failed to load super metadata: {ex.Message}\n" +
+				Debug.LogError($"[AbxrLib] Failed to load super metadata: {ex.Message}\n" +
 				               $"Exception Type: {ex.GetType().Name}\n" +
 				               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 			}
@@ -990,7 +990,7 @@ namespace AbxrLib.Runtime
 			catch (Exception ex)
 			{
 				// Log error with consistent format and include stack trace for debugging
-				Debug.LogError($"AbxrLib: Failed to save super metadata: {ex.Message}\n" +
+				Debug.LogError($"[AbxrLib] Failed to save super metadata: {ex.Message}\n" +
 				               $"Exception Type: {ex.GetType().Name}\n" +
 				               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 			}
