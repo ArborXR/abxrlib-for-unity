@@ -56,6 +56,9 @@ namespace AbxrLib.Runtime.Core
         
         // Overlay UI for passthrough mode
         private GameObject _overlayCanvas;
+
+        // One-shot callback when using StartQRScanForAuthInput (developer API). When set, scan result is delivered here instead of KeyboardAuthenticate.
+        private Action<string> _scanResultCallback;
         
         private void Awake()
         {
@@ -836,6 +839,22 @@ namespace AbxrLib.Runtime.Core
         }
         
         /// <summary>
+        /// Set the one-shot callback for developer API (StartQRScanForAuthInput). When set, OnQRCodeScanned invokes this instead of KeyboardAuthenticate, and we do not create the built-in overlay.
+        /// </summary>
+        public void SetScanResultCallback(Action<string> callback)
+        {
+            _scanResultCallback = callback;
+        }
+
+        /// <summary>
+        /// Returns the camera texture (WebCamTexture) for embedding in custom UI. Null if not available or not yet initialized.
+        /// </summary>
+        public Texture GetCameraTexture()
+        {
+            return _webCamTexture;
+        }
+
+        /// <summary>
         /// Start the scanning coroutine
         /// </summary>
         private void StartScanning()
@@ -848,7 +867,9 @@ namespace AbxrLib.Runtime.Core
             }
             
             _isScanning = true;
-            CreateOverlayUI();
+            // When using developer API (callback set), do not create overlay so they can use GetCameraTexture() in their own UI
+            if (_scanResultCallback == null)
+                CreateOverlayUI();
             
             // Update camera texture in overlay if it already exists
             if (_overlayCanvas != null)
@@ -893,8 +914,12 @@ namespace AbxrLib.Runtime.Core
                 StopCoroutine(_scanningCoroutine);
                 _scanningCoroutine = null;
             }
-            
-            
+            if (_scanResultCallback != null)
+            {
+                var cb = _scanResultCallback;
+                _scanResultCallback = null;
+                cb?.Invoke(null);
+            }
             DestroyOverlayUI();
         }
         
@@ -1207,26 +1232,47 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         private void OnQRCodeScanned(string scanResult)
         {
-            StopScanning();
-
-            if (string.IsNullOrEmpty(scanResult)) return;
-            
-            // Extract PIN from QR code format "ABXR:123456"
-            Match match = Regex.Match(scanResult, @"(?<=ABXR:)\d+");
-            if (match.Success)
+            if (_scanResultCallback != null)
             {
-                string pin = match.Value;
+                string pin = null;
+                if (!string.IsNullOrEmpty(scanResult))
+                {
+                    Match match = Regex.Match(scanResult, @"(?<=ABXR:)\d+");
+                    if (match.Success)
+                    {
+                        pin = match.Value;
+                        Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
+                    }
+                    else
+                        Debug.LogWarning($"[AbxrLib] Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
+                }
+                var cb = _scanResultCallback;
+                _scanResultCallback = null;
+                _isScanning = false;
+                if (_scanningCoroutine != null)
+                {
+                    StopCoroutine(_scanningCoroutine);
+                    _scanningCoroutine = null;
+                }
+                DestroyOverlayUI();
+                cb?.Invoke(pin);
+                return;
+            }
+            StopScanning();
+            if (string.IsNullOrEmpty(scanResult)) return;
+            Match m = Regex.Match(scanResult, @"(?<=ABXR:)\d+");
+            if (m.Success)
+            {
+                string pin = m.Value;
                 Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
-                // Set inputSource to "QRlms" for QR code authentication
                 AuthService.SetInputSource("QRlms");
-                AuthService.KeyboardAuthenticate(pin); // TODO invalid QR code option??
+                AuthService.KeyboardAuthenticate(pin);
             }
             else
             {
                 Debug.LogWarning($"[AbxrLib] Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
-                // Set inputSource to "QRlms" even for invalid QR codes
                 AuthService.SetInputSource("QRlms");
-                AuthService.KeyboardAuthenticate(null); // TODO invalid QR code option??
+                AuthService.KeyboardAuthenticate(null);
             }
         }
         

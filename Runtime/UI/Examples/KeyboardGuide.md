@@ -164,7 +164,7 @@ The keyboard system is designed to work seamlessly with AbxrLib's authentication
 Abxr.Authenticate("username", "password");
 
 // PIN pad for assessment PINs
-Abxr.Authenticate("assessmentPin", "123456");
+Abxr.Authenticate("pin", "123456");
 ```
 
 ## Panel Structure

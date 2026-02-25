@@ -37,7 +37,7 @@ namespace AbxrLib.Runtime
 
         // ── Module state ─────────────────────────────────────────────
         private int _currentModuleIndex;
-        private Action<object, Action<string>> _appOnInputRequested;
+        private Action<string, string, string, string> _appOnInputRequested;
 
         // ── Super metadata ───────────────────────────────────────────
         private const string SuperMetaDataPrefsKey = "AbxrSuperMetaData";
@@ -64,12 +64,6 @@ namespace AbxrLib.Runtime
         
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
-
-        /// <summary>
-        /// When the default keyboard/PIN pad is shown, this is set so that when the user submits,
-        /// SubmitInput invokes it with the value instead of calling KeyboardAuthenticate directly.
-        /// </summary>
-        private Action<string> _pendingSubmitCallback;
 
         private void Awake()
         {
@@ -219,16 +213,69 @@ namespace AbxrLib.Runtime
 
         internal void SubmitInput(string input)
         {
-            if (_pendingSubmitCallback != null)
+            _authService.SubmitInput(input);
+        }
+
+        internal bool IsQRScanForAuthAvailable()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+#if PICO_ENTERPRISE_SDK_3
+            if (QRCodeReaderPico.Instance != null) return true;
+#endif
+            return QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
+#else
+            return false;
+#endif
+        }
+
+        internal void StartQRScanForAuthInput(Action<string> onResult)
+        {
+            if (onResult == null) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+#if PICO_ENTERPRISE_SDK_3
+            if (QRCodeReaderPico.Instance != null)
             {
-                var cb = _pendingSubmitCallback;
-                _pendingSubmitCallback = null;
-                cb(input);
+                QRCodeReaderPico.Instance.SetScanResultCallback(onResult);
+                QRCodeReaderPico.Instance.ScanQRCode();
+                return;
             }
-            else
+#endif
+            if (QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable())
             {
-                _authService.KeyboardAuthenticate(input);
+                QRCodeReader.Instance.SetScanResultCallback(onResult);
+                QRCodeReader.Instance.ScanQRCode();
+                return;
             }
+#endif
+            onResult(null);
+        }
+
+        internal void CancelQRScanForAuthInput()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+#if PICO_ENTERPRISE_SDK_3
+            if (QRCodeReaderPico.Instance != null)
+            {
+                QRCodeReaderPico.Instance.CancelScanForAuthInput();
+                return;
+            }
+#endif
+            if (QRCodeReader.Instance != null && QRCodeReader.Instance.IsScanning())
+                QRCodeReader.Instance.CancelScanning();
+#endif
+        }
+
+        internal Texture GetQRScanCameraTexture()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+#if PICO_ENTERPRISE_SDK_3
+            // Pico uses platform scanner UI; there is no embeddable camera texture.
+            if (QRCodeReaderPico.Instance != null) return null;
+#endif
+            return QRCodeReader.Instance?.GetCameraTexture();
+#else
+            return null;
+#endif
         }
 
         private void HandleAuthCompleted(bool success)
@@ -324,16 +371,16 @@ namespace AbxrLib.Runtime
 		internal void StartAuthentication() => _authService.Authenticate();
 
 		/// <summary>
-		/// Get or set the single OnInputRequested handler (forwarded to auth service). Public API uses object so app code does not need to reference AuthMechanism.
+		/// Get or set the single OnInputRequested handler (forwarded to auth service). Handler receives (type, prompt, domain, error).
 		/// </summary>
-		internal Action<object, Action<string>> OnInputRequested
+		internal Action<string, string, string, string> OnInputRequested
 		{
 			get => _appOnInputRequested;
 			set
 			{
 				_appOnInputRequested = value;
 				if (_authService != null)
-					_authService.OnInputRequested = value != null ? (m, s) => value(m, s) : null;
+					_authService.OnInputRequested = value != null ? (type, prompt, domain, error) => value(type, prompt, domain, error) : null;
 			}
 		}
 		
@@ -666,12 +713,12 @@ namespace AbxrLib.Runtime
 			Event("level_start", meta);
 		}
 		
-		internal void EventLevelComplete(string levelName, string score, Dictionary<string, string> meta = null)
+		internal void EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null)
 		{
 			meta ??= new Dictionary<string, string>();
 			meta["verb"] = "completed";
 			meta["id"] = levelName;
-			meta["score"] = score;
+			meta["score"] = score.ToString();
 			AddDuration(_levelStartTimes, levelName, meta);
 			Event("level_complete", meta);
 		}
@@ -1032,25 +1079,26 @@ namespace AbxrLib.Runtime
 			return result.ToString();
 		}
 
-		private void PresentKeyboard(AuthMechanism mechanism, Action<string> submitValue)
+		private void PresentKeyboard(string type, string prompt, string domain, string error)
 		{
-			_pendingSubmitCallback = submitValue;
-			if (mechanism.type is "text" or null)
+			string displayPrompt = string.IsNullOrEmpty(error) ? (prompt ?? "") : $"{error}\n{prompt ?? ""}";
+			if (type is "text" or null or "")
 			{
 				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
-				KeyboardHandler.SetPrompt(mechanism.prompt ?? "Enter Your Login");
+				KeyboardHandler.SetPrompt(!string.IsNullOrEmpty(displayPrompt) ? displayPrompt : "Enter Your Login");
 			}
-			else if (mechanism.type == "assessmentPin")
+			else if (type == "pin")
 			{
 				KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
-				KeyboardHandler.SetPrompt(mechanism.prompt ?? "Enter your 6-digit PIN");
+				KeyboardHandler.SetPrompt(!string.IsNullOrEmpty(displayPrompt) ? displayPrompt : "Enter your 6-digit PIN");
 			}
-			else if (mechanism.type == "email")
+			else if (type == "email")
 			{
 				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
-				KeyboardHandler.SetPrompt(mechanism.prompt != null ?
-					$"{mechanism.prompt} \n(<u>username</u>@{mechanism.domain})" :
-					$"Enter your email username\n(<u>username</u>@{mechanism.domain})");
+				string emailPrompt = !string.IsNullOrEmpty(prompt)
+					? $"{displayPrompt} \n(<u>username</u>@{domain ?? ""})"
+					: $"Enter your email username\n(<u>username</u>@{domain ?? ""})";
+				KeyboardHandler.SetPrompt(emailPrompt);
 			}
 		}
 		

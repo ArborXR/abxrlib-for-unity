@@ -178,6 +178,7 @@ public static partial class Abxr
 	/// Returns null if not authenticated yet.
 	/// </summary>
 	/// <returns>The auth response, or null if not authenticated</returns>
+	/// Note: Do not add this to public API documentation, it should only be used by developers who understand the purpose for it.
 	public static AuthResponse GetAuthResponse() => X?.GetAuthResponse();
 
 	/// <summary>
@@ -209,14 +210,42 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Assign your handler to collect auth input (e.g. PIN, email) instead of the default keyboard/PIN UI.
-	/// Only one handler is allowed; use assignment (=), not subscribe (+=). Your handler receives (mechanism, submitValue)—call submitValue(enteredValue) when the user submits.
-	/// The mechanism argument is an object with .type ("text" | "assessmentPin" | "email"), .prompt, .domain (use dynamic or cast as needed). Set to null in OnDestroy when your component is no longer responsible.
+	/// Only one handler is allowed; use assignment (=), not subscribe (+=). Your handler receives (type, prompt, domain, error).
+	/// Show your UI; when the user submits, call Abxr.OnInputSubmitted(enteredValue). Set to null in OnDestroy when your component is no longer responsible.
+	/// type is "text" | "pin" | "email"; error is empty on first request and may contain a previous failure message on retry.
 	/// </summary>
-	public static Action<object, Action<string>> OnInputRequested
+	public static Action<string, string, string, string> OnInputRequested //(type, prompt, domain, error)
 	{
 		get => X?.OnInputRequested;
 		set { if (X != null) X.OnInputRequested = value; }
 	}
+
+	/// <summary>
+	/// Submit user input when auth has requested it (e.g. after OnInputRequested). Call this when the user has entered the requested value.
+	/// If no input was requested, the call is ignored.
+	/// </summary>
+	public static void OnInputSubmitted(string input) => X?.SubmitInput(input);
+
+	/// <summary>
+	/// Returns true if QR scanning for auth input is available (Meta or Pico reader). Use to show/hide a "Scan QR" option in custom auth UI.
+	/// </summary>
+	public static bool IsQRScanForAuthAvailable() => X != null && X.IsQRScanForAuthAvailable();
+
+	/// <summary>
+	/// Start a QR scan for auth input. When a code is scanned or the user cancels, the callback is invoked once with the extracted PIN or null.
+	/// Close your auth UI and, if value != null, call Abxr.OnInputSubmitted(value).
+	/// </summary>
+	public static void StartQRScanForAuthInput(System.Action<string> onResult) => X?.StartQRScanForAuthInput(onResult);
+
+	/// <summary>
+	/// Stop an in-progress QR scan started via StartQRScanForAuthInput and invoke the pending callback with null so the handler can close UI without submitting.
+	/// </summary>
+	public static void CancelQRScanForAuthInput() => X?.CancelQRScanForAuthInput();
+
+	/// <summary>
+	/// Returns the camera texture used by the QR reader when available (Meta/Quest). Assign to a RawImage in your own UI to embed the feed. Null on Pico or when not initialized.
+	/// </summary>
+	public static UnityEngine.Texture GetQRScanCameraTexture() => X?.GetQRScanCameraTexture();
 
 	/// <summary>
 	/// Start a new session with a fresh session identifier
@@ -374,8 +403,10 @@ public static partial class Abxr
 	/// <param name="levelName">Name of the level (must match the start event)</param>
 	/// <param name="score">Numerical score achieved for this level</param>
 	/// <param name="meta">Optional metadata with completion details</param>
-	public static void EventLevelComplete(string levelName, string score, Dictionary<string, string> meta = null) =>
+	public static void EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null) =>
 		X?.EventLevelComplete(levelName, score, meta);
+	public static void EventLevelComplete(string levelName, string score, Dictionary<string, string> meta = null) =>
+		EventLevelComplete(levelName, int.Parse(score), meta); // backwards compatibility
 	
 	/// <summary>
 	/// Flag critical training events for auto-inclusion in the Critical Choices Chart

@@ -14,6 +14,7 @@
  */
 #if UNITY_ANDROID && !UNITY_EDITOR && PICO_ENTERPRISE_SDK_3
 
+using System;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Services.Auth;
 using UnityEngine;
@@ -28,6 +29,8 @@ namespace AbxrLib.Runtime.Core
     {
         public static QRCodeReaderPico Instance;
         public static AbxrAuthService AuthService;
+
+        private Action<string> _scanResultCallback;
 
         private void Awake()
         {
@@ -64,6 +67,27 @@ namespace AbxrLib.Runtime.Core
 
         private static void OnServiceBound(bool success) { }
 
+        /// <summary>
+        /// Set the one-shot callback for developer API (StartQRScanForAuthInput). When set, OnQRCodeScanned invokes this instead of KeyboardAuthenticate.
+        /// </summary>
+        public void SetScanResultCallback(Action<string> callback)
+        {
+            _scanResultCallback = callback;
+        }
+
+        /// <summary>
+        /// Cancel an in-progress scan started with a callback; invokes the callback with null so the handler can close UI.
+        /// </summary>
+        public void CancelScanForAuthInput()
+        {
+            if (_scanResultCallback != null)
+            {
+                var cb = _scanResultCallback;
+                _scanResultCallback = null;
+                cb?.Invoke(null);
+            }
+        }
+
         public void ScanQRCode()
         {
             PXR_Enterprise.ScanQRCode(OnQRCodeScanned);
@@ -71,10 +95,27 @@ namespace AbxrLib.Runtime.Core
 
         private void OnQRCodeScanned(string scanResult)
         {
+            if (_scanResultCallback != null)
+            {
+                string pin = null;
+                if (!string.IsNullOrEmpty(scanResult))
+                {
+                    Match match = Regex.Match(scanResult, @"(?<=ABXR:)\d+");
+                    if (match.Success)
+                    {
+                        pin = match.Value;
+                        Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
+                    }
+                    else
+                        Debug.LogWarning($"[AbxrLib] Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
+                }
+                var cb = _scanResultCallback;
+                _scanResultCallback = null;
+                cb?.Invoke(pin);
+                return;
+            }
             if (string.IsNullOrEmpty(scanResult)) return;
-
             AuthService.SetInputSource("QRlms");
-
             Match match = Regex.Match(scanResult, @"(?<=ABXR:)\d+");
             if (match.Success)
             {

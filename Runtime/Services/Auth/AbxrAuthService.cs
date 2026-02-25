@@ -19,10 +19,10 @@ namespace AbxrLib.Runtime.Services.Auth
         // ── Callbacks ────────────────────────────────────────────────
         /// <summary>
         /// Invoked when authentication needs user input (e.g. PIN or username).
-        /// Handler receives the request (mechanism) and a callback; call the callback with the user's entered value when done.
+        /// Handler receives (type, prompt, domain, error). Show your UI; when the user submits, call the subsystem's SubmitInput (exposed as Abxr.OnInputSubmitted).
         /// For OnInputRequested only one handler is allowed at a time; use assignment (=), not subscribe (+=).
         /// </summary>
-        public Action<AuthMechanism, Action<string>> OnInputRequested;
+        public Action<string, string, string, string> OnInputRequested;
         public Action OnSucceeded;
         public Action<string> OnFailed;
 
@@ -39,6 +39,8 @@ namespace AbxrLib.Runtime.Services.Auth
         private AuthMechanism _authMechanism;
         private DateTime _tokenExpiry = DateTime.MinValue;
         private int _failedAuthAttempts;
+        private bool _inputRequestPending;
+        private string _lastInputError;
         private bool _stopping;
         private bool _attemptActive;
         private Coroutine _reAuthCoroutine;
@@ -152,13 +154,24 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         public void SetSessionId(string sessionId) => _payload.sessionId = sessionId;
+
+        /// <summary>
+        /// Submit user input when there is an outstanding OnInputRequested. Called by subsystem (Abxr.OnInputSubmitted).
+        /// If no input was requested, this is a no-op.
+        /// </summary>
+        public void SubmitInput(string input)
+        {
+            if (!_inputRequestPending) return;
+            _inputRequestPending = false;
+            KeyboardAuthenticate(input);
+        }
         
         public void KeyboardAuthenticate(string input)
         {
             string originalPrompt = _authMechanism.prompt;
             _authMechanism.prompt = input;
 
-            _runner.StartCoroutine(AuthRequestCoroutine(success =>
+            _runner.StartCoroutine(AuthRequestCoroutineWithError((success, errorMessage) =>
             {
                 // Store the entered value for email and text auth methods so we can add it to UserData
                 if (_authMechanism.type == "email" || _authMechanism.type == "text")
@@ -180,6 +193,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
                 else
                 {
+                    _lastInputError = !string.IsNullOrEmpty(errorMessage) ? errorMessage : "Authentication failed";
                     RequestKeyboardInput();
                 }
             }, withRetry: false));
@@ -263,7 +277,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 yield break;
             }
 
-            if (!string.IsNullOrEmpty(_authMechanism.prompt))
+            // If no auth mechanism or its type does not require user input → no keyboard. Otherwise show keyboard (prompt/domain may be empty).
+            bool needsInput = _authMechanism != null && RequiresUserInputType(_authMechanism.type);
+            if (needsInput)
             {
                 RequestKeyboardInput();
             }
@@ -282,15 +298,27 @@ namespace AbxrLib.Runtime.Services.Auth
             public long ResponseCode;
         }
 
-        /// <summary>Attempts auth via service (when available) or REST. When withRetry is true, retries the same path until success (parity with main). When false (e.g. keyboard auth), one attempt only.</summary>
-        private IEnumerator AuthRequestCoroutine(Action<bool> onComplete, bool withRetry = true)
+        private static string ExtractAuthErrorMessage(string responseJson)
         {
-            if (_stopping || !_attemptActive) { onComplete(false); yield break; }
+            if (string.IsNullOrEmpty(responseJson)) return null;
+            try
+            {
+                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
+                if (obj != null && obj.TryGetValue("message", out var msg) && msg != null)
+                    return msg.ToString();
+            }
+            catch { /* ignore */ }
+            return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
+        }
+
+        /// <summary>Attempts auth via service (when available) or REST. When withRetry is true, retries until success. When false (e.g. keyboard auth), one attempt only; on failure passes error message to callback.</summary>
+        private IEnumerator AuthRequestCoroutineWithError(Action<bool, string> onComplete, bool withRetry = true)
+        {
+            if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
             _payload.authMechanism = CreateAuthMechanismDict();
 
-            // API receives buildType "production" when config is Production (Custom APK)
             string savedBuildType = _payload.buildType;
             if (_payload.buildType == "production_custom")
                 _payload.buildType = "production";
@@ -303,16 +331,14 @@ namespace AbxrLib.Runtime.Services.Auth
 
             while (true)
             {
-                if (_stopping || !_attemptActive) { onComplete(false); yield break; }
+                if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
                 bool useService = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
                 useService = Configuration.Instance.enableArborInsightServiceClient && ArborInsightServiceClient.ServiceIsFullyInitialized();
-                // When service is enabled and APK is installed but not ready yet, wait in this coroutine
-                // (non-blocking) so the scene can keep loading; auth starts once bind is complete.
                 if (Configuration.Instance.enableArborInsightServiceClient && !useService && ArborInsightServiceClient.IsServicePackageInstalled())
                 {
-                    const int waitAttempts = 40;  // 40 * 0.25s = 10s max for bind + service init
+                    const int waitAttempts = 40;
                     const float waitSeconds = 0.25f;
                     for (int i = 0; i < waitAttempts && !ArborInsightServiceClient.ServiceIsFullyInitialized() && !_stopping && _attemptActive; i++)
                         yield return new WaitForSecondsRealtime(waitSeconds);
@@ -340,12 +366,10 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield return SendAuthRequestRest(json, holder);
                     responseJson = holder.Response;
 
-                    // 4xx client errors (Invalid org_id, Invalid app_id, invalid fingerprint/auth_secret, etc.)
-                    // require config or build or headset changes; retrying will not change the API response.
                     if (holder.ResponseCode >= 400 && holder.ResponseCode < 500)
                     {
                         _payload.buildType = savedBuildType;
-                        onComplete(false);
+                        onComplete(false, ExtractAuthErrorMessage(responseJson));
                         yield break;
                     }
                 }
@@ -355,20 +379,26 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (useService)
                         _usedArborInsightServiceForSession = true;
                     _payload.buildType = savedBuildType;
-                    onComplete(true);
+                    onComplete(true, null);
                     yield break;
                 }
 
                 if (!withRetry)
                 {
                     _payload.buildType = savedBuildType;
-                    onComplete(false);
+                    onComplete(false, ExtractAuthErrorMessage(responseJson));
                     yield break;
                 }
 
                 Debug.LogWarning($"[AbxrLib] AuthRequest failed, retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
+        }
+
+        /// <summary>Attempts auth via service (when available) or REST. When withRetry is true, retries the same path until success (parity with main). When false (e.g. keyboard auth), one attempt only.</summary>
+        private IEnumerator AuthRequestCoroutine(Action<bool> onComplete, bool withRetry = true)
+        {
+            yield return AuthRequestCoroutineWithError((ok, _) => onComplete(ok), withRetry);
         }
 
         /// <summary>Performs one POST to /v1/auth/token and sets holder.Response and holder.ResponseCode.</summary>
@@ -480,7 +510,7 @@ namespace AbxrLib.Runtime.Services.Auth
                         Configuration.Instance.ApplyConfigPayload(config);
                         _authMechanism = config.authMechanism ?? new AuthMechanism();
                         if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
-                        Debug.Log("[AbxrLib] GetConfiguration successful");
+                        Debug.Log($"[AbxrLib] GetConfiguration successful. authMechanism type=\"{(_authMechanism?.type ?? "")}\" prompt=\"{(_authMechanism?.prompt ?? "")}\"");
                         onComplete(true, null);
                         yield break;
                     }
@@ -599,26 +629,34 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
+        /// <summary>Normalize backend auth mechanism type to "text" | "pin" | "email" for OnInputRequested, or "" if no input required (e.g. "none", empty). Single source of truth for pin variants (assessmentPin, assessment_pin → "pin").</summary>
+        private static string NormalizeAuthMechanismTypeForInput(string type)
+        {
+            if (string.IsNullOrEmpty(type)) return "";
+            var t = type.Trim().ToLowerInvariant();
+            if (t == "none") return "";
+            if (t == "email") return "email";
+            if (t == "pin" || t == "assessmentpin" || t == "assessment_pin") return "pin";
+            return "text";
+        }
+
+        /// <summary>True if auth mechanism type indicates the user must enter text/PIN/email (so we should show keyboard). Uses normalized type so pin variants are one place.</summary>
+        private static bool RequiresUserInputType(string type)
+        {
+            return !string.IsNullOrEmpty(NormalizeAuthMechanismTypeForInput(type));
+        }
+
         private void RequestKeyboardInput()
         {
-            string prompt = "";
-            if (_failedAuthAttempts > 0)
-            {
-                prompt = $"Authentication Failed ({_failedAuthAttempts})\n";
-            }
+            string error = _lastInputError ?? "";
+            _lastInputError = null;
+            string type = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
+            if (string.IsNullOrEmpty(type)) type = "text"; // defensive; we should only be here when input is required
+            string prompt = _authMechanism?.prompt ?? "";
+            string domain = _authMechanism?.domain ?? "";
 
-            prompt += _authMechanism.prompt;
-
-            var mechanism = new AuthMechanism
-            {
-                type = _authMechanism.type,
-                prompt = prompt,
-                domain = _authMechanism.domain
-            };
-
-            Action<string> submitValue = value => KeyboardAuthenticate(value);
-            OnInputRequested?.Invoke(mechanism, submitValue);
-
+            _inputRequestPending = true;
+            OnInputRequested?.Invoke(type, prompt, domain, error);
             _failedAuthAttempts++;
         }
 
@@ -641,6 +679,8 @@ namespace AbxrLib.Runtime.Services.Auth
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
             _usedArborInsightServiceForSession = false;
+            _inputRequestPending = false;
+            _lastInputError = null;
         }
         
         /// <summary>
