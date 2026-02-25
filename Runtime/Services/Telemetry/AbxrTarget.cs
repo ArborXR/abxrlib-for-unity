@@ -25,8 +25,14 @@ namespace AbxrLib.Runtime.Services.Telemetry
     public class AbxrTarget : MonoBehaviour
     {
         // Static registry of all AbxrTarget instances for efficient lookup
-        // This avoids expensive FindObjectsOfType calls
         private static System.Collections.Generic.List<AbxrTarget> _allTargets = new System.Collections.Generic.List<AbxrTarget>();
+        // Fast path: avoid GetAllTargets() when no targets exist (e.g. on every Event when scene has no AbxrTargets)
+        private static int _targetCount;
+
+        /// <summary>
+        /// Returns whether any AbxrTarget instances exist. Use this for a quick exit when no targets are in the scene.
+        /// </summary>
+        public static bool HasAnyTargets => _targetCount > 0;
 
         /// <summary>
         /// Gets all AbxrTarget instances in the scene.
@@ -35,14 +41,10 @@ namespace AbxrLib.Runtime.Services.Telemetry
         /// <returns>Array of all AbxrTarget instances</returns>
         public static AbxrTarget[] GetAllTargets()
         {
-            // Remove null entries (destroyed targets) before returning
-            // This prevents memory leaks from targets that were destroyed without proper cleanup
-            if (_allTargets != null)
-            {
-                _allTargets.RemoveAll(target => target == null);
-                return _allTargets.ToArray();
-            }
-            return new AbxrTarget[0];
+            if (_allTargets == null) return new AbxrTarget[0];
+            _allTargets.RemoveAll(target => target == null);
+            _targetCount = _allTargets.Count; // Keep in sync after pruning
+            return _allTargets.ToArray();
         }
 
         [Tooltip("Target name for this target (e.g., 'head', 'leftleg', 'button1'). If empty, uses GameObject name.")]
@@ -334,6 +336,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
             if (this != null && _allTargets != null && !_allTargets.Contains(this))
             {
                 _allTargets.Add(this);
+                _targetCount++;
             }
 
             // Ensure we have a trigger collider for accurate detection
@@ -353,6 +356,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
             if (this != null && _allTargets != null && !_allTargets.Contains(this))
             {
                 _allTargets.Add(this);
+                _targetCount++;
             }
         }
 
@@ -362,7 +366,8 @@ namespace AbxrLib.Runtime.Services.Telemetry
             // Add null checks to prevent race conditions and ensure proper cleanup
             if (_allTargets != null && this != null)
             {
-                _allTargets.Remove(this);
+                if (_allTargets.Remove(this))
+                    _targetCount--;
             }
         }
 
@@ -372,9 +377,10 @@ namespace AbxrLib.Runtime.Services.Telemetry
             // Add null checks to prevent race conditions and ensure proper cleanup to prevent memory leaks
             if (_allTargets != null)
             {
-                _allTargets.Remove(this);
-                // Also remove any null entries that might have accumulated
+                if (_allTargets.Remove(this))
+                    _targetCount--;
                 _allTargets.RemoveAll(target => target == null);
+                _targetCount = _allTargets.Count; // Resync after prune
             }
         }
 

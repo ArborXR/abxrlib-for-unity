@@ -107,6 +107,8 @@ namespace AbxrLib.Runtime.Services.Telemetry
         /// </summary>
         public static void SendTargetGazeData(Dictionary<string, string> eventMetadata = null)
         {
+            if (!AbxrTarget.HasAnyTargets)
+                return;
             AbxrTarget[] targets = AbxrTarget.GetAllTargets();
             if (targets == null || targets.Length == 0)
                 return;
