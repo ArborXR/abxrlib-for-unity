@@ -848,16 +848,25 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private void GetArborData()
         {
-            // Only apply Arbor SDK overrides when we have a connected client (avoid overwriting config with empty when null/disconnected).
-            if (_arborServiceClient?.IsConnected() != true) return;
-
-            _payload.partner = "arborxr";
-            _payload.deviceId = Abxr.GetDeviceId();
-            _payload.tags = Abxr.GetDeviceTags();
+            // Partner/deviceId/tags when we have a connected client; when not connected, still apply deviceId from subsystem if set (e.g. Abxr.SetDeviceId).
+            if (_arborServiceClient != null && _arborServiceClient.IsConnected())
+            {
+                _payload.partner = "arborxr";
+                _payload.deviceId = Abxr.GetDeviceId();
+                _payload.tags = Abxr.GetDeviceTags();
+            }
+            else
+            {
+                string deviceIdFromSubsystem = Abxr.GetDeviceId();
+                if (!string.IsNullOrEmpty(deviceIdFromSubsystem))
+                    _payload.deviceId = deviceIdFromSubsystem;
+            }
 
             if (_payload.buildType == "production_custom")
                 return;
 
+            // Always apply orgId/authSecret/orgToken from subsystem (GetOrgId/GetFingerprint) when not production_custom,
+            // so developer overrides or Configuration are used when client is null or not connected.
             if (Configuration.Instance.useAppTokens)
             {
                 try

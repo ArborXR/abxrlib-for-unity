@@ -209,8 +209,21 @@ namespace AbxrLib.Editor
                 "Prune Sent Items Older Than (hours)", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours), 0, 8760);
             config.maximumCachedItems = Mathf.Clamp(EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems), 10, 10000);
 
-            config.enableArborInsightServiceClient = EditorGUILayout.Toggle(new GUIContent(
-                "Enable Insights Device Service Usage", "When enabled, the app will use the ArborInsightService device APK for auth and data on Android when installed. When disabled, only REST/cloud is used."), config.enableArborInsightServiceClient);
+            const string AdvancedArborXRKey = "AbxrLib.ConfigInspector.AdvancedArborXRSettings";
+            bool showAdvanced = EditorPrefs.GetBool(AdvancedArborXRKey, false);
+            showAdvanced = EditorGUILayout.Toggle("Advanced ArborXR Settings", showAdvanced);
+            EditorPrefs.SetBool(AdvancedArborXRKey, showAdvanced);
+
+            if (showAdvanced)
+            {
+                EditorGUI.indentLevel++;
+                config.enableArborInsightServiceClient = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable InsightsClientService", "When enabled, the app will use the ArborInsightServiceClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used."), config.enableArborInsightServiceClient);
+
+                config.enableArborServiceClient = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable ArborServiceClient", "When enabled on Android, ArborServiceClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborServiceClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only."), config.enableArborServiceClient);
+                EditorGUI.indentLevel--;
+            }
 
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
@@ -257,6 +270,7 @@ namespace AbxrLib.Editor
                 config.maximumCachedItems = defaultConfig.maximumCachedItems;
                 config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
                 config.enableArborInsightServiceClient = defaultConfig.enableArborInsightServiceClient;
+                config.enableArborServiceClient = defaultConfig.enableArborServiceClient;
                 config.enableAutomaticTelemetry = defaultConfig.enableAutomaticTelemetry;
                 config.enableSceneEvents = defaultConfig.enableSceneEvents;
                 

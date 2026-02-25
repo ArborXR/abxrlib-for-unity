@@ -653,6 +653,12 @@ public static partial class Abxr
 	/// <returns>UUID is provided as a string.</returns>
 	public static string GetDeviceId() => X?.GetDeviceId();
 
+	/// <summary>
+	///   Sets the device ID to use for auth and elsewhere. When set, this value is used instead of ArborServiceClient.
+	///   Call before StartAuthentication() when using config/setter credentials. Pass null to clear the override.
+	/// </summary>
+	public static void SetDeviceId(string deviceId) => X?.SetDeviceId(deviceId);
+
 	/// <summary>Gets the serial number assigned to device by OEM.</summary>
 	/// <returns>Serial number is provided as a string.</returns>
 	public static string GetDeviceSerial() => X?.GetDeviceSerial();
@@ -670,6 +676,18 @@ public static partial class Abxr
 	/// </summary>
 	/// <returns>UUID is provided as a string.</returns>
 	public static string GetOrgId() => X?.GetOrgId();
+
+	/// <summary>
+	///   Sets the organization ID to use for auth. When set, this value is used instead of ArborServiceClient or Configuration.
+	///   Call before StartAuthentication(). Pass null to clear the override.
+	/// </summary>
+	public static void SetOrgId(string orgId) => X?.SetOrgId(orgId);
+
+	/// <summary>
+	///   Sets the auth secret (fingerprint) to use for auth. When set, this value is used instead of ArborServiceClient.
+	///   Call before StartAuthentication(). Pass null to clear the override.
+	/// </summary>
+	public static void SetAuthSecret(string authSecret) => X?.SetAuthSecret(authSecret);
 
 	/// <summary>Gets the name assigned to organization by admin through the ArborXR Web Portal.</summary>
 	public static string GetOrgTitle() => X?.GetOrgTitle();

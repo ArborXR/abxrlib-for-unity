@@ -39,6 +39,11 @@ namespace AbxrLib.Runtime
         private int _currentModuleIndex;
         private Action<string, string, string, string> _appOnInputRequested;
 
+        // Developer-supplied overrides (bypass ArborServiceClient); null = not set.
+        private string _overrideOrgId;
+        private string _overrideAuthSecret;
+        private string _overrideDeviceId;
+
         // ── Super metadata ───────────────────────────────────────────
         private const string SuperMetaDataPrefsKey = "AbxrSuperMetaData";
         private readonly Dictionary<string, string> _superMetaData = new();
@@ -89,11 +94,14 @@ namespace AbxrLib.Runtime
 
             // Create services
 #if UNITY_ANDROID && !UNITY_EDITOR
-            _arborClient = new ArborServiceClient();
+            if (Configuration.Instance.enableArborServiceClient)
+            {
+                _arborClient = new ArborServiceClient();
+                // Start bind early so it can complete while the scene loads; auth will wait for ready in a coroutine.
+                _arborClient.Initialize();
+            }
             if (Configuration.Instance.enableArborInsightServiceClient)
                 _arborInsightService = new ArborInsightServiceClient();
-            // Start bind early so it can complete while the scene loads; auth will wait for ready in a coroutine.
-            _arborClient.Initialize();
             if (_arborInsightService != null)
                 _arborInsightService.Start();
 #endif
@@ -730,7 +738,7 @@ namespace AbxrLib.Runtime
 		}
         
         internal string GetDeviceId() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceId() : "";
+			_overrideDeviceId != null ? _overrideDeviceId : (_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceId() : "");
         
 		internal string GetDeviceSerial() =>
 			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceSerial() : "";
@@ -741,8 +749,12 @@ namespace AbxrLib.Runtime
 		internal string[] GetDeviceTags() =>
 			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceTags() : null;
 		
+		internal void SetOrgId(string orgId) => _overrideOrgId = orgId;
+		internal void SetAuthSecret(string authSecret) => _overrideAuthSecret = authSecret;
+		internal void SetDeviceId(string deviceId) => _overrideDeviceId = deviceId;
+
 		internal string GetOrgId() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgId() : Configuration.Instance?.orgID ?? "";
+			_overrideOrgId != null ? _overrideOrgId : (_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgId() : Configuration.Instance?.orgID ?? "");
 		
 		internal string GetOrgTitle() =>
 			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgTitle() : "";
@@ -769,7 +781,7 @@ namespace AbxrLib.Runtime
 			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetExpiresDateUtc() : DateTime.MinValue;
 		
 		internal string GetFingerprint() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetFingerprint() : "";
+			_overrideAuthSecret != null ? _overrideAuthSecret : (_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetFingerprint() : "");
 		
 		internal IEnumerator StorageGetDefaultEntry(Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
 		{
