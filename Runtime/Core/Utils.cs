@@ -790,5 +790,40 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
         }
+
+        /// <summary>
+        /// Finds the best available camera for gaze tracking and telemetry.
+        /// Tries Camera.main, then XR HMD camera, then any active enabled camera.
+        /// </summary>
+        /// <returns>Camera transform if found, null otherwise</returns>
+        public static Transform FindCameraTransform()
+        {
+            Camera mainCamera = Camera.main;
+            if (mainCamera != null && mainCamera.enabled && mainCamera.gameObject.activeInHierarchy)
+                return mainCamera.transform;
+
+            try
+            {
+                var hmd = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.Head);
+                if (hmd.isValid)
+                {
+                    Camera[] cameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+                    foreach (var cam in cameras)
+                    {
+                        if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
+                            return cam.transform;
+                    }
+                }
+            }
+            catch (System.Exception) { }
+
+            Camera[] allCameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+            foreach (var cam in allCameras)
+            {
+                if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
+                    return cam.transform;
+            }
+            return null;
+        }
     }
 }

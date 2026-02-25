@@ -205,6 +205,7 @@ namespace AbxrLib.Runtime.Core
             ClampFloat(nameof(frameRateTrackingPeriodSeconds), ref frameRateTrackingPeriodSeconds, 0.1f, 60f, 0.5f);
             ClampFloat(nameof(telemetryTrackingPeriodSeconds), ref telemetryTrackingPeriodSeconds, 1f, 300f, 10f);
             ClampFloat(nameof(authenticationStartDelay), ref authenticationStartDelay, 0f, 60f, 0f);
+            ClampFloat(nameof(defaultMaxDistanceLimit), ref defaultMaxDistanceLimit, 0f, 10000f, 50f);
 
             return true;
         }
@@ -283,6 +284,12 @@ namespace AbxrLib.Runtime.Core
         [Header("Player Tracking")]
         public bool headsetTracking = true;
         public float positionTrackingPeriodSeconds = 1f;
+
+        [Header("Target Gaze Tracking")]
+        [Tooltip("Global default maximum distance for AbxrTarget occlusion checks (meters). 0 = unlimited. Individual AbxrTarget components can override.")]
+        public float defaultMaxDistanceLimit = 50f;
+        [Tooltip("Global default for auto-creating trigger colliders on AbxrTarget. Individual AbxrTarget components can override.")]
+        public bool defaultAutoCreateTriggerCollider = true;
 
         [Header("Authentication Control")]
         [Tooltip("When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()")]

@@ -82,6 +82,9 @@ namespace AbxrLib.Runtime
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
+            if (GetComponent<TrackTargetGaze>() == null)
+                gameObject.AddComponent<TrackTargetGaze>();
+
             var jsonVersion = typeof(JsonConvert).Assembly.GetName().Version;
             Debug.Log($"AbxrLib: Using Newtonsoft.Json version: {jsonVersion}");
 
@@ -464,6 +467,8 @@ namespace AbxrLib.Runtime
         internal void Event(string eventName, Dictionary<string, string> metadata, bool sendTelemetry = true)
         {
             metadata ??= new Dictionary<string, string>();
+            // Add gaze scores to event metadata when AbxrTargets exist (and send gaze telemetry)
+            TrackTargetGaze.SendTargetGazeData(metadata);
             metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
             // Add super metadata to all events

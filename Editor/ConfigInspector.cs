@@ -150,6 +150,12 @@ namespace AbxrLib.Editor
                 config.enableSceneEvents = EditorGUILayout.Toggle("Enable Scene Events", config.enableSceneEvents);
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Target Gaze Tracking", EditorStyles.boldLabel);
+            config.defaultMaxDistanceLimit = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
+                "Default Max Distance (meters)", "Global default maximum distance for AbxrTarget occlusion checks. 0 = unlimited. Individual AbxrTarget components can override."), config.defaultMaxDistanceLimit), 0f, 10000f);
+            config.defaultAutoCreateTriggerCollider = EditorGUILayout.Toggle(new GUIContent(
+                "Default Auto Create Trigger Collider", "Global default for auto-creating trigger colliders on AbxrTarget. Individual AbxrTarget components can override."), config.defaultAutoCreateTriggerCollider);
+            EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Control", EditorStyles.boldLabel);
             config.enableAutoStartAuthentication = EditorGUILayout.Toggle(new GUIContent(
                 "Enable Auto Start Authentication", "When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()"), config.enableAutoStartAuthentication);
@@ -222,6 +228,10 @@ namespace AbxrLib.Editor
                 // Player Tracking
                 config.headsetTracking = defaultConfig.headsetTracking;
                 config.positionTrackingPeriodSeconds = defaultConfig.positionTrackingPeriodSeconds;
+                
+                // Target Gaze Tracking
+                config.defaultMaxDistanceLimit = defaultConfig.defaultMaxDistanceLimit;
+                config.defaultAutoCreateTriggerCollider = defaultConfig.defaultAutoCreateTriggerCollider;
                 
                 // Authentication Control
                 config.enableAutoStartAuthentication = defaultConfig.enableAutoStartAuthentication;
