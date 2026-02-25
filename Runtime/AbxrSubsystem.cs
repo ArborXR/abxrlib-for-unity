@@ -678,46 +678,46 @@ namespace AbxrLib.Runtime
 		}
         
         internal string GetDeviceId() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceId() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceId() : "";
         
 		internal string GetDeviceSerial() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceSerial() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceSerial() : "";
 		
 		internal string GetDeviceTitle() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceTitle() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceTitle() : "";
 		
 		internal string[] GetDeviceTags() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceTags() : null;
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceTags() : null;
 		
 		internal string GetOrgId() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgId() : Configuration.Instance.orgID;
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgId() : Configuration.Instance?.orgID ?? "";
 		
 		internal string GetOrgTitle() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgTitle() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgTitle() : "";
 		
 		internal string GetOrgSlug() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgSlug() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgSlug() : "";
 		
 		internal string GetMacAddressFixed() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetMacAddressFixed() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetMacAddressFixed() : "";
 		
 		internal string GetMacAddressRandom() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetMacAddressRandom() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetMacAddressRandom() : "";
 		
 		internal bool GetIsAuthenticated() =>
-			_arborClient.IsConnected() && _arborClient.ServiceWrapper != null && _arborClient.ServiceWrapper.GetIsAuthenticated();
+			_arborClient != null && _arborClient.IsConnected() && _arborClient.ServiceWrapper != null && _arborClient.ServiceWrapper.GetIsAuthenticated();
 		
 		internal string GetAccessToken() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetAccessToken() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetAccessToken() : "";
 		
 		internal string GetRefreshToken() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetRefreshToken() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetRefreshToken() : "";
 		
 		internal DateTime? GetExpiresDateUtc() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetExpiresDateUtc() : DateTime.MinValue;
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetExpiresDateUtc() : DateTime.MinValue;
 		
 		internal string GetFingerprint() =>
-			_arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetFingerprint() : "";
+			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetFingerprint() : "";
 		
 		internal IEnumerator StorageGetDefaultEntry(Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
 		{
