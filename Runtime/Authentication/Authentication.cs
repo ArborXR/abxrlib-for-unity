@@ -801,8 +801,6 @@ namespace AbxrLib.Runtime.Authentication
 
         private static IEnumerator GetConfiguration()
         {
-            _authMechanism = new AuthMechanism();
-
             string configJson = null;
             if (ServiceIsFullyInitialized())
                 configJson = ArborInsightServiceClient.GetAppConfig();
@@ -826,13 +824,14 @@ namespace AbxrLib.Runtime.Authentication
                 SetConfigFromPayload(payload);
                 if (payload.authMechanism != null)
                 {
-                    _authMechanism.type = payload.authMechanism.type;
-                    _authMechanism.prompt = payload.authMechanism.prompt;
-                    _authMechanism.domain = payload.authMechanism.domain;
-                    _authMechanism.inputSource = payload.authMechanism.inputSource;
+                    _authMechanism = new AuthMechanism
+                    {
+                        type = payload.authMechanism.type,
+                        prompt = payload.authMechanism.prompt,
+                        domain = payload.authMechanism.domain,
+                        inputSource = string.IsNullOrEmpty(payload.authMechanism.inputSource) ? "user" : payload.authMechanism.inputSource
+                    };
                 }
-                if (string.IsNullOrEmpty(_authMechanism.inputSource))
-                    _authMechanism.inputSource = "user";
             }
             catch (Exception ex)
             {
