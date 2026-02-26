@@ -107,9 +107,10 @@ namespace AbxrLib.Runtime.Authentication
         public static bool ServiceIsFullyInitialized() => ArborInsightServiceClient.ServiceIsFullyInitialized();
         
         /// <summary>
-        /// Clears authentication state and stops data transmission
+        /// Clears authentication state and stops data transmission.
+        /// Used by ReAuthenticate() and by Abxr.StartNewSession() before starting a fresh session.
         /// </summary>
-        private static void ClearAuthenticationState()
+        internal static void ClearAuthenticationState()
         {
             _tokenExpiry = DateTime.MinValue;
             _keyboardAuthSuccess = null;

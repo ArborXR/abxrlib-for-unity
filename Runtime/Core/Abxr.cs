@@ -268,12 +268,15 @@ public static partial class Abxr
 	}
 
 	/// <summary>
-	/// Start a new session with a fresh session identifier
-	/// Generates a new session ID and performs fresh authentication
-	/// Useful for starting new training experiences or resetting user context
+	/// Start a new session with a fresh session identifier.
+	/// Clears all API tokens and previous-session state (auth, batched events/telemetry/storage), then performs fresh authentication.
+	/// Behavior is equivalent to closing the app and starting it fresh.
 	/// </summary>
 	public static void StartNewSession()
 	{
+		Authentication.ClearAuthenticationState();
+		DataBatcher.ClearQueues();
+		StorageBatcher.ClearQueues();
 		Authentication.SetSessionId(Guid.NewGuid().ToString());
 		CoroutineRunner.Instance.StartCoroutine(Authentication.Authenticate());
 	}

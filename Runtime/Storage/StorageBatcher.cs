@@ -32,7 +32,18 @@ namespace AbxrLib.Runtime.Storage
 			_timer -= Time.deltaTime;
 			if (_timer <= 0) CoroutineRunner.Instance.StartCoroutine(Send());
 		}
-	
+
+		/// <summary>
+		/// Clears all queued storage payloads. Used by Abxr.StartNewSession() so previous-session data is not sent with the new session.
+		/// </summary>
+		internal static void ClearQueues()
+		{
+			lock (_lock)
+			{
+				_payloads.Clear();
+			}
+		}
+
 		/// <summary>
 	/// Add a storage entry. When this session uses ArborInsightService we send directly to the service; otherwise we queue for Send() (standalone).
 	/// </summary>
