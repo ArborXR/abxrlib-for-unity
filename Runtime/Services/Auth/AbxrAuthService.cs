@@ -179,14 +179,13 @@ namespace AbxrLib.Runtime.Services.Auth
 
             _runner.StartCoroutine(AuthRequestCoroutineWithError((success, errorMessage) =>
             {
-                // Store the entered value for email, text, and pin so we can add it to UserData (same shape as built-in keyboard path).
-                string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
-                if (normalizedType == "email" || normalizedType == "text" || normalizedType == "pin")
+                // Store the entered value only for email and text so we can add it to UserData. PIN is never stored in UserData—only used as auth prompt.
+                if (_authMechanism.type == "email" || _authMechanism.type == "text")
                 {
                     _enteredAuthValue = input;
 
                     // For email type, combine with domain if provided
-                    if (normalizedType == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
+                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
                     {
                         _enteredAuthValue += $"@{_authMechanism.domain}";
                     }
@@ -473,8 +472,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (!string.IsNullOrEmpty(_enteredAuthValue))
                 {
                     ResponseData.UserData ??= new Dictionary<string, string>();
-                    var normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
-                    var keyName = normalizedType == "email" ? "email" : "text"; // pin and text both use "text"
+                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
                     ResponseData.UserData[keyName] = _enteredAuthValue;
                 }
                 return true;
@@ -1052,8 +1050,7 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 // Initialize UserData if it's null
                 ResponseData.UserData ??= new Dictionary<string, string>();
-                var normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
-                string keyName = normalizedType == "email" ? "email" : "text"; // pin and text both use "text"
+                string keyName = _authMechanism?.type == "email" ? "email" : "text";
                 ResponseData.UserData[keyName] = _enteredAuthValue;
             }
 
