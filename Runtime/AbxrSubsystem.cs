@@ -227,8 +227,10 @@ namespace AbxrLib.Runtime
             _authService.SubmitInput(input);
         }
 
+        /// <summary>True when QR scanning is available on this device and the SDK is currently waiting for auth input (OnInputRequested was invoked). Use this to show/hide the "Scan QR" option; when true, OnInputSubmitted will be accepted after a scan.</summary>
         internal bool IsQRScanForAuthAvailable()
         {
+            if (_authService == null || !_authService.IsInputRequestPending) return false;
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
             if (QRCodeReaderPico.IsAvailable) return true;
@@ -273,6 +275,19 @@ namespace AbxrLib.Runtime
 #endif
             if (QRCodeReader.Instance != null && QRCodeReader.Instance.IsScanning())
                 QRCodeReader.Instance.CancelScanning();
+#endif
+        }
+
+        /// <summary>True when the app can choose where to display the QR camera feed (non-Pico). When true, use GetQRScanCameraTexture() and assign to your own RawImage. When false (Pico), the platform shows its own scanner UI.</summary>
+        internal bool IsQRScanCameraTexturePlaceable()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+#if PICO_ENTERPRISE_SDK_3
+            if (QRCodeReaderPico.IsAvailable) return false;
+#endif
+            return QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
+#else
+            return false;
 #endif
         }
 
@@ -380,6 +395,9 @@ namespace AbxrLib.Runtime
 			_authService.SetUserData(userId, additionalUserData);
 		
 		internal void StartAuthentication() => _authService.Authenticate();
+
+		/// <summary>True when the SDK is waiting for auth input (OnInputRequested was invoked). Use with device-specific QR availability to show "Scan QR" only when it will be accepted (e.g. Meta: IsAuthInputRequestPending() &amp;&amp; MetaQRCodeReader.Instance.IsQRScanningAvailable()).</summary>
+		internal bool IsAuthInputRequestPending() => _authService != null && _authService.IsInputRequestPending;
 
 		/// <summary>
 		/// Get or set the single OnInputRequested handler (forwarded to auth service). Handler receives (type, prompt, domain, error).

@@ -40,6 +40,10 @@ namespace AbxrLib.Runtime.Services.Auth
         private DateTime _tokenExpiry = DateTime.MinValue;
         private int _failedAuthAttempts;
         private bool _inputRequestPending;
+
+        /// <summary>True when OnInputRequested was invoked and we are waiting for the app to call SubmitInput (OnInputSubmitted). Used so clients can show/hide QR-for-auth UI via IsQRScanForAuthAvailable() without tracking state themselves.</summary>
+        internal bool IsInputRequestPending => _inputRequestPending;
+
         private string _lastInputError;
         private bool _stopping;
         private bool _attemptActive;
