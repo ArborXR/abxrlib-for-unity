@@ -163,7 +163,11 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         public void SubmitInput(string input)
         {
-            if (!_inputRequestPending) return;
+            if (!_inputRequestPending)
+            {
+                Debug.LogWarning("[AbxrLib] OnInputSubmitted was ignored: no input request is pending. Call OnInputSubmitted only once, after OnInputRequested has been invoked.");
+                return;
+            }
             _inputRequestPending = false;
             KeyboardAuthenticate(input);
         }
@@ -175,18 +179,19 @@ namespace AbxrLib.Runtime.Services.Auth
 
             _runner.StartCoroutine(AuthRequestCoroutineWithError((success, errorMessage) =>
             {
-                // Store the entered value for email and text auth methods so we can add it to UserData
-                if (_authMechanism.type == "email" || _authMechanism.type == "text")
+                // Store the entered value for email, text, and pin so we can add it to UserData (same shape as built-in keyboard path).
+                string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
+                if (normalizedType == "email" || normalizedType == "text" || normalizedType == "pin")
                 {
                     _enteredAuthValue = input;
 
                     // For email type, combine with domain if provided
-                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
+                    if (normalizedType == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
                     {
                         _enteredAuthValue += $"@{_authMechanism.domain}";
                     }
                 }
-                
+
                 _authMechanism.prompt = originalPrompt;
                 if (success)
                 {
@@ -468,7 +473,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (!string.IsNullOrEmpty(_enteredAuthValue))
                 {
                     ResponseData.UserData ??= new Dictionary<string, string>();
-                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
+                    var normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
+                    var keyName = normalizedType == "email" ? "email" : "text"; // pin and text both use "text"
                     ResponseData.UserData[keyName] = _enteredAuthValue;
                 }
                 return true;
@@ -1046,12 +1052,11 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 // Initialize UserData if it's null
                 ResponseData.UserData ??= new Dictionary<string, string>();
-                        
-                // Determine the key name based on auth type
-                string keyName = _authMechanism?.type == "email" ? "email" : "text";
+                var normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
+                string keyName = normalizedType == "email" ? "email" : "text"; // pin and text both use "text"
                 ResponseData.UserData[keyName] = _enteredAuthValue;
             }
-            
+
             if (ResponseData.Modules?.Count > 1)
             {
                 ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
