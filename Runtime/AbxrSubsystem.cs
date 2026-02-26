@@ -978,10 +978,11 @@ namespace AbxrLib.Runtime
 			if (_authService.ResponseData.Modules?.Count > 0 && _currentModuleIndex < _authService.ResponseData.Modules?.Count)
 			{
 				ModuleData moduleData = _authService.ResponseData.Modules[_currentModuleIndex];
-				if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
+				// these are potentially sharing developer private information. Disabling for now
+				//if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
+				//if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
+				//if (!meta.ContainsKey("moduleOrder")) meta["moduleOrder"] = moduleData.Order.ToString();
 				if (!meta.ContainsKey("moduleName")) meta["moduleName"] = moduleData.Name;
-				if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
-				if (!meta.ContainsKey("moduleOrder")) meta["moduleOrder"] = moduleData.Order.ToString();
 			}
 			
 			// Add super metadata to metadata (includes manually-set moduleName/moduleId/moduleOrder when no LMS modules)
