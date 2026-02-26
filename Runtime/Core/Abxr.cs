@@ -403,7 +403,7 @@ public static partial class Abxr
 		// }
 		
 		metadata ??= new Dictionary<string, string>();
-		if (Configuration.Instance.enableSceneEvents)
+		if (!Configuration.Instance.disableSceneEvents)
 			metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
 		// Add super metadata to all events
@@ -888,7 +888,7 @@ public static partial class Abxr
 	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null)
 	{
 		metadata ??= new Dictionary<string, string>();
-		if (Configuration.Instance.enableSceneEvents)
+		if (!Configuration.Instance.disableSceneEvents)
 			metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
 		// Add super metadata to all logs
@@ -978,7 +978,7 @@ public static partial class Abxr
 	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
 	{
 		telemetryData ??= new Dictionary<string, string>();
-		if (Configuration.Instance.enableSceneEvents)
+		if (!Configuration.Instance.disableSceneEvents)
 			telemetryData["sceneName"] = SceneChangeDetector.CurrentSceneName;
 		
 		// Add super metadata to all telemetry entries
