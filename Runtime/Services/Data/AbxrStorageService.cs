@@ -48,6 +48,17 @@ namespace AbxrLib.Runtime.Services.Data
 		}
 		
 		public void ForceSend() => _nextSendAt = 0; // Send on the next update
+
+		/// <summary>
+		/// Clears all pending storage payloads from the in-memory queue. Used when starting a new session so no previous-session data is sent.
+		/// </summary>
+		public void ClearAllPending()
+		{
+			lock (_lock)
+			{
+				_payloads.Clear();
+			}
+		}
 		
 		private IEnumerator TickCoroutine()
 		{

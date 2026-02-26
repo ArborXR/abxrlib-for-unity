@@ -55,6 +55,19 @@ namespace AbxrLib.Runtime.Services.Data
 
         public void ForceSend() => _nextSendAt = 0; // Send on the next update
 
+        /// <summary>
+        /// Clears all pending events, telemetry, and logs from the in-memory batch. Used when starting a new session so no previous-session data is sent.
+        /// </summary>
+        public void ClearAllPendingBatches()
+        {
+            lock (_lock)
+            {
+                _eventPayloads.Clear();
+                _telemetryPayloads.Clear();
+                _logPayloads.Clear();
+            }
+        }
+
         private IEnumerator TickCoroutine()
         {
 	        while (true)

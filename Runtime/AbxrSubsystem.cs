@@ -392,10 +392,27 @@ namespace AbxrLib.Runtime
 			}
 		}
 		
+		/// <summary>
+		/// Starts an entirely fresh session: clears all API tokens, auth state, and pending data; then re-authenticates.
+		/// When using ArborInsightService (Android), unbinds and rebinds the service so the connection is fresh.
+		/// Equivalent to the user closing the app and starting it again from a session perspective.
+		/// </summary>
 		internal void StartNewSession()
 		{
-			_authService.SetSessionId(Guid.NewGuid().ToString());
-			_authService.Authenticate();
+			// Clear in-memory batchers so no previous-session events/telemetry/logs/storage are sent with the new session.
+			_dataService.ClearAllPendingBatches();
+			_storageService.ClearAllPending();
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+			// When using ArborInsightService, unbind then bind to clear session-related connection state and get a fresh connection.
+			if (_arborInsightService != null && ArborInsightServiceClient.IsServiceBound())
+			{
+				ArborInsightServiceClient.Unbind();
+				ArborInsightServiceClient.Bind(null);
+			}
+#endif
+			_authService.ClearSessionAndPrepareForNew();
+			_authService.Authenticate(clearStateFirst: false);
 		}
 		
 		internal bool StartModuleAtIndex(int moduleIndex)

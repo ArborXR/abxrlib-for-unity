@@ -113,12 +113,14 @@ namespace AbxrLib.Runtime.Services.Auth
         
         // ── Public API ───────────────────────────────────────────────
         
-        public void Authenticate()
+        /// <param name="clearStateFirst">If true (default), clears auth state before running. If false, caller has already cleared and set session (e.g. StartNewSession).</param>
+        public void Authenticate(bool clearStateFirst = true)
         {
             if (_stopping || _attemptActive) return;
             _attemptActive = true;
             StopReAuthPolling();
-            ClearAuthenticationState();
+            if (clearStateFirst)
+                ClearAuthenticationState();
 
             // Load config into payload first, then re-apply Arbor/device overrides so they are not lost.
             LoadConfigIntoPayload();
@@ -681,6 +683,17 @@ namespace AbxrLib.Runtime.Services.Auth
             _usedArborInsightServiceForSession = false;
             _inputRequestPending = false;
             _lastInputError = null;
+            _userData?.Clear();
+        }
+
+        /// <summary>
+        /// Clears all auth/session state and assigns a new session ID. Used by StartNewSession before re-authenticating.
+        /// Call Authenticate(clearStateFirst: false) after this so the new session ID is preserved.
+        /// </summary>
+        internal void ClearSessionAndPrepareForNew()
+        {
+            ClearAuthenticationState();
+            _payload.sessionId = Guid.NewGuid().ToString();
         }
         
         /// <summary>

@@ -92,6 +92,10 @@ AIDL → ArborInsightService (separate APK)
 - **Service “not ready” or bind fails on Android:** Ensure the ArborInsightService APK is installed and the client AAR in `Plugins/Android/` matches that service version (AAR must support set_OrgToken when using app tokens). Check logcat for `ArborInsightServiceClient` and `[AbxrLib]`.
 - **Missing AAR:** If you see “bridge not initialized” or “AAR may be missing”, add the client AAR (e.g. `insights-client-service.aar`) to `Plugins/Android/`. Obtain it from your distribution channel; it is not built in this repo.
 
+## StartNewSession
+
+- **`Abxr.StartNewSession()`** starts an entirely fresh session, equivalent to the user closing the app and reopening it from a session perspective. It: (1) clears all pending events, telemetry, logs, and storage from the in-memory batchers; (2) on Android when using ArborInsightService, unbinds then rebinds the service so the connection and service-side session are fresh; (3) clears all auth state (tokens, ResponseData, user data, session id, _usedArborInsightServiceForSession); (4) assigns a new session ID and runs authentication again. The ArborInsightService removes the client session from its map in `onUnbind` (after flushing unsent data), so a new bind gets a new `ClientSession` and clean batcher on the service side.
+
 ## Technical Notes
 
 - Default execution order: `Authentication` uses `[DefaultExecutionOrder(1)]` so it runs early.
