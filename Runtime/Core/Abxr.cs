@@ -75,6 +75,9 @@ public static partial class Abxr
 	#region Constructor
 	static Abxr()
 	{
+		// Super metadata is per-session; clear any persisted value so we start fresh each run.
+		PlayerPrefs.DeleteKey(_superMetaDataKey);
+		PlayerPrefs.Save();
 		LoadSuperMetaData();
 		// Subscribe to OnAuthCompleted to start delayed DEFAULT assessment timer
 		OnAuthCompleted += OnAuthCompletedHandler;
@@ -274,6 +277,8 @@ public static partial class Abxr
 	/// </summary>
 	public static void StartNewSession()
 	{
+		// Super metadata is per-session; clear in-memory and persisted value.
+		Reset();
 		Authentication.ClearAuthenticationState();
 		DataBatcher.ClearQueues();
 		StorageBatcher.ClearQueues();
@@ -1354,10 +1359,10 @@ public static partial class Abxr
 		{
 			Authentication.ModuleData moduleData = Authentication.GetAuthResponse().Modules[_currentModuleIndex];
 			// these are potentially sharing developer private information. Disabling for now
-			//if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
-			//if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
-			//if (!meta.ContainsKey("moduleOrder")) meta["moduleOrder"] = moduleData.Order.ToString();
+			if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
 			if (!meta.ContainsKey("moduleName")) meta["moduleName"] = moduleData.Name;
+			if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
+			if (!meta.ContainsKey("moduleOrder")) meta["moduleOrder"] = moduleData.Order.ToString();
 		}
 		
 		// Add super metadata to metadata (includes manually-set moduleName/moduleId/moduleOrder when no LMS modules)
@@ -1458,7 +1463,7 @@ public static partial class Abxr
 	{
 		// Check if we're using auth-provided module targets
 		var response = Authentication.GetAuthResponse();
-		if (response?.Modules == null || response.Modules.Count > 0)
+		if (response?.Modules != null && response.Modules.Count > 0)
 		{
 			// Auth-provided modules exist - don't allow manual setting to prevent breaking module sequence
 			return;
