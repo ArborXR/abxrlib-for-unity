@@ -10,13 +10,17 @@ namespace AbxrLib.Runtime.Services.Telemetry
     {
         private Vector3 _currentPosition;
         private Quaternion _currentRotation;
-        private static float _timer = 1f;
+        private float _timer;
         private readonly Dictionary<string, string> _positionData = new Dictionary<string, string>(3);
 
         private void Update()
         {
             _timer += Time.deltaTime;
-            if (_timer >= Configuration.Instance.telemetryTrackingPeriodSeconds) RecordLocation();
+            if (_timer >= Configuration.Instance.telemetryTrackingPeriodSeconds)
+            {
+                _timer = 0f;
+                RecordLocation();
+            }
         }
 
         private void RecordLocation()

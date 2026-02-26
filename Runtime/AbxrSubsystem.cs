@@ -505,8 +505,9 @@ namespace AbxrLib.Runtime
 		internal void Log(string logMessage, Abxr.LogLevel logLevel, Dictionary<string, string> metadata)
 		{
 			metadata ??= new Dictionary<string, string>();
-			metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		
+			if (Configuration.Instance.enableSceneEvents)
+				metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
+
 			// Add super metadata to all logs
 			metadata = MergeSuperMetaData(metadata);
 		
@@ -528,8 +529,9 @@ namespace AbxrLib.Runtime
         internal void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
         {
             telemetryData ??= new Dictionary<string, string>();
-            telemetryData["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		
+            if (Configuration.Instance.enableSceneEvents)
+                telemetryData["sceneName"] = SceneChangeDetector.CurrentSceneName;
+
             // Add super metadata to all telemetry entries
             telemetryData = MergeSuperMetaData(telemetryData);
 		
@@ -541,8 +543,9 @@ namespace AbxrLib.Runtime
             metadata ??= new Dictionary<string, string>();
             // Add gaze scores to event metadata when AbxrTargets exist (and send gaze telemetry)
             TrackTargetGaze.SendTargetGazeData(metadata);
-            metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
-		
+            if (Configuration.Instance.enableSceneEvents)
+                metadata["sceneName"] = SceneChangeDetector.CurrentSceneName;
+
             // Add super metadata to all events
             metadata = MergeSuperMetaData(metadata);
 		

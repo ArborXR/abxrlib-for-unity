@@ -90,12 +90,14 @@ namespace AbxrLib.Runtime.Services.Telemetry
             }
         }
         
+        private static readonly WaitForSeconds TriggerCheckInterval = new WaitForSeconds(0.25f);
+
         private IEnumerator TriggerCheckLoop()
         {
             while (true)
             {
                 CheckTriggers();
-                yield return new WaitForSeconds(0.1f);
+                yield return TriggerCheckInterval;
             }
         }
         
