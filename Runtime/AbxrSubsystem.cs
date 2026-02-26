@@ -124,6 +124,9 @@ namespace AbxrLib.Runtime
                 HandleAuthCompleted(false);
             };
 
+            // Super metadata is per-session; clear any persisted value so we start fresh each run.
+            PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
+            PlayerPrefs.Save();
             LoadSuperMetaData();
             
             _sceneChangeDetector = new SceneChangeDetector();
@@ -403,6 +406,11 @@ namespace AbxrLib.Runtime
 			_dataService.ClearAllPendingBatches();
 			_storageService.ClearAllPending();
 
+			// Super metadata is per-session; clear in-memory and persisted value.
+			_superMetaData.Clear();
+			PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
+			PlayerPrefs.Save();
+
 #if UNITY_ANDROID && !UNITY_EDITOR
 			// When using ArborInsightService, unbind then bind to clear session-related connection state and get a fresh connection.
 			if (_arborInsightService != null && ArborInsightServiceClient.IsServiceBound())
@@ -474,7 +482,7 @@ namespace AbxrLib.Runtime
 		{
 			// Check if we're using auth-provided module targets
 			var response = _authService.ResponseData;
-			if (response?.Modules == null || response.Modules.Count > 0)
+			if (response?.Modules != null && response.Modules.Count > 0)
 			{
 				// Auth-provided modules exist - don't allow manual setting to prevent breaking module sequence
 				return;
@@ -999,10 +1007,10 @@ namespace AbxrLib.Runtime
 			{
 				ModuleData moduleData = _authService.ResponseData.Modules[_currentModuleIndex];
 				// these are potentially sharing developer private information. Disabling for now
-				//if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
-				//if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
-				//if (!meta.ContainsKey("moduleOrder")) meta["moduleOrder"] = moduleData.Order.ToString();
+				if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
+				if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
 				if (!meta.ContainsKey("moduleName")) meta["moduleName"] = moduleData.Name;
+				if (!meta.ContainsKey("moduleOrder")) meta["moduleOrder"] = moduleData.Order.ToString();
 			}
 			
 			// Add super metadata to metadata (includes manually-set moduleName/moduleId/moduleOrder when no LMS modules)
