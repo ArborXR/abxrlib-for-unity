@@ -231,7 +231,7 @@ namespace AbxrLib.Runtime
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.Instance != null) return true;
+            if (QRCodeReaderPico.IsAvailable) return true;
 #endif
             return QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
 #else
@@ -244,7 +244,7 @@ namespace AbxrLib.Runtime
             if (onResult == null) return;
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.Instance != null)
+            if (QRCodeReaderPico.IsAvailable)
             {
                 QRCodeReaderPico.Instance.SetScanResultCallback(onResult);
                 QRCodeReaderPico.Instance.ScanQRCode();
@@ -265,7 +265,7 @@ namespace AbxrLib.Runtime
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.Instance != null)
+            if (QRCodeReaderPico.IsAvailable)
             {
                 QRCodeReaderPico.Instance.CancelScanForAuthInput();
                 return;
@@ -281,7 +281,7 @@ namespace AbxrLib.Runtime
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
             // Pico uses platform scanner UI; there is no embeddable camera texture.
-            if (QRCodeReaderPico.Instance != null) return null;
+            if (QRCodeReaderPico.IsAvailable) return null;
 #endif
             return QRCodeReader.Instance?.GetCameraTexture();
 #else

@@ -8,7 +8,11 @@
  *
  * Only activates when:
  * - PICO_ENTERPRISE_SDK_3 is defined and PXR_Enterprise is available
- * - Running on a PICO Enterprise device (product name contains "enterprise")
+ * - Running on a PICO Enterprise device (product name contains "enterprise").
+ *
+ * QR is known to work on PICO 4 Enterprise Ultra (4EU). On PICO 4 Enterprise (non-Ultra) the SDK
+ * may fail (bind or ScanQRCode); we allow the attempt and on first failure mark the reader as
+ * unsupported and persist that in PlayerPrefs so we do not offer QR on future app launches.
  *
  * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
  */
@@ -24,26 +28,57 @@ using Unity.XR.PXR;
 namespace AbxrLib.Runtime.Core
 {
     /// <summary>
-    /// QR code reader for PICO headsets using PXR_Enterprise SDK (platform handles camera access).
+    /// QR code reader for PICO Enterprise devices using PXR_Enterprise SDK. Known to work on PICO 4 Enterprise Ultra (4EU);
+    /// we also allow PICO 4 Enterprise and mark as unsupported on first bind/scan failure.
     /// </summary>
     public class QRCodeReaderPico : MonoBehaviour
     {
         public static QRCodeReaderPico Instance;
         public static AbxrAuthService AuthService;
 
+        private const string PicoQrUnsupportedKey = "abxrlib_pico_qr_unsupported";
+
+        /// <summary>
+        /// True once we have seen a failure (bind or ScanQRCode), this session or a previous one (PlayerPrefs).
+        /// </summary>
+        private static bool _qrUnsupportedThisSession;
+
+        /// <summary>
+        /// True if the PICO QR reader is available (Instance exists and we have not marked it unsupported this device).
+        /// </summary>
+        public static bool IsAvailable => Instance != null && !_qrUnsupportedThisSession;
+
         private Action<string> _scanResultCallback;
+
+        private static bool GetPicoQrUnsupportedFromPrefs()
+        {
+            return PlayerPrefs.GetInt(PicoQrUnsupportedKey, 0) != 0;
+        }
+
+        private static void SetPicoQrUnsupportedInPrefs()
+        {
+            PlayerPrefs.SetInt(PicoQrUnsupportedKey, 1);
+            PlayerPrefs.Save();
+        }
+
+        private static bool IsPicoEnterprise(string productName)
+        {
+            if (string.IsNullOrEmpty(productName)) return false;
+            return productName.ToLower().Contains("enterprise");
+        }
 
         private void Awake()
         {
-            string productName = Unity.XR.PXR.PXR_System.GetProductName().ToLower();
-            if (!productName.Contains("enterprise"))
+            string productName = Unity.XR.PXR.PXR_System.GetProductName();
+            if (!IsPicoEnterprise(productName))
             {
-                Debug.LogWarning("[AbxrLib] Disabling PICO QR Code Scanner. Must be run on PICO Enterprise device.");
+                Debug.LogWarning("[AbxrLib] Disabling PICO QR Code Scanner. Must be run on a PICO Enterprise device. Product: " + productName);
                 return;
             }
 
             if (Instance == null)
             {
+                _qrUnsupportedThisSession = GetPicoQrUnsupportedFromPrefs();
                 Instance = this;
                 Debug.Log("[AbxrLib] QRCodeReaderPico Instance activated successfully.");
             }
@@ -66,7 +101,15 @@ namespace AbxrLib.Runtime.Core
                 Instance = null;
         }
 
-        private static void OnServiceBound(bool success) { }
+        private void OnServiceBound(bool success)
+        {
+            if (!success && Instance == this)
+            {
+                _qrUnsupportedThisSession = true;
+                SetPicoQrUnsupportedInPrefs();
+                Debug.LogWarning("[AbxrLib] PICO QR Code Scanner: Enterprise service bind failed. QR scan disabled for this device (saved in preferences; device may be PICO 4 Enterprise rather than 4EU).");
+            }
+        }
 
         /// <summary>
         /// Set the one-shot callback for developer API (StartQRScanForAuthInput). When set, OnQRCodeScanned invokes this instead of KeyboardAuthenticate.
@@ -91,7 +134,25 @@ namespace AbxrLib.Runtime.Core
 
         public void ScanQRCode()
         {
-            PXR_Enterprise.ScanQRCode(OnQRCodeScanned);
+            try
+            {
+                PXR_Enterprise.ScanQRCode(OnQRCodeScanned);
+            }
+            catch (Exception e)
+            {
+                if (Instance == this)
+                {
+                    _qrUnsupportedThisSession = true;
+                    SetPicoQrUnsupportedInPrefs();
+                    Debug.LogWarning("[AbxrLib] PICO QR Code Scanner: ScanQRCode failed. QR scan disabled for this device (saved in preferences). " + e.Message);
+                }
+                if (_scanResultCallback != null)
+                {
+                    var cb = _scanResultCallback;
+                    _scanResultCallback = null;
+                    cb.Invoke(null);
+                }
+            }
         }
 
         private void OnQRCodeScanned(string scanResult)
