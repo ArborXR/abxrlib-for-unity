@@ -18,6 +18,7 @@ using System;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Services.Auth;
 using UnityEngine;
+using Unity.XR.PICO.TOBSupport;
 using Unity.XR.PXR;
 
 namespace AbxrLib.Runtime.Core
@@ -116,10 +117,10 @@ namespace AbxrLib.Runtime.Core
             }
             if (string.IsNullOrEmpty(scanResult)) return;
             AuthService.SetInputSource("QRlms");
-            Match match = Regex.Match(scanResult, @"(?<=ABXR:)\d+");
-            if (match.Success)
+            Match authMatch = Regex.Match(scanResult, @"(?<=ABXR:)\d+");
+            if (authMatch.Success)
             {
-                string pin = match.Value;
+                string pin = authMatch.Value;
                 Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
                 AuthService.KeyboardAuthenticate(pin);
             }
