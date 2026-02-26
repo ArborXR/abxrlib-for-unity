@@ -20,6 +20,7 @@ namespace AbxrLib.Runtime.Services.Data
 		private Coroutine _tickCoroutine;
 		
 		private const string UrlPath = "/v1/storage";
+		private static readonly WaitForSeconds WaitQuarterSecond = new WaitForSeconds(0.25f);
 		private readonly Uri _uri;
 		private readonly List<StoragePayload> _payloads = new();
 		private readonly object _lock = new();
@@ -64,7 +65,7 @@ namespace AbxrLib.Runtime.Services.Data
 		{
 			while (true)
 			{
-				yield return new WaitForSeconds(0.25f);
+				yield return WaitQuarterSecond;
 				if (Time.time >= _nextSendAt)
 				{
 					yield return Send();

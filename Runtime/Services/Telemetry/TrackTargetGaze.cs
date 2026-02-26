@@ -45,14 +45,9 @@ namespace AbxrLib.Runtime.Services.Telemetry
             }
         }
 
-        private void Update()
-        {
-            if (Time.frameCount % 300 == 0)
-            {
-                UpdateCameraReference();
-            }
-        }
-
+        /// <summary>
+        /// Refreshes the cached camera reference. Called from Start and from SendTargetGazeData when cache is null or invalid.
+        /// </summary>
         private static void UpdateCameraReference()
         {
             Transform cameraTransform = Utils.FindCameraTransform();

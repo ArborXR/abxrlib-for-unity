@@ -11,7 +11,8 @@ namespace AbxrLib.Runtime.Services.Telemetry
         private Vector3 _currentPosition;
         private Quaternion _currentRotation;
         private static float _timer = 1f;
-    
+        private readonly Dictionary<string, string> _positionData = new Dictionary<string, string>(3);
+
         private void Update()
         {
             _timer += Time.deltaTime;
@@ -25,13 +26,11 @@ namespace AbxrLib.Runtime.Services.Telemetry
 
             _currentPosition = transform.position;
             _currentRotation = transform.rotation;
-            var positionDict = new Dictionary<string, string>
-            {
-                ["x"] = transform.position.x.ToString(CultureInfo.InvariantCulture),
-                ["y"] = transform.position.y.ToString(CultureInfo.InvariantCulture),
-                ["z"] = transform.position.z.ToString(CultureInfo.InvariantCulture)
-            };
-            Abxr.Telemetry(gameObject.name + " Position", positionDict);
+            _positionData.Clear();
+            _positionData["x"] = transform.position.x.ToString(CultureInfo.InvariantCulture);
+            _positionData["y"] = transform.position.y.ToString(CultureInfo.InvariantCulture);
+            _positionData["z"] = transform.position.z.ToString(CultureInfo.InvariantCulture);
+            Abxr.Telemetry(gameObject.name + " Position", _positionData);
         }
     }
 }

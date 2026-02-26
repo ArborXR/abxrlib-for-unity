@@ -23,6 +23,13 @@ namespace AbxrLib.Runtime.Services.Telemetry
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _rightTriggerValues = new();
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _leftTriggerValues = new();
 
+        // Reused to avoid allocations in telemetry hot paths
+        private readonly Dictionary<string, string> _batteryData = new Dictionary<string, string>(2);
+        private readonly Dictionary<string, string> _memoryData = new Dictionary<string, string>(4);
+        private readonly Dictionary<string, string> _positionData = new Dictionary<string, string>(3);
+        private readonly Dictionary<string, string> _rotationData = new Dictionary<string, string>(4);
+        private readonly Dictionary<string, string> _triggerData = new Dictionary<string, string>(1);
+
         public AbxrTelemetryService(MonoBehaviour runner)
         {
             _runner = runner;
@@ -94,14 +101,12 @@ namespace AbxrLib.Runtime.Services.Telemetry
         
         public void RecordSystemInfo()
         {
-            var batteryData = new Dictionary<string, string>
-            {
-                ["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%",
-                ["Status"] = SystemInfo.batteryStatus.ToString()
-            };
-            Abxr.Telemetry("Battery", batteryData);
+            _batteryData.Clear();
+            _batteryData["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%";
+            _batteryData["Status"] = SystemInfo.batteryStatus.ToString();
+            Abxr.Telemetry("Battery", _batteryData);
 
-            var memoryData = new Dictionary<string, string>();
+            _memoryData.Clear();
             try
             {
                 // Check if newer Profiler methods are available (Unity 2020.1+)
@@ -111,26 +116,26 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 if (getTotalAllocatedMethod != null)
                 {
                     // Use newer methods (Unity 2020.1+)
-                    memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
-                    memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
-                    memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
+                    _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
+                    _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
+                    _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
                 }
                 else
                 {
                     // Fallback to older methods (Unity 2019.x and earlier)
-                    memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemory() / 1000000 + " MB";
-                    memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemory() / 1000000 + " MB";
+                    _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemory() / 1000000 + " MB";
+                    _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemory() / 1000000 + " MB";
                 }
             }
             catch (System.Exception ex)
             {
                 Debug.LogWarning($"[AbxrLib] Memory profiling not available: {ex.Message}");
-                memoryData["Total Allocated"] = "N/A";
-                memoryData["Total Reserved"] = "N/A";
-                memoryData["Total Unused Reserved"] = "N/A";
+                _memoryData["Total Allocated"] = "N/A";
+                _memoryData["Total Reserved"] = "N/A";
+                _memoryData["Total Unused Reserved"] = "N/A";
             }
             
-            Abxr.Telemetry("Memory", memoryData);
+            Abxr.Telemetry("Memory", _memoryData);
         }
         
         public void RecordLocationData()
@@ -140,7 +145,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
             RecordLocationData(_hmd);
         }
 
-        private static void RecordLocationData(InputDevice device)
+        private void RecordLocationData(InputDevice device)
         {
             if (!device.isValid) return;
         
@@ -151,21 +156,18 @@ namespace AbxrLib.Runtime.Services.Telemetry
             if (device.characteristics.HasFlag(InputDeviceCharacteristics.Right)) deviceName = RightControllerName;
             if (device.characteristics.HasFlag(InputDeviceCharacteristics.Left)) deviceName = LeftControllerName;
 
-            var positionDict = new Dictionary<string, string>
-            {
-                ["x"] = position.x.ToString(CultureInfo.InvariantCulture),
-                ["y"] = position.y.ToString(CultureInfo.InvariantCulture),
-                ["z"] = position.z.ToString(CultureInfo.InvariantCulture)
-            };
-            var rotationDict = new Dictionary<string, string>
-            {
-                ["x"] = rotation.x.ToString(CultureInfo.InvariantCulture),
-                ["y"] = rotation.y.ToString(CultureInfo.InvariantCulture),
-                ["z"] = rotation.z.ToString(CultureInfo.InvariantCulture),
-                ["w"] = rotation.w.ToString(CultureInfo.InvariantCulture)
-            };
-            Abxr.Telemetry(deviceName + " Position", positionDict);
-            Abxr.Telemetry(deviceName + " Rotation", rotationDict);
+            _positionData.Clear();
+            _positionData["x"] = position.x.ToString(CultureInfo.InvariantCulture);
+            _positionData["y"] = position.y.ToString(CultureInfo.InvariantCulture);
+            _positionData["z"] = position.z.ToString(CultureInfo.InvariantCulture);
+            Abxr.Telemetry(deviceName + " Position", _positionData);
+
+            _rotationData.Clear();
+            _rotationData["x"] = rotation.x.ToString(CultureInfo.InvariantCulture);
+            _rotationData["y"] = rotation.y.ToString(CultureInfo.InvariantCulture);
+            _rotationData["z"] = rotation.z.ToString(CultureInfo.InvariantCulture);
+            _rotationData["w"] = rotation.w.ToString(CultureInfo.InvariantCulture);
+            Abxr.Telemetry(deviceName + " Rotation", _rotationData);
         }
 
         private void CheckTriggers()
@@ -184,13 +186,9 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 _rightTriggerValues.TryGetValue(trigger, out bool wasPressed);
                 if (isPressed != wasPressed)
                 {
-                    string action = "Pressed";
-                    if (!isPressed) action = "Released";
-                    var telemetryData = new Dictionary<string, string>
-                    {
-                        [trigger.name] = action
-                    };
-                    Abxr.Telemetry($"Right Controller {trigger.name}", telemetryData);
+                    _triggerData.Clear();
+                    _triggerData[trigger.name] = isPressed ? "Pressed" : "Released";
+                    Abxr.Telemetry($"Right Controller {trigger.name}", _triggerData);
                     _rightTriggerValues[trigger] = isPressed;
                 }
             }
@@ -201,13 +199,9 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 _leftTriggerValues.TryGetValue(trigger, out bool wasPressed);
                 if (isPressed != wasPressed)
                 {
-                    string action = "Pressed";
-                    if (!isPressed) action = "Released";
-                    var telemetryData = new Dictionary<string, string>
-                    {
-                        [trigger.name] = action
-                    };
-                    Abxr.Telemetry($"Left Controller {trigger.name}", telemetryData);
+                    _triggerData.Clear();
+                    _triggerData[trigger.name] = isPressed ? "Pressed" : "Released";
+                    Abxr.Telemetry($"Left Controller {trigger.name}", _triggerData);
                     _leftTriggerValues[trigger] = isPressed;
                 }
             }

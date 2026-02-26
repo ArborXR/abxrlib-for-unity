@@ -24,6 +24,7 @@ namespace AbxrLib.Runtime.Services.Data
         private Coroutine _tickCoroutine;
         
         private const string UrlPath = "/v1/collect/data";
+        private static readonly WaitForSeconds WaitQuarterSecond = new WaitForSeconds(0.25f);
         private readonly Uri _uri;
         private readonly List<EventPayload> _eventPayloads = new();
         private readonly List<TelemetryPayload> _telemetryPayloads = new();
@@ -72,7 +73,7 @@ namespace AbxrLib.Runtime.Services.Data
         {
 	        while (true)
 	        {
-		        yield return new WaitForSeconds(0.25f);
+		        yield return WaitQuarterSecond;
 		        if (Time.time >= _nextSendAt)
 		        {
 			        yield return Send();
@@ -100,7 +101,7 @@ namespace AbxrLib.Runtime.Services.Data
 				timestamp = isoTime,
 				preciseTimestamp = eventTime,
 				name = name,
-				meta = meta ?? new Dictionary<string, string>()
+				meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>()
 			};
 
 			lock (_lock)
@@ -137,7 +138,7 @@ namespace AbxrLib.Runtime.Services.Data
 				timestamp = isoTime,
 				preciseTimestamp = telemetryTime,
 				name = name,
-				meta = meta ?? new Dictionary<string, string>()
+				meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>()
 			};
 
 			lock (_lock)
@@ -188,7 +189,7 @@ namespace AbxrLib.Runtime.Services.Data
 				preciseTimestamp = logTime,
 				logLevel = logLevel,
 				text = text,
-				meta = meta ?? new Dictionary<string, string>()
+				meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>()
 			};
 
 			lock (_lock)
