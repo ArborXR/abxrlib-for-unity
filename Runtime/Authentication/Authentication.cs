@@ -634,6 +634,13 @@ namespace AbxrLib.Runtime.Authentication
                     var restHolder = new AuthResponseHolder();
                     yield return SendAuthRequestRest(JsonConvert.SerializeObject(data), restHolder);
                     responseJson = restHolder.Response;
+
+                    // If we got a 4xx from the server, we had connectivity and credentials are unchanged; retrying won't help.
+                    if (restHolder.ResponseCode >= 400 && restHolder.ResponseCode < 500)
+                    {
+                        Abxr.OnAuthCompleted?.Invoke(false, null);
+                        break;
+                    }
                 }
 
                 if (HandleAuthResponse(responseJson, fromService: useService, handoff: false))
@@ -651,16 +658,18 @@ namespace AbxrLib.Runtime.Authentication
             }
         }
 
-        /// <summary>Holds the response body from a single REST auth attempt (used so coroutine can "return" it).</summary>
+        /// <summary>Holds the response body and status from a single REST auth attempt (used so coroutine can "return" it).</summary>
         private class AuthResponseHolder
         {
             public string Response;
+            public long ResponseCode;
         }
 
-        /// <summary>Performs one POST to /v1/auth/token and sets holder.Response to the response body or null on failure.</summary>
+        /// <summary>Performs one POST to /v1/auth/token and sets holder.Response and holder.ResponseCode.</summary>
         private static IEnumerator SendAuthRequestRest(string json, AuthResponseHolder holder)
         {
             holder.Response = null;
+            holder.ResponseCode = 0;
             var fullUri = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token");
             UnityWebRequest request = null;
             try
@@ -679,6 +688,7 @@ namespace AbxrLib.Runtime.Authentication
 
             try
             {
+                holder.ResponseCode = request.responseCode;
                 if (request.result == UnityWebRequest.Result.Success)
                     holder.Response = request.downloadHandler?.text;
                 else
