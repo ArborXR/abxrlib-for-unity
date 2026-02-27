@@ -32,16 +32,19 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             LoadPrefabs();
         }
-        
-        private void LoadPrefabs()
+
+        /// <summary>
+        /// Load keyboard and PIN pad prefabs from Configuration or Resources.
+        /// Safe to call from static code (e.g. before Start); used on first Create() if needed.
+        /// </summary>
+        private static void LoadPrefabs()
         {
             var config = Configuration.Instance;
             
             // Try to use configuration prefabs first, fall back to Resources.Load
-            _keyboardPrefab = config.KeyboardPrefab;
-            _pinPadPrefab = config.PinPrefab;
+            _keyboardPrefab = config != null ? config.KeyboardPrefab : null;
+            _pinPadPrefab = config != null ? config.PinPrefab : null;
             
-            // Fall back to Resources.Load if configuration prefabs are not set
             if (!_keyboardPrefab)
             {
                 _keyboardPrefab = Resources.Load<GameObject>("Prefabs/AbxrKeyboard" + RigDetector.PrefabSuffix());
@@ -60,10 +63,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 Debug.Log("[AbxrLib] KeyboardHandler - Using custom PIN pad prefab from configuration");
             }
             
-            
             if (!_keyboardPrefab)
             {
-                Debug.LogError("[AbxrLib] KeyboardHandler - Failed to load keyboard prefab from both configuration and Resources");
+                Debug.LogError("[AbxrLib] KeyboardHandler - Failed to load keyboard prefab from both configuration and Resources. Assign Keyboard Prefab in AbxrLib Configuration or ensure package Resources are available.");
             }
         }
     
@@ -90,12 +92,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void RefreshPrefabs()
         {
-            var keyboardHandler = FindObjectOfType<KeyboardHandler>();
-            if (keyboardHandler != null)
-            {
-                keyboardHandler.LoadPrefabs();
-                Debug.Log("[AbxrLib] KeyboardHandler - Prefabs refreshed from configuration");
-            }
+            LoadPrefabs();
+            Debug.Log("[AbxrLib] KeyboardHandler - Prefabs refreshed from configuration");
         }
 
         public static void SetPrompt(string prompt)
@@ -109,9 +107,18 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public static void Create(KeyboardType keyboardType)
         {
             _processingSubmit = false;
+
+            // Ensure prefabs are loaded (handles Create() being called before KeyboardHandler.Start())
+            if (_keyboardPrefab == null || _pinPadPrefab == null)
+                LoadPrefabs();
             
             if (keyboardType == KeyboardType.PinPad)
             {
+                if (_pinPadPrefab == null)
+                {
+                    Debug.LogError("[AbxrLib] KeyboardHandler - Cannot show PIN pad: prefab not found. Assign Pin Prefab in AbxrLib Configuration or ensure package Resources are available.");
+                    return;
+                }
                 if (_pinPadInstance) return; // Prevent duplicate PIN pad creation
                 _pinPadInstance = Instantiate(_pinPadPrefab);
                 
@@ -127,6 +134,11 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
             else if (keyboardType == KeyboardType.FullKeyboard)
             {
+                if (_keyboardPrefab == null)
+                {
+                    Debug.LogError("[AbxrLib] KeyboardHandler - Cannot show keyboard: prefab not found. Assign Keyboard Prefab in AbxrLib Configuration or ensure package Resources are available.");
+                    return;
+                }
                 if( _keyboardInstance) return; // Prevent duplicate full keyboard creation
                 _keyboardInstance = Instantiate(_keyboardPrefab);
                 
