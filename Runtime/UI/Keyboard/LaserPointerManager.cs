@@ -54,8 +54,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     }
                 }
                 _originalStates = newDictionary;
-                
-                Debug.Log($"[AbxrLib] LaserPointerManager - Cleaned up {keysToRemove.Count} destroyed ray interactor references");
             }
         }
         
@@ -68,7 +66,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _isManagingLaserPointers = false;
             _cachedRayInteractors = null; // Clear cache
             _cacheValid = false; // Invalidate cache
-            Debug.Log("[AbxrLib] LaserPointerManager - Force cleanup completed");
         }
         
         /// <summary>
@@ -79,7 +76,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (_isManagingLaserPointers)
             {
-                Debug.Log("[AbxrLib] LaserPointerManager - Scene changed while managing laser pointers, performing cleanup");
                 ForceCleanup();
             }
             else
@@ -120,10 +116,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 
                 // Update cache with valid interactors only if some were destroyed
                 if (validInteractors.Count != _cachedRayInteractors.Length)
-                {
                     _cachedRayInteractors = validInteractors.ToArray();
-                    Debug.Log($"[AbxrLib] LaserPointerManager - Updated cache, removed {_cachedRayInteractors.Length - validInteractors.Count} destroyed ray interactors");
-                }
                 
                 return _cachedRayInteractors;
             }
@@ -158,6 +151,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _isManagingLaserPointers = true;
             _originalStates.Clear();
 
+            bool anyEnabled = false;
             // Get cached ray interactors (or find them if cache is expired)
             var rayInteractors = GetRayInteractors();
             foreach (var rayInteractor in rayInteractors)
@@ -172,7 +166,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     if (!wasActive)
                     {
                         rayInteractor.gameObject.SetActive(true);
-                        Debug.Log($"[AbxrLib] LaserPointerManager - Enabled ray interactor on {rayInteractor.gameObject.name}");
+                        anyEnabled = true;
                     }
                 }
                 else if (_originalStates.Count >= Configuration.Instance.maxDictionarySize)
@@ -181,6 +175,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     break;
                 }
             }
+            if (anyEnabled)
+                Debug.Log("[AbxrLib] LaserPointerManager - Enabled laser pointer(s) for keyboard interaction (were previously disabled).");
         }
 
         /// <summary>
@@ -199,7 +195,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 if (canvas.GetComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>() != null)
                     continue;
                 canvas.gameObject.AddComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>();
-                Debug.Log($"[AbxrLib] LaserPointerManager - Added TrackedDeviceGraphicRaycaster to canvas on {canvas.gameObject.name}");
             }
         }
 
@@ -214,6 +209,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             CleanupDestroyedReferences();
 
             var keysToRemove = new List<object>();
+            bool anyRestored = false;
             
             foreach (var kvp in _originalStates)
             {
@@ -227,6 +223,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     if (comp.gameObject.activeInHierarchy != originalState)
                     {
                         comp.gameObject.SetActive(originalState);
+                        anyRestored = true;
                     }
                     keysToRemove.Add(rayInteractor); // Mark for removal after processing
                 }
@@ -253,6 +250,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
 
             _isManagingLaserPointers = false;
+            if (anyRestored)
+                Debug.Log("[AbxrLib] LaserPointerManager - Restored laser pointer(s) to original state.");
         }
 
         /// <summary>

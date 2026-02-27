@@ -85,7 +85,6 @@ namespace AbxrLib.Runtime
                 gameObject.AddComponent<TrackTargetGaze>();
 
             var jsonVersion = typeof(JsonConvert).Assembly.GetName().Version;
-            Debug.Log($"[AbxrLib] Using Newtonsoft.Json version: {jsonVersion}");
 
             if (jsonVersion < new Version(13, 0, 0))
             {

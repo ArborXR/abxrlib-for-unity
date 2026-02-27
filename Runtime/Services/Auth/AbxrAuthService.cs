@@ -520,7 +520,11 @@ namespace AbxrLib.Runtime.Services.Auth
                         Configuration.Instance.ApplyConfigPayload(config);
                         _authMechanism = config.authMechanism ?? new AuthMechanism();
                         if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
-                        Debug.Log($"[AbxrLib] GetConfiguration successful. authMechanism type=\"{(_authMechanism?.type ?? "")}\" prompt=\"{(_authMechanism?.prompt ?? "")}\"");
+                        string authType = _authMechanism?.type ?? "";
+                        if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
+                            Debug.Log($"[AbxrLib] User Authentication Required. Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
+                        else
+                            Debug.Log("[AbxrLib] User authentication not required. Using anonymous session.");
                         onComplete(true, null);
                         yield break;
                     }
