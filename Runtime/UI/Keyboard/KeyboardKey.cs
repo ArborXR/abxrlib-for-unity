@@ -25,7 +25,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             character = keyLabel.text;
             shiftCharacter = keyLabel.text.ToUpper();
 
-            const string numbers = "1234567890";
+            const string numbers = "1234567890.-";
             if (numbers.Contains(keyLabel.text))
             {
                 shiftCharacter = GetShiftCharacter();
@@ -108,6 +108,10 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     return "(";
                 case "0":
                     return ")";
+                case ".":
+                    return ",";
+                case "-":
+                    return "_";
                 default:
                     break;
             }

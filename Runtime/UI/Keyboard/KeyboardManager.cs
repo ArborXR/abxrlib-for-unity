@@ -91,7 +91,16 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 qrCodeButton.gameObject.SetActive(isAvailable);
                 if (isAvailable)
-                    Debug.Log("[AbxrLib] QR Code button enabled");
+                {
+#if PICO_ENTERPRISE_SDK_3
+                    if (hasPico)
+                        Debug.Log("[AbxrLib] QR Code button enabled for PICO (SDK 3+)");
+                    else
+#endif
+                        Debug.Log("[AbxrLib] QR Code button enabled (device supported, permissions granted)");
+                }
+                else
+                    Debug.LogWarning("[AbxrLib] QR Code button hidden - QR scanning not available. Check device support and camera permissions.");
                 _lastQRButtonState = isAvailable;
             }
 #endif

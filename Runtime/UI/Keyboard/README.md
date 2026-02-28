@@ -394,6 +394,7 @@ If you're upgrading from an older version:
 - `deleteButton` - Delete button
 - `spaceButton` - Space button
 - `submitButton` - Submit button
+- `qrCodeButton` - Optional QR code scan button (shown on supported Android VR devices when a QR reader is available)
 
 ### KeyboardKey
 
