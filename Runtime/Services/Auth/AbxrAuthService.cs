@@ -173,6 +173,14 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
             _inputRequestPending = false;
+
+            if (input == "**skip**")
+            {
+                Debug.LogWarning("[AbxrLib] Skipping user authentication.");
+                KeyboardHandler.Destroy();
+                AuthSucceeded();
+            }
+            
             KeyboardAuthenticate(input);
         }
         

@@ -17,6 +17,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public Button spaceButton;
         public Button submitButton;
         public Button qrCodeButton;
+        public Button skipButton;
 
         public TMP_InputField inputField;
 #if UNITY_ANDROID && !UNITY_EDITOR 
@@ -38,6 +39,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             AddPointerDownHandler(deleteButton, Delete);
             AddPointerDownHandler(submitButton, Submit);
             AddPointerDownHandler(qrCodeButton, QRCode);
+            AddPointerDownHandler(skipButton, Skip);
         }
 
         private void Start()
@@ -176,6 +178,11 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 // Stop processing visual and clear input on error
                 inputField.text = "";
             }
+        }
+        
+        private static void Skip()
+        {
+            AbxrSubsystem.Instance.SubmitInput("**skip**");
         }
         
         private void QRCode()
