@@ -347,6 +347,26 @@ namespace AbxrLib.Runtime.Core
         [HideInInspector]
         public int maxDictionarySize = 50;
 
+#if UNITY_EDITOR
+        // Unit Test Credentials — editor-only; stripped from player builds.
+        // When unitTestConfigEnabled is true, AbxrPlayModeTestBase automatically responds to
+        // OnInputRequested using these values so tests can exercise the real auth-input flow.
+        [HideInInspector] public bool unitTestConfigEnabled = false;
+        [HideInInspector] public string unitTestAuthText  = "";
+        [HideInInspector] public string unitTestAuthEmail = "";
+        [HideInInspector] public string unitTestAuthPin   = "";
+#endif
+
+        /// <summary>
+        /// For testing only. Clears the singleton so the next access creates a fresh default instance.
+        /// Also resets the validation flag so numeric clamping runs again on the new instance.
+        /// </summary>
+        internal static void ResetForTesting()
+        {
+            _instance = null;
+            _validatedOnce = false;
+        }
+
         private void MigrateIfNeeded()
         {
             if (_configSerializedVersion >= 1) return;

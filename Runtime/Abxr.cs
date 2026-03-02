@@ -315,6 +315,8 @@ public static partial class Abxr
 	/// <param name="meta">Optional metadata with completion details</param>
 	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		X?.EventAssessmentComplete(assessmentName, score, status, meta);
+	public static void EventAssessmentComplete(string assessmentName, string score) =>
+		EventAssessmentComplete(assessmentName, int.Parse(score), EventStatus.Complete);  // disambiguating 2-arg overload
 	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		EventAssessmentComplete(assessmentName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	public static void EventAssessmentComplete(string assessmentName, string score, ResultOptions result = ResultOptions.Complete, Dictionary<string, string> meta = null) =>
@@ -380,6 +382,8 @@ public static partial class Abxr
 	/// <param name="result">User's response (e.g., Correct, Incorrect, Neutral)</param>
 	/// <param name="response">User's response (e.g., "A", "red_pill", "blue_pill")</param>
 	/// <param name="meta">Optional metadata with interaction details</param>
+	public static void EventInteractionComplete(string interactionName, InteractionType type) =>
+		EventInteractionComplete(interactionName, type, InteractionResult.Neutral, null);  // disambiguating 2-arg overload
 	public static void EventInteractionComplete(string interactionName, InteractionType type, InteractionResult result = InteractionResult.Neutral, string response = null, Dictionary<string, string> meta = null) =>
 		X?.EventInteractionComplete(interactionName, type, result, response, meta);
 	public static void EventInteractionComplete(string interactionName, InteractionType type, string response = "", Dictionary<string, string> meta = null) =>

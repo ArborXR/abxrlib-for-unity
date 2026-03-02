@@ -225,6 +225,39 @@ namespace AbxrLib.Editor
                 EditorGUI.indentLevel--;
             }
 
+            EditorGUILayout.Space();
+            const string UnitTestKey = "AbxrLib.ConfigInspector.UnitTestSettings";
+            bool showUnitTest = EditorPrefs.GetBool(UnitTestKey, false);
+            showUnitTest = EditorGUILayout.Toggle("Unit Test Config", showUnitTest);
+            EditorPrefs.SetBool(UnitTestKey, showUnitTest);
+
+            if (showUnitTest)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.HelpBox(
+                    "These credentials are editor-only and are never included in player builds. " +
+                    "When 'Enable Test Credentials' is on, Play Mode tests automatically submit the " +
+                    "appropriate value when auth requests input (text, email, or PIN).",
+                    MessageType.Info);
+                config.unitTestConfigEnabled = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable Test Credentials",
+                    "When on, Play Mode tests auto-respond to auth input requests using the values below."),
+                    config.unitTestConfigEnabled);
+                EditorGUI.BeginDisabledGroup(!config.unitTestConfigEnabled);
+                config.unitTestAuthText  = EditorGUILayout.TextField(new GUIContent(
+                    "Text / Username", "Submitted when the auth mechanism type is 'text'."),
+                    config.unitTestAuthText);
+                config.unitTestAuthEmail = EditorGUILayout.TextField(new GUIContent(
+                    "Email", "Submitted when the auth mechanism type is 'email'."),
+                    config.unitTestAuthEmail);
+                config.unitTestAuthPin   = EditorGUILayout.TextField(new GUIContent(
+                    "PIN", "Submitted when the auth mechanism type is 'pin' (covers assessmentPin, ssoPin, etc.)."),
+                    config.unitTestAuthPin);
+                EditorGUI.EndDisabledGroup();
+                EditorGUI.indentLevel--;
+            }
+
+            EditorGUILayout.Space();
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
                 // Create a temporary instance to get the default values

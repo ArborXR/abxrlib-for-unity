@@ -1302,5 +1302,17 @@ namespace AbxrLib.Runtime
 			public string key;
 			public string value;
 		}
+
+		// ── Test helpers ──────────────────────────────────────────────────────
+		// These members are internal and accessible only to assemblies listed in InternalsVisibleTo.
+
+		/// <summary>For testing only. Direct access to the auth service to simulate auth state.</summary>
+		internal AbxrAuthService AuthServiceForTesting => _authService;
+
+		/// <summary>For testing only. Direct access to the data service to inspect queued payloads.</summary>
+		internal AbxrDataService DataServiceForTesting => _dataService;
+
+		/// <summary>For testing only. Resets static fields that persist across MonoBehaviour instances between tests.</summary>
+		internal static void ResetStaticStateForTesting() => _assessmentStarted = false;
 	}
 }

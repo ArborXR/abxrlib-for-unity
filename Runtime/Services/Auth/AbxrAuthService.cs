@@ -1103,5 +1103,16 @@ namespace AbxrLib.Runtime.Services.Auth
             
             return true;
         }
+
+        /// <summary>
+        /// For testing only. Simulates a successful authentication response without making HTTP requests.
+        /// Fires OnSucceeded so the subsystem's auth-completion handler runs (setting DEFAULT assessment timer, firing Abxr.OnAuthCompleted, etc.).
+        /// </summary>
+        internal void SimulateAuthSuccess(AuthResponse response)
+        {
+            ResponseData = response ?? new AuthResponse();
+            Authenticated = true;
+            OnSucceeded?.Invoke();
+        }
     }
 }

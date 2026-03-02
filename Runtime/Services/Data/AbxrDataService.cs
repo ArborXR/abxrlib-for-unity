@@ -69,6 +69,24 @@ namespace AbxrLib.Runtime.Services.Data
             }
         }
 
+        /// <summary>For testing only. Returns a snapshot of all events currently in the send queue.</summary>
+        internal List<EventPayload> GetPendingEventsForTesting()
+        {
+            lock (_lock) { return new List<EventPayload>(_eventPayloads); }
+        }
+
+        /// <summary>For testing only. Returns a snapshot of all logs currently in the send queue.</summary>
+        internal List<LogPayload> GetPendingLogsForTesting()
+        {
+            lock (_lock) { return new List<LogPayload>(_logPayloads); }
+        }
+
+        /// <summary>For testing only. Returns a snapshot of all telemetry currently in the send queue.</summary>
+        internal List<TelemetryPayload> GetPendingTelemetryForTesting()
+        {
+            lock (_lock) { return new List<TelemetryPayload>(_telemetryPayloads); }
+        }
+
         private IEnumerator TickCoroutine()
         {
 	        while (true)
