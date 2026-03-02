@@ -10,9 +10,9 @@ namespace AbxrLib.Runtime.Services.Platform
 {
 	internal static class ArborInsightServiceBridge
 	{
-		private const string		PackageName = "aar.xrdi.arborinsightservice.unity.UnityArborInsightServiceClient";
+		private const string		PackageName = "app.xrdm.insights.client.Service";
 		/// <summary>Package name of the ArborInsightService APK (impl app). Used to check if the service is installed before waiting for bind.</summary>
-		private const string		ServiceApkPackageName = "impl.xrdi.arborinsightservice";
+		private const string		ServiceApkPackageName = "app.xrdm.insights";
 		static AndroidJavaObject	_client = null;
 
 		static AndroidJavaObject Activity => new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity");
