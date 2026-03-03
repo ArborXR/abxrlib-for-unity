@@ -1356,6 +1356,7 @@ RectTransform:
   - {fileID: 2159974401106593113}
   - {fileID: 6164152546629638467}
   - {fileID: 2567054066492165676}
+  - {fileID: 3431882218051321811}
   m_Father: {fileID: 1532419503338112427}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -2353,7 +2354,6 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2080690583623871084}
-  - {fileID: 3431882218051321811}
   - {fileID: 2595154894568363220}
   m_Father: {fileID: 5882378055200361980}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -3766,7 +3766,7 @@ MonoBehaviour:
   m_FallbackScreenDPI: 96
   m_DefaultSpriteDPI: 96
   m_DynamicPixelsPerUnit: 1
-  m_PresetInfoIsWorld: 0
+  m_PresetInfoIsWorld: 1
 --- !u!114 &7282786441445851047
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4605,7 +4605,7 @@ PrefabInstance:
   serializedVersion: 2
   m_Modification:
     serializedVersion: 3
-    m_TransformParent: {fileID: 8180219054457137610}
+    m_TransformParent: {fileID: 3982564340432653276}
     m_Modifications:
     - target: {fileID: 4134876018333934113, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_TargetGraphic
@@ -4713,11 +4713,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018333934119, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_SizeDelta.x
-      value: 2.2
+      value: 4.5
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018333934119, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_SizeDelta.y
-      value: 2.2
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018333934119, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_LocalPosition.x
@@ -4749,11 +4749,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018333934119, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_AnchoredPosition.x
-      value: 27.49
+      value: -4.76
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018333934119, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: -2.14
+      value: -1.9200001
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018333934119, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -4773,11 +4773,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_text
-      value: X
+      value: Guest Access
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_fontSize
-      value: 1.5
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_fontStyle
@@ -4785,11 +4785,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_fontColor.b
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_fontColor.g
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_fontColor.r
@@ -4797,11 +4797,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_fontSizeBase
-      value: 1.5
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: m_fontColor32.rgba
-      value: 4278190335
+      value: 4294967295
       objectReference: {fileID: 0}
     - target: {fileID: 4134876018436328723, guid: 92ec71468190c4441a2ccde88d1bdad9, type: 3}
       propertyPath: 'm_ActiveFontFeatures.Array.data[0]'
