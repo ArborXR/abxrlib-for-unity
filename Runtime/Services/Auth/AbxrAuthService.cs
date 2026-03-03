@@ -698,8 +698,9 @@ namespace AbxrLib.Runtime.Services.Auth
             if (ResponseData.Modules?.Count > 1)
                 ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
             ResponseData.UserData ??= new Dictionary<string, string>();
-            if (!string.IsNullOrEmpty(ResponseData.UserId))
-                ResponseData.UserData["userId"] = ResponseData.UserId;
+            var userIdStr = ResponseData.UserId?.ToString();
+            if (!string.IsNullOrEmpty(userIdStr))
+                ResponseData.UserData["userId"] = userIdStr;
             Authenticated = true;
             OnSucceeded?.Invoke();
         }
