@@ -26,9 +26,9 @@ namespace AbxrLib.Runtime
         private AbxrAuthService _authService;
         private AbxrDataService _dataService;
         private AbxrTelemetryService _telemetryService;
-        private ArborServiceClient _arborClient;
+        private ArborMdmClient _arborMdmClient;
 #if UNITY_ANDROID && !UNITY_EDITOR
-	    private ArborInsightServiceClient _arborInsightService;
+	    private ArborInsightsClient _arborInsightsClient;
 #endif
         private AbxrStorageService _storageService;
         private AIProxyApi _aiProxyApi;
@@ -39,7 +39,7 @@ namespace AbxrLib.Runtime
         private int _currentModuleIndex;
         private Action<string, string, string, string> _appOnInputRequested;
 
-        // Developer-supplied overrides (bypass ArborServiceClient); null = not set.
+        // Developer-supplied overrides (bypass ArborMdmClient); null = not set.
         private string _overrideOrgId;
         private string _overrideAuthSecret;
         private string _overrideDeviceId;
@@ -93,18 +93,18 @@ namespace AbxrLib.Runtime
 
             // Create services
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (Configuration.Instance.enableArborServiceClient)
+            if (Configuration.Instance.enableArborMdmClient)
             {
-                _arborClient = new ArborServiceClient();
+                _arborMdmClient = new ArborMdmClient();
                 // Start bind early so it can complete while the scene loads; auth will wait for ready in a coroutine.
-                _arborClient.Initialize();
+                _arborMdmClient.Initialize();
             }
-            if (Configuration.Instance.enableArborInsightServiceClient)
-                _arborInsightService = new ArborInsightServiceClient();
-            if (_arborInsightService != null)
-                _arborInsightService.Start();
+            if (Configuration.Instance.enableArborInsightsClient)
+                _arborInsightsClient = new ArborInsightsClient();
+            if (_arborInsightsClient != null)
+                _arborInsightsClient.Start();
 #endif
-            _authService = new AbxrAuthService(this, _arborClient);
+            _authService = new AbxrAuthService(this, _arborMdmClient);
             _dataService = new AbxrDataService(_authService, this);
             _telemetryService = new AbxrTelemetryService(this);
             _aiProxyApi = new AIProxyApi(_authService);
@@ -179,8 +179,8 @@ namespace AbxrLib.Runtime
             _sceneChangeDetector?.Stop();
             _headsetDetector?.Stop();
 #if UNITY_ANDROID && !UNITY_EDITOR
-            _arborClient?.Shutdown();
-            _arborInsightService?.Stop();
+            _arborMdmClient?.Shutdown();
+            _arborInsightsClient?.Stop();
 #endif
             
             if (_delayedStartCoroutine != null)
@@ -208,9 +208,10 @@ namespace AbxrLib.Runtime
 	        Debug.Log("[AbxrLib] Application quitting, automatically closing running events");
 	        CloseRunningEvents();
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_authService.UsingArborInsightServiceForData())
+            if (_authService != null && _authService.UsingArborInsightsClientForData())
             {
-                ArborInsightServiceClient.ForceSendUnsent();
+                ArborInsightsClient.ForceSendUnsent();
+                ArborInsightsClient.Unbind();
             }
             else
 #endif
@@ -414,7 +415,7 @@ namespace AbxrLib.Runtime
 		
 		/// <summary>
 		/// Starts an entirely fresh session: clears all API tokens, auth state, and pending data; then re-authenticates.
-		/// When using ArborInsightService (Android), unbinds and rebinds the service so the connection is fresh.
+		/// When using ArborInsightsClient (Android), unbinds and rebinds the service so the connection is fresh.
 		/// Equivalent to the user closing the app and starting it again from a session perspective.
 		/// </summary>
 		internal void StartNewSession()
@@ -429,11 +430,11 @@ namespace AbxrLib.Runtime
 			PlayerPrefs.Save();
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-			// When using ArborInsightService, unbind then bind to clear session-related connection state and get a fresh connection.
-			if (_arborInsightService != null && ArborInsightServiceClient.IsServiceBound())
+			// When using ArborInsightsClient, unbind then bind to clear session-related connection state and get a fresh connection.
+			if (_arborInsightsClient != null && ArborInsightsClient.IsServiceBound())
 			{
-				ArborInsightServiceClient.Unbind();
-				ArborInsightServiceClient.Bind(null);
+				ArborInsightsClient.Unbind();
+				ArborInsightsClient.Bind(null);
 			}
 #endif
 			_authService.ClearSessionAndPrepareForNew();
@@ -783,50 +784,50 @@ namespace AbxrLib.Runtime
 		}
         
         internal string GetDeviceId() =>
-			_overrideDeviceId != null ? _overrideDeviceId : (_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceId() : "");
+			_overrideDeviceId != null ? _overrideDeviceId : (_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceId() : "");
         
 		internal string GetDeviceSerial() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceSerial() : "";
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceSerial() : "";
 		
 		internal string GetDeviceTitle() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceTitle() : "";
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTitle() : "";
 		
 		internal string[] GetDeviceTags() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetDeviceTags() : null;
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTags() : null;
 		
 		internal void SetOrgId(string orgId) => _overrideOrgId = orgId;
 		internal void SetAuthSecret(string authSecret) => _overrideAuthSecret = authSecret;
 		internal void SetDeviceId(string deviceId) => _overrideDeviceId = deviceId;
 
 		internal string GetOrgId() =>
-			_overrideOrgId != null ? _overrideOrgId : (_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgId() : Configuration.Instance?.orgID ?? "");
+			_overrideOrgId != null ? _overrideOrgId : (_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetOrgId() : Configuration.Instance?.orgID ?? "");
 		
 		internal string GetOrgTitle() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgTitle() : "";
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetOrgTitle() : "";
 		
 		internal string GetOrgSlug() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetOrgSlug() : "";
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetOrgSlug() : "";
 		
 		internal string GetMacAddressFixed() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetMacAddressFixed() : "";
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetMacAddressFixed() : "";
 		
 		internal string GetMacAddressRandom() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetMacAddressRandom() : "";
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetMacAddressRandom() : "";
 		
 		internal bool GetIsAuthenticated() =>
-			_arborClient != null && _arborClient.IsConnected() && _arborClient.ServiceWrapper != null && _arborClient.ServiceWrapper.GetIsAuthenticated();
+			_arborMdmClient != null && _arborMdmClient.IsConnected() && _arborMdmClient.ServiceWrapper != null && _arborMdmClient.ServiceWrapper.GetIsAuthenticated();
 		
 		internal string GetAccessToken() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetAccessToken() : "";
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetAccessToken() : "";
 		
 		internal string GetRefreshToken() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetRefreshToken() : "";
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetRefreshToken() : "";
 		
 		internal DateTime? GetExpiresDateUtc() =>
-			_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetExpiresDateUtc() : DateTime.MinValue;
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetExpiresDateUtc() : DateTime.MinValue;
 		
 		internal string GetFingerprint() =>
-			_overrideAuthSecret != null ? _overrideAuthSecret : (_arborClient != null && _arborClient.IsConnected() ? _arborClient.ServiceWrapper?.GetFingerprint() : "");
+			_overrideAuthSecret != null ? _overrideAuthSecret : (_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetFingerprint() : "");
 		
 		internal IEnumerator StorageGetDefaultEntry(Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
 		{

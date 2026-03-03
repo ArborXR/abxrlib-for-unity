@@ -217,11 +217,11 @@ namespace AbxrLib.Editor
             if (showAdvanced)
             {
                 EditorGUI.indentLevel++;
-                config.enableArborInsightServiceClient = EditorGUILayout.Toggle(new GUIContent(
-                    "Enable InsightsClientService", "When enabled, the app will use the ArborInsightServiceClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used."), config.enableArborInsightServiceClient);
+                config.enableArborInsightsClient = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable InsightsClientService", "When enabled, the app will use the ArborInsightsClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used."), config.enableArborInsightsClient);
 
-                config.enableArborServiceClient = EditorGUILayout.Toggle(new GUIContent(
-                    "Enable ArborServiceClient", "When enabled on Android, ArborServiceClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborServiceClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only."), config.enableArborServiceClient);
+                config.enableArborMdmClient = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable ArborMdmClient", "When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only."), config.enableArborMdmClient);
                 EditorGUI.indentLevel--;
             }
 
@@ -269,8 +269,8 @@ namespace AbxrLib.Editor
                 config.pruneSentItemsOlderThanHours = defaultConfig.pruneSentItemsOlderThanHours;
                 config.maximumCachedItems = defaultConfig.maximumCachedItems;
                 config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
-                config.enableArborInsightServiceClient = defaultConfig.enableArborInsightServiceClient;
-                config.enableArborServiceClient = defaultConfig.enableArborServiceClient;
+                config.enableArborInsightsClient = defaultConfig.enableArborInsightsClient;
+                config.enableArborMdmClient = defaultConfig.enableArborMdmClient;
                 config.enableAutomaticTelemetry = defaultConfig.enableAutomaticTelemetry;
                 config.enableSceneEvents = defaultConfig.enableSceneEvents;
                 

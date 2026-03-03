@@ -74,12 +74,12 @@ namespace AbxrLib.Runtime.Services.Data
 		}
 	
 		/// <summary>
-		/// Add a storage entry. When this session uses ArborInsightService we send directly to the service; otherwise we queue for Send() (standalone).
+		/// Add a storage entry. When this session uses ArborInsightsClient we send directly to the service; otherwise we queue for Send() (standalone).
 		/// </summary>
 		public void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
 		{
 #if UNITY_ANDROID && !UNITY_EDITOR
-			if (_authService.UsingArborInsightServiceForData())
+			if (_authService.UsingArborInsightsClientForData())
 			{
 				long t = Utils.GetUnityTime();
 				string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
@@ -95,9 +95,9 @@ namespace AbxrLib.Runtime.Services.Data
 				bool keepLatest = policy == Abxr.StoragePolicy.KeepLatest;
 				bool sessionData = scope == Abxr.StorageScope.User;
 				if (name == "state")
-					ArborInsightServiceClient.StorageSetDefaultEntryFromString(json, keepLatest, "unity", sessionData);
+					ArborInsightsClient.StorageSetDefaultEntryFromString(json, keepLatest, "unity", sessionData);
 				else
-					ArborInsightServiceClient.StorageSetEntryFromString(name, json, keepLatest, "unity", sessionData);
+					ArborInsightsClient.StorageSetEntryFromString(name, json, keepLatest, "unity", sessionData);
 				return;
 			}
 #endif
@@ -131,7 +131,7 @@ namespace AbxrLib.Runtime.Services.Data
 
 		private IEnumerator Send()
 		{
-			if (_authService.UsingArborInsightServiceForData()) yield break; // When using ArborInsightService, never make our own HTTP requests.
+			if (_authService.UsingArborInsightsClientForData()) yield break; // When using ArborInsightsClient, never make our own HTTP requests.
 
 			if (Time.time - _lastCallTime < Configuration.Instance.maxCallFrequencySeconds) yield break;
 
@@ -161,7 +161,7 @@ namespace AbxrLib.Runtime.Services.Data
 		/// </summary>
 		private IEnumerator SendWithRetry(List<StoragePayload> storagesToSend)
 		{
-			if (_authService.UsingArborInsightServiceForData()) yield break; // When using ArborInsightService, never make our own HTTP requests.
+			if (_authService.UsingArborInsightsClientForData()) yield break; // When using ArborInsightsClient, never make our own HTTP requests.
 
 			int retryCount = 0;
 			int maxRetries = Configuration.Instance.sendRetriesOnFailure;
@@ -358,11 +358,11 @@ namespace AbxrLib.Runtime.Services.Data
 			if (!_authService.Authenticated) yield break;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-			if (_authService.UsingArborInsightServiceForData())
+			if (_authService.UsingArborInsightsClientForData())
 			{
 				string json = name == "state"
-					? ArborInsightServiceClient.StorageGetDefaultEntryAsString()
-					: ArborInsightServiceClient.StorageGetEntryAsString(name);
+					? ArborInsightsClient.StorageGetDefaultEntryAsString()
+					: ArborInsightsClient.StorageGetEntryAsString(name);
 				List<Dictionary<string, string>> result = null;
 				if (!string.IsNullOrEmpty(json))
 				{
@@ -415,19 +415,19 @@ namespace AbxrLib.Runtime.Services.Data
 			if (!_authService.Authenticated) yield break;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-			if (_authService.UsingArborInsightServiceForData())
+			if (_authService.UsingArborInsightsClientForData())
 			{
 				if (string.IsNullOrEmpty(name))
 				{
-					ArborInsightServiceClient.StorageRemoveMultipleEntries(scope == Abxr.StorageScope.User);
+					ArborInsightsClient.StorageRemoveMultipleEntries(scope == Abxr.StorageScope.User);
 				}
 				else if (name == "state")
 				{
-					ArborInsightServiceClient.StorageRemoveDefaultEntry();
+					ArborInsightsClient.StorageRemoveDefaultEntry();
 				}
 				else
 				{
-					ArborInsightServiceClient.StorageRemoveEntry(name);
+					ArborInsightsClient.StorageRemoveEntry(name);
 				}
 				yield break;
 			}

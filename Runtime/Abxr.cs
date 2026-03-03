@@ -669,7 +669,7 @@ public static partial class Abxr
 	public static string GetDeviceId() => X?.GetDeviceId();
 
 	/// <summary>
-	///   Sets the device ID to use for auth and elsewhere. When set, this value is used instead of ArborServiceClient.
+	///   Sets the device ID to use for auth and elsewhere. When set, this value is used instead of ArborMdmClient.
 	///   Call before StartAuthentication() when using config/setter credentials. Pass null to clear the override.
 	/// </summary>
 	public static void SetDeviceId(string deviceId) => X?.SetDeviceId(deviceId);
@@ -693,13 +693,13 @@ public static partial class Abxr
 	public static string GetOrgId() => X?.GetOrgId();
 
 	/// <summary>
-	///   Sets the organization ID to use for auth. When set, this value is used instead of ArborServiceClient or Configuration.
+	///   Sets the organization ID to use for auth. When set, this value is used instead of ArborMdmClient or Configuration.
 	///   Call before StartAuthentication(). Pass null to clear the override.
 	/// </summary>
 	public static void SetOrgId(string orgId) => X?.SetOrgId(orgId);
 
 	/// <summary>
-	///   Sets the auth secret (fingerprint) to use for auth. When set, this value is used instead of ArborServiceClient.
+	///   Sets the auth secret (fingerprint) to use for auth. When set, this value is used instead of ArborMdmClient.
 	///   Call before StartAuthentication(). Pass null to clear the override.
 	/// </summary>
 	public static void SetAuthSecret(string authSecret) => X?.SetAuthSecret(authSecret);

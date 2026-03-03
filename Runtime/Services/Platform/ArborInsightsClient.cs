@@ -8,16 +8,16 @@ using UnityEngine;
 
 namespace AbxrLib.Runtime.Services.Platform
 {
-	internal static class ArborInsightServiceBridge
+	internal static class ArborInsightsClientBridge
 	{
 		private const string		PackageName = "app.xrdi.client.Service";
-		/// <summary>Package name of the ArborInsightService APK (impl app). Used to check if the service is installed before waiting for bind.</summary>
+		/// <summary>Package name of the ArborInsightsClient APK (impl app). Used to check if the service is installed before waiting for bind.</summary>
 		private const string		ServiceApkPackageName = "app.xrdi.client";
 		static AndroidJavaObject	_client = null;
 
 		static AndroidJavaObject Activity => new AndroidJavaClass("com.unity3d.player.UnityPlayer").GetStatic<AndroidJavaObject>("currentActivity");
 
-		/// <summary>Returns true if the ArborInsightService APK is installed on the device. Use to skip the readiness poll when not installed.</summary>
+		/// <summary>Returns true if the ArborInsightsClient APK is installed on the device. Use to skip the readiness poll when not installed.</summary>
 		public static bool IsServicePackageInstalled()
 		{
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -56,7 +56,7 @@ namespace AbxrLib.Runtime.Services.Platform
 			}
 			catch (Exception e)
 			{
-				Debug.LogWarning($"[ArborInsightServiceClient] Init failed ({PackageName}): {e.Message}");
+				Debug.LogWarning($"[ArborInsightsClient] Init failed ({PackageName}): {e.Message}");
 			}
 		}
 		/// <summary>
@@ -68,7 +68,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		{
 			if (_client == null)
 			{
-				Debug.LogWarning("[ArborInsightServiceClient] Bind() skipped: bridge not initialized (Unity ArborInsightService AAR may be missing from Plugins/Android).");
+				Debug.LogWarning("[ArborInsightsClient] Bind() skipped: bridge not initialized (Unity ArborInsightsClient AAR may be missing from Plugins/Android).");
 				return false;
 			}
 			return _client.Call<bool>("bind", null, explicitPackage); // listener null for brevity
@@ -102,7 +102,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		{
 			if (_client == null)
 			{
-				Debug.LogError($"[ArborInsightServiceClient] AuthRequest called but _client is null!");
+				Debug.LogError($"[ArborInsightsClient] AuthRequest called but _client is null!");
 				return "{\"result\":0}";
 			}
 			try
@@ -111,7 +111,7 @@ namespace AbxrLib.Runtime.Services.Platform
 			}
 			catch (Exception e)
 			{
-				Debug.LogError($"[ArborInsightServiceClient] AuthRequest exception: {e.GetType().Name}: {e.Message}\nStackTrace: {e.StackTrace}");
+				Debug.LogError($"[ArborInsightsClient] AuthRequest exception: {e.GetType().Name}: {e.Message}\nStackTrace: {e.StackTrace}");
 				return "{\"result\":0}";
 			}
 		}
@@ -307,7 +307,7 @@ namespace AbxrLib.Runtime.Services.Platform
 	}
 
 	/// <summary>
-	/// Due to marshalling, the ArborInsightServiceClient calls that use enums need to represent them with ints.
+	/// Due to marshalling, the ArborInsightsClient calls that use enums need to represent them with ints.
 	/// This is for the ones that return AbxrResult.
 	/// Co-maintain with Kotlin service DotNetishTypes.kt.
 	/// </summary>
@@ -349,7 +349,7 @@ namespace AbxrLib.Runtime.Services.Platform
 	///   Only a single instance of this class should be used per app. The SDK is automatically initialized and shut
 	///   down whenever the instance of this class is enabled/disabled (respectively).
 	/// </remarks>
-	public class ArborInsightServiceClient
+	public class ArborInsightsClient
 	{
 		//private const string				PackageName = "aar.xrdi.abxrinsightservice";
 		//private AndroidJavaObject			_mjpsdk = null;
@@ -359,39 +359,39 @@ namespace AbxrLib.Runtime.Services.Platform
 		{
 			try
 			{
-				ArborInsightServiceBridge.Init();
-				if (!ArborInsightServiceBridge.IsInitialized())
+				ArborInsightsClientBridge.Init();
+				if (!ArborInsightsClientBridge.IsInitialized())
 				{
-					Debug.LogWarning("[ArborInsightServiceClient] Init failed (ClassNotFoundException usually means the ArborInsightService unity-client AAR is not in Assets/Plugins/Android). Skipping Bind().");
+					Debug.LogWarning("[ArborInsightsClient] Init failed (ClassNotFoundException usually means the ArborInsightsClient unity-client AAR is not in Assets/Plugins/Android). Skipping Bind().");
 					return;
 				}
-				ArborInsightServiceBridge.Bind();
+				ArborInsightsClientBridge.Bind();
 			}
 			catch (Exception e)
 			{
-				Debug.LogWarning($"[ArborInsightServiceClient] Bind failed: {e.Message}");
+				Debug.LogWarning($"[ArborInsightsClient] Bind failed: {e.Message}");
 			}
 		}
 		public void Stop()
 		{
-			ArborInsightServiceBridge.Unbind();
+			ArborInsightsClientBridge.Unbind();
 		}
 		// --- API CALLS.
-		public static bool Bind(string explicitPackage = null) => ArborInsightServiceBridge.Bind(explicitPackage);
+		public static bool Bind(string explicitPackage = null) => ArborInsightsClientBridge.Bind(explicitPackage);
 		/// <summary>
 		/// IsInitialized().
 		/// </summary>
 		/// <returns></returns>
-		public static bool IsInitialized() => ArborInsightServiceBridge.IsInitialized();
-		public static void Unbind() => ArborInsightServiceBridge.Unbind();
-		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) => ArborInsightServiceBridge.BasicTypes(anInt, aLong, aBoolean, aFloat, aDouble, aString);
-		public static string WhatTimeIsIt() => ArborInsightServiceBridge.WhatTimeIsIt();
-		public static bool IsServiceBound() => ArborInsightServiceBridge.IsServiceBound();
-		public static bool IsServiceAvailable() => ArborInsightServiceBridge.IsServiceAvailable();
-		/// <summary>True if the ArborInsightService APK is installed. Use to fail fast and skip the readiness poll when running standalone.</summary>
-		public static bool IsServicePackageInstalled() => ArborInsightServiceBridge.IsServicePackageInstalled();
+		public static bool IsInitialized() => ArborInsightsClientBridge.IsInitialized();
+		public static void Unbind() => ArborInsightsClientBridge.Unbind();
+		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) => ArborInsightsClientBridge.BasicTypes(anInt, aLong, aBoolean, aFloat, aDouble, aString);
+		public static string WhatTimeIsIt() => ArborInsightsClientBridge.WhatTimeIsIt();
+		public static bool IsServiceBound() => ArborInsightsClientBridge.IsServiceBound();
+		public static bool IsServiceAvailable() => ArborInsightsClientBridge.IsServiceAvailable();
+		/// <summary>True if the ArborInsightsClient APK is installed. Use to fail fast and skip the readiness poll when running standalone.</summary>
+		public static bool IsServicePackageInstalled() => ArborInsightsClientBridge.IsServicePackageInstalled();
 		/// <summary>True if the service reports fully initialized. Never throws; returns false if the bridge is unavailable or JNI fails.</summary>
-		public static bool ServiceIsFullyInitialized() => ArborInsightServiceBridge.ServiceIsFullyInitialized();
+		public static bool ServiceIsFullyInitialized() => ArborInsightsClientBridge.ServiceIsFullyInitialized();
 		/// <summary>Blocks until the service reports ready or maxAttempts is reached. Only runs on Android when the service APK is installed; no-op otherwise. Call from main thread at startup so auth can proceed.</summary>
 		public static void WaitForServiceReady(int maxAttempts = 40, int delayMs = 250)
 		{
@@ -405,141 +405,141 @@ namespace AbxrLib.Runtime.Services.Platform
 #endif
 		}
 		// --- API code.
-		public static void AbxrLibInitStart() => ArborInsightServiceBridge.AbxrLibInitStart();
-		public static void AbxrLibInitEnd() => ArborInsightServiceBridge.AbxrLibInitEnd();
+		public static void AbxrLibInitStart() => ArborInsightsClientBridge.AbxrLibInitStart();
+		public static void AbxrLibInitEnd() => ArborInsightsClientBridge.AbxrLibInitEnd();
 		// ---
-		public static string AuthRequest(String szUserId, String dictAdditionalUserData) => ArborInsightServiceBridge.AuthRequest(szUserId ?? "", dictAdditionalUserData ?? "");
+		public static string AuthRequest(String szUserId, String dictAdditionalUserData) => ArborInsightsClientBridge.AuthRequest(szUserId ?? "", dictAdditionalUserData ?? "");
 		// ---
-		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => ArborInsightServiceBridge.Authenticate(szAppId ?? "", szOrgId ?? "", szDeviceId ?? "", szAuthSecret ?? "", ePartner);
-		public static int FinalAuthenticate() => ArborInsightServiceBridge.FinalAuthenticate();
-		public static int ReAuthenticate(bool bObtainAuthSecret) => ArborInsightServiceBridge.ReAuthenticate(bObtainAuthSecret);
-		public static int ForceSendUnsent() => ArborInsightServiceBridge.ForceSendUnsent();
+		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => ArborInsightsClientBridge.Authenticate(szAppId ?? "", szOrgId ?? "", szDeviceId ?? "", szAuthSecret ?? "", ePartner);
+		public static int FinalAuthenticate() => ArborInsightsClientBridge.FinalAuthenticate();
+		public static int ReAuthenticate(bool bObtainAuthSecret) => ArborInsightsClientBridge.ReAuthenticate(bObtainAuthSecret);
+		public static int ForceSendUnsent() => ArborInsightsClientBridge.ForceSendUnsent();
 		// ---
-		public static void CaptureTimeStamp() => ArborInsightServiceBridge.CaptureTimeStamp();
-		public static void UnCaptureTimeStamp() => ArborInsightServiceBridge.UnCaptureTimeStamp();
+		public static void CaptureTimeStamp() => ArborInsightsClientBridge.CaptureTimeStamp();
+		public static void UnCaptureTimeStamp() => ArborInsightsClientBridge.UnCaptureTimeStamp();
 		// ---
-		public static int LogDebug(String szText, Dictionary<string, string> dictMeta) => ArborInsightServiceBridge.LogDebug(szText ?? "", dictMeta);
-		public static int LogDebugBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogDebugBlocking(szText ?? "", dictMeta);
-		public static int LogInfo(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogInfo(szText ?? "", dictMeta);
-		public static int LogInfoBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogInfoBlocking(szText, dictMeta);
-		public static int LogWarn(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogWarn(szText ?? "", dictMeta);
-		public static int LogWarnBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogWarnBlocking(szText ?? "", dictMeta);
-		public static int LogError(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogError(szText ?? "", dictMeta);
-		public static int LogErrorBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogErrorBlocking(szText ?? "", dictMeta);
-		public static int LogCritical(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogCritical(szText ?? "", dictMeta);
-		public static int LogCriticalBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.LogCriticalBlocking(szText ?? "", dictMeta);
+		public static int LogDebug(String szText, Dictionary<string, string> dictMeta) => ArborInsightsClientBridge.LogDebug(szText ?? "", dictMeta);
+		public static int LogDebugBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogDebugBlocking(szText ?? "", dictMeta);
+		public static int LogInfo(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogInfo(szText ?? "", dictMeta);
+		public static int LogInfoBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogInfoBlocking(szText, dictMeta);
+		public static int LogWarn(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogWarn(szText ?? "", dictMeta);
+		public static int LogWarnBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogWarnBlocking(szText ?? "", dictMeta);
+		public static int LogError(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogError(szText ?? "", dictMeta);
+		public static int LogErrorBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogErrorBlocking(szText ?? "", dictMeta);
+		public static int LogCritical(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogCritical(szText ?? "", dictMeta);
+		public static int LogCriticalBlocking(String szText, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.LogCriticalBlocking(szText ?? "", dictMeta);
 		// ---
-		public static int Event(String szMessage, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.Event(szMessage ?? "", dictMeta);
-		public static int EventBlocking(String szMessage, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventBlocking(szMessage ?? "", dictMeta);
+		public static int Event(String szMessage, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.Event(szMessage ?? "", dictMeta);
+		public static int EventBlocking(String szMessage, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventBlocking(szMessage ?? "", dictMeta);
 		// --- Convenient wrappers for particular forms of events.
-		public static int EventAssessmentStart(String szAssessmentName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventAssessmentStart(szAssessmentName ?? "", dictMeta);
-		public static int EventAssessmentComplete(String szAssessmentName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventAssessmentComplete(szAssessmentName ?? "", szScore ?? "", eResultOptions, dictMeta);
+		public static int EventAssessmentStart(String szAssessmentName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventAssessmentStart(szAssessmentName ?? "", dictMeta);
+		public static int EventAssessmentComplete(String szAssessmentName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventAssessmentComplete(szAssessmentName ?? "", szScore ?? "", eResultOptions, dictMeta);
 		// ---
-		public static int EventObjectiveStart(String szObjectiveName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventObjectiveStart(szObjectiveName ?? "", dictMeta);
-		public static int EventObjectiveComplete(String szObjectiveName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventObjectiveComplete(szObjectiveName ?? "", szScore ?? "", eResultOptions, dictMeta);
+		public static int EventObjectiveStart(String szObjectiveName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventObjectiveStart(szObjectiveName ?? "", dictMeta);
+		public static int EventObjectiveComplete(String szObjectiveName, String szScore, int eResultOptions, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventObjectiveComplete(szObjectiveName ?? "", szScore ?? "", eResultOptions, dictMeta);
 		// ---
-		public static int EventInteractionStart(String szInteractionName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventInteractionStart(szInteractionName ?? "", dictMeta);
-		public static int EventInteractionComplete(String szInteractionName, String szResult, String szResultDetails, int eInteractionType, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventInteractionComplete(szInteractionName ?? "", szResult ?? "", szResultDetails ?? "", eInteractionType, dictMeta);
+		public static int EventInteractionStart(String szInteractionName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventInteractionStart(szInteractionName ?? "", dictMeta);
+		public static int EventInteractionComplete(String szInteractionName, String szResult, String szResultDetails, int eInteractionType, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventInteractionComplete(szInteractionName ?? "", szResult ?? "", szResultDetails ?? "", eInteractionType, dictMeta);
 		// ---
-		public static int EventLevelStart(String szLevelName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventLevelStart(szLevelName ?? "", dictMeta);
-		public static int EventLevelComplete(String szLevelName, String szScore, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.EventLevelComplete(szLevelName ?? "", szScore ?? "", dictMeta);
+		public static int EventLevelStart(String szLevelName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventLevelStart(szLevelName ?? "", dictMeta);
+		public static int EventLevelComplete(String szLevelName, String szScore, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventLevelComplete(szLevelName ?? "", szScore ?? "", dictMeta);
 		// ---
-		public static int AddAIProxy(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightServiceBridge.AddAIProxy(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
-		public static int AddAIProxyBlocking(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightServiceBridge.AddAIProxyBlocking(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
+		public static int AddAIProxy(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightsClientBridge.AddAIProxy(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
+		public static int AddAIProxyBlocking(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightsClientBridge.AddAIProxyBlocking(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
 		// ---
-		public static int AddTelemetryEntry(String szName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.AddTelemetryEntry(szName ?? "", dictMeta);
-		public static int AddTelemetryEntryBlocking(String szName, Dictionary<String, String> dictMeta) => ArborInsightServiceBridge.AddTelemetryEntryBlocking(szName ?? "", dictMeta);
+		public static int AddTelemetryEntry(String szName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.AddTelemetryEntry(szName ?? "", dictMeta);
+		public static int AddTelemetryEntryBlocking(String szName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.AddTelemetryEntryBlocking(szName ?? "", dictMeta);
 		// ---
 		//boolean platformIsWindows();
 		// --- Authentication fields. get_ApiToken and get_ApiSecret are internal for post-auth use; setters stay public to push auth payload.
-		internal static String get_ApiToken() => ArborInsightServiceBridge.get_ApiToken();
-		public static void set_ApiToken(String szApiToken) => ArborInsightServiceBridge.set_ApiToken(szApiToken ?? "");
+		internal static String get_ApiToken() => ArborInsightsClientBridge.get_ApiToken();
+		public static void set_ApiToken(String szApiToken) => ArborInsightsClientBridge.set_ApiToken(szApiToken ?? "");
 		// ---
-		internal static String get_ApiSecret() => ArborInsightServiceBridge.get_ApiSecret();
-		public static void set_ApiSecret(String szApiSecret) => ArborInsightServiceBridge.set_ApiSecret(szApiSecret ?? "");
+		internal static String get_ApiSecret() => ArborInsightsClientBridge.get_ApiSecret();
+		public static void set_ApiSecret(String szApiSecret) => ArborInsightsClientBridge.set_ApiSecret(szApiSecret ?? "");
 		// ---
-		public static void set_AppToken(String szAppToken) => ArborInsightServiceBridge.set_AppToken(szAppToken ?? "");
-		public static void set_OrgToken(String szOrgToken) => ArborInsightServiceBridge.set_OrgToken(szOrgToken ?? "");
-		public static void set_SSOAccessToken(String szSSOAccessToken) => ArborInsightServiceBridge.set_SSOAccessToken(szSSOAccessToken ?? "");
+		public static void set_AppToken(String szAppToken) => ArborInsightsClientBridge.set_AppToken(szAppToken ?? "");
+		public static void set_OrgToken(String szOrgToken) => ArborInsightsClientBridge.set_OrgToken(szOrgToken ?? "");
+		public static void set_SSOAccessToken(String szSSOAccessToken) => ArborInsightsClientBridge.set_SSOAccessToken(szSSOAccessToken ?? "");
 		// ---
-		public static void set_AppID(String szAppID) => ArborInsightServiceBridge.set_AppID(szAppID ?? "");
+		public static void set_AppID(String szAppID) => ArborInsightsClientBridge.set_AppID(szAppID ?? "");
 		// ---
-		public static String get_OrgID() => ArborInsightServiceBridge.get_OrgID();
-		public static void set_OrgID(String szOrgID) => ArborInsightServiceBridge.set_OrgID(szOrgID ?? "");
+		public static String get_OrgID() => ArborInsightsClientBridge.get_OrgID();
+		public static void set_OrgID(String szOrgID) => ArborInsightsClientBridge.set_OrgID(szOrgID ?? "");
 		// ---
-		public static String get_AuthSecret() => ArborInsightServiceBridge.get_AuthSecret();
-		public static void set_AuthSecret(String szAuthSecret) => ArborInsightServiceBridge.set_AuthSecret(szAuthSecret ?? "");
+		public static String get_AuthSecret() => ArborInsightsClientBridge.get_AuthSecret();
+		public static void set_AuthSecret(String szAuthSecret) => ArborInsightsClientBridge.set_AuthSecret(szAuthSecret ?? "");
 		// ---
-		public static String get_BuildType() => ArborInsightServiceBridge.get_BuildType();
-		public static void set_BuildType(String szBuildType) => ArborInsightServiceBridge.set_BuildType(szBuildType ?? "");
+		public static String get_BuildType() => ArborInsightsClientBridge.get_BuildType();
+		public static void set_BuildType(String szBuildType) => ArborInsightsClientBridge.set_BuildType(szBuildType ?? "");
 		// ---
-		public static String get_DeviceID() => ArborInsightServiceBridge.get_DeviceID();
-		public static void set_DeviceID(String szDeviceID) => ArborInsightServiceBridge.set_DeviceID(szDeviceID ?? "");
+		public static String get_DeviceID() => ArborInsightsClientBridge.get_DeviceID();
+		public static void set_DeviceID(String szDeviceID) => ArborInsightsClientBridge.set_DeviceID(szDeviceID ?? "");
 		// ---
-		public static String get_UserID() => ArborInsightServiceBridge.get_UserID();
-		public static void set_UserID(String szUserID) => ArborInsightServiceBridge.set_UserID(szUserID ?? "");
+		public static String get_UserID() => ArborInsightsClientBridge.get_UserID();
+		public static void set_UserID(String szUserID) => ArborInsightsClientBridge.set_UserID(szUserID ?? "");
 		// ---
-		public static long get_TokenExpiration() => ArborInsightServiceBridge.get_TokenExpiration();
-		public static void set_TokenExpiration(long dtTokenExpiration) => ArborInsightServiceBridge.set_TokenExpiration(dtTokenExpiration);
+		public static long get_TokenExpiration() => ArborInsightsClientBridge.get_TokenExpiration();
+		public static void set_TokenExpiration(long dtTokenExpiration) => ArborInsightsClientBridge.set_TokenExpiration(dtTokenExpiration);
 		// ---
-		public static bool TokenExpirationImminent() => ArborInsightServiceBridge.TokenExpirationImminent();
+		public static bool TokenExpirationImminent() => ArborInsightsClientBridge.TokenExpirationImminent();
 		// ---
-		public static int get_Partner() => ArborInsightServiceBridge.get_Partner();
-		public static void set_Partner(int ePartner) => ArborInsightServiceBridge.set_Partner(ePartner);
+		public static int get_Partner() => ArborInsightsClientBridge.get_Partner();
+		public static void set_Partner(int ePartner) => ArborInsightsClientBridge.set_Partner(ePartner);
 		// --- Environment/session globals that get sent with the auth payload in Authenticate() functions.
-		public static String get_OsVersion() => ArborInsightServiceBridge.get_OsVersion();
-		public static void set_OsVersion(String szOsVersion) => ArborInsightServiceBridge.set_OsVersion(szOsVersion ?? "");
+		public static String get_OsVersion() => ArborInsightsClientBridge.get_OsVersion();
+		public static void set_OsVersion(String szOsVersion) => ArborInsightsClientBridge.set_OsVersion(szOsVersion ?? "");
 		// ---
-		public static String get_IpAddress() => ArborInsightServiceBridge.get_IpAddress();
-		public static void set_IpAddress(String szIpAddress) => ArborInsightServiceBridge.set_IpAddress(szIpAddress ?? "");
+		public static String get_IpAddress() => ArborInsightsClientBridge.get_IpAddress();
+		public static void set_IpAddress(String szIpAddress) => ArborInsightsClientBridge.set_IpAddress(szIpAddress ?? "");
 		// ---
-		public static String get_XrdmVersion() => ArborInsightServiceBridge.get_XrdmVersion();
-		public static void set_XrdmVersion(String szXrdmVersion) => ArborInsightServiceBridge.set_XrdmVersion(szXrdmVersion ?? "");
+		public static String get_XrdmVersion() => ArborInsightsClientBridge.get_XrdmVersion();
+		public static void set_XrdmVersion(String szXrdmVersion) => ArborInsightsClientBridge.set_XrdmVersion(szXrdmVersion ?? "");
 		// ---
-		public static String get_AppVersion() => ArborInsightServiceBridge.get_AppVersion();
-		public static void set_AppVersion(String szAppVersion) => ArborInsightServiceBridge.set_AppVersion(szAppVersion ?? "");
+		public static String get_AppVersion() => ArborInsightsClientBridge.get_AppVersion();
+		public static void set_AppVersion(String szAppVersion) => ArborInsightsClientBridge.set_AppVersion(szAppVersion ?? "");
 		// ---
-		public static String get_UnityVersion() => ArborInsightServiceBridge.get_UnityVersion();
-		public static void set_UnityVersion(String szUnityVersion) => ArborInsightServiceBridge.set_UnityVersion(szUnityVersion ?? "");
+		public static String get_UnityVersion() => ArborInsightsClientBridge.get_UnityVersion();
+		public static void set_UnityVersion(String szUnityVersion) => ArborInsightsClientBridge.set_UnityVersion(szUnityVersion ?? "");
 		// ---
-		public static String get_AbxrLibType() => ArborInsightServiceBridge.get_AbxrLibType();
-		public static void set_AbxrLibType(String szAbxrLibType) => ArborInsightServiceBridge.set_AbxrLibType(szAbxrLibType ?? "");
+		public static String get_AbxrLibType() => ArborInsightsClientBridge.get_AbxrLibType();
+		public static void set_AbxrLibType(String szAbxrLibType) => ArborInsightsClientBridge.set_AbxrLibType(szAbxrLibType ?? "");
 		// ---
-		public static String get_AbxrLibVersion() => ArborInsightServiceBridge.get_AbxrLibVersion();
-		public static void set_AbxrLibVersion(String szAbxrLibVersion) => ArborInsightServiceBridge.set_AbxrLibVersion(szAbxrLibVersion ?? "");
+		public static String get_AbxrLibVersion() => ArborInsightsClientBridge.get_AbxrLibVersion();
+		public static void set_AbxrLibVersion(String szAbxrLibVersion) => ArborInsightsClientBridge.set_AbxrLibVersion(szAbxrLibVersion ?? "");
 		// ---
 		// Not sure about this one... seems to be an artifact of an earlier time.  It is in the C++ code but only as a data member that is not used anywhere.
 		//String get_DataPath();
 		//void set_DataPath(String szDataPath);
 		// ---
-		public static String get_DeviceModel() => ArborInsightServiceBridge.get_DeviceModel();
-		public static void set_DeviceModel(String szDeviceModel) => ArborInsightServiceBridge.set_DeviceModel(szDeviceModel ?? "");
+		public static String get_DeviceModel() => ArborInsightsClientBridge.get_DeviceModel();
+		public static void set_DeviceModel(String szDeviceModel) => ArborInsightsClientBridge.set_DeviceModel(szDeviceModel ?? "");
 		// --- Build fingerprint (optional on AAR)
-		public static void set_BuildFingerprint(String szBuildFingerprint) => ArborInsightServiceBridge.set_BuildFingerprint(szBuildFingerprint ?? "");
+		public static void set_BuildFingerprint(String szBuildFingerprint) => ArborInsightsClientBridge.set_BuildFingerprint(szBuildFingerprint ?? "");
 		// ---
-		public static void set_UserId(String szUserId) => ArborInsightServiceBridge.set_UserId(szUserId ?? "");
+		public static void set_UserId(String szUserId) => ArborInsightsClientBridge.set_UserId(szUserId ?? "");
 		// ---
-		public static List<String> get_Tags() => ArborInsightServiceBridge.get_Tags();
-		public static void set_Tags(List<String> lszTags) => ArborInsightServiceBridge.set_Tags(lszTags);
+		public static List<String> get_Tags() => ArborInsightsClientBridge.get_Tags();
+		public static void set_Tags(List<String> lszTags) => ArborInsightsClientBridge.set_Tags(lszTags);
 		// ---
-		public static Dictionary<String, String> get_GeoLocation() => ArborInsightServiceBridge.get_GeoLocation();
-		public static void set_GeoLocation(Dictionary<String, String> dictValue) => ArborInsightServiceBridge.set_GeoLocation(dictValue);
+		public static Dictionary<String, String> get_GeoLocation() => ArborInsightsClientBridge.get_GeoLocation();
+		public static void set_GeoLocation(Dictionary<String, String> dictValue) => ArborInsightsClientBridge.set_GeoLocation(dictValue);
 		// ---
-		public static Dictionary<String, String> get_SessionAuthMechanism() => ArborInsightServiceBridge.get_SessionAuthMechanism();
-		public static void set_SessionAuthMechanism(Dictionary<String, String> dictValue) => ArborInsightServiceBridge.set_SessionAuthMechanism(dictValue);
+		public static Dictionary<String, String> get_SessionAuthMechanism() => ArborInsightsClientBridge.get_SessionAuthMechanism();
+		public static void set_SessionAuthMechanism(Dictionary<String, String> dictValue) => ArborInsightsClientBridge.set_SessionAuthMechanism(dictValue);
 		// --- Environment / Storage functions.
-		public static String StorageGetDefaultEntryAsString() => ArborInsightServiceBridge.StorageGetDefaultEntryAsString();
-		public static String StorageGetEntryAsString(String szName) => ArborInsightServiceBridge.StorageGetEntryAsString(szName ?? "");
+		public static String StorageGetDefaultEntryAsString() => ArborInsightsClientBridge.StorageGetDefaultEntryAsString();
+		public static String StorageGetEntryAsString(String szName) => ArborInsightsClientBridge.StorageGetEntryAsString(szName ?? "");
 		// ---
-		public static int StorageSetDefaultEntryFromString(String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => ArborInsightServiceBridge.StorageSetDefaultEntryFromString(szStorageEntry ?? "", bKeepLatest, szOrigin ?? "", bSessionData);
-		public static int StorageSetEntryFromString(String szName, String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => ArborInsightServiceBridge.StorageSetEntryFromString(szName ?? "", szStorageEntry ?? "", bKeepLatest, szOrigin ?? "", bSessionData);
+		public static int StorageSetDefaultEntryFromString(String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => ArborInsightsClientBridge.StorageSetDefaultEntryFromString(szStorageEntry ?? "", bKeepLatest, szOrigin ?? "", bSessionData);
+		public static int StorageSetEntryFromString(String szName, String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => ArborInsightsClientBridge.StorageSetEntryFromString(szName ?? "", szStorageEntry ?? "", bKeepLatest, szOrigin ?? "", bSessionData);
 		// ---
-		public static int StorageRemoveDefaultEntry() => ArborInsightServiceBridge.StorageRemoveDefaultEntry();
-		public static int StorageRemoveEntry(String szName) => ArborInsightServiceBridge.StorageRemoveEntry(szName ?? "");
-		public static int StorageRemoveMultipleEntries(bool bSessionOnly) => ArborInsightServiceBridge.StorageRemoveMultipleEntries(bSessionOnly);
+		public static int StorageRemoveDefaultEntry() => ArborInsightsClientBridge.StorageRemoveDefaultEntry();
+		public static int StorageRemoveEntry(String szName) => ArborInsightsClientBridge.StorageRemoveEntry(szName ?? "");
+		public static int StorageRemoveMultipleEntries(bool bSessionOnly) => ArborInsightsClientBridge.StorageRemoveMultipleEntries(bSessionOnly);
 		// --- Configuration fields.
-		public static String get_RestUrl() => ArborInsightServiceBridge.get_RestUrl();
-		public static void set_RestUrl(String szValue) => ArborInsightServiceBridge.set_RestUrl(szValue ?? "");
+		public static String get_RestUrl() => ArborInsightsClientBridge.get_RestUrl();
+		public static void set_RestUrl(String szValue) => ArborInsightsClientBridge.set_RestUrl(szValue ?? "");
 		// ---
 		/// <summary>Sets REST URL and all auth-related session fields on the service from the given auth payload. Call once per auth request before AuthRequest(). Keeps service-path auth setup in one place and limits divergence from the standalone auth path.</summary>
 		public static void SetAuthPayloadForRequest(string restUrl, AuthPayload data)
@@ -569,53 +569,53 @@ namespace AbxrLib.Runtime.Services.Platform
 			if (data.tags != null) set_Tags(new List<string>(data.tags));
 		}
 		// ---
-		public static int get_SendRetriesOnFailure() => ArborInsightServiceBridge.get_SendRetriesOnFailure();
-		public static void set_SendRetriesOnFailure(int nValue) => ArborInsightServiceBridge.set_SendRetriesOnFailure(nValue);
+		public static int get_SendRetriesOnFailure() => ArborInsightsClientBridge.get_SendRetriesOnFailure();
+		public static void set_SendRetriesOnFailure(int nValue) => ArborInsightsClientBridge.set_SendRetriesOnFailure(nValue);
 		// ---
-		public static double get_SendRetryInterval() => ArborInsightServiceBridge.get_SendRetryInterval();
-		public static void set_SendRetryInterval(double tsValue) => ArborInsightServiceBridge.set_SendRetryInterval(tsValue);
+		public static double get_SendRetryInterval() => ArborInsightsClientBridge.get_SendRetryInterval();
+		public static void set_SendRetryInterval(double tsValue) => ArborInsightsClientBridge.set_SendRetryInterval(tsValue);
 		// ---
-		public static double get_SendNextBatchWait() => ArborInsightServiceBridge.get_SendNextBatchWait();
-		public static void set_SendNextBatchWait(double tsValue) => ArborInsightServiceBridge.set_SendNextBatchWait(tsValue);
+		public static double get_SendNextBatchWait() => ArborInsightsClientBridge.get_SendNextBatchWait();
+		public static void set_SendNextBatchWait(double tsValue) => ArborInsightsClientBridge.set_SendNextBatchWait(tsValue);
 		// ---
-		public static double get_StragglerTimeout() => ArborInsightServiceBridge.get_StragglerTimeout();
-		public static void set_StragglerTimeout(double tsValue) => ArborInsightServiceBridge.set_StragglerTimeout(tsValue);
+		public static double get_StragglerTimeout() => ArborInsightsClientBridge.get_StragglerTimeout();
+		public static void set_StragglerTimeout(double tsValue) => ArborInsightsClientBridge.set_StragglerTimeout(tsValue);
 		// ---
-		public static double get_PositionCapturePeriodicity() => ArborInsightServiceBridge.get_PositionCapturePeriodicity();
-		public static void set_PositionCapturePeriodicity(double dValue) => ArborInsightServiceBridge.set_PositionCapturePeriodicity(dValue);
+		public static double get_PositionCapturePeriodicity() => ArborInsightsClientBridge.get_PositionCapturePeriodicity();
+		public static void set_PositionCapturePeriodicity(double dValue) => ArborInsightsClientBridge.set_PositionCapturePeriodicity(dValue);
 		// ---
-		public static double get_FrameRateCapturePeriodicity() => ArborInsightServiceBridge.get_FrameRateCapturePeriodicity();
-		public static void set_FrameRateCapturePeriodicity(double dValue) => ArborInsightServiceBridge.set_FrameRateCapturePeriodicity(dValue);
+		public static double get_FrameRateCapturePeriodicity() => ArborInsightsClientBridge.get_FrameRateCapturePeriodicity();
+		public static void set_FrameRateCapturePeriodicity(double dValue) => ArborInsightsClientBridge.set_FrameRateCapturePeriodicity(dValue);
 		// ---
-		public static double get_TelemetryCapturePeriodicity() => ArborInsightServiceBridge.get_TelemetryCapturePeriodicity();
-		public static void set_TelemetryCapturePeriodicity(double dValue) => ArborInsightServiceBridge.set_TelemetryCapturePeriodicity(dValue);
+		public static double get_TelemetryCapturePeriodicity() => ArborInsightsClientBridge.get_TelemetryCapturePeriodicity();
+		public static void set_TelemetryCapturePeriodicity(double dValue) => ArborInsightsClientBridge.set_TelemetryCapturePeriodicity(dValue);
 		// ---
-		public static int get_DataItemsPerSendAttempt() => ArborInsightServiceBridge.get_DataItemsPerSendAttempt();
-		public static void set_DataItemsPerSendAttempt(int nValue) => ArborInsightServiceBridge.set_DataItemsPerSendAttempt(nValue);
+		public static int get_DataItemsPerSendAttempt() => ArborInsightsClientBridge.get_DataItemsPerSendAttempt();
+		public static void set_DataItemsPerSendAttempt(int nValue) => ArborInsightsClientBridge.set_DataItemsPerSendAttempt(nValue);
 		// ---
-		public static int get_StorageEntriesPerSendAttempt() => ArborInsightServiceBridge.get_StorageEntriesPerSendAttempt();
-		public static void set_StorageEntriesPerSendAttempt(int nValue) => ArborInsightServiceBridge.set_StorageEntriesPerSendAttempt(nValue);
+		public static int get_StorageEntriesPerSendAttempt() => ArborInsightsClientBridge.get_StorageEntriesPerSendAttempt();
+		public static void set_StorageEntriesPerSendAttempt(int nValue) => ArborInsightsClientBridge.set_StorageEntriesPerSendAttempt(nValue);
 		// ---
-		public static double get_PruneSentItemsOlderThan() => ArborInsightServiceBridge.get_PruneSentItemsOlderThan();
-		public static void set_PruneSentItemsOlderThan(double tsValue) => ArborInsightServiceBridge.set_PruneSentItemsOlderThan(tsValue);
+		public static double get_PruneSentItemsOlderThan() => ArborInsightsClientBridge.get_PruneSentItemsOlderThan();
+		public static void set_PruneSentItemsOlderThan(double tsValue) => ArborInsightsClientBridge.set_PruneSentItemsOlderThan(tsValue);
 		// ---
-		public static int get_MaximumCachedItems() => ArborInsightServiceBridge.get_MaximumCachedItems();
-		public static void set_MaximumCachedItems(int nValue) => ArborInsightServiceBridge.set_MaximumCachedItems(nValue);
+		public static int get_MaximumCachedItems() => ArborInsightsClientBridge.get_MaximumCachedItems();
+		public static void set_MaximumCachedItems(int nValue) => ArborInsightsClientBridge.set_MaximumCachedItems(nValue);
 		// ---
-		public static bool get_RetainLocalAfterSent() => ArborInsightServiceBridge.get_RetainLocalAfterSent();
-		public static void set_RetainLocalAfterSent(bool bValue) => ArborInsightServiceBridge.set_RetainLocalAfterSent(bValue);
+		public static bool get_RetainLocalAfterSent() => ArborInsightsClientBridge.get_RetainLocalAfterSent();
+		public static void set_RetainLocalAfterSent(bool bValue) => ArborInsightsClientBridge.set_RetainLocalAfterSent(bValue);
 		// ---
-		public static bool get_ReAuthenticateBeforeTokenExpires() => ArborInsightServiceBridge.get_ReAuthenticateBeforeTokenExpires();
-		public static void set_ReAuthenticateBeforeTokenExpires(bool bValue) => ArborInsightServiceBridge.set_ReAuthenticateBeforeTokenExpires(bValue);
+		public static bool get_ReAuthenticateBeforeTokenExpires() => ArborInsightsClientBridge.get_ReAuthenticateBeforeTokenExpires();
+		public static void set_ReAuthenticateBeforeTokenExpires(bool bValue) => ArborInsightsClientBridge.set_ReAuthenticateBeforeTokenExpires(bValue);
 		// ---
-		public static bool get_UseDatabase() => ArborInsightServiceBridge.get_UseDatabase();
-		public static void set_UseDatabase(bool bValue) => ArborInsightServiceBridge.set_UseDatabase(bValue);
+		public static bool get_UseDatabase() => ArborInsightsClientBridge.get_UseDatabase();
+		public static void set_UseDatabase(bool bValue) => ArborInsightsClientBridge.set_UseDatabase(bValue);
 		// ---
-		public static Dictionary<String, String> get_AppConfigAuthMechanism() => ArborInsightServiceBridge.get_AppConfigAuthMechanism();
-		public static void set_AppConfigAuthMechanism(Dictionary<String, String> dictValue) => ArborInsightServiceBridge.set_AppConfigAuthMechanism(dictValue);
+		public static Dictionary<String, String> get_AppConfigAuthMechanism() => ArborInsightsClientBridge.get_AppConfigAuthMechanism();
+		public static void set_AppConfigAuthMechanism(Dictionary<String, String> dictValue) => ArborInsightsClientBridge.set_AppConfigAuthMechanism(dictValue);
 		/// <summary>Full app config as JSON (same shape as GET /v1/storage/config).</summary>
-		public static string GetAppConfig() => ArborInsightServiceBridge.GetAppConfig();
+		public static string GetAppConfig() => ArborInsightsClientBridge.GetAppConfig();
 		// ---
-		public static bool ReadConfig() => ArborInsightServiceBridge.ReadConfig();
+		public static bool ReadConfig() => ArborInsightsClientBridge.ReadConfig();
 	}
 }

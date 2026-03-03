@@ -52,7 +52,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private Dictionary<string, string> _userData = new();
         
         private readonly MonoBehaviour _runner;
-        private readonly ArborServiceClient _arborServiceClient;
+        private readonly ArborMdmClient _ArborMdmClient;
         
         private const string DeviceIdKey = "abxrlib_device_id";
         
@@ -63,23 +63,23 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _sessionUsedAuthHandoff;
 
         /// <summary>
-        /// True only when we completed authentication via ArborInsightService this session.
+        /// True only when we completed authentication via ArborInsightsClient this session.
         /// Set once when auth succeeds through the service; never switches to true later.
         /// Data (events, telemetry, logs) use the service only when this is true.
         /// </summary>
-        private bool _usedArborInsightServiceForSession = false;
+        private bool _usedArborInsightsClientForSession = false;
 
         /// <summary>
-        /// True when this session authenticated via ArborInsightService. When true, DataBatcher and
+        /// True when this session authenticated via ArborInsightsClient. When true, DataBatcher and
         /// other data paths use the service only (no Unity HTTP). When false, we operate in standalone mode
         /// for the whole session and do not switch to the service later.
         /// </summary>
-        public bool UsingArborInsightServiceForData() => _usedArborInsightServiceForSession;
+        public bool UsingArborInsightsClientForData() => _usedArborInsightsClientForSession;
 
-        public AbxrAuthService(MonoBehaviour coroutineRunner, ArborServiceClient arborServiceClient)
+        public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient ArborMdmClient)
         {
             _runner = coroutineRunner;
-            _arborServiceClient = arborServiceClient;
+            _ArborMdmClient = ArborMdmClient;
 
             _payload = new AuthPayload
             {
@@ -111,7 +111,7 @@ namespace AbxrLib.Runtime.Services.Auth
 #endif
             SetSessionData();
 
-            // Do not block on ArborInsightService here: bind is started before this constructor runs,
+            // Do not block on ArborInsightsClient here: bind is started before this constructor runs,
             // and auth waits for service ready in a coroutine so the scene can load without lag.
         }
         
@@ -219,7 +219,7 @@ namespace AbxrLib.Runtime.Services.Auth
         
         public void SetAuthHeaders(UnityWebRequest request, string json = null)
         {
-            // When using ArborInsightService for data, Token/Secret are not set; only REST path should call this.
+            // When using ArborInsightsClient for data, Token/Secret are not set; only REST path should call this.
             if (ResponseData == null || string.IsNullOrEmpty(ResponseData.Token) || string.IsNullOrEmpty(ResponseData.Secret))
             {
                 Debug.LogError("[AbxrLib] Cannot set auth headers - authentication tokens are missing");
@@ -353,14 +353,14 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 bool useService = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
-                useService = Configuration.Instance.enableArborInsightServiceClient && ArborInsightServiceClient.ServiceIsFullyInitialized();
-                if (Configuration.Instance.enableArborInsightServiceClient && !useService && ArborInsightServiceClient.IsServicePackageInstalled())
+                useService = Configuration.Instance.enableArborInsightsClient && ArborInsightsClient.ServiceIsFullyInitialized();
+                if (Configuration.Instance.enableArborInsightsClient && !useService && ArborInsightsClient.IsServicePackageInstalled())
                 {
                     const int waitAttempts = 40;
                     const float waitSeconds = 0.25f;
-                    for (int i = 0; i < waitAttempts && !ArborInsightServiceClient.ServiceIsFullyInitialized() && !_stopping && _attemptActive; i++)
+                    for (int i = 0; i < waitAttempts && !ArborInsightsClient.ServiceIsFullyInitialized() && !_stopping && _attemptActive; i++)
                         yield return new WaitForSecondsRealtime(waitSeconds);
-                    useService = ArborInsightServiceClient.ServiceIsFullyInitialized();
+                    useService = ArborInsightsClient.ServiceIsFullyInitialized();
                 }
 #endif
 
@@ -370,8 +370,8 @@ namespace AbxrLib.Runtime.Services.Auth
                     try
                     {
                         var config = Configuration.Instance;
-                        ArborInsightServiceClient.SetAuthPayloadForRequest(config.restUrl ?? "https://lib-backend.xrdm.app/", _payload);
-                        responseJson = ArborInsightServiceClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(_payload.authMechanism));
+                        ArborInsightsClient.SetAuthPayloadForRequest(config.restUrl ?? "https://lib-backend.xrdm.app/", _payload);
+                        responseJson = ArborInsightsClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(_payload.authMechanism));
                     }
                     catch (Exception ex)
                     {
@@ -395,7 +395,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (ApplyAuthResponse(responseJson, fromService: useService))
                 {
                     if (useService)
-                        _usedArborInsightServiceForSession = true;
+                        _usedArborInsightsClientForSession = true;
                     _payload.buildType = savedBuildType;
                     onComplete(true, null);
                     yield break;
@@ -440,7 +440,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 Debug.LogWarning($"[AbxrLib] AuthRequest REST failed: {request.responseCode} - {request.downloadHandler.text}");
         }
 
-        /// <summary>Parses auth response and applies it. When fromService: no token/expiry validation. When !fromService: require Token and set expiry from JWT. Single place for ResponseData, UserData, Modules, and (when fromService) _usedArborInsightServiceForSession.</summary>
+        /// <summary>Parses auth response and applies it. When fromService: no token/expiry validation. When !fromService: require Token and set expiry from JWT. Single place for ResponseData, UserData, Modules, and (when fromService) _usedArborInsightsClientForSession.</summary>
         private bool ApplyAuthResponse(string responseText, bool fromService)
         {
             if (string.IsNullOrEmpty(responseText)) return false;
@@ -496,7 +496,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        // ── GET /v1/storage/config (or from service when auth was via ArborInsightService) ───
+        // ── GET /v1/storage/config (or from service when auth was via ArborInsightsClient) ───
 
         private IEnumerator GetConfigurationCoroutine(Action<bool, string> onComplete)
         {
@@ -505,10 +505,10 @@ namespace AbxrLib.Runtime.Services.Auth
             string configJson = null;
             string failureDetail = null;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (Configuration.Instance.enableArborInsightServiceClient && ArborInsightServiceClient.ServiceIsFullyInitialized())
-                configJson = ArborInsightServiceClient.GetAppConfig();
+            if (Configuration.Instance.enableArborInsightsClient && ArborInsightsClient.ServiceIsFullyInitialized())
+                configJson = ArborInsightsClient.GetAppConfig();
             if (!string.IsNullOrEmpty(configJson))
-                Debug.Log("[AbxrLib] GetConfiguration from ArborInsightService");
+                Debug.Log("[AbxrLib] GetConfiguration from ArborInsightsClient");
 #endif
             if (string.IsNullOrEmpty(configJson)) // Service not initialized, or GetAppConfig returned empty (e.g. second-step auth); fall back to REST.
             {
@@ -620,8 +620,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private IEnumerator ReAuthPollCoroutine()
         {
-            // When using ArborInsightService for data, re-auth is the service's responsibility; exit the loop.
-            while (!_stopping && !UsingArborInsightServiceForData())
+            // When using ArborInsightsClient for data, re-auth is the service's responsibility; exit the loop.
+            while (!_stopping && !UsingArborInsightsClientForData())
             {
                 yield return new WaitForSeconds(ReAuthPollSeconds);
 
@@ -700,7 +700,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _failedAuthAttempts = 0;
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
-            _usedArborInsightServiceForSession = false;
+            _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
             _lastInputError = null;
             _userData?.Clear();
@@ -757,7 +757,7 @@ namespace AbxrLib.Runtime.Services.Auth
         
         /// <summary>
         /// Update user data (UserId and UserData) and reauthenticate to sync with server.
-        /// Merges existing UserData with the optional userId and additionalUserData, then sends the updated list via re-auth (REST or ArborInsightService as appropriate).
+        /// Merges existing UserData with the optional userId and additionalUserData, then sends the updated list via re-auth (REST or ArborInsightsClient as appropriate).
         /// </summary>
         /// <param name="userId">Optional user ID to set or update</param>
         /// <param name="additionalUserData">Optional key-value pairs to merge with existing UserData (overwrites existing keys)</param>
@@ -882,7 +882,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private void GetArborData()
         {
             // Partner/deviceId/tags when we have a connected client; when not connected, still apply deviceId from subsystem if set (e.g. Abxr.SetDeviceId).
-            if (_arborServiceClient != null && _arborServiceClient.IsConnected())
+            if (_ArborMdmClient != null && _ArborMdmClient.IsConnected())
             {
                 _payload.partner = "arborxr";
                 _payload.deviceId = Abxr.GetDeviceId();

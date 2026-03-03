@@ -47,15 +47,15 @@ In Editor or when XR isn’t available, you typically see:
 
 ## 4. Auth & GetConfiguration
 
-**Path A – Using ArborInsightService (Android, config from service):**
+**Path A – Using ArborInsightsClient (Android, config from service):**
 
 | # | Level | Message / pattern | File:Line |
 |---|--------|-------------------|-----------|
-| 11 | LOG | `[AbxrLib] GetConfiguration from ArborInsightService` | Runtime/Services/Auth/AbxrAuthService.cs:503 |
+| 11 | LOG | `[AbxrLib] GetConfiguration from ArborInsightsClient` | Runtime/Services/Auth/AbxrAuthService.cs:503 |
 | 12a | LOG | `[AbxrLib] GetConfiguration successful. User Authentication Required. Type: {type} & Prompt: {prompt}` | Runtime/Services/Auth/AbxrAuthService.cs:525 |
 | 12b | LOG | `[AbxrLib] GetConfiguration successful. User authentication not required. Using anonymous session.` | Runtime/Services/Auth/AbxrAuthService.cs:527 |
 
-**Path B – REST (no service or empty config):** no “GetConfiguration from ArborInsightService”; config comes from REST. Same 12a/12b after successful config.
+**Path B – REST (no service or empty config):** no “GetConfiguration from ArborInsightsClient”; config comes from REST. Same 12a/12b after successful config.
 
 *Auth failure/retry/JWT/response handling – AbxrAuthService.cs:172, 217, 370, 403, 432, 448, 454, 459, 468, 486, 534 – are error path only.*
 
@@ -130,8 +130,8 @@ Kept in one place so you can trim or downgrade them.
 - **HeadsetDetector:** 41, 88, 125, 130, 149, 164, 195, 200, 229.
 - **KeyboardHandler:** 68, 119, 139 (prefab missing).
 - **Utils:** 278, 285, 292, 302, 309, 317, 322, 327, 494, 527, 653, 685, 733, 768 (JWT, org token, Android, module conversion).
-- **ArborServiceClient:** 22, 28, 56.
-- **ArborInsightServiceClient:** 59, 71, 105, 114, 365, 372.
+- **ArborMdmClient:** 22, 28, 56.
+- **ArborInsightsClient:** 59, 71, 105, 114, 365, 372.
 - **AbxrDataService / AbxrStorageService:** 195, 207, 244, 263, 277, 286, 317, 329, 366, 382, 408, 453, 465.
 - **AbxrTelemetryService / AbxrTarget:** 49, 134, 149, 159, 319, 578, 613.
 - **UpdateCheck:** 35, 86, 112, 116, 140, 144.

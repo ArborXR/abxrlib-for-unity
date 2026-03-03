@@ -36,7 +36,7 @@ namespace AbxrLib.Runtime.Services.Platform
     ///   Only a single instance of this class should be used per app. The SDK is automatically initialized and shut
     ///   down whenever the instance of this class is enabled/disabled (respectively).
     /// </remarks>
-    public class ArborServiceClient
+    public class ArborMdmClient
     {
         private const string PackageName = "app.xrdm.sdk.external";
         private AndroidJavaObject? _sdk;
@@ -53,7 +53,7 @@ namespace AbxrLib.Runtime.Services.Platform
             {
                 if (_sdk is null)
                 {
-                    Debug.LogWarning("[AbxrLib] ArborServiceClient SDK is not initialized. This MonoBehaviour may not be enabled.");
+                    Debug.LogWarning("[AbxrLib] ArborMdmClient SDK is not initialized. This MonoBehaviour may not be enabled.");
                 }
 
                 return _sdk;
@@ -177,9 +177,9 @@ namespace AbxrLib.Runtime.Services.Platform
 
         private sealed class NativeConnectionCallback : AndroidJavaProxy
         {
-            private readonly ArborServiceClient _sdkBehavior;
+            private readonly ArborMdmClient _sdkBehavior;
 
-            public NativeConnectionCallback(ArborServiceClient sdkBehavior) : base(PackageName + ".IConnectionCallback")
+            public NativeConnectionCallback(ArborMdmClient sdkBehavior) : base(PackageName + ".IConnectionCallback")
             {
                 _sdkBehavior = sdkBehavior;
             }

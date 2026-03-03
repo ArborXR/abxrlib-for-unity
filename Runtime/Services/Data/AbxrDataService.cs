@@ -83,14 +83,14 @@ namespace AbxrLib.Runtime.Services.Data
 
 		/// <summary>
 		/// Add an event to the batch.
-		/// When this session authenticated via ArborInsightService we send directly to the service (no queue). Otherwise we queue and Send() uses HTTP; we never switch to the service later.
+		/// When this session authenticated via ArborInsightsClient we send directly to the service (no queue). Otherwise we queue and Send() uses HTTP; we never switch to the service later.
 		/// </summary>
 		public void AddEvent(string name, Dictionary<string, string> meta)
 		{
 #if UNITY_ANDROID && !UNITY_EDITOR
-			if (_authService.UsingArborInsightServiceForData())
+			if (_authService.UsingArborInsightsClientForData())
 			{
-				ArborInsightServiceClient.Event(name, meta ?? new Dictionary<string, string>());
+				ArborInsightsClient.Event(name, meta ?? new Dictionary<string, string>());
 				return;
 			}
 #endif
@@ -120,14 +120,14 @@ namespace AbxrLib.Runtime.Services.Data
 
 		/// <summary>
 		/// Add telemetry data to the batch.
-		/// When this session uses ArborInsightService we send directly to the service; otherwise we queue for Send() (standalone).
+		/// When this session uses ArborInsightsClient we send directly to the service; otherwise we queue for Send() (standalone).
 		/// </summary>
 		public void AddTelemetry(string name, Dictionary<string, string> meta)
 		{
 #if UNITY_ANDROID && !UNITY_EDITOR
-			if (_authService.UsingArborInsightServiceForData())
+			if (_authService.UsingArborInsightsClientForData())
 			{
-				ArborInsightServiceClient.AddTelemetryEntry(name, meta ?? new Dictionary<string, string>());
+				ArborInsightsClient.AddTelemetryEntry(name, meta ?? new Dictionary<string, string>());
 				return;
 			}
 #endif
@@ -157,27 +157,27 @@ namespace AbxrLib.Runtime.Services.Data
 
 		/// <summary>
 		/// Add a log entry to the batch.
-		/// When this session uses ArborInsightService we send directly to the service; otherwise we queue for Send() (standalone).
+		/// When this session uses ArborInsightsClient we send directly to the service; otherwise we queue for Send() (standalone).
 		/// </summary>
 		public void AddLog(string logLevel, string text, Dictionary<string, string> meta)
 		{
 #if UNITY_ANDROID && !UNITY_EDITOR
-			if (_authService.UsingArborInsightServiceForData())
+			if (_authService.UsingArborInsightsClientForData())
 			{
 				var dict = meta ?? new Dictionary<string, string>();
 				string level = logLevel?.ToUpperInvariant() ?? "";
 				if (level == "DEBUG")
-					ArborInsightServiceClient.LogDebug(text ?? "", dict);
+					ArborInsightsClient.LogDebug(text ?? "", dict);
 				else if (level == "INFO")
-					ArborInsightServiceClient.LogInfo(text ?? "", dict);
+					ArborInsightsClient.LogInfo(text ?? "", dict);
 				else if (level == "WARN")
-					ArborInsightServiceClient.LogWarn(text ?? "", dict);
+					ArborInsightsClient.LogWarn(text ?? "", dict);
 				else if (level == "ERROR")
-					ArborInsightServiceClient.LogError(text ?? "", dict);
+					ArborInsightsClient.LogError(text ?? "", dict);
 				else if (level == "CRITICAL")
-					ArborInsightServiceClient.LogCritical(text ?? "", dict);
+					ArborInsightsClient.LogCritical(text ?? "", dict);
 				else
-					ArborInsightServiceClient.LogInfo(text ?? "", dict);
+					ArborInsightsClient.LogInfo(text ?? "", dict);
 				return;
 			}
 #endif
@@ -239,8 +239,8 @@ namespace AbxrLib.Runtime.Services.Data
 			}
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-			// When this session uses ArborInsightService, never do our own HTTP; push any queued items to the service.
-			if (_authService.UsingArborInsightServiceForData())
+			// When this session uses ArborInsightsClient, never do our own HTTP; push any queued items to the service.
+			if (_authService.UsingArborInsightsClientForData())
 			{
 				int e = eventsToSend.Count, t = telemetriesToSend.Count, l = logsToSend.Count;
 				PushQueuedToService(eventsToSend, telemetriesToSend, logsToSend);
@@ -253,24 +253,24 @@ namespace AbxrLib.Runtime.Services.Data
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 		/// <summary>
-		/// Pushes queued events, telemetry, and logs to ArborInsightService via default (non-blocking) APIs (no HTTP from Unity).
+		/// Pushes queued events, telemetry, and logs to ArborInsightsClient via default (non-blocking) APIs (no HTTP from Unity).
 		/// </summary>
 		private void PushQueuedToService(List<EventPayload> events, List<TelemetryPayload> telemetries, List<LogPayload> logs)
 		{
 			foreach (var p in events)
-				ArborInsightServiceClient.Event(p.name, p.meta ?? new Dictionary<string, string>());
+				ArborInsightsClient.Event(p.name, p.meta ?? new Dictionary<string, string>());
 			foreach (var p in telemetries)
-				ArborInsightServiceClient.AddTelemetryEntry(p.name, p.meta ?? new Dictionary<string, string>());
+				ArborInsightsClient.AddTelemetryEntry(p.name, p.meta ?? new Dictionary<string, string>());
 			foreach (var p in logs)
 			{
 				string level = (p.logLevel ?? "").ToUpperInvariant();
 				var dict = p.meta ?? new Dictionary<string, string>();
-				if (level == "DEBUG") ArborInsightServiceClient.LogDebug(p.text ?? "", dict);
-				else if (level == "INFO") ArborInsightServiceClient.LogInfo(p.text ?? "", dict);
-				else if (level == "WARN") ArborInsightServiceClient.LogWarn(p.text ?? "", dict);
-				else if (level == "ERROR") ArborInsightServiceClient.LogError(p.text ?? "", dict);
-				else if (level == "CRITICAL") ArborInsightServiceClient.LogCritical(p.text ?? "", dict);
-				else ArborInsightServiceClient.LogInfo(p.text ?? "", dict);
+				if (level == "DEBUG") ArborInsightsClient.LogDebug(p.text ?? "", dict);
+				else if (level == "INFO") ArborInsightsClient.LogInfo(p.text ?? "", dict);
+				else if (level == "WARN") ArborInsightsClient.LogWarn(p.text ?? "", dict);
+				else if (level == "ERROR") ArborInsightsClient.LogError(p.text ?? "", dict);
+				else if (level == "CRITICAL") ArborInsightsClient.LogCritical(p.text ?? "", dict);
+				else ArborInsightsClient.LogInfo(p.text ?? "", dict);
 			}
 		}
 #endif
