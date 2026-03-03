@@ -210,7 +210,7 @@ namespace AbxrLib.Runtime
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (_authService != null && _authService.UsingArborInsightsClientForData())
             {
-                ArborInsightsClient.ForceSendUnsent();
+                // Unbind only; the service's onUnbind runs flush (short delay, drain queue, forceSendUnsent) on a background thread so we never block.
                 ArborInsightsClient.Unbind();
             }
             else
