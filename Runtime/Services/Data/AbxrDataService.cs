@@ -82,19 +82,6 @@ namespace AbxrLib.Runtime.Services.Data
         }
 
 		/// <summary>
-		/// Clears all queued events, telemetry, and logs. Used by Abxr.StartNewSession() so previous-session data is not sent with the new session.
-		/// </summary>
-		internal static void ClearQueues()
-		{
-			lock (_lock)
-			{
-				_eventPayloads.Clear();
-				_telemetryPayloads.Clear();
-				_logPayloads.Clear();
-			}
-		}
-
-		/// <summary>
 		/// Add an event to the batch.
 		/// When this session authenticated via ArborInsightsClient we send directly to the service (no queue). Otherwise we queue and Send() uses HTTP; we never switch to the service later.
 		/// </summary>
