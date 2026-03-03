@@ -2,121 +2,67 @@
 
 ## Overview
 
-AbxrLib uses `WebCamTexture` to access Meta Quest's passthrough camera for QR code scanning. The implementation is simple and doesn't require AR Foundation or camera settings modifications.
+AbxrLib uses `WebCamTexture` to access Meta Quest's passthrough camera for QR code scanning. No AR Foundation is required. On Meta Quest, the SDK checks that OpenXR **Meta Quest Support** and **Meta Quest: Camera (Passthrough)** (and Session) are enabled; it will log errors if they are missing.
 
 ## Required Setup
 
 ### 1. Camera Permissions
 
-The following permissions are **automatically added** to AndroidManifest.xml by AbxrLib:
+AbxrLib automatically adds to AndroidManifest.xml:
 - `android.permission.CAMERA`
 - `horizonos.permission.HEADSET_CAMERA`
 
-### 2. Device Settings (On Quest Headset)
+### 2. Device Settings (On Quest)
 
-1. Put on your Quest headset
-2. Go to **Settings > Privacy > Camera Access**
-3. Find your app and **enable** camera access
+1. Put on the headset and go to **Settings > Privacy > Camera Access** (or **Privacy & Safety > App Permissions > Headset Cameras**, depending on firmware).
+2. Find your app and **enable** camera access.
 
 ## How It Works
 
-- AbxrLib uses `WebCamTexture` to access the passthrough camera
-- The camera feed is displayed in a world-space UI overlay
-- No scene camera modifications are made (your scene settings remain unchanged)
-- No AR Foundation package is required
-- Camera feed is displayed in a Canvas overlay, independent of scene rendering
-
-### Button Visibility
-
-The "Scan QR Code" button is **automatically shown or hidden** based on:
-- Device support (Quest 3/3S/Pro only - Quest 2 is not supported)
-- Camera permissions (both `CAMERA` and `HEADSET_CAMERA` must be granted)
-
-**If the button is not visible**, it means one of these conditions is not met. The button will automatically appear once all requirements are satisfied (no app restart needed).
+- AbxrLib uses `WebCamTexture` for the passthrough camera; the feed is shown in a world-space Canvas overlay.
+- Supported devices: **Quest 3, Quest 3S, Quest Pro** (Quest 2 is not supported).
+- The "Scan QR Code" button is shown or hidden based on device support and whether both `CAMERA` and `HEADSET_CAMERA` are granted. Once permissions are granted, the button can appear without restarting the app (some firmware may require a restart).
 
 ## Troubleshooting
 
 ### "Scan QR Code" Button Not Visible
 
-If you don't see the "Scan QR Code" button on the PIN pad:
-
-1. **Verify device support**:
-   - The button only appears on Quest 3, Quest 3S, or Quest Pro
-   - Quest 2 is not supported (camera quality insufficient)
-
-2. **Check camera permissions**:
-   - Quest Settings > Privacy & Safety > App Permissions > Headset Cameras
-   - Ensure camera access is **enabled** for your app
-   - The button will automatically appear once permissions are granted (no app restart needed)
-
-3. **Check logs** for details:
-   - Look for: `QR Code button hidden - QR scanning not available`
-   - Look for: `HEADSET_CAMERA permission check returned: -1` (denied)
-   - Look for: `Device '...' is not supported for QR code reading`
-
-4. **If permissions were just granted**:
-   - The button should appear automatically within a few seconds
-   - If it doesn't appear, try closing and reopening the PIN pad
+- **Device:** Button only appears on Quest 3, 3S, or Pro.
+- **Permissions:** Enable camera for your app in Quest Settings (Privacy / Camera Access or Headset Cameras). The button should appear when both permissions are granted.
+- **Logs:** Look for `[AbxrLib] QR Code button hidden - QR scanning not available`, `Device '...' is not supported for QR code reading`, or `HEADSET_CAMERA permission check failed`. If permissions were just enabled, try closing and reopening the PIN pad.
 
 ### Black Camera Feed
 
-If you see a black camera feed after clicking "Scan QR Code":
+- Confirm camera is enabled for the app in Quest Settings.
+- Allow a few seconds for the camera to start; if it stays black, re-check permissions and look for `[AbxrLib] HEADSET_CAMERA permission not granted` or `Camera permission denied` in logs.
 
-1. **Check device permissions**:
-   - Quest Settings > Privacy > Camera Access > Your App
-   - Enable if disabled
-   - The button should be hidden if permissions are denied, but check anyway
+### OpenXR Errors
 
-2. **Check logs** for permission status:
-   - Look for: `HEADSET_CAMERA permission check returned: -1` (denied)
-   - Look for: `Camera permission denied` errors
-   - Grant permission in Quest Settings > Privacy & Safety > App Permissions > Headset Cameras > Your App > Enable
-
-3. **Wait for camera initialization**:
-   - The camera may take a few seconds to start producing valid frames
-   - If the feed remains black after 5-10 seconds, check permissions
-
-### Permission Denied
-
-If `HEADSET_CAMERA` permission is denied:
-
-1. The permission is automatically added to AndroidManifest.xml
-2. You must grant it in **Quest Settings > Privacy > Camera Access**
-3. The "Scan QR Code" button will be **hidden** until permissions are granted
-4. Once granted, the button will automatically appear (no app restart needed)
-5. Some Quest firmware versions may require the app to be restarted after granting permission
-
+If you see errors about **Meta Quest: Session** or **Meta Quest: Camera (Passthrough)** not enabled, enable them in **Project Settings > XR Plug-in Management > OpenXR > OpenXR Feature Groups** (Meta Quest Support, and the Camera (Passthrough) feature).
 
 ## Testing
 
-1. Build and deploy to Quest 3/3S/Pro
-2. Launch the app
-3. **Grant camera permissions** (if not already granted):
-   - Quest Settings > Privacy & Safety > App Permissions > Headset Cameras > Your App > Enable
-4. Open the PIN pad
-5. **Verify the "Scan QR Code" button is visible** (if not, see troubleshooting section)
-6. Click "Scan QR Code" button
-7. You should see the camera feed in a world-space overlay
-8. Point the camera at a QR code starting with "ABXR:"
+1. Build and deploy to Quest 3/3S/Pro.
+2. Grant camera permissions for your app if prompted (Quest Settings > Privacy / Camera Access or Headset Cameras).
+3. Open the PIN pad and tap "Scan QR Code."
+4. Point the camera at a QR code that starts with **ABXR:** (e.g. `ABXR:123456`).
 
 ## Notes
 
-- **Quest 2 is not supported** (camera quality insufficient for QR scanning)
-- The QR scanner only processes QR codes that start with "ABXR:"
-- The "Scan QR Code" button toggles to "Stop Scanning" when active
-- Camera feed is displayed in a world-space overlay visible in passthrough mode
-- **No scene modifications**: AbxrLib does not modify your scene camera settings
-- **No package dependencies**: No Unity packages or OpenXR configuration required - WebCamTexture works directly on Quest
-- **Pico compatibility**: No Meta-specific packages or configuration needed, so Pico-only builds won't have conflicts
+- **Quest 2** is not supported (camera quality insufficient for reliable QR scanning).
+- Only QR codes starting with **ABXR:** are accepted; the button label toggles to "Stop Scanning" while active.
+- For custom UI, use `Abxr.GetQRScanCameraTexture()` to get the camera texture (e.g. for a RawImage). Pico uses a different path; Meta-only builds do not conflict with Pico.
 
 ## Debugging
 
-View logs with:
+View AbxrLib logs:
+
 ```bash
 adb logcat | grep -i "[AbxrLib]"
 ```
 
-Clear logs and view:
+Clear and then view:
+
 ```bash
-clear; adb logcat -c && adb logcat | grep -i "[AbxrLib]"
+adb logcat -c && adb logcat | grep -i "[AbxrLib]"
 ```
