@@ -11,3 +11,5 @@
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("AbxrLib.Editor")]
+[assembly: InternalsVisibleTo("AbxrLib.Tests.EditMode")]
+[assembly: InternalsVisibleTo("AbxrLib.Tests.PlayMode")]

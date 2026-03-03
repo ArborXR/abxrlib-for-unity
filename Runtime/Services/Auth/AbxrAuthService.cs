@@ -690,6 +690,20 @@ namespace AbxrLib.Runtime.Services.Auth
             Debug.Log("[AbxrLib] Authenticated successfully");
         }
 
+        /// <summary>For testing only. Applies the given auth response and invokes OnSucceeded so subsystem and Abxr.OnAuthCompleted behave as after a real auth.</summary>
+        internal void SimulateAuthSuccess(AuthResponse response)
+        {
+            if (response == null) return;
+            ResponseData = response;
+            if (ResponseData.Modules?.Count > 1)
+                ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
+            ResponseData.UserData ??= new Dictionary<string, string>();
+            if (!string.IsNullOrEmpty(ResponseData.UserId))
+                ResponseData.UserData["userId"] = ResponseData.UserId;
+            Authenticated = true;
+            OnSucceeded?.Invoke();
+        }
+
         private void ClearAuthenticationState()
         {
             Authenticated = false;

@@ -347,6 +347,21 @@ namespace AbxrLib.Runtime.Core
         [HideInInspector]
         public int maxDictionarySize = 50;
 
+#if UNITY_EDITOR
+        /// <summary>Editor-only: when true, PlayMode test base can auto-respond to OnInputRequested using unitTestAuth* values.</summary>
+        [HideInInspector] public bool unitTestConfigEnabled = false;
+        [HideInInspector] public string unitTestAuthText = "";
+        [HideInInspector] public string unitTestAuthEmail = "";
+        [HideInInspector] public string unitTestAuthPin = "";
+#endif
+
+        /// <summary>For testing only. Clears the singleton and validation flag so the next access creates a fresh instance.</summary>
+        internal static void ResetForTesting()
+        {
+            _instance = null;
+            _validatedOnce = false;
+        }
+
         private void MigrateIfNeeded()
         {
             if (_configSerializedVersion >= 1) return;

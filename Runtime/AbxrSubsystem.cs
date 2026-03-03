@@ -22,6 +22,18 @@ namespace AbxrLib.Runtime
         // ── Singleton ────────────────────────────────────────────────
         internal static AbxrSubsystem Instance { get; private set; }
 
+        /// <summary>For testing only. Resets static state that survives MonoBehaviour destruction.</summary>
+        internal static void ResetStaticStateForTesting()
+        {
+            _assessmentStarted = false;
+        }
+
+        /// <summary>For testing only. Exposes the auth service so tests can simulate auth success.</summary>
+        internal AbxrAuthService AuthServiceForTesting => _authService;
+
+        /// <summary>For testing only. Exposes the data service so tests can inspect pending events/logs/telemetry.</summary>
+        internal AbxrDataService DataServiceForTesting => _dataService;
+
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
         private AbxrDataService _dataService;
