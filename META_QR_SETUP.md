@@ -113,10 +113,10 @@ If `HEADSET_CAMERA` permission is denied:
 
 View logs with:
 ```bash
-adb logcat | grep -i "AbxrLib:"
+adb logcat | grep -i "[AbxrLib]"
 ```
 
 Clear logs and view:
 ```bash
-clear; adb logcat -c && adb logcat | grep -i "AbxrLib:"
+clear; adb logcat -c && adb logcat | grep -i "[AbxrLib]"
 ```

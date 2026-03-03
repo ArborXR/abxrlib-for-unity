@@ -14,8 +14,11 @@
  * through the Unity Inspector or programmatically at runtime.
  */
 
+using System;
 using System.Text.RegularExpressions;
+using AbxrLib.Runtime.Types;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace AbxrLib.Runtime.Core
 {
@@ -49,6 +52,8 @@ namespace AbxrLib.Runtime.Core
                 {
                     _instance = CreateInstance<Configuration>();
                 }
+
+                _instance.MigrateIfNeeded();
 
                 // Run validation once on first load so numeric ranges are clamped early; return value is ignored here.
                 if (!_validatedOnce)
@@ -94,14 +99,14 @@ namespace AbxrLib.Runtime.Core
                 if (string.IsNullOrEmpty(appToken))
                 {
                     if (PreferValidationWarnings)
-                        Debug.LogWarning("AbxrLib: Configuration validation - appToken is required when using app tokens. Set App Token in AbxrLib configuration or authentication will fail at runtime.");
+                        Debug.LogWarning("[AbxrLib] Configuration validation - appToken is required when using app tokens. Set App Token in AbxrLib configuration or authentication will fail at runtime.");
                     else
-                        Debug.LogError("AbxrLib: Configuration validation failed - appToken is required when using app tokens.");
+                        Debug.LogError("[AbxrLib] Configuration validation failed - appToken is required when using app tokens.");
                     return false;
                 }
                 if (!LooksLikeJwt(appToken))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - appToken does not look like a JWT (expected three dot-separated segments).");
+                    Debug.LogError("[AbxrLib] Configuration validation failed - appToken does not look like a JWT (expected three dot-separated segments).");
                     return false;
                 }
                 // Production (Custom APK) requires orgToken to be set and JWT-shaped
@@ -110,20 +115,20 @@ namespace AbxrLib.Runtime.Core
                     if (string.IsNullOrEmpty(orgToken))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("AbxrLib: Configuration validation - Organization Token is required when Build Type is Production (Custom APK). Set the customer's org token in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Configuration validation - Organization Token is required when Build Type is Production (Custom APK). Set the customer's org token in AbxrLib configuration.");
                         else
-                            Debug.LogError("AbxrLib: Configuration validation failed - Organization Token is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Configuration validation failed - Organization Token is required when Build Type is Production (Custom APK).");
                         return false;
                     }
                     if (!LooksLikeJwt(orgToken))
                     {
-                        Debug.LogError("AbxrLib: Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
+                        Debug.LogError("[AbxrLib] Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
                         return false;
                     }
                 }
                 else if (!string.IsNullOrEmpty(orgToken) && !LooksLikeJwt(orgToken))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
+                    Debug.LogError("[AbxrLib] Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
                     return false;
                 }
             }
@@ -132,12 +137,12 @@ namespace AbxrLib.Runtime.Core
                 // Legacy mode: appID is required and must be valid format. orgID and authSecret can come from runtime — only validate format when set. Production (Custom APK) requires both.
                 if (string.IsNullOrEmpty(appID))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - Application ID is required when not using app tokens.");
+                    Debug.LogError("[AbxrLib] Configuration validation failed - Application ID is required when not using app tokens.");
                     return false;
                 }
                 if (!Regex.IsMatch(appID, uuidPattern))
                 {
-                    Debug.LogError("AbxrLib: Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
                     return false;
                 }
                 if (buildType == "production_custom")
@@ -145,43 +150,42 @@ namespace AbxrLib.Runtime.Core
                     if (string.IsNullOrEmpty(orgID))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("AbxrLib: Configuration validation - Organization ID is required when Build Type is Production (Custom APK) with legacy auth. Set the customer's org ID in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Configuration validation - Organization ID is required when Build Type is Production (Custom APK) with legacy auth. Set the customer's org ID in AbxrLib configuration.");
                         else
-                            Debug.LogError("AbxrLib: Configuration validation failed - Organization ID is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Configuration validation failed - Organization ID is required when Build Type is Production (Custom APK).");
                         return false;
                     }
                     if (string.IsNullOrEmpty(authSecret) || string.IsNullOrWhiteSpace(authSecret))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("AbxrLib: Configuration validation - Authorization Secret is required when Build Type is Production (Custom APK) with legacy auth. Set it in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Configuration validation - Authorization Secret is required when Build Type is Production (Custom APK) with legacy auth. Set it in AbxrLib configuration.");
                         else
-                            Debug.LogError("AbxrLib: Configuration validation failed - Authorization Secret is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Configuration validation failed - Authorization Secret is required when Build Type is Production (Custom APK).");
                         return false;
                     }
                 }
                 if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
                 {
-                    Debug.LogError("AbxrLib: Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
                     return false;
                 }
                 if (!string.IsNullOrEmpty(authSecret) && string.IsNullOrWhiteSpace(authSecret))
                 {
-                    Debug.LogError("AbxrLib: Configuration validation failed - authSecret cannot be empty if set");
+                    Debug.LogError("[AbxrLib] Configuration validation failed - authSecret cannot be empty if set");
                     return false;
                 }
             }
 
             // Validate restUrl and numeric ranges for both modes
-            // Validate restUrl format - must be a valid HTTP/HTTPS URL
             if (string.IsNullOrEmpty(restUrl))
             {
-                Debug.LogError("AbxrLib: Configuration validation failed - restUrl is required but not set");
+                Debug.LogError("[AbxrLib] Configuration validation failed - restUrl is required but not set");
                 return false;
             }
             
             if (!Utils.IsValidUrl(restUrl))
             {
-                Debug.LogError($"AbxrLib: Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL");
+                Debug.LogError($"[AbxrLib] Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL");
                 return false;
             }
             
@@ -201,6 +205,7 @@ namespace AbxrLib.Runtime.Core
             ClampFloat(nameof(frameRateTrackingPeriodSeconds), ref frameRateTrackingPeriodSeconds, 0.1f, 60f, 0.5f);
             ClampFloat(nameof(telemetryTrackingPeriodSeconds), ref telemetryTrackingPeriodSeconds, 1f, 300f, 10f);
             ClampFloat(nameof(authenticationStartDelay), ref authenticationStartDelay, 0f, 60f, 0f);
+            ClampFloat(nameof(defaultMaxDistanceLimit), ref defaultMaxDistanceLimit, 0f, 10000f, 50f);
 
             return true;
         }
@@ -210,12 +215,12 @@ namespace AbxrLib.Runtime.Core
             if (value < min)
             {
                 int applied = Mathf.Clamp(defaultValue, min, max);
-                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
+                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
                 value = applied;
             }
             else if (value > max)
             {
-                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value}, clamped to maximum {max}.");
+                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value}, clamped to maximum {max}.");
                 value = max;
             }
         }
@@ -225,12 +230,12 @@ namespace AbxrLib.Runtime.Core
             if (value < min)
             {
                 float applied = Mathf.Clamp(defaultValue, min, max);
-                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
+                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
                 value = applied;
             }
             else if (value > max)
             {
-                Debug.LogWarning($"AbxrLib: Configuration {fieldName} was {value}, clamped to maximum {max}.");
+                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value}, clamped to maximum {max}.");
                 value = max;
             }
         }
@@ -240,6 +245,27 @@ namespace AbxrLib.Runtime.Core
             if (string.IsNullOrEmpty(value)) return false;
             var parts = value.Split('.');
             return parts.Length == 3;
+        }
+
+        public void ApplyConfigPayload(ConfigPayload payload)
+        {
+            if (!string.IsNullOrEmpty(payload.restUrl)) restUrl = payload.restUrl;
+            if (!string.IsNullOrEmpty(payload.sendRetriesOnFailure)) sendRetriesOnFailure = Convert.ToInt32(payload.sendRetriesOnFailure);
+            if (!string.IsNullOrEmpty(payload.sendRetryInterval)) sendRetryIntervalSeconds = Convert.ToInt32(payload.sendRetryInterval);
+            if (!string.IsNullOrEmpty(payload.sendNextBatchWait)) sendNextBatchWaitSeconds = Convert.ToInt32(payload.sendNextBatchWait);
+            if (!string.IsNullOrEmpty(payload.stragglerTimeout)) stragglerTimeoutSeconds = Convert.ToInt32(payload.stragglerTimeout);
+            if (!string.IsNullOrEmpty(payload.dataEntriesPerSendAttempt)) dataEntriesPerSendAttempt = Convert.ToInt32(payload.dataEntriesPerSendAttempt);
+            if (!string.IsNullOrEmpty(payload.storageEntriesPerSendAttempt)) storageEntriesPerSendAttempt = Convert.ToInt32(payload.storageEntriesPerSendAttempt);
+            if (!string.IsNullOrEmpty(payload.pruneSentItemsOlderThan)) pruneSentItemsOlderThanHours = Convert.ToInt32(payload.pruneSentItemsOlderThan);
+            if (!string.IsNullOrEmpty(payload.maximumCachedItems)) maximumCachedItems = Convert.ToInt32(payload.maximumCachedItems);
+            if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
+            // Performance / tracking periods (backend may send as numeric strings, e.g. "1", "0.5", "10")
+            if (!string.IsNullOrEmpty(payload.positionCapturePeriod) && float.TryParse(payload.positionCapturePeriod, out float positionPeriod))
+                positionTrackingPeriodSeconds = Mathf.Clamp(positionPeriod, 0.1f, 60f);
+            if (!string.IsNullOrEmpty(payload.frameRateCapturePeriod) && float.TryParse(payload.frameRateCapturePeriod, out float frameRatePeriod))
+                frameRateTrackingPeriodSeconds = Mathf.Clamp(frameRatePeriod, 0.1f, 60f);
+            if (!string.IsNullOrEmpty(payload.telemetryCapturePeriod) && float.TryParse(payload.telemetryCapturePeriod, out float telemetryPeriod))
+                telemetryTrackingPeriodSeconds = Mathf.Clamp(telemetryPeriod, 1f, 300f);
         }
 
         [Header("Service Provider")]
@@ -259,10 +285,17 @@ namespace AbxrLib.Runtime.Core
         public bool headsetTracking = true;
         public float positionTrackingPeriodSeconds = 1f;
 
+        [Header("Target Gaze Tracking")]
+        [Tooltip("Global default maximum distance for AbxrTarget occlusion checks (meters). 0 = unlimited. Individual AbxrTarget components can override.")]
+        public float defaultMaxDistanceLimit = 50f;
+        [Tooltip("Global default for auto-creating trigger colliders on AbxrTarget. Individual AbxrTarget components can override.")]
+        public bool defaultAutoCreateTriggerCollider = true;
+
         [Header("Authentication Control")]
-        [Tooltip("When enabled, authentication will NOT start automatically on app launch. You must manually call Abxr.StartAuthentication()")]
-        public bool disableAutoStartAuthentication = false;
-        
+        [Tooltip("When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()")]
+        [FormerlySerializedAs("disableAutoStartAuthentication")]
+        public bool enableAutoStartAuthentication = true;
+
         [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
         public float authenticationStartDelay = 0f;
         
@@ -293,10 +326,38 @@ namespace AbxrLib.Runtime.Core
         public int pruneSentItemsOlderThanHours = 12;
         public int maximumCachedItems = 1024;
         public bool retainLocalAfterSent;
-        public bool disableAutomaticTelemetry;
-        public bool disableSceneEvents;
 
-        [HideInInspector] 
+        [Tooltip("When enabled, the app will use the ArborInsightsClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used.")]
+        public bool enableArborInsightsClient = true;
+
+        [Tooltip("When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only. Default true.")]
+        [FormerlySerializedAs("enableAuthCredentialsFromConfigOrSetters")]
+        [FormerlySerializedAs("skipArborMdmClientForAuth")]
+        public bool enableArborMdmClient = true;
+
+        [FormerlySerializedAs("disableAutomaticTelemetry")]
+        public bool enableAutomaticTelemetry = true;
+
+        [FormerlySerializedAs("disableSceneEvents")]
+        public bool enableSceneEvents = true;
+
+        [SerializeField, HideInInspector]
+        private int _configSerializedVersion = 0;
+
+        [HideInInspector]
         public int maxDictionarySize = 50;
+
+        private void MigrateIfNeeded()
+        {
+            if (_configSerializedVersion >= 1) return;
+
+            enableAutoStartAuthentication = !enableAutoStartAuthentication;
+            enableAutomaticTelemetry = !enableAutomaticTelemetry;
+            enableSceneEvents = !enableSceneEvents;
+            _configSerializedVersion = 1;
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(this);
+#endif
+        }
     }
 }

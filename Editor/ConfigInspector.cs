@@ -28,11 +28,9 @@ namespace AbxrLib.Editor
             
             if (useAppTokens)
             {
-                // App Token (in code: appToken)
                 config.appToken = EditorGUILayout.TextField(new GUIContent(
                     "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);
                 
-                // Organization Token (optional in Development; required for Production Custom APK; disabled in Production)
                 bool isProductionCustom = config.buildType == "production_custom";
                 EditorGUI.BeginDisabledGroup(isProduction);
                 string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token (optional)";
@@ -54,11 +52,9 @@ namespace AbxrLib.Editor
             }
             else
             {
-                // Show traditional appID/orgID/authSecret fields
                 config.appID = EditorGUILayout.TextField(new GUIContent(
                     "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
                 
-                // Grey out orgID and authSecret when buildType is production only; enable for development and production_custom
                 bool isProductionCustomLegacy = config.buildType == "production_custom";
                 EditorGUI.BeginDisabledGroup(isProduction);
                 string orgIdLabel = isProductionCustomLegacy ? "Organization ID (required)" : "Organization ID (*)";
@@ -144,21 +140,27 @@ namespace AbxrLib.Editor
 
             EditorGUILayout.LabelField("Player Tracking", EditorStyles.boldLabel);
         
-            // Disable headset tracking UI if telemetry is disabled
-            config.disableAutomaticTelemetry = !EditorGUILayout.Toggle("Enable Automatic Telemetry", !config.disableAutomaticTelemetry);
-            EditorGUI.BeginDisabledGroup(config.disableAutomaticTelemetry);
+            // Disable headset tracking UI when automatic telemetry is off
+            config.enableAutomaticTelemetry = EditorGUILayout.Toggle("Enable Automatic Telemetry", config.enableAutomaticTelemetry);
+            EditorGUI.BeginDisabledGroup(!config.enableAutomaticTelemetry);
                 config.headsetTracking = EditorGUILayout.Toggle(new GUIContent(
                     "Headset/Controller Tracking", "Track the Headset and Controllers"), config.headsetTracking);
                 config.positionTrackingPeriodSeconds = Mathf.Clamp(EditorGUILayout.FloatField(
                     "Position Capture Period (seconds)", config.positionTrackingPeriodSeconds), 0.1f, 60f);
-                config.disableSceneEvents = !EditorGUILayout.Toggle("Enable Scene Events", !config.disableSceneEvents);
+                config.enableSceneEvents = EditorGUILayout.Toggle("Enable Scene Events", config.enableSceneEvents);
             EditorGUI.EndDisabledGroup();
             EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Target Gaze Tracking", EditorStyles.boldLabel);
+            config.defaultMaxDistanceLimit = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
+                "Default Max Distance (meters)", "Global default maximum distance for AbxrTarget occlusion checks. 0 = unlimited. Individual AbxrTarget components can override."), config.defaultMaxDistanceLimit), 0f, 10000f);
+            config.defaultAutoCreateTriggerCollider = EditorGUILayout.Toggle(new GUIContent(
+                "Default Auto Create Trigger Collider", "Global default for auto-creating trigger colliders on AbxrTarget. Individual AbxrTarget components can override."), config.defaultAutoCreateTriggerCollider);
+            EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Control", EditorStyles.boldLabel);
-            config.disableAutoStartAuthentication = !EditorGUILayout.Toggle(new GUIContent(
-                "Enable Auto Start Authentication", "When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()"), !config.disableAutoStartAuthentication);
-            
-            EditorGUI.BeginDisabledGroup(config.disableAutoStartAuthentication);
+            config.enableAutoStartAuthentication = EditorGUILayout.Toggle(new GUIContent(
+                "Enable Auto Start Authentication", "When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()"), config.enableAutoStartAuthentication);
+
+            EditorGUI.BeginDisabledGroup(!config.enableAutoStartAuthentication);
                 config.authenticationStartDelay = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
                     "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay), 0f, 60f);
             EditorGUI.EndDisabledGroup();
@@ -207,6 +209,21 @@ namespace AbxrLib.Editor
                 "Prune Sent Items Older Than (hours)", "0 = Infinite, i.e. Never Prune"), config.pruneSentItemsOlderThanHours), 0, 8760);
             config.maximumCachedItems = Mathf.Clamp(EditorGUILayout.IntField("Maximum Cached Items", config.maximumCachedItems), 10, 10000);
 
+            const string AdvancedArborXRKey = "AbxrLib.ConfigInspector.AdvancedArborXRSettings";
+            bool showAdvanced = EditorPrefs.GetBool(AdvancedArborXRKey, false);
+            showAdvanced = EditorGUILayout.Toggle("Advanced ArborXR Settings", showAdvanced);
+            EditorPrefs.SetBool(AdvancedArborXRKey, showAdvanced);
+
+            if (showAdvanced)
+            {
+                EditorGUI.indentLevel++;
+                config.enableArborInsightsClient = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable InsightsClientService", "When enabled, the app will use the ArborInsightsClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used."), config.enableArborInsightsClient);
+
+                config.enableArborMdmClient = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable ArborMdmClient", "When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only."), config.enableArborMdmClient);
+                EditorGUI.indentLevel--;
+            }
 
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
@@ -225,8 +242,12 @@ namespace AbxrLib.Editor
                 config.headsetTracking = defaultConfig.headsetTracking;
                 config.positionTrackingPeriodSeconds = defaultConfig.positionTrackingPeriodSeconds;
                 
+                // Target Gaze Tracking
+                config.defaultMaxDistanceLimit = defaultConfig.defaultMaxDistanceLimit;
+                config.defaultAutoCreateTriggerCollider = defaultConfig.defaultAutoCreateTriggerCollider;
+                
                 // Authentication Control
-                config.disableAutoStartAuthentication = defaultConfig.disableAutoStartAuthentication;
+                config.enableAutoStartAuthentication = defaultConfig.enableAutoStartAuthentication;
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
                 config.returnToLauncherAfterAssessmentComplete = defaultConfig.returnToLauncherAfterAssessmentComplete;
                 
@@ -248,8 +269,10 @@ namespace AbxrLib.Editor
                 config.pruneSentItemsOlderThanHours = defaultConfig.pruneSentItemsOlderThanHours;
                 config.maximumCachedItems = defaultConfig.maximumCachedItems;
                 config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
-                config.disableAutomaticTelemetry = defaultConfig.disableAutomaticTelemetry;
-                config.disableSceneEvents = defaultConfig.disableSceneEvents;
+                config.enableArborInsightsClient = defaultConfig.enableArborInsightsClient;
+                config.enableArborMdmClient = defaultConfig.enableArborMdmClient;
+                config.enableAutomaticTelemetry = defaultConfig.enableAutomaticTelemetry;
+                config.enableSceneEvents = defaultConfig.enableSceneEvents;
                 
                 // Clean up the temporary instance
                 DestroyImmediate(defaultConfig);

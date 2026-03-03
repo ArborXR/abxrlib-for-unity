@@ -1,5 +1,6 @@
-using AbxrLib.Runtime.Authentication;
 using TMPro;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Services.Auth;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -9,12 +10,14 @@ namespace AbxrLib.Runtime.UI.Keyboard
     public class KeyboardManager : MonoBehaviour
     {
         public static KeyboardManager Instance;
+        public static AbxrAuthService AuthService;
         public Button shiftButton1;
         public Button shiftButton2;
         public Button deleteButton;
         public Button spaceButton;
         public Button submitButton;
         public Button qrCodeButton;
+        public Button skipButton;
 
         public TMP_InputField inputField;
 #if UNITY_ANDROID && !UNITY_EDITOR 
@@ -36,6 +39,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             AddPointerDownHandler(deleteButton, Delete);
             AddPointerDownHandler(submitButton, Submit);
             AddPointerDownHandler(qrCodeButton, QRCode);
+            AddPointerDownHandler(skipButton, Skip);
         }
 
         private void Start()
@@ -78,61 +82,29 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private void CheckAndEnableQRButton()
         {
             if (qrCodeButton == null) return;
-#if UNITY_ANDROID && !UNITY_EDITOR            
+#if UNITY_ANDROID && !UNITY_EDITOR
+            bool hasPico = false;
 #if PICO_ENTERPRISE_SDK_3
-            // Only enable QR button if PICO Enterprise SDK 3+ is available and instance exists
-            if (PicoQRCodeReader.Instance != null)
-            {
-                bool shouldShow = true;
-                if (_lastQRButtonState != shouldShow)
-                {
-                    qrCodeButton.gameObject.SetActive(shouldShow);
-                    Debug.Log("AbxrLib: QR Code button enabled for PICO (SDK 3+)");
-                    _lastQRButtonState = shouldShow;
-                }
-            }
-            else
-            {
-                // Instance not available - hide button
-                if (_lastQRButtonState != false)
-                {
-                    qrCodeButton.gameObject.SetActive(false);
-                    _lastQRButtonState = false;
-                }
-            }
+            hasPico = QRCodeReaderPico.Instance != null;
 #endif
-#if META_QR_AVAILABLE
-            if (MetaQRCodeReader.Instance != null)
+            bool hasGeneral = QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
+            bool isAvailable = hasPico || hasGeneral;
+            if (_lastQRButtonState != isAvailable)
             {
-                // Only show button if QR scanning is available (device supported, features enabled, permissions granted)
-                bool isAvailable = MetaQRCodeReader.Instance.IsQRScanningAvailable();
-                
-                // Only log and update if state changed
-                if (_lastQRButtonState != isAvailable)
+                qrCodeButton.gameObject.SetActive(isAvailable);
+                if (isAvailable)
                 {
-                    qrCodeButton.gameObject.SetActive(isAvailable);
-                    
-                    if (isAvailable)
-                    {
-                        Debug.Log("AbxrLib: QR Code button enabled for Meta (device supported, permissions granted)");
-                    }
+#if PICO_ENTERPRISE_SDK_3
+                    if (hasPico)
+                        Debug.Log("[AbxrLib] QR Code button enabled for PICO (SDK 3+)");
                     else
-                    {
-                        Debug.LogWarning("AbxrLib: QR Code button hidden - QR scanning not available. Check device support and camera permissions.");
-                    }
-                    _lastQRButtonState = isAvailable;
-                }
-            }
-            else
-            {
-                if (_lastQRButtonState != false)
-                {
-                    qrCodeButton.gameObject.SetActive(false);
-                    Debug.LogWarning("AbxrLib: MetaQRCodeReader.Instance is null. Button will remain hidden.");
-                    _lastQRButtonState = false;
-                }
-            }
 #endif
+                        Debug.Log("[AbxrLib] QR Code button enabled (device supported, permissions granted)");
+                }
+                else
+                    Debug.LogWarning("[AbxrLib] QR Code button hidden - QR scanning not available. Check device support and camera permissions.");
+                _lastQRButtonState = isAvailable;
+            }
 #endif
         }
 
@@ -196,45 +168,42 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 StartCoroutine(KeyboardHandler.ProcessingVisual());
                 // Ensure inputSource is set to "user" for manual keyboard input
-                Authentication.Authentication.SetInputSource("user");
-                StartCoroutine(Authentication.Authentication.KeyboardAuthenticate(inputField.text));
+                AuthService.SetInputSource("user");
+                AbxrSubsystem.Instance.SubmitInput(inputField.text);
                 inputField.text = "";
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"AbxrLib: KeyboardManager - Error during authentication submission: {ex.Message}");
+                Debug.LogError($"[AbxrLib] KeyboardManager - Error during authentication submission: {ex.Message}");
                 // Stop processing visual and clear input on error
                 inputField.text = "";
             }
+        }
+        
+        private static void Skip()
+        {
+            AbxrSubsystem.Instance.SubmitInput("**skip**");
         }
         
         private void QRCode()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
-            // Toggle: if already scanning, cancel; otherwise start scanning
-            if (PicoQRCodeReader.Instance != null)
+            if (QRCodeReaderPico.Instance != null)
             {
-                // PICO doesn't have cancel, so just start scanning
-                PicoQRCodeReader.Instance.ScanQRCode();
+                QRCodeReaderPico.Instance.ScanQRCode();
+                inputField.text = "";
+                return;
             }
 #endif
-#if META_QR_AVAILABLE
-            // Toggle: if already scanning, cancel; otherwise start scanning
-            if (MetaQRCodeReader.Instance != null)
+            if (QRCodeReader.Instance != null)
             {
-                if (MetaQRCodeReader.Instance.IsScanning())
-                {
-                    MetaQRCodeReader.Instance.CancelScanning();
-                }
+                if (QRCodeReader.Instance.IsScanning())
+                    QRCodeReader.Instance.CancelScanning();
                 else
-                {
-                    MetaQRCodeReader.Instance.ScanQRCode();
-                }
-                // Update button text immediately after toggling
+                    QRCodeReader.Instance.ScanQRCode();
                 UpdateQRButtonTextImmediate();
             }
-#endif
 #endif
             inputField.text = "";
         }
@@ -267,16 +236,18 @@ namespace AbxrLib.Runtime.UI.Keyboard
             bool permissionsDenied = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
-            // PICO doesn't have IsScanning, so we can't toggle text for it
-#endif
-#if META_QR_AVAILABLE
-            if (MetaQRCodeReader.Instance != null)
+            if (QRCodeReaderPico.Instance != null)
             {
-                isScanning = MetaQRCodeReader.Instance.IsScanning();
-                isInitializing = MetaQRCodeReader.Instance.IsInitializing();
-                permissionsDenied = MetaQRCodeReader.AreCameraPermissionsDenied();
+                // PICO SDK does not expose IsScanning/IsInitializing; button text stays default
             }
+            else
 #endif
+            if (QRCodeReader.Instance != null)
+            {
+                isScanning = QRCodeReader.Instance.IsScanning();
+                isInitializing = QRCodeReader.Instance.IsInitializing();
+                permissionsDenied = QRCodeReader.AreCameraPermissionsDenied();
+            }
 #endif
             // Update text based on state (priority: permissions denied > scanning > initializing > idle)
             if (permissionsDenied)

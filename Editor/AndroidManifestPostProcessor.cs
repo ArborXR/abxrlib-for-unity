@@ -90,6 +90,52 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// Validates app/org tokens or legacy orgID/authSecret for Production (Custom APK). Fails the build when set but invalid or incomplete.
+        /// </summary>
+        private static void ValidateAppTokensForBuild()
+        {
+            var configData = GetCachedConfigData();
+            if (configData.useAppTokens)
+            {
+                if (!string.IsNullOrEmpty(configData.appToken) && !LooksLikeJwt(configData.appToken))
+                    throw new BuildFailedException("[AbxrLib] App Token is set but does not look like a JWT (expected three dot-separated segments). Fix or clear the App Token in Analytics for XR configuration.");
+                if (configData.buildType == "production_custom")
+                {
+                    if (!string.IsNullOrEmpty(configData.appToken))
+                    {
+                        if (string.IsNullOrEmpty(configData.orgToken))
+                            throw new BuildFailedException("[AbxrLib] Production (Custom APK) requires Organization Token to be set for Custom APK builds. Set the customer's org token in Analytics for XR configuration.");
+                        if (!LooksLikeJwt(configData.orgToken))
+                            throw new BuildFailedException("[AbxrLib] Organization Token is set but does not look like a JWT (expected three dot-separated segments). Fix the Organization Token in Analytics for XR configuration.");
+                    }
+                }
+                return;
+            }
+            if (configData.buildType == "production_custom" && !string.IsNullOrEmpty(configData.appId))
+            {
+                if (string.IsNullOrEmpty(configData.orgId))
+                    throw new BuildFailedException("[AbxrLib] Production (Custom APK) requires Organization ID to be set for Custom APK builds. Set the customer's org ID in Analytics for XR configuration.");
+                if (string.IsNullOrEmpty(configData.authSecret) || string.IsNullOrWhiteSpace(configData.authSecret))
+                    throw new BuildFailedException("[AbxrLib] Production (Custom APK) requires Authorization Secret to be set for Custom APK builds. Set it in Analytics for XR configuration.");
+                if (!LooksLikeUuid(configData.orgId))
+                    throw new BuildFailedException("[AbxrLib] Organization ID does not look like a valid UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Fix the Organization ID in Analytics for XR configuration.");
+            }
+        }
+
+        private static bool LooksLikeUuid(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            return Regex.IsMatch(value, "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$");
+        }
+
+        private static bool LooksLikeJwt(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return false;
+            var parts = value.Split('.');
+            return parts.Length == 3;
+        }
+
+        /// <summary>
         /// Generates a unique GUID for each build.
         /// This build_fingerprint can be used to track and compare results across different builds.
         /// </summary>
@@ -126,54 +172,6 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// Validates app/org tokens or legacy orgID/authSecret for Production (Custom APK). Fails the build when set but invalid or incomplete.
-        /// Empty credentials are allowed (config may not be filled yet).
-        /// </summary>
-        private static void ValidateAppTokensForBuild()
-        {
-            var configData = GetCachedConfigData();
-            if (configData.useAppTokens)
-            {
-                if (!string.IsNullOrEmpty(configData.appToken) && !LooksLikeJwt(configData.appToken))
-                    throw new BuildFailedException("AbxrLib: App Token is set but does not look like a JWT (expected three dot-separated segments). Fix or clear the App Token in Analytics for XR configuration.");
-                if (configData.buildType == "production_custom")
-                {
-                    if (!string.IsNullOrEmpty(configData.appToken))
-                    {
-                        if (string.IsNullOrEmpty(configData.orgToken))
-                            throw new BuildFailedException("AbxrLib: Production (Custom APK) requires Organization Token to be set for Custom APK builds. Set the customer's org token in Analytics for XR configuration.");
-                        if (!LooksLikeJwt(configData.orgToken))
-                            throw new BuildFailedException("AbxrLib: Organization Token is set but does not look like a JWT (expected three dot-separated segments). Fix the Organization Token in Analytics for XR configuration.");
-                    }
-                }
-                return;
-            }
-            // Legacy auth: Production (Custom APK) requires orgID and authSecret when appID is set
-            if (configData.buildType == "production_custom" && !string.IsNullOrEmpty(configData.appId))
-            {
-                if (string.IsNullOrEmpty(configData.orgId))
-                    throw new BuildFailedException("AbxrLib: Production (Custom APK) requires Organization ID to be set for Custom APK builds. Set the customer's org ID in Analytics for XR configuration.");
-                if (string.IsNullOrEmpty(configData.authSecret) || string.IsNullOrWhiteSpace(configData.authSecret))
-                    throw new BuildFailedException("AbxrLib: Production (Custom APK) requires Authorization Secret to be set for Custom APK builds. Set it in Analytics for XR configuration.");
-                if (!LooksLikeUuid(configData.orgId))
-                    throw new BuildFailedException("AbxrLib: Organization ID does not look like a valid UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Fix the Organization ID in Analytics for XR configuration.");
-            }
-        }
-
-        private static bool LooksLikeUuid(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return false;
-            return System.Text.RegularExpressions.Regex.IsMatch(value, "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$");
-        }
-
-        private static bool LooksLikeJwt(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return false;
-            var parts = value.Split('.');
-            return parts.Length == 3;
-        }
-
-        /// <summary>
         /// Processes the AndroidManifest.xml to inject AbxrLib metadata.
         /// </summary>
         private static void ProcessManifest(string projectPath)
@@ -192,13 +190,13 @@ namespace AbxrLib.Editor
             if (string.IsNullOrEmpty(manifestPath))
             {
                 // Only log warning for Gradle project builds where we expect to find the manifest
-                Debug.LogWarning($"AbxrLib: AndroidManifest.xml not found. Searched in: {projectPath}");
+                Debug.LogWarning($"[AbxrLib] AndroidManifest.xml not found. Searched in: {projectPath}");
                 return;
             }
 
             if (!File.Exists(manifestPath))
             {
-                Debug.LogWarning($"AbxrLib: AndroidManifest.xml not found at: {manifestPath}");
+                Debug.LogWarning($"[AbxrLib] AndroidManifest.xml not found at: {manifestPath}");
                 return;
             }
 
@@ -227,7 +225,7 @@ namespace AbxrLib.Editor
             }
             catch (System.Exception e)
             {
-                Debug.LogError($"AbxrLib: Failed to inject metadata into AndroidManifest.xml: {e.Message}\nStackTrace: {e.StackTrace}");
+                Debug.LogError($"[AbxrLib] Failed to inject metadata into AndroidManifest.xml: {e.Message}\nStackTrace: {e.StackTrace}");
             }
         }
 
@@ -283,7 +281,7 @@ namespace AbxrLib.Editor
             // For APK builds, the manifest is already packaged and not accessible as a file
             if (!projectPath.EndsWith(".apk", System.StringComparison.OrdinalIgnoreCase))
             {
-                Debug.LogWarning($"AbxrLib: Manifest not found. Searched paths:\n{string.Join("\n", possiblePaths)}");
+                Debug.LogWarning($"[AbxrLib] Manifest not found. Searched paths:\n{string.Join("\n", possiblePaths)}");
             }
             return null;
         }
@@ -302,7 +300,7 @@ namespace AbxrLib.Editor
             
             // Add headset camera permission for Meta Quest Passthrough Camera API
             manifestContent = AddHeadsetCameraPermission(manifestContent);
-            
+
             manifestContent = AddNetworkPermissions(manifestContent);
             
             // Handle version metadata
@@ -397,7 +395,7 @@ namespace AbxrLib.Editor
                 return manifestContent;
             }
 
-            Debug.LogWarning("AbxrLib: Could not find <application> tag. Metadata not added.");
+            Debug.LogWarning("[AbxrLib] Could not find <application> tag. Metadata not added.");
             return manifestContent;
         }
 
@@ -432,7 +430,7 @@ namespace AbxrLib.Editor
                 return manifestContent;
             }
 
-            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Camera permission not added.");
+            Debug.LogWarning("[AbxrLib] Could not find <manifest> tag. Camera permission not added.");
             return manifestContent;
         }
 
@@ -463,14 +461,14 @@ namespace AbxrLib.Editor
                 // Add headset camera permission
                 string headsetCameraPermission = "    <uses-permission android:name=\"horizonos.permission.HEADSET_CAMERA\" />\n";
                 manifestContent = manifestContent.Insert(insertPosition, headsetCameraPermission);
-                Debug.Log("AbxrLib: Added horizonos.permission.HEADSET_CAMERA permission to AndroidManifest.xml");
+                Debug.Log("[AbxrLib] Added horizonos.permission.HEADSET_CAMERA permission to AndroidManifest.xml");
                 return manifestContent;
             }
 
-            Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Headset camera permission not added.");
+            Debug.LogWarning("[AbxrLib] Could not find <manifest> tag. Headset camera permission not added.");
             return manifestContent;
         }
-        
+
         // Adds INTERNET and ACCESS_NETWORK_STATE permissions to the manifest if they don't already exist
         private static string AddNetworkPermissions(string manifestContent)
         {
@@ -479,7 +477,7 @@ namespace AbxrLib.Editor
 
             if (!match.Success)
             {
-                Debug.LogWarning("AbxrLib: Could not find <manifest> tag. Network permissions not added.");
+                Debug.LogWarning("[AbxrLib] Could not find <manifest> tag. Network permissions not added.");
                 return manifestContent;
             }
 
@@ -500,7 +498,7 @@ namespace AbxrLib.Editor
             }
 
             return manifestContent;
-        }
+        }        
     }
 }
 

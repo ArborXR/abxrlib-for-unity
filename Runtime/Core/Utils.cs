@@ -3,7 +3,7 @@
  * 
  * AbxrLib for Unity - Utility Functions
  * 
- * This file contains utility functions and helper methods used throughout AbxrLib:
+ * This file contains utility functions and helper methods used throughout AbxrLib
  * - Cryptographic functions (SHA256, CRC32)
  * - JWT token decoding and validation
  * - Network utilities (IP address detection, URL building)
@@ -21,10 +21,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
-using AbxrLib.Runtime.Authentication;
-using AbxrLib.Runtime.Common;
-using AbxrLib.Runtime.Data;
-using AbxrLib.Runtime.Storage;
+using AbxrLib.Runtime.Types;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -278,21 +275,21 @@ namespace AbxrLib.Runtime.Core
             {
                 if (string.IsNullOrEmpty(token))
                 {
-                    Debug.LogError("AbxrLib: JWT token is null or empty");
+                    Debug.LogError("[AbxrLib] JWT token is null or empty");
                     return null;
                 }
 
                 string[] parts = token.Split('.');
                 if (parts.Length != 3)
                 {
-                    Debug.LogError($"AbxrLib: Invalid JWT token format - expected 3 parts, got {parts.Length}");
+                    Debug.LogError($"[AbxrLib] Invalid JWT token format - expected 3 parts, got {parts.Length}");
                     return null;
                 }
 
                 string payload = parts[1];
                 if (string.IsNullOrEmpty(payload))
                 {
-                    Debug.LogError("AbxrLib: JWT payload is empty");
+                    Debug.LogError("[AbxrLib] JWT payload is empty");
                     return null;
                 }
 
@@ -302,14 +299,14 @@ namespace AbxrLib.Runtime.Core
 
                 if (string.IsNullOrEmpty(json))
                 {
-                    Debug.LogError("AbxrLib: JWT payload decoded to empty JSON");
+                    Debug.LogError("[AbxrLib] JWT payload decoded to empty JSON");
                     return null;
                 }
 
                 var result = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
                 if (result == null)
                 {
-                    Debug.LogError("AbxrLib: Failed to deserialize JWT payload JSON");
+                    Debug.LogError("[AbxrLib] Failed to deserialize JWT payload JSON");
                     return null;
                 }
 
@@ -317,17 +314,17 @@ namespace AbxrLib.Runtime.Core
             }
             catch (FormatException ex)
             {
-                Debug.LogError($"AbxrLib: JWT token format error: {ex.Message}");
+                Debug.LogError($"[AbxrLib] JWT token format error: {ex.Message}");
                 return null;
             }
             catch (JsonException ex)
             {
-                Debug.LogError($"AbxrLib: JWT JSON parsing error: {ex.Message}");
+                Debug.LogError($"[AbxrLib] JWT JSON parsing error: {ex.Message}");
                 return null;
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: JWT decoding error: {ex.Message}");
+                Debug.LogError($"[AbxrLib] JWT decoding error: {ex.Message}");
                 return null;
             }
         }
@@ -373,9 +370,9 @@ namespace AbxrLib.Runtime.Core
         /// </summary>
         internal struct AuthConfigData
         {
-            public string appId; //legacy only
-            public string orgId; //legacy only
-            public string authSecret; //legacy only
+            public string appId; // legacy only
+            public string orgId; // legacy only
+            public string authSecret; // legacy only
             public string appToken;
             public string orgToken;
             public string buildType;
@@ -421,7 +418,7 @@ namespace AbxrLib.Runtime.Core
                     result.orgToken = config.orgToken;
                 // buildType stays from config above; appId/orgId/authSecret left default (unused when using tokens)
             }
-            else //legacy AppID/OrgID/AuthSecret approach
+            else // legacy AppID/OrgID/AuthSecret approach
             {
                 // Single appId required
                 if (string.IsNullOrEmpty(config.appID))
@@ -432,9 +429,8 @@ namespace AbxrLib.Runtime.Core
 
                 // Use traditional appID/orgID/authSecret approach
                 result.appId = config.appID;
-               
+
                 // Only include orgID and authSecret if buildType is development or production_custom (custom APK)
-                // In production builds, these should be empty to avoid including credentials
                 if (config.buildType == "development" || config.buildType == "production_custom")
                 {
                     result.orgId = config.orgID;
@@ -442,7 +438,6 @@ namespace AbxrLib.Runtime.Core
                 }
                 else
                 {
-                    // Production build - use empty values
                     result.orgId = null;
                     result.authSecret = null;
                 }
@@ -496,7 +491,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: BuildOrgTokenDynamic failed: {ex.Message}");
+                Debug.LogError($"[AbxrLib] BuildOrgTokenDynamic failed: {ex.Message}");
                 return null;
             }
         }
@@ -529,7 +524,7 @@ namespace AbxrLib.Runtime.Core
             catch (Exception ex)
             {
                 // Log error with consistent format and include network context
-                Debug.LogError($"AbxrLib: Failed to get local IP address: {ex.Message}\n" +
+                Debug.LogError($"[AbxrLib] Failed to get local IP address: {ex.Message}\n" +
                               $"Exception Type: {ex.GetType().Name}\n" +
                               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
@@ -588,7 +583,7 @@ namespace AbxrLib.Runtime.Core
         /// <returns>The argument value if found, empty string otherwise</returns>
         public static string GetCommandLineArg(string key)
         {
-            string[] args = System.Environment.GetCommandLineArgs();
+            string[] args = Environment.GetCommandLineArgs();
             
             // Pre-build the search strings to avoid repeated concatenation
             string keyEquals = key + "=";
@@ -616,8 +611,6 @@ namespace AbxrLib.Runtime.Core
 
         /// <summary>
         /// Returns the directory that contains the game executable on standalone desktop builds.
-        /// Windows: folder containing the .exe (parent of the _Data folder).
-        /// Mac: folder containing the executable inside the .app bundle (Contents/MacOS).
         /// </summary>
         public static string GetStandaloneExecutableDirectory()
         {
@@ -657,7 +650,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"AbxrLib: Could not read org token from {OrgTokenFileName}: {ex.Message}");
+                Debug.LogWarning($"[AbxrLib] Could not read org token from {OrgTokenFileName}: {ex.Message}");
             }
 
             return "";
@@ -689,7 +682,7 @@ namespace AbxrLib.Runtime.Core
             catch (System.Exception ex)
             {
                 // Log warning with consistent format and include Android context
-                Debug.LogWarning($"AbxrLib: Failed to get Android intent parameter '{key}': {ex.Message}\n" +
+                Debug.LogWarning($"[AbxrLib] Failed to get Android intent parameter '{key}': {ex.Message}\n" +
                                 $"Exception Type: {ex.GetType().Name}\n" +
                                 $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
@@ -737,7 +730,7 @@ namespace AbxrLib.Runtime.Core
             catch (System.Exception ex)
             {
                 // Log warning with consistent format and include Android context
-                Debug.LogWarning($"AbxrLib: Failed to get Android manifest metadata '{key}': {ex.Message}\n" +
+                Debug.LogWarning($"[AbxrLib] Failed to get Android manifest metadata '{key}': {ex.Message}\n" +
                                 $"Exception Type: {ex.GetType().Name}\n" +
                                 $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
@@ -745,33 +738,19 @@ namespace AbxrLib.Runtime.Core
             return "";
         }
     
-        public static long GetUnityTime() => (long)(Time.time * 1000f) + Initialize.StartTimeMs;
-
-        public static void SendAllData()
-        {
-            // Send all pending data from all batcher types
-            if (CoroutineRunner.Instance != null)
-            {
-                CoroutineRunner.Instance.StartCoroutine(DataBatcher.Send());
-                CoroutineRunner.Instance.StartCoroutine(StorageBatcher.Send());
-            }
-            else
-            {
-                Debug.LogWarning("AbxrLib: Cannot send data - CoroutineRunner.Instance is null");
-            }
-        }
+        public static long GetUnityTime() => (long)(Time.time * 1000f) + AbxrSubsystem.StartTimeMs;
 
         /// <summary>
         /// Convert raw module dictionaries to typed ModuleData objects.
         /// Internal helper for processing authentication response modules. Modules are sorted by order.
         /// </summary>
-        public static List<Authentication.Authentication.ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
+        public static List<ModuleData> ConvertToModuleDataList(List<Dictionary<string, object>> rawModules)
         {
-            var moduleDataList = new List<Authentication.Authentication.ModuleData>();
+            var moduleDataList = new List<ModuleData>();
             if (rawModules == null) return moduleDataList;
             try
             {
-                var tempList = new List<Authentication.Authentication.ModuleData>();
+                var tempList = new List<ModuleData>();
                 foreach (var rawModule in rawModules)
                 {
                     var moduleId = rawModule.ContainsKey("id") ? rawModule["id"]?.ToString() : "";
@@ -780,13 +759,13 @@ namespace AbxrLib.Runtime.Core
                     var moduleOrder = 0;
                     if (rawModule.ContainsKey("order") && rawModule["order"] != null)
                         int.TryParse(rawModule["order"].ToString(), out moduleOrder);
-                    tempList.Add(new Authentication.Authentication.ModuleData { Id = moduleId, Name = moduleName, Target = moduleTarget, Order = moduleOrder });
+                    tempList.Add(new ModuleData { Id = moduleId, Name = moduleName, Target = moduleTarget, Order = moduleOrder });
                 }
                 moduleDataList = tempList.OrderBy(m => m.Order).ToList();
             }
             catch (Exception ex)
             {
-                Debug.LogError($"AbxrLib: Failed to convert module data: {ex.Message}\nException Type: {ex.GetType().Name}\nStack Trace: {ex.StackTrace ?? "No stack trace available"}");
+                Debug.LogError($"[AbxrLib] Failed to convert module data: {ex.Message}\nException Type: {ex.GetType().Name}\nStack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
             return moduleDataList;
         }
@@ -810,6 +789,41 @@ namespace AbxrLib.Runtime.Core
             {
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Finds the best available camera for gaze tracking and telemetry.
+        /// Tries Camera.main, then XR HMD camera, then any active enabled camera.
+        /// </summary>
+        /// <returns>Camera transform if found, null otherwise</returns>
+        public static Transform FindCameraTransform()
+        {
+            Camera mainCamera = Camera.main;
+            if (mainCamera != null && mainCamera.enabled && mainCamera.gameObject.activeInHierarchy)
+                return mainCamera.transform;
+
+            try
+            {
+                var hmd = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.Head);
+                if (hmd.isValid)
+                {
+                    Camera[] cameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+                    foreach (var cam in cameras)
+                    {
+                        if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
+                            return cam.transform;
+                    }
+                }
+            }
+            catch (System.Exception) { }
+
+            Camera[] allCameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+            foreach (var cam in allCameras)
+            {
+                if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
+                    return cam.transform;
+            }
+            return null;
         }
     }
 }

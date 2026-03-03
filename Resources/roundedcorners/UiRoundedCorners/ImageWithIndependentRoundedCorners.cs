@@ -71,7 +71,7 @@ namespace AbxrLib.UiRoundedCorners {
 				if (shader != null) {
 					material = new Material(shader);
 				} else {
-					Debug.LogError("AbxrLib: Could not find independent rounded corners shader. Make sure the shader is compiled.");
+					Debug.LogError("[AbxrLib] Could not find independent rounded corners shader. Make sure the shader is compiled.");
 					return;
 				}
 			}
