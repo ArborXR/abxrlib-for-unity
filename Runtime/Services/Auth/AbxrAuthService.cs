@@ -860,7 +860,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
             if (!configData.isValid)
             {
-                Debug.LogError($"[AbxrLib] {configData.errorMessage} Cannot authenticate.");
+                Debug.LogError($"[AbxrLib] {configData.errorMessage}");
                 return;
             }
 
@@ -978,24 +978,24 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 if (string.IsNullOrEmpty(_payload.appToken))
                 {
-                    Debug.LogError("[AbxrLib] App Token is missing. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
                     return false;
                 }
                 if (!LooksLikeJwt(_payload.appToken))
                 {
-                    Debug.LogError("[AbxrLib] App Token does not look like a JWT (expected three dot-separated segments). Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
                     return false;
                 }
                 if (_payload.buildType == "development" && string.IsNullOrEmpty(_payload.orgToken))
                     _payload.orgToken = _payload.appToken;
                 if (string.IsNullOrEmpty(_payload.orgToken))
                 {
-                    Debug.LogError("[AbxrLib] Organization Token is missing. Set it in config, connect via ArborXR device management service for a dynamic token, pass org_token in the URL (WebGL), use --org_token or arborxr_org_token.key (desktop), pass org_token as Android intent extra (APK), or set in config. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                     return false;
                 }
                 if (!LooksLikeJwt(_payload.orgToken))
                 {
-                    Debug.LogError("[AbxrLib] Organization Token does not look like a JWT (expected three dot-separated segments). Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                     return false;
                 }
             }
@@ -1003,17 +1003,17 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 if (string.IsNullOrEmpty(_payload.appId))
                 {
-                    Debug.LogError("[AbxrLib] Application ID is missing. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
                     return false;
                 }
                 if (string.IsNullOrEmpty(_payload.orgId))
                 {
-                    Debug.LogError("[AbxrLib] Organization ID is missing. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                     return false;
                 }
                 if (string.IsNullOrEmpty(_payload.authSecret))
                 {
-                    Debug.LogError("[AbxrLib] Authentication Secret is missing. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                     return false;
                 }
             }

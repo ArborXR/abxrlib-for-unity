@@ -99,14 +99,14 @@ namespace AbxrLib.Runtime.Core
                 if (string.IsNullOrEmpty(appToken))
                 {
                     if (PreferValidationWarnings)
-                        Debug.LogWarning("[AbxrLib] Configuration validation - appToken is required when using app tokens. Set App Token in AbxrLib configuration or authentication will fail at runtime.");
+                        Debug.LogWarning("[AbxrLib] Authentication error: App identification not set.");
                     else
-                        Debug.LogError("[AbxrLib] Configuration validation failed - appToken is required when using app tokens.");
+                        Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
                     return false;
                 }
                 if (!LooksLikeJwt(appToken))
                 {
-                    Debug.LogError("[AbxrLib] Configuration validation failed - appToken does not look like a JWT (expected three dot-separated segments).");
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
                     return false;
                 }
                 // Production (Custom APK) requires orgToken to be set and JWT-shaped
@@ -115,20 +115,20 @@ namespace AbxrLib.Runtime.Core
                     if (string.IsNullOrEmpty(orgToken))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("[AbxrLib] Configuration validation - Organization Token is required when Build Type is Production (Custom APK). Set the customer's org token in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Authentication error: Organization identification unavailable.");
                         else
-                            Debug.LogError("[AbxrLib] Configuration validation failed - Organization Token is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                         return false;
                     }
                     if (!LooksLikeJwt(orgToken))
                     {
-                        Debug.LogError("[AbxrLib] Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
+                        Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                         return false;
                     }
                 }
                 else if (!string.IsNullOrEmpty(orgToken) && !LooksLikeJwt(orgToken))
                 {
-                    Debug.LogError("[AbxrLib] Configuration validation failed - orgToken does not look like a JWT (expected three dot-separated segments).");
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                     return false;
                 }
             }
@@ -137,12 +137,12 @@ namespace AbxrLib.Runtime.Core
                 // Legacy mode: appID is required and must be valid format. orgID and authSecret can come from runtime — only validate format when set. Production (Custom APK) requires both.
                 if (string.IsNullOrEmpty(appID))
                 {
-                    Debug.LogError("[AbxrLib] Configuration validation failed - Application ID is required when not using app tokens.");
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
                     return false;
                 }
                 if (!Regex.IsMatch(appID, uuidPattern))
                 {
-                    Debug.LogError("[AbxrLib] Invalid Application ID format. Must be a valid UUID. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
                     return false;
                 }
                 if (buildType == "production_custom")
@@ -150,28 +150,28 @@ namespace AbxrLib.Runtime.Core
                     if (string.IsNullOrEmpty(orgID))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("[AbxrLib] Configuration validation - Organization ID is required when Build Type is Production (Custom APK) with legacy auth. Set the customer's org ID in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Authentication error: Organization identification unavailable.");
                         else
-                            Debug.LogError("[AbxrLib] Configuration validation failed - Organization ID is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                         return false;
                     }
                     if (string.IsNullOrEmpty(authSecret) || string.IsNullOrWhiteSpace(authSecret))
                     {
                         if (PreferValidationWarnings)
-                            Debug.LogWarning("[AbxrLib] Configuration validation - Authorization Secret is required when Build Type is Production (Custom APK) with legacy auth. Set it in AbxrLib configuration.");
+                            Debug.LogWarning("[AbxrLib] Authentication error: Organization identification unavailable.");
                         else
-                            Debug.LogError("[AbxrLib] Configuration validation failed - Authorization Secret is required when Build Type is Production (Custom APK).");
+                            Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                         return false;
                     }
                 }
                 if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
                 {
-                    Debug.LogError("[AbxrLib] Invalid Organization ID format. Must be a valid UUID. Cannot authenticate.");
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                     return false;
                 }
                 if (!string.IsNullOrEmpty(authSecret) && string.IsNullOrWhiteSpace(authSecret))
                 {
-                    Debug.LogError("[AbxrLib] Configuration validation failed - authSecret cannot be empty if set");
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
                     return false;
                 }
             }

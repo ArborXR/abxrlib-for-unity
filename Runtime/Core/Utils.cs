@@ -407,7 +407,7 @@ namespace AbxrLib.Runtime.Core
                 // Single appToken (App Token) required
                 if (string.IsNullOrEmpty(config.appToken))
                 {
-                    result.errorMessage = "App Token (appToken) is not set.";
+                    result.errorMessage = "Authentication error: App identification not set.";
                     return result;
                 }
                 result.appToken = config.appToken;
@@ -423,7 +423,7 @@ namespace AbxrLib.Runtime.Core
                 // Single appId required
                 if (string.IsNullOrEmpty(config.appID))
                 {
-                    result.errorMessage = "Application ID (appID) is not set.";
+                    result.errorMessage = "Authentication error: App identification not set.";
                     return result;
                 }
 

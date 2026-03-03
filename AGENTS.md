@@ -70,7 +70,7 @@ AIDL → ArborInsightsClient (separate APK)
 
 ## How This Repo Works With Other Projects
 
-- **ArborInsightsClient:** This repo consumes the **client AAR** and (on device) the **service APK**. Both are supplied externally. On Android, `ArborInsightsClient` binds to the service via the AAR’s Java bridge. Do not assume access to the service’s source repo; guidance in this file is from the consumer’s perspective only.
+- **ArborInsightsClient:** This repo consumes the **client AAR** and (on device) the **service APK**. Both are supplied externally. On Android, `ArborInsightsClient` binds to the service via the AAR’s Java bridge. The device service runs as package **`app.xrdi.client`** with component **`InsightsService`**. Do not assume access to the service’s source repo; guidance in this file is from the consumer’s perspective only.
 - **abxrlib-for-unity-demo-app:** Consumes this package (git URL or local); demonstrates integration and optional use of the device service on Android when the AAR and APK are available.
 
 ## Build and Usage (for app developers)
@@ -89,7 +89,7 @@ AIDL → ArborInsightsClient (separate APK)
 - **Auth fails / wrong orgId or authSecret:** Confirm Unity Configuration (AbxrLib.asset) and buildType; remember GetArborData() can override with ArborXR SDK when connected.
 - **Empty app_id / org_id / auth_secret or HTTP 422:** Check GetConfigData()/GetArborData() and that Configuration or ArborXR SDK is providing values; inspect auth payload in logs.
 - **App/org token validation (useAppTokens):** Ensure appToken and orgToken are valid JWTs (three dot-separated segments). For production_custom, orgToken is required. Development can use app token as org token if org token is empty.
-- **Service “not ready” or bind fails on Android:** Ensure the ArborInsightsClient APK is installed and the client AAR in `Plugins/Android/` matches that service version (AAR must support set_OrgToken when using app tokens). Check logcat for `ArborInsightsClient` and `[AbxrLib]`.
+- **Service “not ready” or bind fails on Android:** Ensure the ArborInsightsClient APK is installed and the client AAR in `Plugins/Android/` matches that service version (AAR must support set_OrgToken when using app tokens). Check logcat for `ArborInsightsClient`, `[AbxrLib]`, and the service package `app.xrdi.client`.
 - **Missing AAR:** If you see “bridge not initialized” or “AAR may be missing”, add the client AAR (e.g. `insights-client-service.aar`) to `Plugins/Android/`. Obtain it from your distribution channel; it is not built in this repo.
 
 ## StartNewSession
