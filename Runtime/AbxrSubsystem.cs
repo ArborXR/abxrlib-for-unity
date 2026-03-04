@@ -1101,7 +1101,7 @@ internal void StartNewSession()
 			// If LMS modules exist, inject current module metadata unless the event already specifies it.
 			// (Data-specific metadata takes precedence.)
 			var modules = _authService.ResponseData?.Modules;
-			if (modules?.Count > 0 && _currentModuleIndex < modules.Count)
+			if (modules?.Count > 0 && _currentModuleIndex >= 0 && _currentModuleIndex < modules.Count)
 			{
 				ModuleData moduleData = modules[_currentModuleIndex];
 				// these are potentially sharing developer private information. Disabling for now
@@ -1276,7 +1276,7 @@ internal void StartNewSession()
 			if (startTimes.ContainsKey(name))
 			{
 				double duration = (DateTime.UtcNow - startTimes[name]).TotalSeconds; //TODO do we want seconds?
-				meta["duration"] = duration.ToString();
+				meta["duration"] = duration.ToString(System.Globalization.CultureInfo.InvariantCulture);
 				startTimes.Remove(name);
 			}
 			else
@@ -1367,8 +1367,8 @@ internal void StartNewSession()
 		
         private void SendAll()
         {
-	        _dataService.ForceSend();
-	        _storageService.ForceSend();
+	        _dataService?.ForceSend();
+	        _storageService?.ForceSend();
         }
 		
 		[Serializable]

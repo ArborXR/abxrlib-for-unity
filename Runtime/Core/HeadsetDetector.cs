@@ -15,7 +15,6 @@ namespace AbxrLib.Runtime.Core
         private const string ContinueSessionString = "Yes, I'd like to continue the current session.";
     
         private bool _sensorStatus = true;
-        private float _nextCheckAt;
         private Coroutine _checkCoroutine;
         private readonly MonoBehaviour _runner;
         private readonly AbxrAuthService _authService;
@@ -43,13 +42,12 @@ namespace AbxrLib.Runtime.Core
                 return;
             }
             
-            _nextCheckAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
             _checkCoroutine = _runner.StartCoroutine(CheckCoroutine());
         }
 
         public void Stop()
         {
-            if (_checkCoroutine != null)
+            if (_checkCoroutine != null && _runner != null)
             {
                 _runner.StopCoroutine(_checkCoroutine);
                 _checkCoroutine = null;
@@ -61,21 +59,16 @@ namespace AbxrLib.Runtime.Core
             while (true)
             {
                 yield return CheckInterval;
-                if (Time.time >= _nextCheckAt)
+                bool currentStatus = CheckProximitySensor();
+                if (_sensorStatus && !currentStatus)
                 {
-                    bool currentStatus = CheckProximitySensor();
-                    if (_sensorStatus && !currentStatus)
-                    {
-                        OnHeadsetRemovedDetected();
-                    }
-                    else if (!_sensorStatus && currentStatus)
-                    {
-                        OnHeadsetPutOnDetected(); // instance method so callback has access to _authService
-                    }
-            
-                    _sensorStatus = currentStatus;
-                    _nextCheckAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
+                    OnHeadsetRemovedDetected();
                 }
+                else if (!_sensorStatus && currentStatus)
+                {
+                    OnHeadsetPutOnDetected(); // instance method so callback has access to _authService
+                }
+                _sensorStatus = currentStatus;
             }
         }
     

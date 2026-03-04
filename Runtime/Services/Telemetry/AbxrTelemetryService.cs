@@ -53,25 +53,27 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 Debug.LogWarning($"[AbxrLib] TrackInputDevices - Failed to initialize XR device tracking: {ex.Message}");
             }
 
+            var sysInfoWait = new WaitForSeconds(Configuration.Instance.telemetryTrackingPeriodSeconds);
+            var locationWait = new WaitForSeconds(Configuration.Instance.positionTrackingPeriodSeconds);
             _coroutines = new List<Coroutine>();
-            _coroutines.Add(_runner.StartCoroutine(SystemInfoLoop()));
+            _coroutines.Add(_runner.StartCoroutine(SystemInfoLoop(sysInfoWait)));
             if (Configuration.Instance.headsetTracking)
             {
-                _coroutines.Add(_runner.StartCoroutine(LocationDataLoop()));
+                _coroutines.Add(_runner.StartCoroutine(LocationDataLoop(locationWait)));
                 _coroutines.Add(_runner.StartCoroutine(TriggerCheckLoop()));
             }
         }
 
         public void Stop()
         {
-            if (_coroutines != null)
+            if (_coroutines != null && _runner != null)
             {
                 foreach (var coroutine in _coroutines)
                 {
                     if (coroutine != null) _runner.StopCoroutine(coroutine);
                 }
-                _coroutines = null;
             }
+            _coroutines = null;
 
             InputDevices.deviceConnected -= RegisterDevice;
             
@@ -80,21 +82,21 @@ namespace AbxrLib.Runtime.Services.Telemetry
             _hmd = default;
         }
 
-        private IEnumerator SystemInfoLoop()
+        private IEnumerator SystemInfoLoop(WaitForSeconds wait)
         {
             while (true)
             {
                 RecordSystemInfo();
-                yield return new WaitForSeconds(Configuration.Instance.telemetryTrackingPeriodSeconds);
+                yield return wait;
             }
         }
-        
-        private IEnumerator LocationDataLoop()
+
+        private IEnumerator LocationDataLoop(WaitForSeconds wait)
         {
             while (true)
             {
                 RecordLocationData();
-                yield return new WaitForSeconds(Configuration.Instance.positionTrackingPeriodSeconds);
+                yield return wait;
             }
         }
         
