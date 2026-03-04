@@ -34,6 +34,7 @@ namespace AbxrLib.Runtime.Services.Auth
         // ── Constants ────────────────────────────────────────────────
         private const float ReAuthPollSeconds = 60f;
         private const int ReAuthThresholdSeconds = 120;
+        private static readonly WaitForSeconds ReAuthWait = new WaitForSeconds(ReAuthPollSeconds);
 
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
@@ -247,7 +248,7 @@ namespace AbxrLib.Runtime.Services.Auth
         
         public void StopReAuthPolling()
         {
-            if (_reAuthCoroutine != null)
+            if (_reAuthCoroutine != null && _runner != null)
             {
                 _runner.StopCoroutine(_reAuthCoroutine);
                 _reAuthCoroutine = null;
@@ -258,7 +259,9 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _stopping = true;
             StopReAuthPolling();
-            if (_retryCoroutine != null) _runner.StopCoroutine(_retryCoroutine);
+            if (_retryCoroutine != null && _runner != null)
+                _runner.StopCoroutine(_retryCoroutine);
+            _retryCoroutine = null;
             _attemptActive = false;
         }
         
@@ -506,7 +509,7 @@ namespace AbxrLib.Runtime.Services.Auth
             // When using ArborInsightsClient for data, re-auth is the service's responsibility; exit the loop.
             while (!_stopping && !UsingArborInsightsClientForData())
             {
-                yield return new WaitForSeconds(ReAuthPollSeconds);
+                yield return ReAuthWait;
 
                 if (_tokenExpiry == DateTime.MinValue || _attemptActive) continue;
                 if (_tokenExpiry - DateTime.UtcNow <= TimeSpan.FromSeconds(ReAuthThresholdSeconds))
@@ -976,7 +979,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 _tokenExpiry = DateTime.UtcNow.AddHours(24);
                 Debug.Log($"[AbxrLib] Auth handoff successful. Modules: {ResponseData.Modules?.Count ?? 0}");
                 _sessionUsedAuthHandoff = true;
-                OnSucceeded?.Invoke();
+                StartReAuthPolling();
+                AuthSucceeded();
                 return true;
             }
             

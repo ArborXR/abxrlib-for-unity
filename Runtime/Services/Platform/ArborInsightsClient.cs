@@ -83,10 +83,10 @@ namespace AbxrLib.Runtime.Services.Platform
 		}
 
 		public static void Unbind() { if (_client != null) _client.Call("unbind"); }
-		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) => _client.Call<int>("basicTypes", anInt, aLong, aBoolean, aFloat, aDouble, aString);
-		public static string WhatTimeIsIt() => _client.Call<string>("whatTimeIsIt");
-		public static bool IsServiceBound() => _client.Call<bool>("isServiceBound");
-		public static bool IsServiceAvailable() => _client.Call<bool>("isServiceAvailable");
+		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) { if (_client != null) _client.Call<int>("basicTypes", anInt, aLong, aBoolean, aFloat, aDouble, aString); }
+		public static string WhatTimeIsIt() => _client != null ? _client.Call<string>("whatTimeIsIt") : null;
+		public static bool IsServiceBound() => _client != null && _client.Call<bool>("isServiceBound");
+		public static bool IsServiceAvailable() => _client != null && _client.Call<bool>("isServiceAvailable");
 		/// <summary>True if the service reports fully initialized. Never throws; returns false if the bridge is unavailable or JNI fails.</summary>
 		public static bool ServiceIsFullyInitialized()
 		{
@@ -95,8 +95,8 @@ namespace AbxrLib.Runtime.Services.Platform
 			catch { return false; }
 		}
 		// --- API code.
-		public static void AbxrLibInitStart() => _client.Call<int>("abxrLibInitStart");
-		public static void AbxrLibInitEnd() => _client.Call<int>("abxrLibInitEnd");
+		public static void AbxrLibInitStart() { if (_client != null) _client.Call<int>("abxrLibInitStart"); }
+		public static void AbxrLibInitEnd() { if (_client != null) _client.Call<int>("abxrLibInitEnd"); }
 		// ---
 		public static String AuthRequest(String szUserId, String dictAdditionalUserData)
 		{

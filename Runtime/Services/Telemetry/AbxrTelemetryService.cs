@@ -23,6 +23,10 @@ namespace AbxrLib.Runtime.Services.Telemetry
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _rightTriggerValues = new();
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _leftTriggerValues = new();
 
+        // Cached once at class load: avoids reflection overhead every 10 s
+        private static readonly bool _hasLongMemoryApi =
+            typeof(UnityEngine.Profiling.Profiler).GetMethod("GetTotalAllocatedMemoryLong") != null;
+
         // Reused to avoid allocations in telemetry hot paths
         private readonly Dictionary<string, string> _batteryData = new Dictionary<string, string>(2);
         private readonly Dictionary<string, string> _memoryData = new Dictionary<string, string>(4);
@@ -115,20 +119,16 @@ namespace AbxrLib.Runtime.Services.Telemetry
             _memoryData.Clear();
             try
             {
-                // Check if newer Profiler methods are available (Unity 2020.1+)
-                var profilerType = typeof(UnityEngine.Profiling.Profiler);
-                var getTotalAllocatedMethod = profilerType.GetMethod("GetTotalAllocatedMemoryLong");
-                
-                if (getTotalAllocatedMethod != null)
+                if (_hasLongMemoryApi)
                 {
-                    // Use newer methods (Unity 2020.1+)
+                    // Unity 2020.1+
                     _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
                     _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
                     _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
                 }
                 else
                 {
-                    // Fallback to older methods (Unity 2019.x and earlier)
+                    // Unity 2019.x and earlier
                     _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemory() / 1000000 + " MB";
                     _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemory() / 1000000 + " MB";
                 }

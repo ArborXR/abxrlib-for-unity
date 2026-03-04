@@ -68,9 +68,12 @@ namespace AbxrLib.Runtime
 	
         // Track whether any assessment has been started (either DEFAULT or user-initiated)
         private static bool _assessmentStarted;
-        
+
         public static readonly long StartTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        
+
+        private static readonly WaitForSecondsRealtime TransportPollWait = new WaitForSecondsRealtime(0.25f);
+        private static readonly WaitForSecondsRealtime AuthStartPollWait = new WaitForSecondsRealtime(0.1f);
+
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
 
@@ -186,6 +189,8 @@ namespace AbxrLib.Runtime
             _telemetryService?.Stop();
             _sceneChangeDetector?.Stop();
             _headsetDetector?.Stop();
+            if (_transport is AbxrTransportRest rest)
+                rest.Stop();
 #if UNITY_ANDROID && !UNITY_EDITOR
             _arborMdmClient?.Shutdown();
             _arborInsightsClient?.Stop();
@@ -251,7 +256,7 @@ namespace AbxrLib.Runtime
                 yield break;
             }
             for (int i = 0; i < waitAttempts && !ArborInsightsClient.ServiceIsFullyInitialized(); i++)
-                yield return new WaitForSecondsRealtime(waitSeconds);
+                yield return TransportPollWait;
             if (ArborInsightsClient.ServiceIsFullyInitialized())
                 SwitchToArborInsightsTransport();
             _transportSelectionComplete = true;
@@ -270,7 +275,7 @@ namespace AbxrLib.Runtime
         private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds)
         {
             while (!_transportSelectionComplete)
-                yield return new WaitForSecondsRealtime(0.1f);
+                yield return AuthStartPollWait;
             if (delaySeconds > 0)
                 yield return new WaitForSeconds(delaySeconds);
             DoAuthenticate();

@@ -10,6 +10,7 @@ namespace AbxrLib.Runtime.Core
     public class HeadsetDetector
     {
         private const float CheckIntervalSeconds = 1f;
+        private static readonly WaitForSeconds CheckInterval = new WaitForSeconds(CheckIntervalSeconds);
         private const string NewSessionString = "No, I need to log in as someone else.";
         private const string ContinueSessionString = "Yes, I'd like to continue the current session.";
     
@@ -17,7 +18,7 @@ namespace AbxrLib.Runtime.Core
         private float _nextCheckAt;
         private Coroutine _checkCoroutine;
         private readonly MonoBehaviour _runner;
-        private static AbxrAuthService _authService;
+        private readonly AbxrAuthService _authService;
 
         public HeadsetDetector(AbxrAuthService authService, MonoBehaviour runner)
         {
@@ -59,7 +60,7 @@ namespace AbxrLib.Runtime.Core
         {
             while (true)
             {
-                yield return new WaitForSeconds(CheckIntervalSeconds);
+                yield return CheckInterval;
                 if (Time.time >= _nextCheckAt)
                 {
                     bool currentStatus = CheckProximitySensor();
@@ -69,7 +70,7 @@ namespace AbxrLib.Runtime.Core
                     }
                     else if (!_sensorStatus && currentStatus)
                     {
-                        OnHeadsetPutOnDetected();
+                        OnHeadsetPutOnDetected(); // instance method so callback has access to _authService
                     }
             
                     _sensorStatus = currentStatus;
@@ -204,7 +205,7 @@ namespace AbxrLib.Runtime.Core
     
         private static void OnHeadsetRemovedDetected() { }
     
-        private static void OnHeadsetPutOnDetected()
+        private void OnHeadsetPutOnDetected()
         {
             // Don't bother asking if they aren't acting on this event
             if (Abxr.OnHeadsetPutOnNewSession == null) return;
@@ -215,13 +216,13 @@ namespace AbxrLib.Runtime.Core
                 NewSessionCheck);
         }
 
-        private static void NewSessionCheck(string response)
+        private void NewSessionCheck(string response)
         {
             if (response == NewSessionString)
             {
                 try
                 {
-                    _authService.Authenticate();
+                    _authService?.Authenticate();
                     Abxr.OnHeadsetPutOnNewSession?.Invoke();
                 }
                 catch (System.Exception ex)
