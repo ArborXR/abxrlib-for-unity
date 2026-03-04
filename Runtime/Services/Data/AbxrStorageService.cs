@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Types;
@@ -49,6 +50,72 @@ namespace AbxrLib.Runtime.Services.Data
 		}
 		
 		public void ForceSend() => _nextSendAt = 0; // Send on the next update
+
+		/// <summary>
+		/// Synchronously sends all currently pending storage data (e.g. for EndSession). Blocks until the HTTP request completes or retries are exhausted.
+		/// When using ArborInsightsClient, just clears the queue (storage is sent at add time).
+		/// </summary>
+		internal void FlushSync()
+		{
+			List<StoragePayload> storagesToSend;
+			lock (_lock)
+			{
+				if (_payloads.Count == 0)
+					return;
+				storagesToSend = new List<StoragePayload>(_payloads);
+				_payloads.Clear();
+			}
+
+			if (_authService.UsingArborInsightsClientForData())
+				return;
+
+			if (!_authService.Authenticated)
+				return;
+
+			int maxRetries = Configuration.Instance.sendRetriesOnFailure;
+			int retryCount = 0;
+			while (retryCount <= maxRetries)
+			{
+				UnityWebRequest request = null;
+				try
+				{
+					var wrapper = new StoragePayloadWrapper { data = storagesToSend };
+					string json = JsonConvert.SerializeObject(wrapper);
+					request = new UnityWebRequest(_uri, "POST");
+					Utils.BuildRequest(request, json);
+					_authService.SetAuthHeaders(request, json);
+					request.timeout = Configuration.Instance.requestTimeoutSeconds;
+
+					var op = request.SendWebRequest();
+					while (!op.isDone)
+						Thread.Sleep(5);
+
+					if (request.result == UnityWebRequest.Result.Success)
+						return;
+
+					string lastError = HandleStorageNetworkError(request);
+					if (!IsStorageRetryableError(request) || retryCount >= maxRetries)
+					{
+						Debug.LogError($"[AbxrLib] Storage FlushSync failed after {retryCount + 1} attempt(s): {lastError}");
+						return;
+					}
+					retryCount++;
+					Thread.Sleep((int)(Configuration.Instance.sendRetryIntervalSeconds * 1000));
+				}
+				catch (Exception ex)
+				{
+					Debug.LogError($"[AbxrLib] Storage FlushSync failed: {ex.Message}");
+					if (!IsStorageRetryableException(ex) || retryCount >= maxRetries)
+						return;
+					retryCount++;
+					Thread.Sleep((int)(Configuration.Instance.sendRetryIntervalSeconds * 1000));
+				}
+				finally
+				{
+					request?.Dispose();
+				}
+			}
+		}
 
 		/// <summary>
 		/// Clears all pending storage payloads from the in-memory queue. Used when starting a new session so no previous-session data is sent.

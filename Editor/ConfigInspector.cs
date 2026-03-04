@@ -225,6 +225,31 @@ namespace AbxrLib.Editor
                 EditorGUI.indentLevel--;
             }
 
+            const string UnitTestCredentialsKey = "AbxrLib.ConfigInspector.unitTestConfigEnabled";
+            bool unitTestConfigEnabled = EditorPrefs.GetBool(UnitTestCredentialsKey, config.unitTestConfigEnabled);
+            unitTestConfigEnabled = EditorGUILayout.Toggle("Unit Test Credentials (Editor only)", unitTestConfigEnabled);
+            EditorPrefs.SetBool(UnitTestCredentialsKey, unitTestConfigEnabled);
+            if (config.unitTestConfigEnabled != unitTestConfigEnabled)
+            {
+                config.unitTestConfigEnabled = unitTestConfigEnabled;
+                EditorUtility.SetDirty(config);
+            }
+
+            if (unitTestConfigEnabled)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField("When enabled, PlayMode tests that trigger auth input (e.g. PIN or email) will auto-respond using the values below so tests don't block waiting for user input.", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.EndVertical();
+                config.unitTestAuthText = EditorGUILayout.TextField(new GUIContent(
+                    "Text / default", "Used when auth type is text or unknown."), config.unitTestAuthText);
+                config.unitTestAuthEmail = EditorGUILayout.TextField(new GUIContent(
+                    "Email", "Used when auth requests type \"email\"."), config.unitTestAuthEmail);
+                config.unitTestAuthPin = EditorGUILayout.TextField(new GUIContent(
+                    "PIN / assessment PIN", "Used when auth requests type \"pin\" or \"assessmentPin\"."), config.unitTestAuthPin);
+                EditorGUI.indentLevel--;
+            }
+
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
                 // Create a temporary instance to get the default values
