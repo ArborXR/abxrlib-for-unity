@@ -222,6 +222,9 @@ namespace AbxrLib.Editor
 
                 config.enableArborMdmClient = EditorGUILayout.Toggle(new GUIContent(
                     "Enable ArborMdmClient", "When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only."), config.enableArborMdmClient);
+
+                config.enableLearnerLauncherMode = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable Auth Learner Launcher Mode", "When enabled, auth mechanism from the API is overridden to assessmentPin with prompt \"LMS PIN\" unless it is already assessmentPin. Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false."), config.enableLearnerLauncherMode);
                 EditorGUI.indentLevel--;
             }
 
@@ -271,6 +274,7 @@ namespace AbxrLib.Editor
                 config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
                 config.enableArborInsightsClient = defaultConfig.enableArborInsightsClient;
                 config.enableArborMdmClient = defaultConfig.enableArborMdmClient;
+                config.enableLearnerLauncherMode = defaultConfig.enableLearnerLauncherMode;
                 config.enableAutomaticTelemetry = defaultConfig.enableAutomaticTelemetry;
                 config.enableSceneEvents = defaultConfig.enableSceneEvents;
                 

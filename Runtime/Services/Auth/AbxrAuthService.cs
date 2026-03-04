@@ -497,6 +497,11 @@ namespace AbxrLib.Runtime.Services.Auth
                         Configuration.Instance.ApplyConfigPayload(config);
                         _authMechanism = config.authMechanism ?? new AuthMechanism();
                         if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
+                        if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_authMechanism?.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _authMechanism.type = "assessmentPin";
+                            _authMechanism.prompt = "LMS PIN";
+                        }
                         string authType = _authMechanism?.type ?? "";
                         if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
                             Debug.Log($"[AbxrLib] User Authentication Required. Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
