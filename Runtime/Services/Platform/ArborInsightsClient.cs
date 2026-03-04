@@ -552,13 +552,21 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void SetAuthPayloadForRequest(string restUrl, AuthPayload data)
 		{
 			set_RestUrl(restUrl ?? "https://lib-backend.xrdm.app/");
-			if (!string.IsNullOrEmpty(data.appId)) set_AppID(data.appId);
-			if (!string.IsNullOrEmpty(data.orgId)) set_OrgID(data.orgId);
-			if (!string.IsNullOrEmpty(data.authSecret)) set_AuthSecret(data.authSecret);
-			if (!string.IsNullOrEmpty(data.appToken)) set_AppToken(data.appToken);
-			if (!string.IsNullOrEmpty(data.orgToken)) set_OrgToken(data.orgToken);
-			if (!string.IsNullOrEmpty(data.SSOAccessToken)) set_SSOAccessToken(data.SSOAccessToken);
+			// Send one mode only: app tokens OR legacy (app_id/org_id/auth_secret), never both.
+			bool useAppTokens = !string.IsNullOrEmpty(data.appToken);
+			if (useAppTokens)
+			{
+				if (!string.IsNullOrEmpty(data.appToken)) set_AppToken(data.appToken);
+				if (!string.IsNullOrEmpty(data.orgToken)) set_OrgToken(data.orgToken);
+			}
+			else
+			{
+				if (!string.IsNullOrEmpty(data.appId)) set_AppID(data.appId);
+				if (!string.IsNullOrEmpty(data.orgId)) set_OrgID(data.orgId);
+				if (!string.IsNullOrEmpty(data.authSecret)) set_AuthSecret(data.authSecret);
+			}
 			if (!string.IsNullOrEmpty(data.buildType)) set_BuildType(data.buildType);
+			if (!string.IsNullOrEmpty(data.SSOAccessToken)) set_SSOAccessToken(data.SSOAccessToken);
 			if (!string.IsNullOrEmpty(data.deviceId)) set_DeviceID(data.deviceId);
 			if (!string.IsNullOrEmpty(data.userId)) set_UserID(data.userId);
 			int partner = string.Equals(data.partner, "arborxr", StringComparison.OrdinalIgnoreCase) ? 1 : 0;

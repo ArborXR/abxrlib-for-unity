@@ -357,6 +357,19 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
+                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret).
+                if (Configuration.Instance.useAppTokens)
+                {
+                    _payload.appId = null;
+                    _payload.orgId = null;
+                    _payload.authSecret = null;
+                }
+                else
+                {
+                    _payload.appToken = null;
+                    _payload.orgToken = null;
+                }
+
                 var holder = new AuthRequestResultHolder();
                 yield return transport.AuthRequestCoroutine(_payload, (ok, json, code) =>
                 {
