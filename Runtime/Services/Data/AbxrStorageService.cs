@@ -11,44 +11,22 @@ namespace AbxrLib.Runtime.Services.Data
     public class AbxrStorageService
     {
         private readonly AbxrAuthService _authService;
-        private readonly MonoBehaviour _runner;
         private readonly Func<IAbxrTransport> _getTransport;
-        private Coroutine _tickCoroutine;
-        private static readonly WaitForSeconds WaitQuarterSecond = new WaitForSeconds(0.25f);
 
         internal AbxrStorageService(AbxrAuthService authService, MonoBehaviour runner, Func<IAbxrTransport> getTransport)
         {
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
-            _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+            _ = runner ?? throw new ArgumentNullException(nameof(runner));
             _getTransport = getTransport ?? throw new ArgumentNullException(nameof(getTransport));
         }
 
-        public void Start()
-        {
-            _tickCoroutine = _runner.StartCoroutine(TickCoroutine());
-        }
-
-        public void Stop()
-        {
-            if (_tickCoroutine != null)
-            {
-                _runner.StopCoroutine(_tickCoroutine);
-                _tickCoroutine = null;
-            }
-        }
+        // AbxrTransportRest manages its own send schedule via its internal tick coroutine.
+        public void Start() { }
+        public void Stop() { }
 
         public void ForceSend() => _getTransport()?.ForceSend();
 
         public void ClearAllPending() => _getTransport()?.ClearAllPending();
-
-        private IEnumerator TickCoroutine()
-        {
-            while (true)
-            {
-                yield return WaitQuarterSecond;
-                _getTransport()?.ForceSend();
-            }
-        }
 
         public void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
         {

@@ -16,31 +16,18 @@ namespace AbxrLib.Runtime.Services.Data
     public class AbxrDataService
     {
         private readonly AbxrAuthService _authService;
-        private readonly MonoBehaviour _runner;
         private readonly Func<IAbxrTransport> _getTransport;
-        private Coroutine _tickCoroutine;
-        private static readonly WaitForSeconds WaitQuarterSecond = new WaitForSeconds(0.25f);
 
         internal AbxrDataService(AbxrAuthService authService, MonoBehaviour coroutineRunner, Func<IAbxrTransport> getTransport)
         {
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
-            _runner = coroutineRunner ?? throw new ArgumentNullException(nameof(coroutineRunner));
+            _ = coroutineRunner ?? throw new ArgumentNullException(nameof(coroutineRunner));
             _getTransport = getTransport ?? throw new ArgumentNullException(nameof(getTransport));
         }
 
-        public void Start()
-        {
-            _tickCoroutine = _runner.StartCoroutine(TickCoroutine());
-        }
-
-        public void Stop()
-        {
-            if (_tickCoroutine != null)
-            {
-                _runner.StopCoroutine(_tickCoroutine);
-                _tickCoroutine = null;
-            }
-        }
+        // AbxrTransportRest manages its own send schedule via its internal tick coroutine.
+        public void Start() { }
+        public void Stop() { }
 
         public void ForceSend() => _getTransport()?.ForceSend();
 
@@ -48,15 +35,6 @@ namespace AbxrLib.Runtime.Services.Data
         /// Clears all pending events, telemetry, and logs. Used when starting a new session.
         /// </summary>
         public void ClearAllPendingBatches() => _getTransport()?.ClearAllPending();
-
-        private IEnumerator TickCoroutine()
-        {
-            while (true)
-            {
-                yield return WaitQuarterSecond;
-                _getTransport()?.ForceSend();
-            }
-        }
 
         public void AddEvent(string name, Dictionary<string, string> meta)
         {
