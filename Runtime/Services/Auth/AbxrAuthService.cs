@@ -639,14 +639,26 @@ namespace AbxrLib.Runtime.Services.Auth
             if (s.useAppTokens)
             {
                 _payload.appToken = s.appToken;
-                _payload.orgToken = s.orgToken;
+                // Production: org token must come from runtime (MDM, intent, query), not config — match ExtractConfigData behavior so Editor/standalone fail when no runtime source.
+                _payload.orgToken = string.Equals(s.buildType, "production", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : s.orgToken;
                 _payload.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
             }
             else
             {
                 _payload.appId = s.appID;
-                _payload.orgId = s.orgID;
-                _payload.authSecret = s.authSecret;
+                // Production (non–custom): orgId/authSecret must come from runtime (MDM), not config — match ExtractConfigData so Editor/standalone fail when no runtime source.
+                if (string.Equals(s.buildType, "production", StringComparison.OrdinalIgnoreCase))
+                {
+                    _payload.orgId = null;
+                    _payload.authSecret = null;
+                }
+                else
+                {
+                    _payload.orgId = s.orgID;
+                    _payload.authSecret = s.authSecret;
+                }
                 _payload.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
             }
         }
