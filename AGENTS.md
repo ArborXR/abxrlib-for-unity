@@ -46,17 +46,26 @@ AIDL → ArborInsightsClient (separate APK)
 - **Initialize:** `Initialize.OnBeforeSceneLoad()` attaches `ArborMdmClient` and `ArborInsightsClient` only when `UNITY_ANDROID && !UNITY_EDITOR`. In `AbxrSubsystem.Awake()`, the bridge’s Init and Bind are started **before** creating `AbxrAuthService`, so the scene can load without blocking. Auth runs in a coroutine that waits for `ServiceIsFullyInitialized()` (up to 40 × 0.25 s) only when the ArborInsightsClient APK is installed; when ready, auth payload (including appToken/orgToken when useAppTokens) is pushed to the service and `AuthRequest()` is called. If the service is not installed, `IsServicePackageInstalled()` is false and the app uses the built-in REST path immediately.
 - **Auth/config:** When the service is used, auth runs through the service (same flow as standalone: first auth, then config, then optional second auth with user input). Data sources: `GetConfigData()` from Unity `Configuration.Instance`, `GetArborData()` can override with ArborXR SDK values when connected.
 
+### Transport abstraction
+
+- **IAbxrTransport** – Single abstraction for sending auth, config, data (events/telemetry/logs), and storage. Two implementations: **AbxrTransportRest** (UnityWebRequest, queues and batch POST) and **AbxrTransportArborInsights** (wraps ArborInsightsClient; Android only).
+- **Subsystem** holds `_transport` (volatile for cross-thread visibility when callers use the getter from another thread). At Awake it is set to `AbxrTransportRest`. On Android when `enableArborInsightsClient`, a coroutine waits for `ArborInsightsClient.ServiceIsFullyInitialized()` (e.g. 40 × 0.25 s); when ready, **SwitchToArborInsightsTransport()** replaces `_transport` with `AbxrTransportArborInsights`. Auth, data, and storage services receive a getter so they always use the current transport.
+- **First auth gated on transport selection:** If "Enable auto start authentication" is on, the first auth does not run until the transport-selection coroutine has finished (swap to service or leave REST). So the first auth always uses the correct backend.
+- **Credentials:** Token/Secret and `Abxr.GetAuthResponse()` remain in `AbxrAuthService`; `AbxrTransportRest` gets auth headers via `AbxrAuthService.SetAuthHeaders()`.
+
 ### Initialization (this package)
 
 - **Runtime:** `Initialize.cs` uses `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]` to attach core components including `AbxrManager`, `AbxrAuthService`, data/telemetry services, `DeviceModel`, UI (ExitPoll, Keyboard, etc.); on Android build, also `ArborMdmClient`, `ArborInsightsClient`, `HeadsetDetector`, and optionally platform QR readers (Pico/Meta).
-- **Service readiness:** On Android, bind is started early in Awake (before creating the auth service). Auth runs in a coroutine and waits for `ServiceIsFullyInitialized()` (non-blocking, up to 40 × 0.25 s) only when `IsServicePackageInstalled()` is true, so the scene keeps loading. Init and readiness are handled by the client AAR and the service APK.
+- **Transport selection:** In `AbxrSubsystem.Awake`, `_transport` is set to `AbxrTransportRest`. On Android when `enableArborInsightsClient`, a coroutine waits for `ServiceIsFullyInitialized()` (up to 40 × 0.25 s); when ready, the subsystem switches to `AbxrTransportArborInsights`. Auto-start auth is gated on this selection so the first auth always uses the chosen transport.
+- **Service readiness:** On Android, bind is started early in Awake (before creating the auth service). Init and readiness are handled by the client AAR and the service APK.
 
 ## Key Files
 
 - **Entry / config:** `Runtime/Core/Initialize.cs`, `Runtime/Core/Configuration.cs`, `Runtime/Abxr.cs`, `Runtime/AbxrManager.cs`
-- **Auth:** `Runtime/Services/Auth/AbxrAuthService.cs` (device/user auth, session, GetConfigData/GetArborData, appToken/orgToken, optional keyboard UI; on Android pushes payload to service and calls AuthRequest when service is ready)
+- **Auth:** `Runtime/Services/Auth/AbxrAuthService.cs` (device/user auth, session, GetConfigData/GetArborData, appToken/orgToken, optional keyboard UI; uses current transport for auth/config)
+- **Transport:** `Runtime/Services/Transport/IAbxrTransport.cs`, `AbxrTransportRest.cs`, `AbxrTransportArborInsights.cs` (abstraction for REST vs ArborInsightsClient)
 - **Service client (Android):** `Runtime/Services/Platform/ArborInsightsClient.cs` (ArborInsightsServiceBridge in same file), `Runtime/Services/Platform/ArborMdmClient.cs`
-- **Data / storage / telemetry:** `Runtime/Services/Data/AbxrDataService.cs`, `Runtime/Services/Data/AbxrStorageService.cs`, `Runtime/Services/Telemetry/AbxrTelemetryService.cs`, `Runtime/Services/Telemetry/TrackObject.cs`
+- **Data / storage / telemetry:** `Runtime/Services/Data/AbxrDataService.cs`, `Runtime/Services/Data/AbxrStorageService.cs` (forward to current transport), `Runtime/Services/Telemetry/AbxrTelemetryService.cs`, `Runtime/Services/Telemetry/TrackObject.cs`
 - **UI:** `Runtime/UI/` (ExitPoll, Keyboard, DebugWindow, HandTrackingButtonSystem, etc.)
 - **Plugins:** `Plugins/Android/` (client AAR, e.g. `insights-client-service.aar`, containing the client bridge used by ArborInsightsClient; supplied separately, not built in this repo)
 
@@ -92,9 +101,10 @@ AIDL → ArborInsightsClient (separate APK)
 - **Service “not ready” or bind fails on Android:** Ensure the ArborInsightsClient APK is installed and the client AAR in `Plugins/Android/` matches that service version (AAR must support set_OrgToken when using app tokens). Check logcat for `ArborInsightsClient`, `[AbxrLib]`, and the service package `app.xrdi.client`.
 - **Missing AAR:** If you see “bridge not initialized” or “AAR may be missing”, add the client AAR (e.g. `insights-client-service.aar`) to `Plugins/Android/`. Obtain it from your distribution channel; it is not built in this repo.
 
-## StartNewSession
+## StartNewSession and EndSession
 
 - **`Abxr.StartNewSession()`** starts an entirely fresh session, equivalent to the user closing the app and reopening it from a session perspective. It: (1) clears all pending events, telemetry, logs, and storage from the in-memory batchers; (2) on Android when using ArborInsightsClient, unbinds then rebinds the service so the connection and service-side session are fresh; (3) clears all auth state (tokens, ResponseData, user data, session id, _usedArborInsightsClientForSession); (4) assigns a new session ID and runs authentication again. The ArborInsightsClient removes the client session from its map in `onUnbind` (after flushing unsent data), so a new bind gets a new `ClientSession` and clean batcher on the service side.
+- **`Abxr.EndSession()`** ends the current session without starting a new one. It calls the same internal handler as application quit: closes running events, flushes data (SendAll), calls transport OnQuit (REST: ForceSend; service: Unbind), clears pending batches/storage/super metadata and auth state. If the app later calls **`Abxr.StartAuthentication()`** while still using the ArborInsightsClient transport, the service transport checks `IsServiceBound()` and, if unbound (e.g. after EndSession), establishes a new bind and waits for the service to be ready before running auth. We still recommend **`Abxr.StartNewSession()`** when re-authenticating for a clean session; the rebind-on-auth path is for cases where the app does not call StartNewSession.
 
 ## Technical Notes
 
