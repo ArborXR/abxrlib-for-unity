@@ -224,6 +224,7 @@ namespace AbxrLib.Runtime
         {
 	        Debug.Log("[AbxrLib] Ending session: closing running events and flushing");
 	        CloseRunningEvents();
+	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync).
 	        SendAll();
             _transport?.OnQuit();
 	        _transport?.ClearAllPending();
