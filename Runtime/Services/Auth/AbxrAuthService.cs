@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
+using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
@@ -33,6 +34,7 @@ namespace AbxrLib.Runtime.Services.Auth
         // ── Constants ────────────────────────────────────────────────
         private const float ReAuthPollSeconds = 60f;
         private const int ReAuthThresholdSeconds = 120;
+        private static readonly WaitForSeconds ReAuthWait = new WaitForSeconds(ReAuthPollSeconds);
 
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
@@ -53,26 +55,26 @@ namespace AbxrLib.Runtime.Services.Auth
         
         private readonly MonoBehaviour _runner;
         private readonly ArborMdmClient _ArborMdmClient;
+        private Func<IAbxrTransport> _getTransport;
         
         private const string DeviceIdKey = "abxrlib_device_id";
         
         // Store entered email/text value for email and text auth methods
-        private static string _enteredAuthValue;
+        private string _enteredAuthValue;
         
         // Auth handoff for external launcher apps
         private bool _sessionUsedAuthHandoff;
 
         /// <summary>
         /// True only when we completed authentication via ArborInsightsClient this session.
-        /// Set once when auth succeeds through the service; never switches to true later.
-        /// Data (events, telemetry, logs) use the service only when this is true.
+        /// Set once when auth succeeds through the service transport. Used only to skip re-auth polling
+        /// (ReAuthPollCoroutine) when the service handles re-auth; data routing is via the transport, not this flag.
         /// </summary>
         private bool _usedArborInsightsClientForSession = false;
 
         /// <summary>
-        /// True when this session authenticated via ArborInsightsClient. When true, DataBatcher and
-        /// other data paths use the service only (no Unity HTTP). When false, we operate in standalone mode
-        /// for the whole session and do not switch to the service later.
+        /// True when this session authenticated via ArborInsightsClient. When true, re-auth polling is skipped
+        /// (the service handles token refresh). Data/events/telemetry/storage routing is via the current transport.
         /// </summary>
         public bool UsingArborInsightsClientForData() => _usedArborInsightsClientForSession;
 
@@ -114,6 +116,8 @@ namespace AbxrLib.Runtime.Services.Auth
             // Do not block on ArborInsightsClient here: bind is started before this constructor runs,
             // and auth waits for service ready in a coroutine so the scene can load without lag.
         }
+
+        internal void SetTransportGetter(Func<IAbxrTransport> getter) => _getTransport = getter;
         
         // ── Public API ───────────────────────────────────────────────
         
@@ -179,8 +183,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 Debug.LogWarning("[AbxrLib] Skipping user authentication.");
                 KeyboardHandler.Destroy();
                 AuthSucceeded();
+                return;
             }
-            
+
             KeyboardAuthenticate(input);
         }
         
@@ -243,7 +248,7 @@ namespace AbxrLib.Runtime.Services.Auth
         
         public void StopReAuthPolling()
         {
-            if (_reAuthCoroutine != null)
+            if (_reAuthCoroutine != null && _runner != null)
             {
                 _runner.StopCoroutine(_reAuthCoroutine);
                 _reAuthCoroutine = null;
@@ -254,7 +259,9 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _stopping = true;
             StopReAuthPolling();
-            if (_retryCoroutine != null) _runner.StopCoroutine(_retryCoroutine);
+            if (_retryCoroutine != null && _runner != null)
+                _runner.StopCoroutine(_retryCoroutine);
+            _retryCoroutine = null;
             _attemptActive = false;
         }
         
@@ -307,11 +314,9 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        // ── POST /v1/auth/token ──────────────────────────────────────
-
-        /// <summary>Holds the response body and status from a single REST auth attempt (used so coroutine can "return" it).</summary>
-        private class AuthResponseHolder
+        private class AuthRequestResultHolder
         {
+            public bool Success;
             public string Response;
             public long ResponseCode;
         }
@@ -329,10 +334,11 @@ namespace AbxrLib.Runtime.Services.Auth
             return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
         }
 
-        /// <summary>Attempts auth via service (when available) or REST. When withRetry is true, retries until success. When false (e.g. keyboard auth), one attempt only; on failure passes error message to callback.</summary>
+        /// <summary>Attempts auth via current transport. When withRetry is true, retries until success. When false (e.g. keyboard auth), one attempt only.</summary>
         private IEnumerator AuthRequestCoroutineWithError(Action<bool, string> onComplete, bool withRetry = true)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
+            if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
             _payload.authMechanism = CreateAuthMechanismDict();
@@ -344,57 +350,44 @@ namespace AbxrLib.Runtime.Services.Auth
             if (Abxr.GetIsAuthenticated())
                 _payload.SSOAccessToken = Abxr.GetAccessToken();
 
-            string json = JsonConvert.SerializeObject(_payload);
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
+            var transport = _getTransport();
 
             while (true)
             {
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
-                bool useService = false;
-#if UNITY_ANDROID && !UNITY_EDITOR
-                useService = Configuration.Instance.enableArborInsightsClient && ArborInsightsClient.ServiceIsFullyInitialized();
-                if (Configuration.Instance.enableArborInsightsClient && !useService && ArborInsightsClient.IsServicePackageInstalled())
+                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret).
+                if (Configuration.Instance.useAppTokens)
                 {
-                    const int waitAttempts = 40;
-                    const float waitSeconds = 0.25f;
-                    for (int i = 0; i < waitAttempts && !ArborInsightsClient.ServiceIsFullyInitialized() && !_stopping && _attemptActive; i++)
-                        yield return new WaitForSecondsRealtime(waitSeconds);
-                    useService = ArborInsightsClient.ServiceIsFullyInitialized();
-                }
-#endif
-
-                string responseJson = null;
-                if (useService)
-                {
-                    try
-                    {
-                        var config = Configuration.Instance;
-                        ArborInsightsClient.SetAuthPayloadForRequest(config.restUrl ?? "https://lib-backend.xrdm.app/", _payload);
-                        responseJson = ArborInsightsClient.AuthRequest(_payload.userId ?? "", Utils.DictToString(_payload.authMechanism));
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogError($"[AbxrLib] Failed to set service properties for auth: {ex.Message}");
-                    }
+                    _payload.appId = null;
+                    _payload.orgId = null;
+                    _payload.authSecret = null;
                 }
                 else
                 {
-                    var holder = new AuthResponseHolder();
-                    yield return SendAuthRequestRest(json, holder);
-                    responseJson = holder.Response;
-
-                    if (holder.ResponseCode >= 400 && holder.ResponseCode < 500)
-                    {
-                        _payload.buildType = savedBuildType;
-                        onComplete(false, ExtractAuthErrorMessage(responseJson));
-                        yield break;
-                    }
+                    _payload.appToken = null;
+                    _payload.orgToken = null;
                 }
 
-                if (ApplyAuthResponse(responseJson, fromService: useService))
+                var holder = new AuthRequestResultHolder();
+                yield return transport.AuthRequestCoroutine(_payload, (ok, json, code) =>
                 {
-                    if (useService)
+                    holder.Success = ok;
+                    holder.Response = json;
+                    holder.ResponseCode = code;
+                });
+
+                if (holder.ResponseCode >= 400 && holder.ResponseCode < 500)
+                {
+                    _payload.buildType = savedBuildType;
+                    onComplete(false, ExtractAuthErrorMessage(holder.Response));
+                    yield break;
+                }
+
+                if (ApplyAuthResponse(holder.Response, fromService: transport.IsServiceTransport))
+                {
+                    if (transport.IsServiceTransport)
                         _usedArborInsightsClientForSession = true;
                     _payload.buildType = savedBuildType;
                     onComplete(true, null);
@@ -404,11 +397,16 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (!withRetry)
                 {
                     _payload.buildType = savedBuildType;
-                    onComplete(false, ExtractAuthErrorMessage(responseJson));
+                    onComplete(false, ExtractAuthErrorMessage(holder.Response));
                     yield break;
                 }
 
-                Debug.LogWarning($"[AbxrLib] AuthRequest failed, retrying in {retryIntervalSeconds} seconds...");
+                string logDetail = !string.IsNullOrEmpty(holder.Response)
+                    ? ExtractAuthErrorMessage(holder.Response)
+                    : (transport.IsServiceTransport
+                        ? "ArborInsightsClient returned empty (check service/logcat for backend error)."
+                        : "No response body.");
+                Debug.LogWarning($"[AbxrLib] AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
         }
@@ -417,27 +415,6 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator AuthRequestCoroutine(Action<bool> onComplete, bool withRetry = true)
         {
             yield return AuthRequestCoroutineWithError((ok, _) => onComplete(ok), withRetry);
-        }
-
-        /// <summary>Performs one POST to /v1/auth/token and sets holder.Response and holder.ResponseCode.</summary>
-        private IEnumerator SendAuthRequestRest(string json, AuthResponseHolder holder)
-        {
-            holder.Response = null;
-            holder.ResponseCode = 0;
-            string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/auth/token").ToString();
-            using var request = new UnityWebRequest(url, "POST");
-            byte[] body = Encoding.UTF8.GetBytes(json);
-            request.uploadHandler = new UploadHandlerRaw(body);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-            request.timeout = Configuration.Instance.requestTimeoutSeconds;
-            yield return request.SendWebRequest();
-
-            holder.ResponseCode = request.responseCode;
-            if (request.result == UnityWebRequest.Result.Success && request.responseCode >= 200 && request.responseCode < 300)
-                holder.Response = request.downloadHandler?.text;
-            else if (!string.IsNullOrEmpty(request.downloadHandler?.text))
-                Debug.LogWarning($"[AbxrLib] AuthRequest REST failed: {request.responseCode} - {request.downloadHandler.text}");
         }
 
         /// <summary>Parses auth response and applies it. When fromService: no token/expiry validation. When !fromService: require Token and set expiry from JWT. Single place for ResponseData, UserData, Modules, and (when fromService) _usedArborInsightsClientForSession.</summary>
@@ -501,22 +478,14 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator GetConfigurationCoroutine(Action<bool, string> onComplete)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
+            if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
 
             string configJson = null;
             string failureDetail = null;
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (Configuration.Instance.enableArborInsightsClient && ArborInsightsClient.ServiceIsFullyInitialized())
-                configJson = ArborInsightsClient.GetAppConfig();
-            if (!string.IsNullOrEmpty(configJson))
-                Debug.Log("[AbxrLib] GetConfiguration from ArborInsightsClient");
-#endif
-            if (string.IsNullOrEmpty(configJson)) // Service not initialized, or GetAppConfig returned empty (e.g. second-step auth); fall back to REST.
+            yield return _getTransport().GetConfigCoroutine((ok, json) =>
             {
-                var restHolder = new ConfigRequestHolder();
-                yield return SendConfigRequestRest(restHolder);
-                configJson = restHolder.Json;
-                failureDetail = restHolder.ErrorMessage;
-            }
+                if (ok) configJson = json; else failureDetail = json;
+            });
 
             if (!string.IsNullOrEmpty(configJson))
             {
@@ -547,71 +516,6 @@ namespace AbxrLib.Runtime.Services.Auth
             onComplete(false, failureDetail ?? "no config returned");
         }
 
-        private class ConfigRequestHolder
-        {
-            public string Json;
-            public string ErrorMessage;
-        }
-
-        /// <summary>Performs one GET to /v1/storage/config with auth headers. Sets holder.Json and holder.ErrorMessage.</summary>
-        private IEnumerator SendConfigRequestRest(ConfigRequestHolder holder)
-        {
-            holder.Json = null;
-            holder.ErrorMessage = null;
-            string url = new Uri(new Uri(Configuration.Instance.restUrl), "/v1/storage/config").ToString();
-            UnityWebRequest request = null;
-            try
-            {
-                request = UnityWebRequest.Get(url);
-                request.SetRequestHeader("Accept", "application/json");
-                request.timeout = Configuration.Instance.requestTimeoutSeconds;
-                SetAuthHeaders(request);
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[AbxrLib] GetConfiguration request creation failed: {ex.Message}");
-                holder.ErrorMessage = ex.Message;
-                yield break;
-            }
-
-            yield return request.SendWebRequest();
-
-            try
-            {
-                if (request.result != UnityWebRequest.Result.Success)
-                {
-                    string errorMessage = request.result switch
-                    {
-                        UnityWebRequest.Result.ConnectionError => $"Connection error: {request.error}",
-                        UnityWebRequest.Result.DataProcessingError => $"Data processing error: {request.error}",
-                        UnityWebRequest.Result.ProtocolError => $"Protocol error ({request.responseCode}): {request.error}",
-                        _ => $"Unknown error: {request.error}"
-                    };
-                    if (!string.IsNullOrEmpty(request.downloadHandler?.text))
-                        errorMessage += $" - Response: {request.downloadHandler.text}";
-                    holder.ErrorMessage = errorMessage;
-                    Debug.LogWarning($"[AbxrLib] GetConfiguration failed: {errorMessage}");
-                    yield break;
-                }
-
-                string responseJson = request.downloadHandler?.text;
-                if (string.IsNullOrEmpty(responseJson))
-                    Debug.LogWarning("[AbxrLib] Empty configuration response, using default configuration");
-                holder.Json = responseJson;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[AbxrLib] GetConfiguration response handling failed: {ex.Message}");
-                holder.ErrorMessage = ex.Message;
-            }
-            finally
-            {
-                request?.Dispose();
-            }
-        }
-        
-        // ────────────────────────────────────────────────────────────────
-
         private void StartReAuthPolling()
         {
             StopReAuthPolling();
@@ -623,7 +527,7 @@ namespace AbxrLib.Runtime.Services.Auth
             // When using ArborInsightsClient for data, re-auth is the service's responsibility; exit the loop.
             while (!_stopping && !UsingArborInsightsClientForData())
             {
-                yield return new WaitForSeconds(ReAuthPollSeconds);
+                yield return ReAuthWait;
 
                 if (_tokenExpiry == DateTime.MinValue || _attemptActive) continue;
                 if (_tokenExpiry - DateTime.UtcNow <= TimeSpan.FromSeconds(ReAuthThresholdSeconds))
@@ -766,6 +670,35 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
+
+        /// <summary>
+        /// Builds the JSON payload passed via the auth_handoff Android intent extra.
+        /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
+        /// so the receiving app and its ArborInsightsClient service can fully adopt the session.
+        /// </summary>
+        internal string GetHandoffJson()
+        {
+            if (ResponseData == null || !Authenticated) return null;
+
+            // Use real token expiry from JWT decode; fall back to 24h if not set
+            long expiryMs = _tokenExpiry > DateTime.UtcNow
+                ? ((DateTimeOffset)_tokenExpiry).ToUnixTimeMilliseconds()
+                : ((DateTimeOffset)DateTime.UtcNow.AddHours(24)).ToUnixTimeMilliseconds();
+
+            var handoff = new Dictionary<string, object>
+            {
+                ["Token"]             = ResponseData.Token ?? "",
+                ["Secret"]            = ResponseData.Secret ?? "",
+                ["AppId"]             = ResponseData.AppId ?? _payload?.appId ?? "",
+                ["UserId"]            = ResponseData.UserId?.ToString() ?? "",
+                ["DeviceId"]          = _payload?.deviceId ?? "",
+                ["AppToken"]          = _payload?.appToken ?? "",
+                ["OrgToken"]          = _payload?.orgToken ?? "",
+                ["OrgId"]             = _payload?.orgId ?? "",
+                ["TokenExpirationMs"] = expiryMs,
+            };
+            return JsonConvert.SerializeObject(handoff);
+        }
         
         /// <summary>
         /// Update user data (UserId and UserData) and reauthenticate to sync with server.
@@ -1063,7 +996,9 @@ namespace AbxrLib.Runtime.Services.Auth
             try
             {
                 ResponseData = JsonConvert.DeserializeObject<AuthResponse>(responseText);
-                if (string.IsNullOrEmpty(ResponseData.Token))
+                // For non-handoff paths, Token is required. For handoff, it may be absent when App A used the
+                // ArborInsightsClient transport (which doesn't require Token in its auth response).
+                if (!handoff && string.IsNullOrEmpty(ResponseData.Token))
                 {
                     throw new Exception("Invalid authentication response - missing token");
                 }
@@ -1093,7 +1028,27 @@ namespace AbxrLib.Runtime.Services.Auth
                 _tokenExpiry = DateTime.UtcNow.AddHours(24);
                 Debug.Log($"[AbxrLib] Auth handoff successful. Modules: {ResponseData.Modules?.Count ?? 0}");
                 _sessionUsedAuthHandoff = true;
-                OnSucceeded?.Invoke();
+
+                // For the ArborInsightsClient transport: the normal AuthRequestCoroutine is bypassed by handoff,
+                // so the service has no knowledge of this session. Pass the full auth response JSON so the
+                // service can set apiToken/apiSecret/restUrl atomically and start accepting events immediately.
+                var transport = _getTransport?.Invoke();
+                if (transport?.IsServiceTransport == true)
+                {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                    try
+                    {
+                        string handoffRestUrl = Configuration.Instance?.restUrl ?? "";
+                        ArborInsightsClient.SetAuthFromHandoff(responseText, handoffRestUrl);
+                    }
+                    catch (Exception ex) { Debug.LogWarning($"[AbxrLib] SetAuthFromHandoff failed: {ex.Message}"); }
+#endif
+                    // Mark as service-authenticated so re-auth polling is skipped (service manages token refresh)
+                    _usedArborInsightsClientForSession = true;
+                }
+
+                StartReAuthPolling();
+                AuthSucceeded();
                 return true;
             }
             

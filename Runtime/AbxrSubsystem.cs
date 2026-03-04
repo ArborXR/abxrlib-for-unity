@@ -9,6 +9,7 @@ using AbxrLib.Runtime.Services.Data;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Services.Telemetry;
 using AbxrLib.Runtime.Services.Platform;
+using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
@@ -31,6 +32,9 @@ namespace AbxrLib.Runtime
 	    private ArborInsightsClient _arborInsightsClient;
 #endif
         private AbxrStorageService _storageService;
+        private volatile IAbxrTransport _transport;
+        private bool _transportSelectionComplete;
+        private Coroutine _transportSelectionCoroutine;
         private AIProxyApi _aiProxyApi;
         private SceneChangeDetector _sceneChangeDetector;
         private HeadsetDetector _headsetDetector;
@@ -64,9 +68,12 @@ namespace AbxrLib.Runtime
 	
         // Track whether any assessment has been started (either DEFAULT or user-initiated)
         private static bool _assessmentStarted;
-        
+
         public static readonly long StartTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        
+
+        private static readonly WaitForSecondsRealtime TransportPollWait = new WaitForSecondsRealtime(0.25f);
+        private static readonly WaitForSecondsRealtime AuthStartPollWait = new WaitForSecondsRealtime(0.1f);
+
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
 
@@ -105,10 +112,20 @@ namespace AbxrLib.Runtime
                 _arborInsightsClient.Start();
 #endif
             _authService = new AbxrAuthService(this, _arborMdmClient);
-            _dataService = new AbxrDataService(_authService, this);
+            _transport = new AbxrTransportRest(_authService, this);
+            _authService.SetTransportGetter(() => _transport);
+            _dataService = new AbxrDataService(this, () => _transport);
             _telemetryService = new AbxrTelemetryService(this);
             _aiProxyApi = new AIProxyApi(_authService);
-            _storageService = new AbxrStorageService(_authService, this);
+            _storageService = new AbxrStorageService(_authService, this, () => _transport);
+
+            _transportSelectionComplete = false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (Configuration.Instance.enableArborInsightsClient && _arborInsightsClient != null)
+                _transportSelectionCoroutine = StartCoroutine(WaitForTransportSelectionCoroutine());
+            else
+#endif
+                _transportSelectionComplete = true;
             
             // Subscribe to OnAuthCompleted to start delayed DEFAULT assessment timer
             Abxr.OnAuthCompleted += OnAuthCompletedHandler;
@@ -143,23 +160,12 @@ namespace AbxrLib.Runtime
 #endif
 #endif
 
-            // Auto-start auth
+            // Auto-start auth (gated on transport selection so first auth uses correct backend)
             var settings = Configuration.Instance;
             if (settings.enableAutoStartAuthentication)
-            {
-                if (settings.authenticationStartDelay > 0)
-                {
-	                Invoke(nameof(DoAuthenticate), settings.authenticationStartDelay);
-                }
-                else
-                {
-	                DoAuthenticate();
-                }
-            }
+                StartCoroutine(AuthStartAfterTransportSelectionCoroutine(settings.authenticationStartDelay));
             else
-            {
                 Debug.Log("[AbxrLib] Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
-            }
 
             // Telemetry collector
             if (settings.enableAutomaticTelemetry)
@@ -172,11 +178,19 @@ namespace AbxrLib.Runtime
 
         private void OnDestroy()
         {
+            Abxr.OnAuthCompleted -= OnAuthCompletedHandler;
+            if (_transportSelectionCoroutine != null)
+            {
+                StopCoroutine(_transportSelectionCoroutine);
+                _transportSelectionCoroutine = null;
+            }
             _authService?.Shutdown();
             _dataService?.Stop();
             _telemetryService?.Stop();
             _sceneChangeDetector?.Stop();
             _headsetDetector?.Stop();
+            if (_transport is AbxrTransportRest rest)
+                rest.Stop();
 #if UNITY_ANDROID && !UNITY_EDITOR
             _arborMdmClient?.Shutdown();
             _arborInsightsClient?.Stop();
@@ -208,27 +222,63 @@ namespace AbxrLib.Runtime
         }
 
         /// <summary>
-        /// Runs quit-time logic: close running events, then on Android with ArborInsightsClient unbinds (service flushes);
-        /// otherwise triggers SendAll. Used by OnApplicationQuit and by tests so there is one code path.
+        /// Ends the current session: closes running events, flushes data, calls transport OnQuit (REST: ForceSend; service: Unbind),
+        /// clears pending batches, storage, super metadata, and auth state. Used by OnApplicationQuit and by Abxr.EndSession().
+        /// Does not start a new session; call Abxr.StartAuthentication() when ready.
         /// </summary>
         internal void OnApplicationQuitHandler()
         {
-	        Debug.Log("[AbxrLib] Application quitting, automatically closing running events");
+	        Debug.Log("[AbxrLib] Ending session: closing running events and flushing");
+	        if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
+	        if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 	        CloseRunningEvents();
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (_authService != null && _authService.UsingArborInsightsClientForData())
-            {
-                // Unbind only; the service's onUnbind runs flush (short delay, drain queue, forceSendUnsent) on a background thread so we never block.
-                ArborInsightsClient.Unbind();
-            }
-            else
-#endif
-            {
-                SendAll();
-            }
+	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync).
+	        SendAll();
+            _transport?.OnQuit();
+	        _transport?.ClearAllPending();
+	        _superMetaData.Clear();
+	        PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
+	        PlayerPrefs.Save();
+	        _assessmentStarted = false;
+	        AIProxyApi.ClearPastMessages();
+	        _authService.ClearSessionAndPrepareForNew();
         }
         
         internal void DoAuthenticate() => _authService.Authenticate();
+
+        private IEnumerator WaitForTransportSelectionCoroutine()
+        {
+            const int waitAttempts = 40;
+            if (!ArborInsightsClient.IsServicePackageInstalled())
+            {
+                _transportSelectionComplete = true;
+                yield break;
+            }
+            for (int i = 0; i < waitAttempts && !ArborInsightsClient.ServiceIsFullyInitialized(); i++)
+                yield return TransportPollWait;
+            if (ArborInsightsClient.ServiceIsFullyInitialized())
+                SwitchToArborInsightsTransport();
+            _transportSelectionComplete = true;
+        }
+
+        private void SwitchToArborInsightsTransport()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_transport is AbxrTransportRest rest)
+                rest.Stop();
+            _transport = new AbxrTransportArborInsights();
+            Debug.Log("[AbxrLib] Switched to ArborInsightsClient transport.");
+#endif
+        }
+
+        private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds)
+        {
+            while (!_transportSelectionComplete)
+                yield return AuthStartPollWait;
+            if (delaySeconds > 0)
+                yield return new WaitForSeconds(delaySeconds);
+            DoAuthenticate();
+        }
 
         internal void SubmitInput(string input)
         {
@@ -387,6 +437,53 @@ namespace AbxrLib.Runtime
 		/// <summary>Returns the full auth response from the last successful authentication (Token, UserData, AppId, Modules, PackageName, etc.). Null if not authenticated.</summary>
 		internal AuthResponse GetAuthResponse() => _authService?.ResponseData;
 
+		/// <summary>Launches another Android app and passes the current auth session via the auth_handoff intent extra.
+		/// The target app must also use AbxrLib; it will adopt the session without re-authenticating.
+		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().</summary>
+		internal bool LaunchAppWithAuthHandoff(string packageName)
+		{
+			if (string.IsNullOrEmpty(packageName))
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: packageName is empty");
+				return false;
+			}
+			if (!(_authService?.Authenticated ?? false))
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: not authenticated");
+				return false;
+			}
+#if UNITY_ANDROID && !UNITY_EDITOR
+			try
+			{
+				string handoffJson = _authService.GetHandoffJson();
+				if (handoffJson == null)
+				{
+					Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: failed to build handoff payload");
+					return false;
+				}
+				using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+				using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+				using var intent = new AndroidJavaObject("android.content.Intent");
+				using var intentClass = new AndroidJavaClass("android.content.Intent");
+				intent.Call<AndroidJavaObject>("setAction", intentClass.GetStatic<string>("ACTION_MAIN"));
+				intent.Call<AndroidJavaObject>("setPackage", packageName);
+				intent.Call<AndroidJavaObject>("putExtra", "auth_handoff", handoffJson);
+				intent.Call<AndroidJavaObject>("addFlags", intentClass.GetStatic<int>("FLAG_ACTIVITY_NEW_TASK"));
+				activity.Call("startActivity", intent);
+				Debug.Log($"[AbxrLib] Launched '{packageName}' with auth handoff");
+				return true;
+			}
+			catch (Exception ex)
+			{
+				Debug.LogError($"[AbxrLib] LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}");
+				return false;
+			}
+#else
+			Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff is only supported on Android");
+			return false;
+#endif
+		}
+
 		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
 		private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)
 		{
@@ -402,7 +499,8 @@ namespace AbxrLib.Runtime
 		internal void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null) =>
 			_authService.SetUserData(userId, additionalUserData);
 		
-		internal void StartAuthentication() => _authService.Authenticate();
+		/// <summary>Starts authentication. Waits for transport selection to complete first so the first auth uses the correct backend (service if available, else REST).</summary>
+		internal void StartAuthentication() => StartCoroutine(AuthStartAfterTransportSelectionCoroutine(0f));
 
 		/// <summary>True when the SDK is waiting for auth input (OnInputRequested was invoked). Use with device-specific QR availability to show "Scan QR" only when it will be accepted (e.g. Meta: IsAuthInputRequestPending() &amp;&amp; MetaQRCodeReader.Instance.IsQRScanningAvailable()).</summary>
 		internal bool IsAuthInputRequestPending() => _authService != null && _authService.IsInputRequestPending;
@@ -430,16 +528,20 @@ namespace AbxrLib.Runtime
 		/// When using ArborInsightsClient (Android), unbinds and rebinds the service so the connection is fresh.
 		/// Equivalent to the user closing the app and starting it again from a session perspective.
 		/// </summary>
-		internal void StartNewSession()
-		{
+internal void StartNewSession()
+        {
 			// Clear in-memory batchers so no previous-session events/telemetry/logs/storage are sent with the new session.
-			_dataService.ClearAllPendingBatches();
-			_storageService.ClearAllPending();
+			_transport?.ClearAllPending();
 
 			// Super metadata is per-session; clear in-memory and persisted value.
 			_superMetaData.Clear();
 			PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
 			PlayerPrefs.Save();
+
+			if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
+			if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
+			_assessmentStarted = false;
+			AIProxyApi.ClearPastMessages();
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 			// When using ArborInsightsClient, unbind then bind to clear session-related connection state and get a fresh connection.
@@ -454,22 +556,12 @@ namespace AbxrLib.Runtime
 		}
 
 		/// <summary>
-		/// Ends the current session: closes any running assessment/objective/interaction, synchronously flushes all pending data to the server,
-		/// then clears pending batches, storage, super metadata, and auth state. Does not start a new session.
-		/// Call Abxr.StartAuthentication() when ready to begin a fresh session.
+		/// Ends the current session (same as quit-time logic): closes running events, flushes, unbinds/flushes transport, clears pending data and auth state.
+		/// Does not start a new session. Call Abxr.StartAuthentication() when ready to begin a fresh session.
 		/// </summary>
 		internal void EndSession()
 		{
-			CloseRunningEvents();
-			SendAll();
-			//_dataService.FlushSync();
-			//_storageService.FlushSync();
-			_dataService.ClearAllPendingBatches();
-			_storageService.ClearAllPending();
-			_superMetaData.Clear();
-			PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
-			PlayerPrefs.Save();
-			_authService.ClearSessionAndPrepareForNew();
+			OnApplicationQuitHandler();
 		}
 		
 		internal bool StartModuleAtIndex(int moduleIndex)
@@ -498,26 +590,28 @@ namespace AbxrLib.Runtime
 			return true;
 		}
 
-		/// <summary>
-		/// Advance to the next module in the sequence after current module completion.
-		/// Called automatically from EventAssessmentComplete() when in a module sequence.
-		/// Advances the module index and triggers the next module, or exits if all modules are complete.
-		/// </summary>
-		private void AdvanceToNextModule()
-		{
-			_currentModuleIndex++;
-			if (_currentModuleIndex < _authService.ResponseData.Modules.Count)
-			{
-				Debug.Log($"[AbxrLib] Module '{_authService.ResponseData.Modules[_currentModuleIndex-1].Name}' complete. " +
-				          $"Advancing to next module - '{_authService.ResponseData.Modules[_currentModuleIndex].Name}'");
-				Abxr.OnModuleTarget?.Invoke(_authService.ResponseData.Modules[_currentModuleIndex].Target);
-			}
-			else
-			{
-				Abxr.OnAllModulesCompleted?.Invoke();
-				Debug.Log("[AbxrLib] All modules complete");
-			}
-		}
+        /// <summary>
+        /// Advance to the next module in the sequence after current module completion.
+        /// Called automatically from EventAssessmentComplete() when in a module sequence.
+        /// Advances the module index and triggers the next module, or exits if all modules are complete.
+        /// </summary>
+        private void AdvanceToNextModule()
+        {
+            var modules = _authService.ResponseData?.Modules;
+            if (modules == null || modules.Count == 0) return;
+            _currentModuleIndex++;
+            if (_currentModuleIndex < modules.Count)
+            {
+                Debug.Log($"[AbxrLib] Module '{modules[_currentModuleIndex - 1].Name}' complete. " +
+                             $"Advancing to next module - '{modules[_currentModuleIndex].Name}'");
+                Abxr.OnModuleTarget?.Invoke(modules[_currentModuleIndex].Target);
+            }
+            else
+            {
+                Abxr.OnAllModulesCompleted?.Invoke();
+                Debug.Log("[AbxrLib] All modules complete");
+            }
+        }
 		
 		/// <summary>
 		/// Set module metadata when no modules are provided in authentication.
@@ -557,7 +651,7 @@ namespace AbxrLib.Runtime
 			SaveSuperMetaData();
 		}
 		
-		internal List<ModuleData> GetModuleList() => _authService.ResponseData.Modules;
+		internal List<ModuleData> GetModuleList() => _authService.ResponseData?.Modules;
 		
 		internal void Log(string logMessage, Abxr.LogLevel logLevel, Dictionary<string, string> metadata)
 		{
@@ -712,7 +806,7 @@ namespace AbxrLib.Runtime
 			Event(assessmentName, meta);
 			
 			// Check if we're in a module sequence
-			if (_authService.ResponseData.Modules?.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
+			if (_authService.ResponseData?.Modules?.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
 			{
 				AdvanceToNextModule();
 			}
@@ -1052,9 +1146,10 @@ namespace AbxrLib.Runtime
 			
 			// If LMS modules exist, inject current module metadata unless the event already specifies it.
 			// (Data-specific metadata takes precedence.)
-			if (_authService.ResponseData.Modules?.Count > 0 && _currentModuleIndex < _authService.ResponseData.Modules?.Count)
+			var modules = _authService.ResponseData?.Modules;
+			if (modules?.Count > 0 && _currentModuleIndex >= 0 && _currentModuleIndex < modules.Count)
 			{
-				ModuleData moduleData = _authService.ResponseData.Modules[_currentModuleIndex];
+				ModuleData moduleData = modules[_currentModuleIndex];
 				// these are potentially sharing developer private information. Disabling for now
 				if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
 				if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;
@@ -1227,7 +1322,7 @@ namespace AbxrLib.Runtime
 			if (startTimes.ContainsKey(name))
 			{
 				double duration = (DateTime.UtcNow - startTimes[name]).TotalSeconds; //TODO do we want seconds?
-				meta["duration"] = duration.ToString();
+				meta["duration"] = duration.ToString(System.Globalization.CultureInfo.InvariantCulture);
 				startTimes.Remove(name);
 			}
 			else
@@ -1318,8 +1413,8 @@ namespace AbxrLib.Runtime
 		
         private void SendAll()
         {
-	        _dataService.ForceSend();
-	        _storageService.ForceSend();
+	        _dataService?.ForceSend();
+	        _storageService?.ForceSend();
         }
 		
 		[Serializable]

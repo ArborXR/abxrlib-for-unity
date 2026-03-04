@@ -23,6 +23,10 @@ namespace AbxrLib.Runtime.Services.Telemetry
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _rightTriggerValues = new();
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _leftTriggerValues = new();
 
+        // Cached once at class load: avoids reflection overhead every 10 s
+        private static readonly bool _hasLongMemoryApi =
+            typeof(UnityEngine.Profiling.Profiler).GetMethod("GetTotalAllocatedMemoryLong") != null;
+
         // Reused to avoid allocations in telemetry hot paths
         private readonly Dictionary<string, string> _batteryData = new Dictionary<string, string>(2);
         private readonly Dictionary<string, string> _memoryData = new Dictionary<string, string>(4);
@@ -49,22 +53,28 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 Debug.LogWarning($"[AbxrLib] TrackInputDevices - Failed to initialize XR device tracking: {ex.Message}");
             }
 
+            var sysInfoWait = new WaitForSeconds(Configuration.Instance.telemetryTrackingPeriodSeconds);
+            var locationWait = new WaitForSeconds(Configuration.Instance.positionTrackingPeriodSeconds);
             _coroutines = new List<Coroutine>();
-            _coroutines.Add(_runner.StartCoroutine(SystemInfoLoop()));
+            _coroutines.Add(_runner.StartCoroutine(SystemInfoLoop(sysInfoWait)));
             if (Configuration.Instance.headsetTracking)
             {
-                _coroutines.Add(_runner.StartCoroutine(LocationDataLoop()));
+                _coroutines.Add(_runner.StartCoroutine(LocationDataLoop(locationWait)));
                 _coroutines.Add(_runner.StartCoroutine(TriggerCheckLoop()));
             }
         }
 
         public void Stop()
         {
-            foreach (var coroutine in _coroutines)
+            if (_coroutines != null && _runner != null)
             {
-                if (coroutine != null) _runner.StopCoroutine(coroutine);
+                foreach (var coroutine in _coroutines)
+                {
+                    if (coroutine != null) _runner.StopCoroutine(coroutine);
+                }
             }
-            
+            _coroutines = null;
+
             InputDevices.deviceConnected -= RegisterDevice;
             
             _rightController = default;
@@ -72,21 +82,21 @@ namespace AbxrLib.Runtime.Services.Telemetry
             _hmd = default;
         }
 
-        private IEnumerator SystemInfoLoop()
+        private IEnumerator SystemInfoLoop(WaitForSeconds wait)
         {
             while (true)
             {
                 RecordSystemInfo();
-                yield return new WaitForSeconds(Configuration.Instance.telemetryTrackingPeriodSeconds);
+                yield return wait;
             }
         }
-        
-        private IEnumerator LocationDataLoop()
+
+        private IEnumerator LocationDataLoop(WaitForSeconds wait)
         {
             while (true)
             {
                 RecordLocationData();
-                yield return new WaitForSeconds(Configuration.Instance.positionTrackingPeriodSeconds);
+                yield return wait;
             }
         }
         
@@ -111,20 +121,16 @@ namespace AbxrLib.Runtime.Services.Telemetry
             _memoryData.Clear();
             try
             {
-                // Check if newer Profiler methods are available (Unity 2020.1+)
-                var profilerType = typeof(UnityEngine.Profiling.Profiler);
-                var getTotalAllocatedMethod = profilerType.GetMethod("GetTotalAllocatedMemoryLong");
-                
-                if (getTotalAllocatedMethod != null)
+                if (_hasLongMemoryApi)
                 {
-                    // Use newer methods (Unity 2020.1+)
+                    // Unity 2020.1+
                     _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
                     _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
                     _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
                 }
                 else
                 {
-                    // Fallback to older methods (Unity 2019.x and earlier)
+                    // Unity 2019.x and earlier
                     _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemory() / 1000000 + " MB";
                     _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemory() / 1000000 + " MB";
                 }
