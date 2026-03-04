@@ -264,6 +264,12 @@ public static partial class Abxr
 	/// Useful for starting new training experiences or resetting user context
 	/// </summary>
 	public static void StartNewSession() => X?.StartNewSession();
+
+	/// <summary>
+	/// Ends the current session: sends all data (including closing any running assessment/objective/interaction),
+	/// then clears session state. Does not start a new session. Call StartAuthentication() when ready for a fresh session.
+	/// </summary>
+	public static void EndSession() => X?.EndSession();
 	
 	
 	// ── Custom Events ───────────────────────────────────────────────────────────────────────────────────────────────

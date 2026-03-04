@@ -31,6 +31,7 @@ namespace AbxrLib.Runtime.UI
 
         private void Start()
         {
+            if (Camera.main == null) return;
             cam = Camera.main.transform;
             if (!cam) return;
             
