@@ -111,7 +111,7 @@ namespace AbxrLib.Runtime
             _authService = new AbxrAuthService(this, _arborMdmClient);
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
-            _dataService = new AbxrDataService(_authService, this, () => _transport);
+            _dataService = new AbxrDataService(this, () => _transport);
             _telemetryService = new AbxrTelemetryService(this);
             _aiProxyApi = new AIProxyApi(_authService);
             _storageService = new AbxrStorageService(_authService, this, () => _transport);
@@ -227,8 +227,6 @@ namespace AbxrLib.Runtime
 	        SendAll();
             _transport?.OnQuit();
 	        _transport?.ClearAllPending();
-	        _dataService.ClearAllPendingBatches();
-	        _storageService.ClearAllPending();
 	        _superMetaData.Clear();
 	        PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
 	        PlayerPrefs.Save();
@@ -442,7 +440,8 @@ namespace AbxrLib.Runtime
 		internal void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null) =>
 			_authService.SetUserData(userId, additionalUserData);
 		
-		internal void StartAuthentication() => _authService.Authenticate();
+		/// <summary>Starts authentication. Waits for transport selection to complete first so the first auth uses the correct backend (service if available, else REST).</summary>
+		internal void StartAuthentication() => StartCoroutine(AuthStartAfterTransportSelectionCoroutine(0f));
 
 		/// <summary>True when the SDK is waiting for auth input (OnInputRequested was invoked). Use with device-specific QR availability to show "Scan QR" only when it will be accepted (e.g. Meta: IsAuthInputRequestPending() &amp;&amp; MetaQRCodeReader.Instance.IsQRScanningAvailable()).</summary>
 		internal bool IsAuthInputRequestPending() => _authService != null && _authService.IsInputRequestPending;
@@ -474,8 +473,6 @@ internal void StartNewSession()
         {
 			// Clear in-memory batchers so no previous-session events/telemetry/logs/storage are sent with the new session.
 			_transport?.ClearAllPending();
-			_dataService.ClearAllPendingBatches();
-			_storageService.ClearAllPending();
 
 			// Super metadata is per-session; clear in-memory and persisted value.
 			_superMetaData.Clear();

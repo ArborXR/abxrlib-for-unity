@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
+using System.Threading;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Types;
@@ -88,6 +89,7 @@ namespace AbxrLib.Runtime.Services.Transport
             catch (Exception ex)
             {
                 Debug.LogError($"[AbxrLib] GetConfig request creation failed: {ex.Message}");
+                request?.Dispose();
                 onComplete?.Invoke(false, ex.Message);
                 yield break;
             }
@@ -219,9 +221,89 @@ namespace AbxrLib.Runtime.Services.Transport
             onComplete?.Invoke(request.result == UnityWebRequest.Result.Success);
         }
 
+        /// <summary>Flush and release. Sends any pending data and storage synchronously so it reaches the server before the app exits.</summary>
         public void OnQuit()
         {
-            ForceSend();
+            FlushDataSync();
+            FlushStorageSync();
+        }
+
+        /// <summary>Synchronously send any queued events/telemetry/logs. Used on quit so data is sent before the process exits (ForceSend only sets flags; the tick may never run again).</summary>
+        private void FlushDataSync()
+        {
+            if (!_authService.Authenticated) return;
+            List<EventPayload> events;
+            List<TelemetryPayload> telemetries;
+            List<LogPayload> logs;
+            lock (_lock)
+            {
+                if (_eventPayloads.Count == 0 && _telemetryPayloads.Count == 0 && _logPayloads.Count == 0) return;
+                events = new List<EventPayload>(_eventPayloads);
+                telemetries = new List<TelemetryPayload>(_telemetryPayloads);
+                logs = new List<LogPayload>(_logPayloads);
+                _eventPayloads.Clear();
+                _telemetryPayloads.Clear();
+                _logPayloads.Clear();
+            }
+            SendDataPayloadSync(events, telemetries, logs);
+        }
+
+        private void SendDataPayloadSync(List<EventPayload> events, List<TelemetryPayload> telemetries, List<LogPayload> logs)
+        {
+            UnityWebRequest request = null;
+            try
+            {
+                var wrapper = new DataPayloadWrapper { @event = events, telemetry = telemetries, basicLog = logs };
+                string json = JsonConvert.SerializeObject(wrapper);
+                request = new UnityWebRequest(_dataUri, "POST");
+                Utils.BuildRequest(request, json);
+                _authService.SetAuthHeaders(request, json);
+                request.timeout = Configuration.Instance.requestTimeoutSeconds;
+                var op = request.SendWebRequest();
+                while (!op.isDone) { Thread.Sleep(1); }
+                if (request.result != UnityWebRequest.Result.Success)
+                    Debug.LogWarning($"[AbxrLib] Sync flush (data) failed ({request.responseCode}): {request.error}");
+            }
+            finally
+            {
+                request?.Dispose();
+            }
+        }
+
+        /// <summary>Synchronously send any queued storage. Used on quit so data is sent before the process exits.</summary>
+        private void FlushStorageSync()
+        {
+            if (!_authService.Authenticated) return;
+            List<StoragePayload> toSend;
+            lock (_lock)
+            {
+                if (_storagePayloads.Count == 0) return;
+                toSend = new List<StoragePayload>(_storagePayloads);
+                _storagePayloads.Clear();
+            }
+            SendStoragePayloadSync(toSend);
+        }
+
+        private void SendStoragePayloadSync(List<StoragePayload> toSend)
+        {
+            UnityWebRequest request = null;
+            try
+            {
+                var wrapper = new StoragePayloadWrapper { data = toSend };
+                string json = JsonConvert.SerializeObject(wrapper);
+                request = new UnityWebRequest(_storageUri, "POST");
+                Utils.BuildRequest(request, json);
+                _authService.SetAuthHeaders(request, json);
+                request.timeout = Configuration.Instance.requestTimeoutSeconds;
+                var op = request.SendWebRequest();
+                while (!op.isDone) { Thread.Sleep(1); }
+                if (request.result != UnityWebRequest.Result.Success)
+                    Debug.LogWarning($"[AbxrLib] Sync flush (storage) failed ({request.responseCode}): {request.error}");
+            }
+            finally
+            {
+                request?.Dispose();
+            }
         }
 
         public void ClearAllPending()
@@ -412,5 +494,5 @@ namespace AbxrLib.Runtime.Services.Transport
             return ex is System.Net.WebException || ex is System.Net.Sockets.SocketException || ex.Message.Contains("timeout") || ex.Message.Contains("connection");
         }
 
-            }
+    }
 }

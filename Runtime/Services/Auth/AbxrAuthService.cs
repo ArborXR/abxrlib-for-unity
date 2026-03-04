@@ -66,15 +66,14 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// True only when we completed authentication via ArborInsightsClient this session.
-        /// Set once when auth succeeds through the service; never switches to true later.
-        /// Data (events, telemetry, logs) use the service only when this is true.
+        /// Set once when auth succeeds through the service transport. Used only to skip re-auth polling
+        /// (ReAuthPollCoroutine) when the service handles re-auth; data routing is via the transport, not this flag.
         /// </summary>
         private bool _usedArborInsightsClientForSession = false;
 
         /// <summary>
-        /// True when this session authenticated via ArborInsightsClient. When true, DataBatcher and
-        /// other data paths use the service only (no Unity HTTP). When false, we operate in standalone mode
-        /// for the whole session and do not switch to the service later.
+        /// True when this session authenticated via ArborInsightsClient. When true, re-auth polling is skipped
+        /// (the service handles token refresh). Data/events/telemetry/storage routing is via the current transport.
         /// </summary>
         public bool UsingArborInsightsClientForData() => _usedArborInsightsClientForSession;
 

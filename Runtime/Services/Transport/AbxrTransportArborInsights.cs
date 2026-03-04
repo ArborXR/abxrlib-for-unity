@@ -54,8 +54,16 @@ namespace AbxrLib.Runtime.Services.Transport
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
         {
-            string configJson = ArborInsightsClient.GetAppConfig();
-            onComplete?.Invoke(!string.IsNullOrEmpty(configJson), configJson);
+            try
+            {
+                string configJson = ArborInsightsClient.GetAppConfig();
+                onComplete?.Invoke(!string.IsNullOrEmpty(configJson), configJson);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[AbxrLib] ArborInsights GetAppConfig failed: {ex.Message}");
+                onComplete?.Invoke(false, ex.Message);
+            }
             yield return null;
         }
 
