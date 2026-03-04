@@ -125,9 +125,8 @@ namespace AbxrLib.Runtime
             // Subscribe to OnAuthCompleted to start delayed DEFAULT assessment timer
             Abxr.OnAuthCompleted += OnAuthCompletedHandler;
 
-            // Wire auth callbacks. Our internal keyboard handling is the initial OnInputRequested handler
-            // so the native keyboard (including when the user replaces prefabs in Configuration) uses the exact same flow.
-            _authService.OnInputRequested = PresentKeyboard;
+            // Wire auth callbacks. Auth always invokes our dispatcher; we never call PresentKeyboard when the app has set OnInputRequested.
+            _authService.OnInputRequested = OnInputRequestedDispatch;
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
             {
@@ -216,6 +215,15 @@ namespace AbxrLib.Runtime
         }
         
         private void OnApplicationQuit()
+        {
+            OnApplicationQuitHandler();
+        }
+
+        /// <summary>
+        /// Runs quit-time logic: close running events, then on Android with ArborInsightsClient unbinds (service flushes);
+        /// otherwise triggers SendAll. Used by OnApplicationQuit and by tests so there is one code path.
+        /// </summary>
+        internal void OnApplicationQuitHandler()
         {
 	        Debug.Log("[AbxrLib] Application quitting, automatically closing running events");
 	        CloseRunningEvents();
@@ -412,17 +420,21 @@ namespace AbxrLib.Runtime
 		internal bool IsAuthInputRequestPending() => _authService != null && _authService.IsInputRequestPending;
 
 		/// <summary>
-		/// Get or set the single OnInputRequested handler (forwarded to auth service). Handler receives (type, prompt, domain, error).
+		/// Get or set the single OnInputRequested handler. When set, auth input requests go to this handler; when null, PresentKeyboard is used.
+		/// Auth service always invokes OnInputRequestedDispatch, which never calls PresentKeyboard if the app handler is set.
 		/// </summary>
 		internal Action<string, string, string, string> OnInputRequested
 		{
 			get => _appOnInputRequested;
-			set
-			{
-				_appOnInputRequested = value;
-				if (_authService != null)
-					_authService.OnInputRequested = value != null ? (type, prompt, domain, error) => value(type, prompt, domain, error) : null;
-			}
+			set => _appOnInputRequested = value;
+		}
+
+		private void OnInputRequestedDispatch(string type, string prompt, string domain, string error)
+		{
+			if (_appOnInputRequested != null)
+				_appOnInputRequested(type, prompt, domain, error);
+			else
+				PresentKeyboard(type, prompt, domain, error);
 		}
 		
 		/// <summary>
@@ -451,6 +463,25 @@ namespace AbxrLib.Runtime
 #endif
 			_authService.ClearSessionAndPrepareForNew();
 			_authService.Authenticate(clearStateFirst: false);
+		}
+
+		/// <summary>
+		/// Ends the current session: closes any running assessment/objective/interaction, synchronously flushes all pending data to the server,
+		/// then clears pending batches, storage, super metadata, and auth state. Does not start a new session.
+		/// Call Abxr.StartAuthentication() when ready to begin a fresh session.
+		/// </summary>
+		internal void EndSession()
+		{
+			CloseRunningEvents();
+			SendAll();
+			//_dataService.FlushSync();
+			//_storageService.FlushSync();
+			_dataService.ClearAllPendingBatches();
+			_storageService.ClearAllPending();
+			_superMetaData.Clear();
+			PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
+			PlayerPrefs.Save();
+			_authService.ClearSessionAndPrepareForNew();
 		}
 		
 		internal bool StartModuleAtIndex(int moduleIndex)
