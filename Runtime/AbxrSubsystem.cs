@@ -249,7 +249,6 @@ namespace AbxrLib.Runtime
         private IEnumerator WaitForTransportSelectionCoroutine()
         {
             const int waitAttempts = 40;
-            const float waitSeconds = 0.25f;
             if (!ArborInsightsClient.IsServicePackageInstalled())
             {
                 _transportSelectionComplete = true;
@@ -437,6 +436,53 @@ namespace AbxrLib.Runtime
 
 		/// <summary>Returns the full auth response from the last successful authentication (Token, UserData, AppId, Modules, PackageName, etc.). Null if not authenticated.</summary>
 		internal AuthResponse GetAuthResponse() => _authService?.ResponseData;
+
+		/// <summary>Launches another Android app and passes the current auth session via the auth_handoff intent extra.
+		/// The target app must also use AbxrLib; it will adopt the session without re-authenticating.
+		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().</summary>
+		internal bool LaunchAppWithAuthHandoff(string packageName)
+		{
+			if (string.IsNullOrEmpty(packageName))
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: packageName is empty");
+				return false;
+			}
+			if (!(_authService?.Authenticated ?? false))
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: not authenticated");
+				return false;
+			}
+#if UNITY_ANDROID && !UNITY_EDITOR
+			try
+			{
+				string handoffJson = _authService.GetHandoffJson();
+				if (handoffJson == null)
+				{
+					Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: failed to build handoff payload");
+					return false;
+				}
+				using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+				using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+				using var intent = new AndroidJavaObject("android.content.Intent");
+				using var intentClass = new AndroidJavaClass("android.content.Intent");
+				intent.Call<AndroidJavaObject>("setAction", intentClass.GetStatic<string>("ACTION_MAIN"));
+				intent.Call<AndroidJavaObject>("setPackage", packageName);
+				intent.Call<AndroidJavaObject>("putExtra", "auth_handoff", handoffJson);
+				intent.Call<AndroidJavaObject>("addFlags", intentClass.GetStatic<int>("FLAG_ACTIVITY_NEW_TASK"));
+				activity.Call("startActivity", intent);
+				Debug.Log($"[AbxrLib] Launched '{packageName}' with auth handoff");
+				return true;
+			}
+			catch (Exception ex)
+			{
+				Debug.LogError($"[AbxrLib] LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}");
+				return false;
+			}
+#else
+			Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff is only supported on Android");
+			return false;
+#endif
+		}
 
 		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
 		private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)

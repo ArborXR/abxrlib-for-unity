@@ -42,7 +42,11 @@ namespace AbxrLib.Runtime.Services.Transport
                 string restUrl = Configuration.Instance.restUrl ?? "https://lib-backend.xrdm.app/";
                 ArborInsightsClient.SetAuthPayloadForRequest(restUrl, payload);
                 string responseJson = ArborInsightsClient.AuthRequest(payload.userId ?? "", Utils.DictToString(payload.authMechanism));
-                onComplete?.Invoke(!string.IsNullOrEmpty(responseJson), responseJson, -1);
+                // Service returns success JSON (token/secret stripped) or error body; only treat as success when it looks like AuthResponse with token or modules.
+                bool success = !string.IsNullOrEmpty(responseJson) && LooksLikeSuccessAuthResponse(responseJson);
+                onComplete?.Invoke(success, responseJson ?? "", -1);
+                if (!success && !string.IsNullOrEmpty(responseJson))
+                    Debug.LogWarning($"[AbxrLib] ArborInsights auth returned error body: {responseJson}");
             }
             catch (Exception ex)
             {
@@ -158,6 +162,22 @@ namespace AbxrLib.Runtime.Services.Transport
         public void ClearAllPending()
         {
             // No-op; service session is cleared on Unbind.
+        }
+
+        /// <summary>True if the response is valid auth success (has token or modules). Service returns success JSON with token/secret stripped, or error body on failure.</summary>
+        private static bool LooksLikeSuccessAuthResponse(string responseJson)
+        {
+            if (string.IsNullOrWhiteSpace(responseJson)) return false;
+            try
+            {
+                var parsed = JsonConvert.DeserializeObject<AuthResponse>(responseJson);
+                if (parsed == null) return false;
+                return !string.IsNullOrEmpty(parsed.Token) || (parsed.Modules != null && parsed.Modules.Count > 0);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 #endif

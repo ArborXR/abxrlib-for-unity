@@ -388,7 +388,12 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield break;
                 }
 
-                Debug.LogWarning($"[AbxrLib] AuthRequest failed, retrying in {retryIntervalSeconds} seconds...");
+                string logDetail = !string.IsNullOrEmpty(holder.Response)
+                    ? ExtractAuthErrorMessage(holder.Response)
+                    : (transport.IsServiceTransport
+                        ? "ArborInsightsClient returned empty (check service/logcat for backend error)."
+                        : "No response body.");
+                Debug.LogWarning($"[AbxrLib] AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
         }
@@ -652,6 +657,35 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
+
+        /// <summary>
+        /// Builds the JSON payload passed via the auth_handoff Android intent extra.
+        /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
+        /// so the receiving app and its ArborInsightsClient service can fully adopt the session.
+        /// </summary>
+        internal string GetHandoffJson()
+        {
+            if (ResponseData == null || !Authenticated) return null;
+
+            // Use real token expiry from JWT decode; fall back to 24h if not set
+            long expiryMs = _tokenExpiry > DateTime.UtcNow
+                ? ((DateTimeOffset)_tokenExpiry).ToUnixTimeMilliseconds()
+                : ((DateTimeOffset)DateTime.UtcNow.AddHours(24)).ToUnixTimeMilliseconds();
+
+            var handoff = new Dictionary<string, object>
+            {
+                ["Token"]             = ResponseData.Token ?? "",
+                ["Secret"]            = ResponseData.Secret ?? "",
+                ["AppId"]             = ResponseData.AppId ?? _payload?.appId ?? "",
+                ["UserId"]            = ResponseData.UserId?.ToString() ?? "",
+                ["DeviceId"]          = _payload?.deviceId ?? "",
+                ["AppToken"]          = _payload?.appToken ?? "",
+                ["OrgToken"]          = _payload?.orgToken ?? "",
+                ["OrgId"]             = _payload?.orgId ?? "",
+                ["TokenExpirationMs"] = expiryMs,
+            };
+            return JsonConvert.SerializeObject(handoff);
+        }
         
         /// <summary>
         /// Update user data (UserId and UserData) and reauthenticate to sync with server.
@@ -949,7 +983,9 @@ namespace AbxrLib.Runtime.Services.Auth
             try
             {
                 ResponseData = JsonConvert.DeserializeObject<AuthResponse>(responseText);
-                if (string.IsNullOrEmpty(ResponseData.Token))
+                // For non-handoff paths, Token is required. For handoff, it may be absent when App A used the
+                // ArborInsightsClient transport (which doesn't require Token in its auth response).
+                if (!handoff && string.IsNullOrEmpty(ResponseData.Token))
                 {
                     throw new Exception("Invalid authentication response - missing token");
                 }
@@ -979,6 +1015,25 @@ namespace AbxrLib.Runtime.Services.Auth
                 _tokenExpiry = DateTime.UtcNow.AddHours(24);
                 Debug.Log($"[AbxrLib] Auth handoff successful. Modules: {ResponseData.Modules?.Count ?? 0}");
                 _sessionUsedAuthHandoff = true;
+
+                // For the ArborInsightsClient transport: the normal AuthRequestCoroutine is bypassed by handoff,
+                // so the service has no knowledge of this session. Pass the full auth response JSON so the
+                // service can set apiToken/apiSecret/restUrl atomically and start accepting events immediately.
+                var transport = _getTransport?.Invoke();
+                if (transport?.IsServiceTransport == true)
+                {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                    try
+                    {
+                        string handoffRestUrl = Configuration.Instance?.restUrl ?? "";
+                        ArborInsightsClient.SetAuthFromHandoff(responseText, handoffRestUrl);
+                    }
+                    catch (Exception ex) { Debug.LogWarning($"[AbxrLib] SetAuthFromHandoff failed: {ex.Message}"); }
+#endif
+                    // Mark as service-authenticated so re-auth polling is skipped (service manages token refresh)
+                    _usedArborInsightsClientForSession = true;
+                }
+
                 StartReAuthPolling();
                 AuthSucceeded();
                 return true;

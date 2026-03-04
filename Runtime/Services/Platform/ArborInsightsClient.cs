@@ -118,6 +118,12 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => _client.Call<int>("authenticate", szAppId, szOrgId, szDeviceId, szAuthSecret, ePartner);
 		public static int FinalAuthenticate() => _client.Call<int>("finalAuthenticate");
+		public static int SetAuthFromHandoff(string szAuthResponseJson, string szRestUrl)
+		{
+			if (_client == null) return (int)AbxrResult.NOT_INITIALIZED;
+			try { return _client.Call<int>("setAuthFromHandoff", szAuthResponseJson ?? "", szRestUrl ?? ""); }
+			catch (Exception e) { Debug.LogWarning($"[ArborInsightsClient] SetAuthFromHandoff failed: {e.Message}"); return (int)AbxrResult.NOT_INITIALIZED; }
+		}
 		public static int ReAuthenticate(bool bObtainAuthSecret) => _client.Call<int>("reAuthenticate", bObtainAuthSecret);
 		public static int ForceSendUnsent() => _client.Call<int>("forceSendUnsent");
 		// ---
@@ -412,6 +418,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => ArborInsightsClientBridge.Authenticate(szAppId ?? "", szOrgId ?? "", szDeviceId ?? "", szAuthSecret ?? "", ePartner);
 		public static int FinalAuthenticate() => ArborInsightsClientBridge.FinalAuthenticate();
+		public static int SetAuthFromHandoff(string szAuthResponseJson, string szRestUrl) => ArborInsightsClientBridge.SetAuthFromHandoff(szAuthResponseJson ?? "", szRestUrl ?? "");
 		public static int ReAuthenticate(bool bObtainAuthSecret) => ArborInsightsClientBridge.ReAuthenticate(bObtainAuthSecret);
 		public static int ForceSendUnsent() => ArborInsightsClientBridge.ForceSendUnsent();
 		// ---
