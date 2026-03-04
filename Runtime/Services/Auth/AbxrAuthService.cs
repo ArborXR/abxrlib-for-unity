@@ -59,7 +59,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private const string DeviceIdKey = "abxrlib_device_id";
         
         // Store entered email/text value for email and text auth methods
-        private static string _enteredAuthValue;
+        private string _enteredAuthValue;
         
         // Auth handoff for external launcher apps
         private bool _sessionUsedAuthHandoff;
@@ -182,8 +182,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 Debug.LogWarning("[AbxrLib] Skipping user authentication.");
                 KeyboardHandler.Destroy();
                 AuthSucceeded();
+                return;
             }
-            
+
             KeyboardAuthenticate(input);
         }
         

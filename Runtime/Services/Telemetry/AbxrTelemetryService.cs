@@ -60,11 +60,15 @@ namespace AbxrLib.Runtime.Services.Telemetry
 
         public void Stop()
         {
-            foreach (var coroutine in _coroutines)
+            if (_coroutines != null)
             {
-                if (coroutine != null) _runner.StopCoroutine(coroutine);
+                foreach (var coroutine in _coroutines)
+                {
+                    if (coroutine != null) _runner.StopCoroutine(coroutine);
+                }
+                _coroutines = null;
             }
-            
+
             InputDevices.deviceConnected -= RegisterDevice;
             
             _rightController = default;

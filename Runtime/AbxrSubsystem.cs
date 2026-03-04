@@ -175,6 +175,7 @@ namespace AbxrLib.Runtime
 
         private void OnDestroy()
         {
+            Abxr.OnAuthCompleted -= OnAuthCompletedHandler;
             if (_transportSelectionCoroutine != null)
             {
                 StopCoroutine(_transportSelectionCoroutine);
@@ -223,6 +224,8 @@ namespace AbxrLib.Runtime
         internal void OnApplicationQuitHandler()
         {
 	        Debug.Log("[AbxrLib] Ending session: closing running events and flushing");
+	        if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
+	        if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 	        CloseRunningEvents();
 	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync).
 	        SendAll();
@@ -231,6 +234,8 @@ namespace AbxrLib.Runtime
 	        _superMetaData.Clear();
 	        PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
 	        PlayerPrefs.Save();
+	        _assessmentStarted = false;
+	        AIProxyApi.ClearPastMessages();
 	        _authService.ClearSessionAndPrepareForNew();
         }
         
@@ -255,6 +260,8 @@ namespace AbxrLib.Runtime
         private void SwitchToArborInsightsTransport()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
+            if (_transport is AbxrTransportRest rest)
+                rest.Stop();
             _transport = new AbxrTransportArborInsights();
             Debug.Log("[AbxrLib] Switched to ArborInsightsClient transport.");
 #endif
@@ -480,6 +487,11 @@ internal void StartNewSession()
 			PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
 			PlayerPrefs.Save();
 
+			if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
+			if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
+			_assessmentStarted = false;
+			AIProxyApi.ClearPastMessages();
+
 #if UNITY_ANDROID && !UNITY_EDITOR
 			// When using ArborInsightsClient, unbind then bind to clear session-related connection state and get a fresh connection.
 			if (_arborInsightsClient != null && ArborInsightsClient.IsServiceBound())
@@ -527,26 +539,28 @@ internal void StartNewSession()
 			return true;
 		}
 
-		/// <summary>
-		/// Advance to the next module in the sequence after current module completion.
-		/// Called automatically from EventAssessmentComplete() when in a module sequence.
-		/// Advances the module index and triggers the next module, or exits if all modules are complete.
-		/// </summary>
-		private void AdvanceToNextModule()
-		{
-			_currentModuleIndex++;
-			if (_currentModuleIndex < _authService.ResponseData.Modules.Count)
-			{
-				Debug.Log($"[AbxrLib] Module '{_authService.ResponseData.Modules[_currentModuleIndex-1].Name}' complete. " +
-				          $"Advancing to next module - '{_authService.ResponseData.Modules[_currentModuleIndex].Name}'");
-				Abxr.OnModuleTarget?.Invoke(_authService.ResponseData.Modules[_currentModuleIndex].Target);
-			}
-			else
-			{
-				Abxr.OnAllModulesCompleted?.Invoke();
-				Debug.Log("[AbxrLib] All modules complete");
-			}
-		}
+        /// <summary>
+        /// Advance to the next module in the sequence after current module completion.
+        /// Called automatically from EventAssessmentComplete() when in a module sequence.
+        /// Advances the module index and triggers the next module, or exits if all modules are complete.
+        /// </summary>
+        private void AdvanceToNextModule()
+        {
+            var modules = _authService.ResponseData?.Modules;
+            if (modules == null || modules.Count == 0) return;
+            _currentModuleIndex++;
+            if (_currentModuleIndex < modules.Count)
+            {
+                Debug.Log($"[AbxrLib] Module '{modules[_currentModuleIndex - 1].Name}' complete. " +
+                             $"Advancing to next module - '{modules[_currentModuleIndex].Name}'");
+                Abxr.OnModuleTarget?.Invoke(modules[_currentModuleIndex].Target);
+            }
+            else
+            {
+                Abxr.OnAllModulesCompleted?.Invoke();
+                Debug.Log("[AbxrLib] All modules complete");
+            }
+        }
 		
 		/// <summary>
 		/// Set module metadata when no modules are provided in authentication.
@@ -586,7 +600,7 @@ internal void StartNewSession()
 			SaveSuperMetaData();
 		}
 		
-		internal List<ModuleData> GetModuleList() => _authService.ResponseData.Modules;
+		internal List<ModuleData> GetModuleList() => _authService.ResponseData?.Modules;
 		
 		internal void Log(string logMessage, Abxr.LogLevel logLevel, Dictionary<string, string> metadata)
 		{
@@ -741,7 +755,7 @@ internal void StartNewSession()
 			Event(assessmentName, meta);
 			
 			// Check if we're in a module sequence
-			if (_authService.ResponseData.Modules?.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
+			if (_authService.ResponseData?.Modules?.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
 			{
 				AdvanceToNextModule();
 			}
@@ -1081,9 +1095,10 @@ internal void StartNewSession()
 			
 			// If LMS modules exist, inject current module metadata unless the event already specifies it.
 			// (Data-specific metadata takes precedence.)
-			if (_authService.ResponseData.Modules?.Count > 0 && _currentModuleIndex < _authService.ResponseData.Modules?.Count)
+			var modules = _authService.ResponseData?.Modules;
+			if (modules?.Count > 0 && _currentModuleIndex < modules.Count)
 			{
-				ModuleData moduleData = _authService.ResponseData.Modules[_currentModuleIndex];
+				ModuleData moduleData = modules[_currentModuleIndex];
 				// these are potentially sharing developer private information. Disabling for now
 				if (!meta.ContainsKey("module")) meta["module"] = moduleData.Target;
 				if (!meta.ContainsKey("moduleId")) meta["moduleId"] = moduleData.Id;

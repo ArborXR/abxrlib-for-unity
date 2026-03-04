@@ -38,8 +38,20 @@ namespace AbxrLib.Runtime.Services.Transport
         private float _lastDataCallTime;
         private float _lastStorageCallTime;
         private Coroutine _tickCoroutine;
+        private bool _stopped;
 
         public bool IsServiceTransport => false;
+
+        /// <summary>Stops the tick coroutine so this transport can be released when replaced (e.g. by ArborInsights transport). Prevents leak and ongoing CPU use.</summary>
+        internal void Stop()
+        {
+            _stopped = true;
+            if (_tickCoroutine != null && _runner != null)
+            {
+                _runner.StopCoroutine(_tickCoroutine);
+                _tickCoroutine = null;
+            }
+        }
 
         public AbxrTransportRest(AbxrAuthService authService, MonoBehaviour runner)
         {
@@ -190,6 +202,7 @@ namespace AbxrLib.Runtime.Services.Transport
             string url = Utils.BuildUrlWithParams(_storageUri.ToString(), queryParams);
             using var request = UnityWebRequest.Get(url);
             request.SetRequestHeader("Accept", "application/json");
+            request.timeout = Configuration.Instance.requestTimeoutSeconds;
             _authService.SetAuthHeaders(request);
             yield return request.SendWebRequest();
             if (request.result == UnityWebRequest.Result.Success)
@@ -216,6 +229,7 @@ namespace AbxrLib.Runtime.Services.Transport
             string url = Utils.BuildUrlWithParams(_storageUri.ToString(), queryParams);
             using var request = UnityWebRequest.Delete(url);
             request.SetRequestHeader("Accept", "application/json");
+            request.timeout = Configuration.Instance.requestTimeoutSeconds;
             _authService.SetAuthHeaders(request);
             yield return request.SendWebRequest();
             onComplete?.Invoke(request.result == UnityWebRequest.Result.Success);
@@ -319,11 +333,13 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private IEnumerator TickCoroutine()
         {
-            while (true)
+            while (!_stopped)
             {
                 yield return WaitQuarterSecond;
+                if (_stopped) yield break;
                 if (Time.time >= _nextDataSendAt)
                     yield return SendData();
+                if (_stopped) yield break;
                 if (Time.time >= _nextStorageSendAt)
                     yield return SendStorage();
             }
@@ -365,6 +381,9 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private IEnumerator SendDataWithRetry(List<EventPayload> events, List<TelemetryPayload> telemetries, List<LogPayload> logs)
         {
+            string json;
+            try { json = JsonConvert.SerializeObject(new DataPayloadWrapper { @event = events, telemetry = telemetries, basicLog = logs }); }
+            catch (Exception ex) { Debug.LogError($"[AbxrLib] Data serialization failed: {ex.Message}"); yield break; }
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
@@ -377,8 +396,6 @@ namespace AbxrLib.Runtime.Services.Transport
                 bool dataRetryBreak = false;
                 try
                 {
-                    var wrapper = new DataPayloadWrapper { @event = events, telemetry = telemetries, basicLog = logs };
-                    string json = JsonConvert.SerializeObject(wrapper);
                     request = new UnityWebRequest(_dataUri, "POST");
                     Utils.BuildRequest(request, json);
                     _authService.SetAuthHeaders(request, json);
@@ -441,6 +458,9 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private IEnumerator SendStorageWithRetry(List<StoragePayload> toSend)
         {
+            string json;
+            try { json = JsonConvert.SerializeObject(new StoragePayloadWrapper { data = toSend }); }
+            catch (Exception ex) { Debug.LogError($"[AbxrLib] Storage serialization failed: {ex.Message}"); yield break; }
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
@@ -453,8 +473,6 @@ namespace AbxrLib.Runtime.Services.Transport
                 bool storageRetryBreak = false;
                 try
                 {
-                    var wrapper = new StoragePayloadWrapper { data = toSend };
-                    string json = JsonConvert.SerializeObject(wrapper);
                     request = new UnityWebRequest(_storageUri, "POST");
                     Utils.BuildRequest(request, json);
                     _authService.SetAuthHeaders(request, json);
