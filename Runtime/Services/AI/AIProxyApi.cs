@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,6 +16,12 @@ namespace AbxrLib.Runtime.Services.AI
         private const string UrlPath = "/v1/services/llm";
         private static readonly List<string> PastMessages = new();
         private static Uri _uri;
+
+        /// <summary>Clears the static conversation history so a new session does not see the previous session's messages.</summary>
+        internal static void ClearPastMessages()
+        {
+            PastMessages.Clear();
+        }
         private readonly AbxrAuthService _authService;
 
         public AIProxyApi(AbxrAuthService authService)

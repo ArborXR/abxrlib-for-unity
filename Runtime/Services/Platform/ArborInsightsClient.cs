@@ -83,10 +83,10 @@ namespace AbxrLib.Runtime.Services.Platform
 		}
 
 		public static void Unbind() { if (_client != null) _client.Call("unbind"); }
-		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) => _client.Call<int>("basicTypes", anInt, aLong, aBoolean, aFloat, aDouble, aString);
-		public static string WhatTimeIsIt() => _client.Call<string>("whatTimeIsIt");
-		public static bool IsServiceBound() => _client.Call<bool>("isServiceBound");
-		public static bool IsServiceAvailable() => _client.Call<bool>("isServiceAvailable");
+		public static void BasicTypes(int anInt, long aLong, bool aBoolean, float aFloat, double aDouble, String aString) { if (_client != null) _client.Call<int>("basicTypes", anInt, aLong, aBoolean, aFloat, aDouble, aString); }
+		public static string WhatTimeIsIt() => _client != null ? _client.Call<string>("whatTimeIsIt") : null;
+		public static bool IsServiceBound() => _client != null && _client.Call<bool>("isServiceBound");
+		public static bool IsServiceAvailable() => _client != null && _client.Call<bool>("isServiceAvailable");
 		/// <summary>True if the service reports fully initialized. Never throws; returns false if the bridge is unavailable or JNI fails.</summary>
 		public static bool ServiceIsFullyInitialized()
 		{
@@ -95,8 +95,8 @@ namespace AbxrLib.Runtime.Services.Platform
 			catch { return false; }
 		}
 		// --- API code.
-		public static void AbxrLibInitStart() => _client.Call<int>("abxrLibInitStart");
-		public static void AbxrLibInitEnd() => _client.Call<int>("abxrLibInitEnd");
+		public static void AbxrLibInitStart() { if (_client != null) _client.Call<int>("abxrLibInitStart"); }
+		public static void AbxrLibInitEnd() { if (_client != null) _client.Call<int>("abxrLibInitEnd"); }
 		// ---
 		public static String AuthRequest(String szUserId, String dictAdditionalUserData)
 		{
@@ -118,6 +118,12 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => _client.Call<int>("authenticate", szAppId, szOrgId, szDeviceId, szAuthSecret, ePartner);
 		public static int FinalAuthenticate() => _client.Call<int>("finalAuthenticate");
+		public static int SetAuthFromHandoff(string szAuthResponseJson, string szRestUrl)
+		{
+			if (_client == null) return (int)AbxrResult.NOT_INITIALIZED;
+			try { return _client.Call<int>("setAuthFromHandoff", szAuthResponseJson ?? "", szRestUrl ?? ""); }
+			catch (Exception e) { Debug.LogWarning($"[ArborInsightsClient] SetAuthFromHandoff failed: {e.Message}"); return (int)AbxrResult.NOT_INITIALIZED; }
+		}
 		public static int ReAuthenticate(bool bObtainAuthSecret) => _client.Call<int>("reAuthenticate", bObtainAuthSecret);
 		public static int ForceSendUnsent() => _client.Call<int>("forceSendUnsent");
 		// ---
@@ -412,6 +418,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => ArborInsightsClientBridge.Authenticate(szAppId ?? "", szOrgId ?? "", szDeviceId ?? "", szAuthSecret ?? "", ePartner);
 		public static int FinalAuthenticate() => ArborInsightsClientBridge.FinalAuthenticate();
+		public static int SetAuthFromHandoff(string szAuthResponseJson, string szRestUrl) => ArborInsightsClientBridge.SetAuthFromHandoff(szAuthResponseJson ?? "", szRestUrl ?? "");
 		public static int ReAuthenticate(bool bObtainAuthSecret) => ArborInsightsClientBridge.ReAuthenticate(bObtainAuthSecret);
 		public static int ForceSendUnsent() => ArborInsightsClientBridge.ForceSendUnsent();
 		// ---
@@ -545,13 +552,21 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void SetAuthPayloadForRequest(string restUrl, AuthPayload data)
 		{
 			set_RestUrl(restUrl ?? "https://lib-backend.xrdm.app/");
-			if (!string.IsNullOrEmpty(data.appId)) set_AppID(data.appId);
-			if (!string.IsNullOrEmpty(data.orgId)) set_OrgID(data.orgId);
-			if (!string.IsNullOrEmpty(data.authSecret)) set_AuthSecret(data.authSecret);
-			if (!string.IsNullOrEmpty(data.appToken)) set_AppToken(data.appToken);
-			if (!string.IsNullOrEmpty(data.orgToken)) set_OrgToken(data.orgToken);
-			if (!string.IsNullOrEmpty(data.SSOAccessToken)) set_SSOAccessToken(data.SSOAccessToken);
+			// Send one mode only: app tokens OR legacy (app_id/org_id/auth_secret), never both.
+			bool useAppTokens = !string.IsNullOrEmpty(data.appToken);
+			if (useAppTokens)
+			{
+				if (!string.IsNullOrEmpty(data.appToken)) set_AppToken(data.appToken);
+				if (!string.IsNullOrEmpty(data.orgToken)) set_OrgToken(data.orgToken);
+			}
+			else
+			{
+				if (!string.IsNullOrEmpty(data.appId)) set_AppID(data.appId);
+				if (!string.IsNullOrEmpty(data.orgId)) set_OrgID(data.orgId);
+				if (!string.IsNullOrEmpty(data.authSecret)) set_AuthSecret(data.authSecret);
+			}
 			if (!string.IsNullOrEmpty(data.buildType)) set_BuildType(data.buildType);
+			if (!string.IsNullOrEmpty(data.SSOAccessToken)) set_SSOAccessToken(data.SSOAccessToken);
 			if (!string.IsNullOrEmpty(data.deviceId)) set_DeviceID(data.deviceId);
 			if (!string.IsNullOrEmpty(data.userId)) set_UserID(data.userId);
 			int partner = string.Equals(data.partner, "arborxr", StringComparison.OrdinalIgnoreCase) ? 1 : 0;

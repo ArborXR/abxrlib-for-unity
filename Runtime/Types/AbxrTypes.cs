@@ -30,12 +30,14 @@ namespace AbxrLib.Runtime.Types
     [Serializable]
     public class AuthPayload
     {
-        public string appId; // legacy only
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string appId; // legacy only; omit when using app tokens
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string orgId; // legacy only
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string authSecret; // legacy only
-        public string appToken;
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string appToken; // omit when using legacy credentials
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string orgToken;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
