@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Transport;
-using AbxrLib.Runtime.Types;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Services.Data
@@ -20,10 +19,6 @@ namespace AbxrLib.Runtime.Services.Data
             _ = coroutineRunner ?? throw new ArgumentNullException(nameof(coroutineRunner));
             _getTransport = getTransport ?? throw new ArgumentNullException(nameof(getTransport));
         }
-
-        // AbxrTransportRest manages its own send schedule via its internal tick coroutine.
-        public void Start() { }
-        public void Stop() { }
 
         public void ForceSend() => _getTransport()?.ForceSend();
 

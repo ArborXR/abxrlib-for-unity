@@ -103,8 +103,5 @@ public class CommonWorkflowScenarios : AbxrPlayModeTestBase
         // 8. Trigger the on-quit handler (close running events, send all)
         RunQuitHandlerInTearDown = true;
         RunEndSessionInTearDown = false;
-
-        // 9. Wait for the data service to flush (ForceSend schedules send on next tick; allow time for HTTP)
-        yield return new WaitForSeconds(2f);
     }
 }

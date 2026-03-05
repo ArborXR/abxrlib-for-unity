@@ -35,6 +35,9 @@ namespace AbxrLib.Runtime
         /// <summary>For testing only. Exposes the data service so tests can inspect pending events/logs/telemetry.</summary>
         internal AbxrDataService DataServiceForTesting => _dataService;
 
+        /// <summary>For testing only. REST transport when active; null when using ArborInsightsClient. Use for GetPending*ForTesting in PlayMode.</summary>
+        internal AbxrTransportRest RestTransportForTesting => _transport as AbxrTransportRest;
+
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
         private AbxrDataService _dataService;
@@ -162,7 +165,6 @@ namespace AbxrLib.Runtime
             _headsetDetector = new HeadsetDetector(_authService, this);
             _headsetDetector.Start();
             
-            _dataService.Start();
             KeyboardManager.AuthService = _authService;
             
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -197,7 +199,6 @@ namespace AbxrLib.Runtime
                 _transportSelectionCoroutine = null;
             }
             _authService?.Shutdown();
-            _dataService?.Stop();
             _telemetryService?.Stop();
             _sceneChangeDetector?.Stop();
             _headsetDetector?.Stop();
