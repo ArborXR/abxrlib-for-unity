@@ -20,10 +20,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public Button skipButton;
 
         public TMP_InputField inputField;
-#if UNITY_ANDROID && !UNITY_EDITOR 
-        // Cache button state to avoid repeated logs
-        private bool? _lastQRButtonState = null;
-#endif
+        private bool? _lastQRButtonState;
         private void Awake()
         {
             if (Instance == null)
@@ -82,30 +79,17 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private void CheckAndEnableQRButton()
         {
             if (qrCodeButton == null) return;
-#if UNITY_ANDROID && !UNITY_EDITOR
-            bool hasPico = false;
-#if PICO_ENTERPRISE_SDK_3
-            hasPico = QRCodeReaderPico.Instance != null;
-#endif
-            bool hasGeneral = QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
-            bool isAvailable = hasPico || hasGeneral;
+            var reader = AbxrSubsystem.Instance?.GetQRCodeReader();
+            bool isAvailable = reader != null && reader.IsAvailable;
             if (_lastQRButtonState != isAvailable)
             {
                 qrCodeButton.gameObject.SetActive(isAvailable);
                 if (isAvailable)
-                {
-#if PICO_ENTERPRISE_SDK_3
-                    if (hasPico)
-                        Debug.Log("[AbxrLib] QR Code button enabled for PICO (SDK 3+)");
-                    else
-#endif
-                        Debug.Log("[AbxrLib] QR Code button enabled (device supported, permissions granted)");
-                }
+                    Debug.Log("[AbxrLib] QR Code button enabled (device supported, permissions granted)");
                 else
                     Debug.LogWarning("[AbxrLib] QR Code button hidden - QR scanning not available. Check device support and camera permissions.");
                 _lastQRButtonState = isAvailable;
             }
-#endif
         }
 
         private void AddPointerDownHandler(Button button, UnityEngine.Events.UnityAction action)
@@ -187,24 +171,15 @@ namespace AbxrLib.Runtime.UI.Keyboard
         
         private void QRCode()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.Instance != null)
+            var reader = AbxrSubsystem.Instance?.GetQRCodeReader();
+            if (reader != null && reader.IsAvailable)
             {
-                QRCodeReaderPico.Instance.ScanQRCode();
-                inputField.text = "";
-                return;
-            }
-#endif
-            if (QRCodeReader.Instance != null)
-            {
-                if (QRCodeReader.Instance.IsScanning())
-                    QRCodeReader.Instance.CancelScanning();
+                if (reader.IsScanning())
+                    reader.CancelScan();
                 else
-                    QRCodeReader.Instance.ScanQRCode();
+                    reader.ScanQRCode();
                 UpdateQRButtonTextImmediate();
             }
-#endif
             inputField.text = "";
         }
         
@@ -231,24 +206,10 @@ namespace AbxrLib.Runtime.UI.Keyboard
             TextMeshProUGUI buttonText = qrCodeButton.GetComponentInChildren<TextMeshProUGUI>();
             if (buttonText == null) return;
             
-            bool isScanning = false;
-            bool isInitializing = false;
-            bool permissionsDenied = false;
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.Instance != null)
-            {
-                // PICO SDK does not expose IsScanning/IsInitializing; button text stays default
-            }
-            else
-#endif
-            if (QRCodeReader.Instance != null)
-            {
-                isScanning = QRCodeReader.Instance.IsScanning();
-                isInitializing = QRCodeReader.Instance.IsInitializing();
-                permissionsDenied = QRCodeReader.AreCameraPermissionsDenied();
-            }
-#endif
+            var reader = AbxrSubsystem.Instance?.GetQRCodeReader();
+            bool isScanning = reader?.IsScanning() ?? false;
+            bool isInitializing = reader?.IsInitializing() ?? false;
+            bool permissionsDenied = reader?.AreCameraPermissionsDenied() ?? false;
             // Update text based on state (priority: permissions denied > scanning > initializing > idle)
             if (permissionsDenied)
             {

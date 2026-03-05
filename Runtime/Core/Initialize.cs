@@ -1,3 +1,4 @@
+using AbxrLib.Runtime.Services.QRCodeReader;
 using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
@@ -12,11 +13,7 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
 #if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            ObjectAttacher.Attach<QRCodeReaderPico>("QRCodeReaderPico");
-#else
-            ObjectAttacher.Attach<QRCodeReader>("QRCodeReader");
-#endif
+            AbxrQRCodeReaderFactory.AttachPreferredReader();
 #endif
             if (AbxrSubsystem.Instance != null) return;
             var go = new GameObject("[AbxrLib]");

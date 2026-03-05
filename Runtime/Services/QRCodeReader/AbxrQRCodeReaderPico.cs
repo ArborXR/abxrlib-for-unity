@@ -1,19 +1,9 @@
 /*
  * Copyright (c) 2025 ArborXR. All rights reserved.
  *
- * AbxrLib for Unity - PICO QR Code Reader (SDK)
+ * AbxrLib for Unity - QR Code Reader (Pico SDK)
  *
- * Uses PICO's PXR_Enterprise SDK for QR scanning on PICO headsets. Camera access is handled
- * by the platform; use this on PICO instead of the general QRCodeReader when the SDK is available.
- *
- * Only activates when:
- * - PICO_ENTERPRISE_SDK_3 is defined and PXR_Enterprise is available
- * - Running on a PICO Enterprise device (product name contains "enterprise").
- *
- * QR is known to work on PICO 4 Enterprise Ultra (4EU). On PICO 4 Enterprise (non-Ultra) the SDK
- * may fail (bind or ScanQRCode); we allow the attempt and on first failure mark the reader as
- * unsupported and persist that in PlayerPrefs so we do not offer QR on future app launches.
- *
+ * Uses PICO's PXR_Enterprise SDK for QR scanning on PICO headsets. Implements IAbxrQRCodeReader.
  * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
  */
 #if UNITY_ANDROID && !UNITY_EDITOR && PICO_ENTERPRISE_SDK_3
@@ -25,28 +15,25 @@ using UnityEngine;
 using Unity.XR.PICO.TOBSupport;
 using Unity.XR.PXR;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Services.QRCodeReader
 {
     /// <summary>
-    /// QR code reader for PICO Enterprise devices using PXR_Enterprise SDK. Known to work on PICO 4 Enterprise Ultra (4EU);
-    /// we also allow PICO 4 Enterprise and mark as unsupported on first bind/scan failure.
+    /// QR code reader for PICO Enterprise devices using PXR_Enterprise SDK. Implements IAbxrQRCodeReader.
     /// </summary>
-    public class QRCodeReaderPico : MonoBehaviour
+    internal class AbxrQRCodeReaderPico : MonoBehaviour, IAbxrQRCodeReader
     {
-        public static QRCodeReaderPico Instance;
-        public static AbxrAuthService AuthService;
+        public static AbxrQRCodeReaderPico Instance;
+        internal static AbxrAuthService AuthService { get; set; }
 
         private const string PicoQrUnsupportedKey = "abxrlib_pico_qr_unsupported";
 
-        /// <summary>
-        /// True once we have seen a failure (bind or ScanQRCode), this session or a previous one (PlayerPrefs).
-        /// </summary>
         private static bool _qrUnsupportedThisSession;
 
-        /// <summary>
-        /// True if the PICO QR reader is available (Instance exists and we have not marked it unsupported this device).
-        /// </summary>
-        public static bool IsAvailable => Instance != null && !_qrUnsupportedThisSession;
+        public bool IsAvailable => Instance != null && !_qrUnsupportedThisSession;
+        public bool IsCameraTexturePlaceable => false;
+        public bool IsScanning() => false;
+        public bool IsInitializing() => false;
+        public bool AreCameraPermissionsDenied() => false;
 
         private Action<string> _scanResultCallback;
 
@@ -69,7 +56,7 @@ namespace AbxrLib.Runtime.Core
 
         private void Awake()
         {
-            string productName = Unity.XR.PXR.PXR_System.GetProductName();
+            string productName = PXR_System.GetProductName();
             if (!IsPicoEnterprise(productName))
             {
                 Debug.LogWarning("[AbxrLib] Disabling PICO QR Code Scanner. Must be run on a PICO Enterprise device. Product: " + productName);
@@ -80,11 +67,11 @@ namespace AbxrLib.Runtime.Core
             {
                 _qrUnsupportedThisSession = GetPicoQrUnsupportedFromPrefs();
                 Instance = this;
-                Debug.Log("[AbxrLib] QRCodeReaderPico Instance activated successfully.");
+                Debug.Log("[AbxrLib] AbxrQRCodeReaderPico Instance activated successfully.");
             }
             else
             {
-                Debug.LogWarning("[AbxrLib] QRCodeReaderPico Instance already exists. Destroying duplicate.");
+                Debug.LogWarning("[AbxrLib] AbxrQRCodeReaderPico Instance already exists. Destroying duplicate.");
                 Destroy(gameObject);
             }
         }
@@ -111,18 +98,12 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
-        /// <summary>
-        /// Set the one-shot callback for developer API (StartQRScanForAuthInput). When set, OnQRCodeScanned invokes this instead of KeyboardAuthenticate.
-        /// </summary>
         public void SetScanResultCallback(Action<string> callback)
         {
             _scanResultCallback = callback;
         }
 
-        /// <summary>
-        /// Cancel an in-progress scan started with a callback; invokes the callback with null so the handler can close UI.
-        /// </summary>
-        public void CancelScanForAuthInput()
+        public void CancelScan()
         {
             if (_scanResultCallback != null)
             {
@@ -154,6 +135,8 @@ namespace AbxrLib.Runtime.Core
                 }
             }
         }
+
+        public Texture GetCameraTexture() => null;
 
         private void OnQRCodeScanned(string scanResult)
         {

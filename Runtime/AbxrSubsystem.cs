@@ -9,6 +9,7 @@ using AbxrLib.Runtime.Services.Data;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Services.Telemetry;
 using AbxrLib.Runtime.Services.Platform;
+using AbxrLib.Runtime.Services.QRCodeReader;
 using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
@@ -38,6 +39,7 @@ namespace AbxrLib.Runtime
         private AIProxyApi _aiProxyApi;
         private SceneChangeDetector _sceneChangeDetector;
         private HeadsetDetector _headsetDetector;
+        private IAbxrQRCodeReader _qrReader;
 
         // ── Module state ─────────────────────────────────────────────
         private int _currentModuleIndex;
@@ -152,13 +154,8 @@ namespace AbxrLib.Runtime
             
             _dataService.Start();
             KeyboardManager.AuthService = _authService;
-            
-#if UNITY_ANDROID && !UNITY_EDITOR
-            QRCodeReader.AuthService = _authService;
-#if PICO_ENTERPRISE_SDK_3
-            QRCodeReaderPico.AuthService = _authService;
-#endif
-#endif
+
+            _qrReader = AbxrQRCodeReaderFactory.Create(_authService);
 
             // Auto-start auth (gated on transport selection so first auth uses correct backend)
             var settings = Configuration.Instance;
@@ -285,81 +282,41 @@ namespace AbxrLib.Runtime
             _authService.SubmitInput(input);
         }
 
+        internal IAbxrQRCodeReader GetQRCodeReader() => _qrReader;
+
         /// <summary>True when QR scanning is available on this device and the SDK is currently waiting for auth input (OnInputRequested was invoked). Use this to show/hide the "Scan QR" option; when true, OnInputSubmitted will be accepted after a scan.</summary>
         internal bool IsQRScanForAuthAvailable()
         {
             if (_authService == null || !_authService.IsInputRequestPending) return false;
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.IsAvailable) return true;
-#endif
-            return QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
-#else
-            return false;
-#endif
+            return _qrReader != null && _qrReader.IsAvailable;
         }
 
         internal void StartQRScanForAuthInput(Action<string> onResult)
         {
             if (onResult == null) return;
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.IsAvailable)
+            if (_qrReader != null && _qrReader.IsAvailable)
             {
-                QRCodeReaderPico.Instance.SetScanResultCallback(onResult);
-                QRCodeReaderPico.Instance.ScanQRCode();
+                _qrReader.SetScanResultCallback(onResult);
+                _qrReader.ScanQRCode();
                 return;
             }
-#endif
-            if (QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable())
-            {
-                QRCodeReader.Instance.SetScanResultCallback(onResult);
-                QRCodeReader.Instance.ScanQRCode();
-                return;
-            }
-#endif
             onResult(null);
         }
 
         internal void CancelQRScanForAuthInput()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.IsAvailable)
-            {
-                QRCodeReaderPico.Instance.CancelScanForAuthInput();
-                return;
-            }
-#endif
-            if (QRCodeReader.Instance != null && QRCodeReader.Instance.IsScanning())
-                QRCodeReader.Instance.CancelScanning();
-#endif
+            _qrReader?.CancelScan();
         }
 
         /// <summary>True when the app can choose where to display the QR camera feed (non-Pico). When true, use GetQRScanCameraTexture() and assign to your own RawImage. When false (Pico), the platform shows its own scanner UI.</summary>
         internal bool IsQRScanCameraTexturePlaceable()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.IsAvailable) return false;
-#endif
-            return QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
-#else
-            return false;
-#endif
+            return _qrReader != null && _qrReader.IsCameraTexturePlaceable;
         }
 
         internal Texture GetQRScanCameraTexture()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            // Pico uses platform scanner UI; there is no embeddable camera texture.
-            if (QRCodeReaderPico.IsAvailable) return null;
-#endif
-            return QRCodeReader.Instance?.GetCameraTexture();
-#else
-            return null;
-#endif
+            return _qrReader?.GetCameraTexture();
         }
 
         private void HandleAuthCompleted(bool success)

@@ -1,10 +1,10 @@
 /*
  * Copyright (c) 2025 ArborXR. All rights reserved.
  *
- * AbxrLib for Unity - Unified QR Code Reader
+ * AbxrLib for Unity - QR Code Reader (CameraStream)
  *
- * Standard QR code reader for Android XR devices other than PICO. Uses WebCamTexture and ZXing.
- * PICO devices use QRCodeReaderPico (PICO SDK) instead, as platform camera access requires their SDK.
+ * Camera-stream QR reader for Android XR (Meta Quest, etc.). Uses WebCamTexture and ZXing.
+ * Implements IAbxrQRCodeReader; PICO uses AbxrQRCodeReaderPico instead.
  *
  * Supported devices: Meta Quest 3/3S/Pro and others in SupportedDevices (PICO excluded).
  *
@@ -17,22 +17,25 @@ using System.Collections;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.UI;
 using UnityEngine;
 using UnityEngine.UI;
 using ZXing;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Services.QRCodeReader
 {
     /// <summary>
-    /// Unified QR code reader for Android XR devices (Meta Quest, PICO, etc.). Uses WebCamTexture + ZXing.
-    /// Only activates on supported devices; camera discovery is device-aware for different headset vendors.
+    /// Camera-stream QR code reader for Android XR (Meta Quest, etc.). Uses WebCamTexture + ZXing. Implements IAbxrQRCodeReader.
     /// </summary>
-    public class QRCodeReader : MonoBehaviour
+    internal class AbxrQRCodeReaderCameraStream : MonoBehaviour, IAbxrQRCodeReader
     {
-        public static QRCodeReader Instance;
-        public static AbxrAuthService AuthService;
+        public static AbxrQRCodeReaderCameraStream Instance;
+        internal static AbxrAuthService AuthService { get; set; }
+
+        public bool IsAvailable => IsQRScanningAvailable();
+        public bool IsCameraTexturePlaceable => true;
 
         // Supported devices: Meta Quest and other non-PICO XR devices. PICO uses QRCodeReaderPico (SDK) instead.
         private static readonly string[] SupportedDevices =
@@ -98,11 +101,11 @@ namespace AbxrLib.Runtime.Core
             if (Instance == null)
             {
                 Instance = this;
-                Debug.Log("[AbxrLib] QRCodeReader Instance activated successfully.");
+                Debug.Log("[AbxrLib] AbxrQRCodeReaderCameraStream Instance activated successfully.");
             }
             else
             {
-                Debug.LogWarning("[AbxrLib] QRCodeReader Instance already exists. Destroying duplicate.");
+                Debug.LogWarning("[AbxrLib] AbxrQRCodeReaderCameraStream Instance already exists. Destroying duplicate.");
                 Destroy(gameObject);
             }
         }
@@ -448,6 +451,9 @@ namespace AbxrLib.Runtime.Core
             }
         }
         
+        /// <summary>IAbxrQRCodeReader: cancel scan and invoke callback with null if set.</summary>
+        public void CancelScan() => CancelScanning();
+
         /// <summary>
         /// Cancel/stop QR code scanning
         /// </summary>
@@ -560,10 +566,13 @@ namespace AbxrLib.Runtime.Core
 #endif
         }
         
+        /// <summary>IAbxrQRCodeReader: whether camera permissions are denied (for UI feedback).</summary>
+        public bool AreCameraPermissionsDenied() => AreCameraPermissionsDeniedStatic();
+
         /// <summary>
         /// Check if camera permissions are denied (for UI feedback)
         /// </summary>
-        public static bool AreCameraPermissionsDenied()
+        private static bool AreCameraPermissionsDeniedStatic()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
