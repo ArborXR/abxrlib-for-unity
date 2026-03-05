@@ -253,6 +253,25 @@ namespace AbxrLib.Editor
                 EditorGUI.indentLevel--;
             }
 
+            if (unitTestConfigEnabled)
+            {
+                EditorGUILayout.Space(4);
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField("Test Runner", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("To see AbxrLib package tests in Window > General > Test Runner, add this project's manifest testables.", EditorStyles.wordWrappedLabel);
+                bool alreadyInTestables = TestRunnerTestablesHelper.IsPackageInTestables();
+                EditorGUI.BeginDisabledGroup(alreadyInTestables);
+                if (GUILayout.Button(alreadyInTestables ? "AbxrLib already in Test Runner testables" : "Add AbxrLib to Test Runner testables"))
+                {
+                    bool ok = TestRunnerTestablesHelper.EnsurePackageInTestables(out string msg);
+                    EditorUtility.DisplayDialog(ok ? "AbxrLib Test Runner" : "AbxrLib Test Runner – Error", msg, "OK");
+                    if (ok)
+                        UnityEditor.PackageManager.Client.Resolve();
+                }
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndVertical();
+            }
+
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
                 // Create a temporary instance to get the default values
