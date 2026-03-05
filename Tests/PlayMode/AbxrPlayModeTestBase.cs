@@ -16,6 +16,9 @@ public class AbxrPlayModeTestBase
 {
     protected GameObject SubsystemGO;
 
+    /// <summary>Override true to allow ArborInsightsClient transport in tests (e.g. when running on device). Default false so Editor tests use REST and can inspect pending events.</summary>
+    protected virtual bool AllowArborInsightsClientInTests => false;
+
     /// <summary>Set to true in a test to have TearDown call OnApplicationQuitHandler() (close running events, send or unbind) before EndSession(). Default false.</summary>
     protected bool RunQuitHandlerInTearDown { get; set; }
 
@@ -54,7 +57,8 @@ public class AbxrPlayModeTestBase
         ModifyConfig(config, "enableAutoStartAuthentication", false); // Tests call StartAuthentication() via PerformAuth.
         ModifyConfig(config, "buildType", "development");             // So tests can authenticate.
         ModifyConfig(config, "enableArborMdmClient", false);
-        ModifyConfig(config, "enableArborInsightsClient", false);
+        if (!AllowArborInsightsClientInTests)
+            ModifyConfig(config, "enableArborInsightsClient", false);
         ModifyConfig(config, "enableAutoStartModules", false);
         ModifyConfig(config, "enableAutoAdvanceModules", false);
         ModifyConfig(config, "returnToLauncherAfterAssessmentComplete", false);
@@ -64,8 +68,7 @@ public class AbxrPlayModeTestBase
         SubsystemGO.AddComponent<AbxrSubsystem>();
 
         // In PlayMode tests, when Unit Test Credentials are enabled we auto-respond to auth input using configured values.
-        // No defaults: user must enable "Unit Test Credentials" and set the PIN/email/text they want in the AbxrLib config asset.
-#if UNITY_EDITOR
+        // Works in Editor and on device: enable in AbxrLib config and set PIN/email/text as needed.
         Abxr.OnInputRequested = (type, prompt, domain, error) =>
         {
             var c = Configuration.Instance;
@@ -88,7 +91,6 @@ public class AbxrPlayModeTestBase
             Debug.Log($"[AbxrPlayModeTestBase] OnInputRequested: type={type}, prompt={prompt}, submitting configured value {value})");
             Abxr.OnInputSubmitted(value);
         };
-#endif
     }
 
     /// <summary>Saves the current config field value and sets the new one; TearDown restores from _savedConfig.</summary>

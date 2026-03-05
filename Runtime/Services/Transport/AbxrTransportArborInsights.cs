@@ -164,6 +164,10 @@ namespace AbxrLib.Runtime.Services.Transport
             // No-op; service session is cleared on Unbind.
         }
 
+        public List<EventPayload> GetPendingEventsForTesting() => new List<EventPayload>();
+        public List<LogPayload> GetPendingLogsForTesting() => new List<LogPayload>();
+        public List<TelemetryPayload> GetPendingTelemetryForTesting() => new List<TelemetryPayload>();
+
         /// <summary>True if the response is valid auth success (has token or modules). Service returns success JSON with token/secret stripped, or error body on failure.</summary>
         private static bool LooksLikeSuccessAuthResponse(string responseJson)
         {

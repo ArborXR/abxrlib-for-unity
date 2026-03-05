@@ -38,6 +38,16 @@ namespace AbxrLib.Runtime
         /// <summary>For testing only. REST transport when active; null when using ArborInsightsClient. Use for GetPending*ForTesting in PlayMode.</summary>
         internal AbxrTransportRest RestTransportForTesting => _transport as AbxrTransportRest;
 
+        /// <summary>For testing only. Current transport (REST or ArborInsights). Use to check IsServiceTransport and call GetPending*ForTesting on any transport.</summary>
+        internal IAbxrTransport GetTransportForTesting() => _transport;
+
+        /// <summary>For testing only. Pending events from current transport; empty list when transport is null or service (device).</summary>
+        internal List<EventPayload> GetPendingEventsForTesting() => _transport?.GetPendingEventsForTesting() ?? new List<EventPayload>();
+        /// <summary>For testing only. Pending logs from current transport; empty when null or service.</summary>
+        internal List<LogPayload> GetPendingLogsForTesting() => _transport?.GetPendingLogsForTesting() ?? new List<LogPayload>();
+        /// <summary>For testing only. Pending telemetry from current transport; empty when null or service.</summary>
+        internal List<TelemetryPayload> GetPendingTelemetryForTesting() => _transport?.GetPendingTelemetryForTesting() ?? new List<TelemetryPayload>();
+
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
         private AbxrDataService _dataService;
