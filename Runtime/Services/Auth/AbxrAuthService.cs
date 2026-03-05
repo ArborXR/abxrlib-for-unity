@@ -500,7 +500,7 @@ namespace AbxrLib.Runtime.Services.Auth
                         if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_authMechanism?.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
                         {
                             _authMechanism.type = "assessmentPin";
-                            _authMechanism.prompt = "LMS PIN";
+                            _authMechanism.prompt = "Enter your 6-digit PIN";
                         }
                         string authType = _authMechanism?.type ?? "";
                         if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))

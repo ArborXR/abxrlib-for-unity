@@ -335,7 +335,7 @@ namespace AbxrLib.Runtime.Core
         [FormerlySerializedAs("skipArborMdmClientForAuth")]
         public bool enableArborMdmClient = true;
 
-        [Tooltip("When enabled (Auth Handoff Launcher flow), the auth mechanism from config is overridden: if type is not already assessmentPin, it is set to assessmentPin with prompt \"LMS PIN\". Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false.")]
+        [Tooltip("When enabled (Auth Handoff Launcher flow), the auth mechanism from config is overridden: if type is not already assessmentPin, it is set to assessmentPin with prompt \"Enter your 6-digit PIN\". Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false.")]
         public bool enableLearnerLauncherMode = false;
 
         [FormerlySerializedAs("disableAutomaticTelemetry")]
