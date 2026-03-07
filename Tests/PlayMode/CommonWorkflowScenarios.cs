@@ -1,7 +1,10 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // Common workflow scenarios seen from users of the Unity package. Use PerformAuth / RunEndSession from base; add more scenarios as needed.
+// All scenarios use useAppTokens=true, buildType=production_custom so they work consistently when Configuration has app token and org token set for unit tests.
 using System.Collections;
 using AbxrLib.Runtime;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -9,9 +12,23 @@ using UnityEngine.TestTools;
 [TestFixture]
 public class CommonWorkflowScenarios : AbxrPlayModeTestBase
 {
+    /// <summary>Sets runtime auth to production_custom with app/org tokens from Configuration so auth succeeds when config is set up for unit tests.</summary>
+    private void SetProductionCustomAuth()
+    {
+        var c = Configuration.Instance;
+        SetRuntimeAuth(new RuntimeAuthConfig
+        {
+            useAppTokens = true,
+            buildType = "production_custom",
+            appToken = c?.appToken ?? "",
+            orgToken = c?.orgToken ?? ""
+        });
+    }
+
     [UnityTest]
     public IEnumerator FullAssessmentWithObjectivesAndInteractions_Scenario()
     {
+        SetProductionCustomAuth();
         // 1. Authenticate using the framework
         bool authSucceeded = false;
         yield return PerformAuth(result => authSucceeded = result);
@@ -74,6 +91,7 @@ public class CommonWorkflowScenarios : AbxrPlayModeTestBase
     [UnityTest]
     public IEnumerator NoAssessmentWithEventAndObjective_Scenario()
     {
+        SetProductionCustomAuth();
         // 1. Authenticate using the framework (no assessment in this scenario)
         bool authSucceeded = false;
         yield return PerformAuth(result => authSucceeded = result);
