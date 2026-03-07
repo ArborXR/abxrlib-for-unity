@@ -1,6 +1,7 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode tests for authentication first-stage: config + validation outcome (succeed/fail).
 // Uses RuntimeAuthConfig via SetRuntimeAuth so Configuration is not modified.
+// All tests set authMechanism type to "none" so no second-stage PIN/input is requested.
 // When a value is "set" (not empty/invalid), use the Configuration asset so tests run with project credentials.
 //
 // Environment: A = Unity TestRunner play mode (no ArborMdmClient). B = Android headset without MDM. C = Headset with ArborMdmClient.
@@ -29,6 +30,9 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     internal const string AuthFailureOrgUnavailable = "[AbxrLib] Authentication failure: Organization identification unavailable.";
     internal const string AuthFailureInitialRequestFailed = "[AbxrLib] Authentication failure: [AbxrLib] Initial authentication request failed";
 
+    /// <summary>Auth mechanism "none" so first-stage tests skip second-stage PIN/input.</summary>
+    private static AuthMechanism AuthMechanismNone => new AuthMechanism { type = "none", prompt = "", domain = "" };
+
     protected override void CreateSubsystemIfNeeded()
     {
         // First-stage tests set runtime auth then call CreateSubsystem() in each test.
@@ -48,7 +52,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Dev_NoIds_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "development", appId = "", orgId = "", authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = "", orgId = "", authSecret = "" });
         LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -59,7 +63,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Dev_AppIdOnly()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = "", authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = "", authSecret = "" });
         bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyCredentials)
             LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
@@ -75,7 +79,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Dev_AppIdOrgId()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
         bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyCredentials)
             LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
@@ -91,7 +95,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Dev_FullConfig_Succeeds()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsTrue(success, "With full legacy credentials (appId, orgId, authSecret) in development, auth should succeed.");
@@ -101,7 +105,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Prod_NoIds_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production", appId = "", orgId = "", authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = "", orgId = "", authSecret = "" });
         LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -112,7 +116,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOnly()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = "", authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = "", authSecret = "" });
         bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyCredentials)
             LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
@@ -128,7 +132,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOrgId()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
         bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyCredentials)
             LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
@@ -144,7 +148,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Prod_FullConfig()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
         bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyCredentials)
             LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
@@ -160,7 +164,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_ProdCustom_AppIdOnly_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = "", authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = "", authSecret = "" });
         LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -171,7 +175,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_ProdCustom_AppIdOrgId_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
         LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -182,7 +186,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_ProdCustom_FullConfig_Succeeds()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsTrue(success);
@@ -192,7 +196,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Dev_NoAppToken_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "development", appToken = "", orgToken = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = "", orgToken = "" });
         LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -203,7 +207,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Dev_AppTokenOnly()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = "" });
         bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyOrgToken)
             LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
@@ -219,7 +223,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Dev_BothTokens_Succeeds()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsTrue(success);
@@ -229,7 +233,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Prod_NoAppToken_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = "", orgToken = ConfigOrgToken });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "", orgToken = ConfigOrgToken });
         LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -240,7 +244,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Prod_OrgTokenOnly_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = "", orgToken = ConfigOrgToken });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "", orgToken = ConfigOrgToken });
         LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -251,7 +255,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Prod_AppTokenOnly()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
         bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyOrgToken)
             LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
@@ -267,7 +271,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Prod_BothTokens()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
         bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyOrgToken)
             LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
@@ -283,7 +287,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_ProdCustom_AppTokenOnly_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = "" });
         LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -294,7 +298,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_ProdCustom_BothTokens_Succeeds()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsTrue(success);
@@ -304,7 +308,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOnly_WithOverrides_Succeeds()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = "", authSecret = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = "", authSecret = "" });
         Abxr.SetOrgId(ConfigOrgId);
         Abxr.SetAuthSecret(ConfigAuthSecret);
         bool success = false;
@@ -316,7 +320,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Prod_AppTokenOnly_WithOverrides()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
         Abxr.SetOrgId(ConfigOrgId);
         Abxr.SetAuthSecret(ConfigAuthSecret);
         bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
@@ -334,7 +338,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_AppTokens_Prod_InvalidAppTokenFormat_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = "not-a-jwt", orgToken = ConfigOrgToken });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "not-a-jwt", orgToken = ConfigOrgToken });
         LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -345,7 +349,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     public IEnumerator AuthFirstStage_Legacy_Dev_InvalidAppIdFormat_Fails()
     {
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "development", appId = "not-a-valid-uuid", orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = "not-a-valid-uuid", orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
         LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -368,7 +372,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // App 2 has enableReturnTo; EventAssessmentComplete would trigger exit path
         // ── App 1: normal auth flow (same as other tests) until success ───────
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
 
@@ -385,7 +389,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: fresh subsystem, receive handoff and adopt session; enableReturnTo so exit/return rule applies ───────
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app2AuthCompleted = false;
         bool app2Success = false;
@@ -411,7 +415,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         BaseSetUpForAppSwitch();
         CreateSubsystem();
         AssignUnitTestInputRequestedHandler(); // so PIN request is auto-submitted and OnAuthCompleted fires
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app1ReturnAuthCompleted = false;
         bool app1ReturnSuccess = false;
@@ -442,7 +446,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // don't stop play mode; simulate quit so test completes
         // ── App 1: auth and hand off to App 2 without ReturnToPackage ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
@@ -455,7 +459,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: receive handoff, adopt session; enableReturnTo true so EventAssessmentComplete triggers exit path ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app2AuthCompleted = false;
         bool app2Success = false;
         Abxr.OnAuthCompleted += (success, _) => { app2AuthCompleted = true; app2Success = success; };
@@ -485,7 +489,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         // ── App 1: auth and hand off to App 2 with ReturnToPackage ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
@@ -498,7 +502,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: receive handoff (with ReturnToPackage), adopt session; enableReturnTo false so exit/return path is NOT triggered ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = false });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = false });
         bool app2AuthCompleted = false;
         bool app2Success = false;
         Abxr.OnAuthCompleted += (success, _) => { app2AuthCompleted = true; app2Success = success; };
@@ -531,7 +535,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // App 2 would quit after handoff; we simulate so test continues
         // ── App 1: auth and hand off to App 2 with ReturnToPackage (JSON payload) ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
@@ -546,7 +550,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: receive handoff (with ReturnToPackage), adopt session; enableReturnTo so exit/return path runs on EventAssessmentComplete ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app2AuthCompleted = false;
         bool app2Success = false;
@@ -572,7 +576,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         BaseSetUpForAppSwitch();
 
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app1ReAdoptCompleted = false;
         bool app1ReAdoptSuccess = false;
@@ -597,7 +601,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // App 2 has enableReturnTo; EventAssessmentComplete would trigger exit path
         // ── App 1: normal auth flow until success ─────────────────────────────
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
 
@@ -613,7 +617,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: receive base64 handoff, normalize to JSON, adopt session; enableReturnTo so exit/return rule applies ────
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app2AuthCompleted = false;
         bool app2Success = false;
@@ -638,7 +642,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         BaseSetUpForAppSwitch();
         CreateSubsystem();
         AssignUnitTestInputRequestedHandler();
-        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app1ReturnAuthCompleted = false;
         bool app1ReturnSuccess = false;
