@@ -5,9 +5,7 @@
 //
 // Environment: A = Unity TestRunner play mode (no ArborMdmClient). B = Android headset without MDM. C = Headset with ArborMdmClient.
 // Outcome: _Fails = fails in all environments (e.g. missing appId/appToken or invalid format).  = fails in A/B (org credentials unavailable), succeeds in C (MDM supplies org). _Succeeds = has full credentials from config/overrides.
-using System;
 using System.Collections;
-using System.Text;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
@@ -34,6 +32,16 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     protected override void CreateSubsystemIfNeeded()
     {
         // First-stage tests set runtime auth then call CreateSubsystem() in each test.
+    }
+
+    /// <summary>Package name for handoff tests: from GetAuthResponse().PackageName when set, otherwise "com.example.app2". Logs when using response value.</summary>
+    private static string GetHandoffTargetPackageName()
+    {
+        var response = Abxr.GetAuthResponse();
+        string name = !string.IsNullOrEmpty(response?.PackageName) ? response.PackageName : "com.example.app2";
+        if (response != null && !string.IsNullOrEmpty(response.PackageName))
+            Debug.Log("[AbxrLib] (Test) Using PackageName from auth response: " + response.PackageName);
+        return name;
     }
 
     [UnityTest]
@@ -366,14 +374,12 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
         Assert.IsTrue(Abxr.GetAuthResponse() != null, "App 1 should have auth response after success.");
 
-        string handoffJson = AbxrSubsystem.Instance.AuthServiceForTesting.GetHandoffJson();
-        Assert.IsNotNull(handoffJson, "Handoff JSON should be built when authenticated.");
-        Assert.IsFalse(string.IsNullOrEmpty(handoffJson), "Handoff JSON should not be empty.");
-
-        // Full teardown (don't clear handoff yet; App 2 will consume it). Then full base setup so App 2 is a fresh "APK".
+        string packageName = GetHandoffTargetPackageName();
+        // Same flow as LaunchAppWithAuthHandoff: build handoff and "deliver" it. For test we inject instead of starting an app.
+        bool launched = AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest(packageName);
+        Assert.IsTrue(launched, "LaunchAppWithAuthHandoffForTest should succeed when authenticated (same validation as LaunchAppWithAuthHandoff).");
         FullTeardownForAppSwitch(clearAuthHandoff: false);
         Debug.Log("[AbxrLib] (Test) Leaving App 1, launching App 2.");
-        AbxrAuthService.SetAuthHandoffForTesting(handoffJson);
         BaseSetUpForAppSwitch();
 
         // ── App 2: fresh subsystem, receive handoff and adopt session ───────
@@ -433,16 +439,11 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
         Assert.IsTrue(Abxr.GetAuthResponse() != null, "App 1 should have auth response after success.");
 
-        string handoffJson = AbxrSubsystem.Instance.AuthServiceForTesting.GetHandoffJson();
-        Assert.IsNotNull(handoffJson, "Handoff JSON should be built when authenticated.");
-        Assert.IsFalse(string.IsNullOrEmpty(handoffJson), "Handoff JSON should not be empty.");
-
-        byte[] bytes = Encoding.UTF8.GetBytes(handoffJson);
-        string handoffPayloadBase64 = Convert.ToBase64String(bytes);
-
+        string packageName = GetHandoffTargetPackageName();
+        bool launched = AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest(packageName, useBase64Encoding: true);
+        Assert.IsTrue(launched, "LaunchAppWithAuthHandoffForTest(base64) should succeed when authenticated.");
         FullTeardownForAppSwitch(clearAuthHandoff: false);
         Debug.Log("[AbxrLib] (Test) Leaving App 1, launching App 2 (auth_handoff as base64).");
-        AbxrAuthService.SetAuthHandoffForTesting(handoffPayloadBase64);
         BaseSetUpForAppSwitch();
 
         // ── App 2: receive base64 handoff, normalize to JSON, adopt session ────

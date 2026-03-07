@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.AI;
 using AbxrLib.Runtime.Types;
@@ -536,6 +537,40 @@ namespace AbxrLib.Runtime
 			Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff is only supported on Android");
 			return false;
 #endif
+		}
+
+		/// <summary>
+		/// For testing only. Same validation and handoff payload as LaunchAppWithAuthHandoff but does not start an app;
+		/// injects the handoff via SetAuthHandoffForTesting so the test can emulate "App 2" receiving it.
+		/// Use when testing flows that would call LaunchAppWithAuthHandoff in production.
+		/// </summary>
+		/// <param name="packageName">Target package name (validated like production; used only for consistency).</param>
+		/// <param name="useBase64Encoding">If true, inject the handoff as base64-encoded JSON so NormalizeHandoffPayload is exercised.</param>
+		/// <returns>True if authenticated and handoff was injected, false otherwise.</returns>
+		internal bool LaunchAppWithAuthHandoffForTest(string packageName, bool useBase64Encoding = false)
+		{
+			if (string.IsNullOrEmpty(packageName))
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: packageName is empty");
+				return false;
+			}
+			if (!(_authService?.Authenticated ?? false))
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: not authenticated");
+				return false;
+			}
+			string handoffJson = _authService.GetHandoffJson();
+			if (handoffJson == null)
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: failed to build handoff payload");
+				return false;
+			}
+			string payload = useBase64Encoding
+				? Convert.ToBase64String(Encoding.UTF8.GetBytes(handoffJson))
+				: handoffJson;
+			AbxrAuthService.SetAuthHandoffForTesting(payload);
+			Debug.Log($"[AbxrLib] LaunchAppWithAuthHandoffForTest: injected handoff for '{packageName}'" + (useBase64Encoding ? " (base64)" : ""));
+			return true;
 		}
 
 		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
