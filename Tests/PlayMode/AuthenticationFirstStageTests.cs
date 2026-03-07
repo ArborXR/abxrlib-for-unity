@@ -2,6 +2,9 @@
 // PlayMode tests for authentication first-stage: config + validation outcome (succeed/fail).
 // Uses RuntimeAuthConfig via SetRuntimeAuth so Configuration is not modified.
 // When a value is "set" (not empty/invalid), use the Configuration asset so tests run with project credentials.
+//
+// Environment: A = Unity TestRunner play mode (no ArborMdmClient). B = Android headset without MDM. C = Headset with ArborMdmClient.
+// Outcome: _Fails = fails in all environments (e.g. missing appId/appToken or invalid format).  = fails in A/B (org credentials unavailable), succeeds in C (MDM supplies org). _Succeeds = has full credentials from config/overrides.
 using System.Collections;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Core;
@@ -42,7 +45,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Dev_AppIdOnly_FailsOrSucceeds()
+    public IEnumerator AuthFirstStage_Legacy_Dev_AppIdOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = "", authSecret = "" });
@@ -58,18 +61,23 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Dev_AppIdOrgId_Fails()
+    public IEnumerator AuthFirstStage_Legacy_Dev_AppIdOrgId()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyCredentials)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyCredentials)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (authSecret from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Dev_FullLegacy_Succeeds()
+    public IEnumerator AuthFirstStage_Legacy_Dev_FullConfig_Succeeds()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
@@ -90,7 +98,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOnly_FailsOrSucceeds()
+    public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = "", authSecret = "" });
@@ -106,25 +114,35 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOrgId_Fails()
+    public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOrgId()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyCredentials)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyCredentials)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (authSecret from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Prod_FullLegacy_Fails()
+    public IEnumerator AuthFirstStage_Legacy_Prod_FullConfig()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyCredentials)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyCredentials)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (production accepts org from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, production rejects org from config so auth fails.");
     }
 
     [UnityTest]
@@ -150,7 +168,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_ProdCustom_FullLegacy_Succeeds()
+    public IEnumerator AuthFirstStage_Legacy_ProdCustom_FullConfig_Succeeds()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
@@ -171,14 +189,19 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Dev_AppTokenOnly_Fails()
+    public IEnumerator AuthFirstStage_AppTokens_Dev_AppTokenOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyOrgToken)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyOrgToken)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (orgToken from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
 
     [UnityTest]
@@ -214,25 +237,35 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_AppTokenOnly_Fails()
+    public IEnumerator AuthFirstStage_AppTokens_Prod_AppTokenOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyOrgToken)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyOrgToken)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (dynamic orgToken from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_BothTokens_Fails()
+    public IEnumerator AuthFirstStage_AppTokens_Prod_BothTokens()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyOrgToken)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyOrgToken)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (production uses orgToken from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, production ignores orgToken from config so auth fails.");
     }
 
     [UnityTest]
@@ -269,7 +302,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_AppTokenOnly_WithOverrides_FailsOrSucceeds()
+    public IEnumerator AuthFirstStage_AppTokens_Prod_AppTokenOnly_WithOverrides()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
@@ -368,7 +401,7 @@ public class AuthenticationFirstStageTestsDevice : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_ProdCustom_FullLegacy_OnDevice_Succeeds()
+    public IEnumerator AuthFirstStage_Legacy_ProdCustom_FullConfig_OnDevice_Succeeds()
     {
         if (!IsRunningOnAndroidDevice())
             Assert.Ignore("Requires Android device (ArborMdmClient/ArborInsightsClient).");

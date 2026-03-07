@@ -1153,21 +1153,21 @@ namespace AbxrLib.Runtime.Services.Auth
                 _runtimeAuth.tags = value;
         }
 
-        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters are used even when MDM is not available.</summary>
+        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters are used. Only overwrites when the getter returns a non-empty value so we do not wipe config/injected credentials with empty (e.g. Editor with no MDM).</summary>
         private void ApplyAbxrOverridesToRuntimeAuth()
         {
             if (_runtimeAuth == null) return;
             string orgId = Abxr.GetOrgId();
-            if (orgId != null)
+            if (!string.IsNullOrEmpty(orgId))
                 _runtimeAuth.orgId = orgId;
             string authSecret = Abxr.GetFingerprint();
-            if (authSecret != null)
+            if (!string.IsNullOrEmpty(authSecret))
                 _runtimeAuth.authSecret = authSecret;
             string deviceId = Abxr.GetDeviceId();
-            if (deviceId != null)
+            if (!string.IsNullOrEmpty(deviceId))
                 _runtimeAuth.deviceId = deviceId;
             string[] tags = Abxr.GetDeviceTags();
-            if (tags != null)
+            if (tags != null && tags.Length > 0)
                 _runtimeAuth.tags = tags;
         }
     }
