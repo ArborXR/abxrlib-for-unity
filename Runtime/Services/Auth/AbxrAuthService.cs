@@ -677,25 +677,53 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         private bool CheckAuthHandoff()
         {
-            string handoffJson = null;
+            string handoffPayload = null;
             if (!string.IsNullOrEmpty(_authHandoffForTesting))
             {
-                handoffJson = _authHandoffForTesting;
+                handoffPayload = _authHandoffForTesting;
                 _authHandoffForTesting = null;
             }
-            if (string.IsNullOrEmpty(handoffJson))
-                handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
-            if (string.IsNullOrEmpty(handoffJson))
-                handoffJson = Utils.GetCommandLineArg("auth_handoff");
-            if (string.IsNullOrEmpty(handoffJson))
+            if (string.IsNullOrEmpty(handoffPayload))
+                handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
+            if (string.IsNullOrEmpty(handoffPayload))
+                handoffPayload = Utils.GetCommandLineArg("auth_handoff");
+            if (string.IsNullOrEmpty(handoffPayload))
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
-                handoffJson = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
+                handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
 #endif
             }
-            if (string.IsNullOrEmpty(handoffJson)) return false;
+            if (string.IsNullOrEmpty(handoffPayload)) return false;
+            string normalized = NormalizeHandoffPayload(handoffPayload);
+            if (string.IsNullOrEmpty(normalized)) return false;
             Debug.Log("[AbxrLib] Processing authentication handoff from external launcher");
-            return ParseAuthResponse(handoffJson, true);
+            return ParseAuthResponse(normalized, true);
+        }
+
+        /// <summary>
+        /// Returns the JSON string to use for handoff: if the value is raw JSON (starts with '{') use as-is;
+        /// if it is base64-encoded JSON, decode and return the decoded string. Returns null if decoding fails or result is not JSON.
+        /// </summary>
+        private static string NormalizeHandoffPayload(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return null;
+            string s = value.Trim();
+            if (s.StartsWith("{")) return s;
+            try
+            {
+                byte[] bytes = Convert.FromBase64String(s);
+                string decoded = Encoding.UTF8.GetString(bytes);
+                if (string.IsNullOrEmpty(decoded)) return null;
+                decoded = decoded.Trim();
+                Debug.Log("[AbxrLib] Normalized handoff payload from base64");
+                if (decoded.StartsWith("{")) return decoded;
+            }
+            catch
+            {
+                // Not valid base64; treat as raw and let ParseAuthResponse validate
+                return s;
+            }
+            return null;
         }
 
         /// <summary>Testing only. Injects the next auth_handoff payload so the next Authenticate() sees it (e.g. to simulate App 2 receiving handoff from App 1). Cleared after one use.</summary>

@@ -5,7 +5,9 @@
 //
 // Environment: A = Unity TestRunner play mode (no ArborMdmClient). B = Android headset without MDM. C = Headset with ArborMdmClient.
 // Outcome: _Fails = fails in all environments (e.g. missing appId/appToken or invalid format).  = fails in A/B (org credentials unavailable), succeeds in C (MDM supplies org). _Succeeds = has full credentials from config/overrides.
+using System;
 using System.Collections;
+using System.Text;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
@@ -412,6 +414,72 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         Abxr.OnAuthCompleted = null;
         Assert.IsTrue(app1ReturnAuthCompleted, "Return to App 1 should eventually complete auth flow (success or input/failure).");
         // We expect either full success (if unit test credentials auto-submit) or that we are not authenticated via handoff.
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "Return to App 1 should not have used handoff; we are in starting state.");
+    }
+
+    /// <summary>
+    /// Same flow as AuthHandoff_App1HandsOffToApp2_ThenReturnToApp1_IsStartingState but injects the auth_handoff
+    /// payload as base64-encoded JSON so that NormalizeHandoffPayload decodes it and handoff still succeeds.
+    /// </summary>
+    [UnityTest]
+    public IEnumerator AuthHandoff_Base64EncodedPayload_App2AdoptsSession_ThenReturnToApp1_IsStartingState()
+    {
+        // ── App 1: normal auth flow until success ─────────────────────────────
+        CreateSubsystem();
+        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+        bool app1Success = false;
+        yield return PerformAuth(r => app1Success = r);
+
+        Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
+        Assert.IsTrue(Abxr.GetAuthResponse() != null, "App 1 should have auth response after success.");
+
+        string handoffJson = AbxrSubsystem.Instance.AuthServiceForTesting.GetHandoffJson();
+        Assert.IsNotNull(handoffJson, "Handoff JSON should be built when authenticated.");
+        Assert.IsFalse(string.IsNullOrEmpty(handoffJson), "Handoff JSON should not be empty.");
+
+        byte[] bytes = Encoding.UTF8.GetBytes(handoffJson);
+        string handoffPayloadBase64 = Convert.ToBase64String(bytes);
+
+        FullTeardownForAppSwitch(clearAuthHandoff: false);
+        Debug.Log("[AbxrLib] (Test) Leaving App 1, launching App 2 (auth_handoff as base64).");
+        AbxrAuthService.SetAuthHandoffForTesting(handoffPayloadBase64);
+        BaseSetUpForAppSwitch();
+
+        // ── App 2: receive base64 handoff, normalize to JSON, adopt session ────
+        CreateSubsystem();
+        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+
+        bool app2AuthCompleted = false;
+        bool app2Success = false;
+        Abxr.OnAuthCompleted += (success, _) => { app2AuthCompleted = true; app2Success = success; };
+        Abxr.StartAuthentication();
+        float deadline = Time.realtimeSinceStartup + 5f;
+        while (!app2AuthCompleted && Time.realtimeSinceStartup < deadline)
+            yield return null;
+        Abxr.OnAuthCompleted = null;
+        Assert.IsTrue(app2AuthCompleted, "App 2 should receive OnAuthCompleted.");
+        Assert.IsTrue(app2Success, "App 2 should adopt session via base64-decoded handoff.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "Session should be marked as handoff.");
+
+        Abxr.EventAssessmentComplete("handoff-test-assessment-base64", 85, Abxr.EventStatus.Pass);
+        yield return null;
+
+        // ── Return to App 1 ───────────────────────────────────────────────────
+        FullTeardownForAppSwitch(clearAuthHandoff: true);
+        BaseSetUpForAppSwitch();
+        CreateSubsystem();
+        AssignUnitTestInputRequestedHandler();
+        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+
+        bool app1ReturnAuthCompleted = false;
+        bool app1ReturnSuccess = false;
+        Abxr.OnAuthCompleted += (success, _) => { app1ReturnAuthCompleted = true; app1ReturnSuccess = success; };
+        Abxr.StartAuthentication();
+        deadline = Time.realtimeSinceStartup + 35f;
+        while (!app1ReturnAuthCompleted && Time.realtimeSinceStartup < deadline)
+            yield return null;
+        Abxr.OnAuthCompleted = null;
+        Assert.IsTrue(app1ReturnAuthCompleted, "Return to App 1 should eventually complete auth flow.");
         Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "Return to App 1 should not have used handoff; we are in starting state.");
     }
 }
