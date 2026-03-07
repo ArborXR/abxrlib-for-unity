@@ -672,29 +672,45 @@ namespace AbxrLib.Runtime.Services.Auth
         
         /// <summary>
         /// Check for authentication handoff from external launcher apps
-        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params
+        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params.
+        /// For TestRunner: tests can inject payload via SetAuthHandoffForTesting so the flow can be asserted without a real intent.
         /// </summary>
         private bool CheckAuthHandoff()
         {
-            string handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
-
-            if (string.IsNullOrEmpty(handoffJson))
+            string handoffJson = null;
+            if (!string.IsNullOrEmpty(_authHandoffForTesting))
             {
-                handoffJson = Utils.GetCommandLineArg("auth_handoff");
+                handoffJson = _authHandoffForTesting;
+                _authHandoffForTesting = null;
             }
-
+            if (string.IsNullOrEmpty(handoffJson))
+                handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
+            if (string.IsNullOrEmpty(handoffJson))
+                handoffJson = Utils.GetCommandLineArg("auth_handoff");
             if (string.IsNullOrEmpty(handoffJson))
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
                 handoffJson = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
 #endif
             }
-
             if (string.IsNullOrEmpty(handoffJson)) return false;
-            
             Debug.Log("[AbxrLib] Processing authentication handoff from external launcher");
             return ParseAuthResponse(handoffJson, true);
         }
+
+        /// <summary>Testing only. Injects the next auth_handoff payload so the next Authenticate() sees it (e.g. to simulate App 2 receiving handoff from App 1). Cleared after one use.</summary>
+        internal static void SetAuthHandoffForTesting(string handoffJson)
+        {
+            _authHandoffForTesting = handoffJson;
+        }
+
+        /// <summary>Testing only. Clears any injected auth_handoff payload.</summary>
+        internal static void ClearAuthHandoffForTesting()
+        {
+            _authHandoffForTesting = null;
+        }
+
+        private static string _authHandoffForTesting;
 
         private static bool ShouldRetry(UnityWebRequest request)
         {

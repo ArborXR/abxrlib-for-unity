@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
@@ -128,6 +129,76 @@ public class AbxrPlayModeTestBase
         CreateSubsystem();
     }
 
+    /// <summary>
+    /// Full teardown equivalent to BaseTearDown, for tests that simulate switching to a different app/APK.
+    /// The only data that crosses the boundary is the auth_handoff payload (injected via SetAuthHandoffForTesting).
+    /// Restores _savedConfig, runs OnApplicationQuitHandler + EndSession, destroys subsystem, optionally clears
+    /// injected auth handoff, resets Configuration and statics, clears event subscriptions. Call with
+    /// clearAuthHandoff: false when the next "app" will consume the handoff (then set it after this).
+    /// </summary>
+    protected void FullTeardownForAppSwitch(bool clearAuthHandoff = true)
+    {
+        if (Configuration.Instance != null && _savedConfig.Count > 0)
+        {
+            var configType = typeof(Configuration);
+            foreach (var kv in _savedConfig)
+            {
+                var field = configType.GetField(kv.Key, BindingFlags.Public | BindingFlags.Instance);
+                if (field != null)
+                    field.SetValue(Configuration.Instance, kv.Value);
+            }
+            _savedConfig.Clear();
+        }
+        if (AbxrSubsystem.Instance != null)
+            AbxrSubsystem.Instance.AuthServiceForTesting.ClearRuntimeAuthInjectionForTesting();
+        if (SubsystemGO != null)
+        {
+            Abxr.EndSession(); // runs OnApplicationQuitHandler once (avoid calling both to prevent duplicate "Ending session" log)
+            UnityEngine.Object.DestroyImmediate(SubsystemGO);
+            SubsystemGO = null;
+        }
+        if (clearAuthHandoff)
+            AbxrAuthService.ClearAuthHandoffForTesting();
+        Configuration.ResetForTesting();
+        AbxrSubsystem.ResetStaticStateForTesting();
+        Abxr.OnAuthCompleted = null;
+        Abxr.OnModuleTarget = null;
+        Abxr.OnAllModulesCompleted = null;
+        Abxr.OnHeadsetPutOnNewSession = null;
+    }
+
+    /// <summary>
+    /// Full setup equivalent to BaseSetUp (except CreateSubsystemIfNeeded), for tests that simulate launching
+    /// a new app/APK after FullTeardownForAppSwitch. Clears any stray subsystems, resets statics, resets
+    /// Configuration, sets NextRuntimeAuthConfigForTesting. Call CreateSubsystem() and SetRuntimeAuth()
+    /// (and SetAuthHandoffForTesting if needed) after this. Then call AssignUnitTestInputRequestedHandler()
+    /// if the new "app" will need to respond to auth input (e.g. PIN), since Abxr.OnInputRequested only
+    /// applies when Instance is non-null.
+    /// </summary>
+    protected void BaseSetUpForAppSwitch()
+    {
+        foreach (var existing in UnityEngine.Object.FindObjectsOfType<AbxrSubsystem>())
+            UnityEngine.Object.DestroyImmediate(existing.gameObject);
+        Abxr.OnAuthCompleted = null;
+        Abxr.OnModuleTarget = null;
+        Abxr.OnAllModulesCompleted = null;
+        Abxr.OnHeadsetPutOnNewSession = null;
+        AbxrSubsystem.ResetStaticStateForTesting();
+        Configuration.ResetForTesting();
+        _ = Configuration.Instance;
+        AbxrSubsystem.NextRuntimeAuthConfigForTesting = new RuntimeAuthConfig { enableAutoStartAuthentication = false };
+    }
+
+    /// <summary>
+    /// Assigns the unit-test auth input handler to the current subsystem so auth input requests (e.g. PIN)
+    /// are auto-submitted from Configuration. Call after CreateSubsystem() when the new subsystem needs to
+    /// handle OnInputRequested (e.g. after BaseSetUpForAppSwitch for "return to App 1").
+    /// </summary>
+    protected void AssignUnitTestInputRequestedHandler()
+    {
+        Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
+    }
+
     /// <summary>True when running on Android device (not Editor). Use to skip tests that require ArborMdmClient/ArborInsightsClient.</summary>
     protected static bool IsRunningOnAndroidDevice()
     {
@@ -179,6 +250,7 @@ public class AbxrPlayModeTestBase
             UnityEngine.Object.DestroyImmediate(SubsystemGO);
 
         // Clean up statics so the next test starts fresh.
+        AbxrAuthService.ClearAuthHandoffForTesting();
         Configuration.ResetForTesting();
         AbxrSubsystem.ResetStaticStateForTesting();
         Abxr.OnAuthCompleted = null;
