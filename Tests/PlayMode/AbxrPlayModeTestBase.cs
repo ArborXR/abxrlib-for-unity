@@ -49,30 +49,28 @@ public class AbxrPlayModeTestBase
         // Create a fresh Configuration singleton for this test.
         Configuration.ResetForTesting();
 
-        // Configuration.Instance creates a default instance and runs MigrateIfNeeded().
-        // Migration flips enableAutoStartAuthentication/Telemetry/SceneEvents from true → false,
-        // which is exactly what we want for tests.
-        var config = Configuration.Instance;
-        // Save current value and set test value; restore all in TearDown so the asset is not left modified.
-        ModifyConfig(config, "enableAutoStartAuthentication", false); // Tests call StartAuthentication() via PerformAuth.
-        ModifyConfig(config, "buildType", "development");             // So tests can authenticate.
-        ModifyConfig(config, "enableArborMdmClient", false);
-        if (!AllowArborInsightsClientInTests)
-            ModifyConfig(config, "enableArborInsightsClient", false);
-        ModifyConfig(config, "enableAutoStartModules", false);
-        ModifyConfig(config, "enableAutoAdvanceModules", false);
-        ModifyConfig(config, "returnToLauncherAfterAssessmentComplete", false);
+        // Configuration.Instance creates a default instance and runs MigrateIfNeeded() (needed for other settings).
+        _ = Configuration.Instance;
 
-        // Create the subsystem – Awake() runs synchronously, setting AbxrSubsystem.Instance.
-        SubsystemGO = new GameObject("[Test] AbxrSubsystem");
-        SubsystemGO.AddComponent<AbxrSubsystem>();
+        // Apply enableAutoStartAuthentication = false via RuntimeAuthConfig when the subsystem is created, so we never modify the Configuration asset (avoids leaving the user's config file changed if TearDown doesn't run).
+        AbxrSubsystem.NextRuntimeAuthConfigForTesting = new RuntimeAuthConfig { enableAutoStartAuthentication = false };
+
+        // Subsystem creation can be deferred by derived fixtures (e.g. first-stage auth tests set config then create).
+        CreateSubsystemIfNeeded();
 
         // In PlayMode tests, when Unit Test Credentials are enabled we auto-respond to auth input using configured values.
-        // Works in Editor and on device: enable in AbxrLib config and set PIN/email/text as needed.
-        Abxr.OnInputRequested = (type, prompt, domain, error) =>
+        // Set handler here so the subsystem created in SetUp gets it. For fixtures that create the subsystem in the test
+        // (e.g. AuthenticationFirstStageTests), we set it again in PerformAuth so the current subsystem receives it.
+        Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
+    }
+
+    /// <summary>Handler that submits Unit Test Credentials when auth requests input. Used so PerformAuth can re-assign it to the current subsystem (which may have been created in the test).</summary>
+    private static Action<string, string, string, string> GetUnitTestInputRequestedHandler()
+    {
+        return (type, prompt, domain, error) =>
         {
             var c = Configuration.Instance;
-            if (!c.unitTestConfigEnabled)
+            if (c == null || !c.unitTestConfigEnabled)
             {
                 Assert.Fail("Auth requested input but Unit Test Credentials are disabled. Enable \"Unit Test Credentials (Editor only)\" in the AbxrLib config and set the PIN/email/text values you need, then save the project.");
                 return;
@@ -88,7 +86,7 @@ public class AbxrPlayModeTestBase
                 Assert.Fail($"Auth requested input type=\"{type}\" but the corresponding Unit Test Credentials value is not set. In the AbxrLib config asset, set unitTestAuthPin (for pin/assessmentPin), unitTestAuthEmail (for email), or unitTestAuthText (for text), then save the project.");
                 return;
             }
-            Debug.Log($"[AbxrPlayModeTestBase] OnInputRequested: type={type}, prompt={prompt}, submitting configured value {value})");
+            Debug.Log($"[AbxrPlayModeTestBase] OnInputRequested: type=" + type + ", prompt=" + prompt + ", submitting configured value " + value + ")");
             Abxr.OnInputSubmitted(value);
         };
     }
@@ -101,6 +99,39 @@ public class AbxrPlayModeTestBase
         if (!_savedConfig.ContainsKey(fieldName))
             _savedConfig[fieldName] = field.GetValue(config);
         field.SetValue(config, newValue);
+    }
+
+    /// <summary>Derived tests can alter config per test (e.g. enableArborMdmClient). For auth-related values prefer SetRuntimeAuth so the Configuration asset is not modified. Restored in TearDown.</summary>
+    protected void ModifyConfig(string fieldName, object newValue)
+    {
+        if (Configuration.Instance == null) return;
+        ModifyConfig(Configuration.Instance, fieldName, newValue);
+    }
+
+    /// <summary>Sets the runtime auth config used by the next Authenticate() call. Call after CreateSubsystem(). Avoids mutating Configuration; use for auth first-stage and similar tests.</summary>
+    protected void SetRuntimeAuth(RuntimeAuthConfig config)
+    {
+        if (config == null || AbxrSubsystem.Instance == null) return;
+        AbxrSubsystem.Instance.AuthServiceForTesting.SetRuntimeAuthForTesting(config);
+    }
+
+    /// <summary>Creates the test subsystem GameObject and AbxrSubsystem. Called from SetUp by default; first-stage tests call after setting config.</summary>
+    protected void CreateSubsystem()
+    {
+        SubsystemGO = new GameObject("[Test] AbxrSubsystem");
+        SubsystemGO.AddComponent<AbxrSubsystem>();
+    }
+
+    /// <summary>Override to skip subsystem creation in SetUp (e.g. first-stage tests create after altering config).</summary>
+    protected virtual void CreateSubsystemIfNeeded()
+    {
+        CreateSubsystem();
+    }
+
+    /// <summary>True when running on Android device (not Editor). Use to skip tests that require ArborMdmClient/ArborInsightsClient.</summary>
+    protected static bool IsRunningOnAndroidDevice()
+    {
+        return Application.platform == RuntimePlatform.Android && !Application.isEditor;
     }
 
     /// <summary>TearDown runs after each test whether it passed, failed, or threw—so config restore is reliable. Must be void (Unity Test Runner does not support IEnumerator TearDown).</summary>
@@ -119,6 +150,10 @@ public class AbxrPlayModeTestBase
             }
             _savedConfig.Clear();
         }
+
+        // Clear any injected runtime auth so the next test does not inherit it.
+        if (AbxrSubsystem.Instance != null)
+            AbxrSubsystem.Instance.AuthServiceForTesting.ClearRuntimeAuthInjectionForTesting();
 
         // Optionally run quit handler first (close running events, send); then optionally end session (close, send, clear).
         if (AbxrSubsystem.Instance != null)
@@ -156,7 +191,7 @@ public class AbxrPlayModeTestBase
 
     /// <summary>
     /// Runs the real auth flow: waits for scene to settle, then StartAuthentication(), wait for OnAuthCompleted, invoke onComplete(success).
-    /// OnInputRequested is already set in BaseSetUp when unitTestConfigEnabled (uses unitTestAuthText/Email/Pin).
+    /// Assigns the unit-test OnInputRequested handler before starting auth so the current subsystem (e.g. one created in the test) receives it.
     /// </summary>
     /// <param name="onComplete">Called with auth success/failure.</param>
     /// <param name="timeoutSeconds">Max time to wait for OnAuthCompleted.</param>
@@ -186,6 +221,8 @@ public class AbxrPlayModeTestBase
             prevHandler?.Invoke(success, null);
         };
 
+        // Ensure current subsystem has the unit-test input handler (critical when subsystem was created in the test, e.g. AuthenticationFirstStageTests).
+        Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
         Abxr.StartAuthentication();
 
         float elapsed = 0f;

@@ -27,10 +27,22 @@ namespace AbxrLib.Runtime
         internal static void ResetStaticStateForTesting()
         {
             _assessmentStarted = false;
+            _nextRuntimeAuthConfigForTesting = null;
         }
+
+        /// <summary>For testing only. When set before CreateSubsystem(), applied as overrides when the auth service is created (e.g. enableAutoStartAuthentication = false) so the Configuration asset is not modified.</summary>
+        internal static RuntimeAuthConfig NextRuntimeAuthConfigForTesting
+        {
+            get => _nextRuntimeAuthConfigForTesting;
+            set => _nextRuntimeAuthConfigForTesting = value;
+        }
+        private static RuntimeAuthConfig _nextRuntimeAuthConfigForTesting;
 
         /// <summary>For testing only. Exposes the auth service so tests can simulate auth success.</summary>
         internal AbxrAuthService AuthServiceForTesting => _authService;
+
+        /// <summary>For testing only. True when ArborMdmClient is available and connected (e.g. on Android device with MDM). Used to decide expected auth outcome in environment-dependent tests.</summary>
+        internal bool IsArborMdmClientAvailableAndConnected => _arborMdmClient != null && _arborMdmClient.IsConnected();
 
         /// <summary>For testing only. Exposes the data service so tests can inspect pending events/logs/telemetry.</summary>
         internal AbxrDataService DataServiceForTesting => _dataService;
@@ -72,6 +84,7 @@ namespace AbxrLib.Runtime
         private string _overrideOrgId;
         private string _overrideAuthSecret;
         private string _overrideDeviceId;
+        private string[] _overrideDeviceTags;
 
         // ── Super metadata ───────────────────────────────────────────
         private const string SuperMetaDataPrefsKey = "AbxrSuperMetaData";
@@ -137,6 +150,11 @@ namespace AbxrLib.Runtime
                 _arborInsightsClient.Start();
 #endif
             _authService = new AbxrAuthService(this, _arborMdmClient);
+            if (_nextRuntimeAuthConfigForTesting != null)
+            {
+                _authService.ApplyRuntimeAuthOverridesForTesting(_nextRuntimeAuthConfigForTesting);
+                _nextRuntimeAuthConfigForTesting = null;
+            }
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
             _dataService = new AbxrDataService(this, () => _transport);
@@ -160,7 +178,7 @@ namespace AbxrLib.Runtime
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
             {
-                Debug.LogWarning($"[AbxrLib] Auth failed: {error}");
+                Debug.LogError($"[AbxrLib] Authentication failure: {error}");
                 HandleAuthCompleted(false);
             };
 
@@ -184,10 +202,25 @@ namespace AbxrLib.Runtime
 #endif
 #endif
 
-            // Auto-start auth (gated on transport selection so first auth uses correct backend)
+            // Log version/init result first so it always appears before any auth failure from the coroutine.
             var settings = Configuration.Instance;
-            if (settings.enableAutoStartAuthentication)
+            var configInvalid = !string.IsNullOrEmpty(Configuration.LastValidationErrorMessage);
+            if (configInvalid)
+            {
+                var reason = Configuration.LastValidationErrorMessage ?? "required configuration missing or invalid";
+                if (reason.StartsWith("Authentication error: ", StringComparison.Ordinal))
+                    reason = reason.Substring("Authentication error: ".Length);
+                Debug.LogError($"[AbxrLib] Version {AbxrLibVersion.Version} Initialization Failed: {reason}");
+            }
+            else
+                Debug.Log($"[AbxrLib] Version {AbxrLibVersion.Version} Initialized.");
+
+            // Auto-start auth (gated on transport selection so first auth uses correct backend). Do not start when config validation failed.
+            bool enableAutoStart = _authService.GetEnableAutoStartAuthentication();
+            if (enableAutoStart && !configInvalid)
                 StartCoroutine(AuthStartAfterTransportSelectionCoroutine(settings.authenticationStartDelay));
+            else if (enableAutoStart && configInvalid)
+                HandleAuthCompleted(false);
             else
                 Debug.Log("[AbxrLib] Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
 
@@ -196,8 +229,6 @@ namespace AbxrLib.Runtime
             {
                 _telemetryService.Start();
             }
-            
-            Debug.Log($"[AbxrLib] Version {AbxrLibVersion.Version} Initialized.");
         }
 
         private void OnDestroy()
@@ -941,11 +972,28 @@ internal void StartNewSession()
 			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTitle() : "";
 		
 		internal string[] GetDeviceTags() =>
-			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTags() : null;
+			_overrideDeviceTags != null ? _overrideDeviceTags : (_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTags() : null);
 		
-		internal void SetOrgId(string orgId) => _overrideOrgId = orgId;
-		internal void SetAuthSecret(string authSecret) => _overrideAuthSecret = authSecret;
-		internal void SetDeviceId(string deviceId) => _overrideDeviceId = deviceId;
+		internal void SetOrgId(string orgId)
+		{
+			_overrideOrgId = orgId;
+			_authService?.SetRuntimeAuthOrgId(orgId);
+		}
+		internal void SetAuthSecret(string authSecret)
+		{
+			_overrideAuthSecret = authSecret;
+			_authService?.SetRuntimeAuthAuthSecret(authSecret);
+		}
+		internal void SetDeviceId(string deviceId)
+		{
+			_overrideDeviceId = deviceId;
+			_authService?.SetRuntimeAuthDeviceId(deviceId);
+		}
+		internal void SetDeviceTags(string[] deviceTags)
+		{
+			_overrideDeviceTags = deviceTags;
+			_authService?.SetRuntimeAuthDeviceTags(deviceTags);
+		}
 
 		internal string GetOrgId() =>
 			_overrideOrgId != null ? _overrideOrgId : (_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetOrgId() : Configuration.Instance?.orgID ?? "");

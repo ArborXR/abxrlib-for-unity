@@ -38,6 +38,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
+        /// <summary>Runtime auth values: loaded from Configuration then updated by GetArborData, GetQueryData, intent, SetOrgId/SetAuthSecret. Validated before each auth; then copied to _payload.</summary>
+        private readonly RuntimeAuthConfig _runtimeAuth = new RuntimeAuthConfig();
         private AuthMechanism _authMechanism;
         private DateTime _tokenExpiry = DateTime.MinValue;
         private int _failedAuthAttempts;
@@ -78,6 +80,9 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         public bool UsingArborInsightsClientForData() => _usedArborInsightsClientForSession;
 
+        /// <summary>When true, Authenticate() skips LoadRuntimeAuthFromConfig() and uses the already-set _runtimeAuth (set via SetRuntimeAuthForTesting). Testing only.</summary>
+        private bool _useInjectedRuntimeAuthForTesting;
+
         public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient ArborMdmClient)
         {
             _runner = coroutineRunner;
@@ -98,12 +103,14 @@ namespace AbxrLib.Runtime.Services.Auth
             GetConfigData();
 #if UNITY_ANDROID && !UNITY_EDITOR
             GetArborData();
-            // On non-XRDM devices, org_token can be provided via launch intent (e.g. adb shell am start --es org_token "JWT...")
-            if (Configuration.Instance.useAppTokens && string.IsNullOrEmpty(_payload.orgToken))
+            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken))
             {
                 string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
                 if (!string.IsNullOrEmpty(orgTokenIntent))
-                    _payload.orgToken = orgTokenIntent;
+                {
+                    _runtimeAuth.orgToken = orgTokenIntent;
+                    _runtimeAuth.CopyAuthFieldsTo(_payload);
+                }
             }
 #elif UNITY_WEBGL && !UNITY_EDITOR
             GetQueryData();
@@ -118,7 +125,7 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         internal void SetTransportGetter(Func<IAbxrTransport> getter) => _getTransport = getter;
-        
+
         // ── Public API ───────────────────────────────────────────────
         
         /// <param name="clearStateFirst">If true (default), clears auth state before running. If false, caller has already cleared and set session (e.g. StartNewSession).</param>
@@ -130,28 +137,37 @@ namespace AbxrLib.Runtime.Services.Auth
             if (clearStateFirst)
                 ClearAuthenticationState();
 
-            // Load config into payload first, then re-apply Arbor/device overrides so they are not lost.
-            LoadConfigIntoPayload();
-#if UNITY_ANDROID && !UNITY_EDITOR
+            // Load runtime auth from Configuration, then apply GetArborData/GetQueryData/intent so runtime config reflects all sources.
+            // When tests inject runtime auth, skip loading from Configuration so the injected values are used.
+            if (!_useInjectedRuntimeAuthForTesting)
+                LoadRuntimeAuthFromConfig();
+
+            // GetArborData() no-ops when ArborMdmClient is not available; when available it applies device/org from MDM.
             GetArborData();
-            if (Configuration.Instance.useAppTokens && string.IsNullOrEmpty(_payload.orgToken))
+
+            // Apply Abxr.SetOrgId/SetAuthSecret/SetDeviceId/SetDeviceTags into runtime auth (after config load so overrides win; before GetArborData so MDM can still overlay).
+            ApplyAbxrOverridesToRuntimeAuth();
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken))
             {
                 string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
                 if (!string.IsNullOrEmpty(orgTokenIntent))
-                    _payload.orgToken = orgTokenIntent;
+                    _runtimeAuth.orgToken = orgTokenIntent;
             }
 #elif UNITY_WEBGL && !UNITY_EDITOR
             GetQueryData();
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
             GetQueryData();
 #endif
-
-            if (!ValidateConfigValues())
+            var validationError = _runtimeAuth.IsValidToSend();
+            if (validationError != null)
             {
                 _attemptActive = false;
-                OnFailed?.Invoke("Abxr settings are invalid");
+                OnFailed?.Invoke(validationError);
                 return;
             }
+            _runtimeAuth.CopyAuthFieldsTo(_payload);
 
             // Check auth handoff (command-line / intent)
             if (CheckAuthHandoff())
@@ -357,8 +373,8 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
-                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret).
-                if (Configuration.Instance.useAppTokens)
+                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret). Use _runtimeAuth so injected test config and runtime overrides are respected.
+                if (_runtimeAuth.useAppTokens)
                 {
                     _payload.appId = null;
                     _payload.orgId = null;
@@ -542,34 +558,36 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        private void LoadConfigIntoPayload()
+        /// <summary>Load auth-related values from Configuration into _runtimeAuth. GetArborData/GetQueryData/intent will update _runtimeAuth next.</summary>
+        private void LoadRuntimeAuthFromConfig()
         {
             var s = Configuration.Instance;
+            _runtimeAuth.useAppTokens = s.useAppTokens;
+            _runtimeAuth.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
             if (s.useAppTokens)
             {
-                _payload.appToken = s.appToken;
-                // Production: org token must come from runtime (MDM, intent, query), not config — match ExtractConfigData behavior so Editor/standalone fail when no runtime source.
-                _payload.orgToken = string.Equals(s.buildType, "production", StringComparison.OrdinalIgnoreCase)
-                    ? null
-                    : s.orgToken;
-                _payload.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
+                _runtimeAuth.appToken = s.appToken;
+                _runtimeAuth.orgToken = string.Equals(s.buildType, "production", StringComparison.OrdinalIgnoreCase) ? null : s.orgToken;
             }
             else
             {
-                _payload.appId = s.appID;
-                // Production (non–custom): orgId/authSecret must come from runtime (MDM), not config — match ExtractConfigData so Editor/standalone fail when no runtime source.
+                _runtimeAuth.appId = s.appID;
                 if (string.Equals(s.buildType, "production", StringComparison.OrdinalIgnoreCase))
                 {
-                    _payload.orgId = null;
-                    _payload.authSecret = null;
+                    _runtimeAuth.orgId = null;
+                    _runtimeAuth.authSecret = null;
                 }
                 else
                 {
-                    _payload.orgId = s.orgID;
-                    _payload.authSecret = s.authSecret;
+                    _runtimeAuth.orgId = s.orgID;
+                    _runtimeAuth.authSecret = s.authSecret;
                 }
-                _payload.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
             }
+            // Establish subsystem defaults for device/partner/tags whenever we load runtime auth (e.g. each Authenticate call).
+            string deviceIdFromSubsystem = Abxr.GetDeviceId();
+            _runtimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : _payload.deviceId;
+            _runtimeAuth.partner = "none";
+            _runtimeAuth.tags = null;
         }
 
         /// <summary>Normalize backend auth mechanism type to "text" | "pin" | "email" for OnInputRequested, or "" if no input required (e.g. "none", empty). Single source of truth for pin variants (assessmentPin, assessment_pin → "pin").</summary>
@@ -820,52 +838,57 @@ namespace AbxrLib.Runtime.Services.Auth
         private void GetConfigData()
         {
             var config = Configuration.Instance;
+            _runtimeAuth.enableAutoStartAuthentication = config != null ? config.enableAutoStartAuthentication : true;
 
             var configData = Utils.ExtractConfigData(config);
-
             if (!configData.isValid)
-            {
-                Debug.LogError($"[AbxrLib] {configData.errorMessage}");
                 return;
-            }
 
+            // Establish subsystem defaults for device/partner/tags when runtime auth is first loaded (e.g. constructor / Awake sequence).
+            string deviceIdFromSubsystem = Abxr.GetDeviceId();
+            _runtimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : _payload.deviceId;
+            _runtimeAuth.partner = "none";
+            _runtimeAuth.tags = null;
+
+            _runtimeAuth.useAppTokens = configData.useAppTokens;
+            _runtimeAuth.buildType = configData.buildType ?? "production";
             if (configData.useAppTokens)
             {
-                _payload.appToken = configData.appToken;
-                _payload.orgToken = configData.orgToken;
-                _payload.buildType = configData.buildType;
+                _runtimeAuth.appToken = configData.appToken;
+                _runtimeAuth.orgToken = configData.orgToken;
             }
             else
             {
-                _payload.appId = configData.appId;
-                _payload.orgId = configData.orgId;
-                _payload.authSecret = configData.authSecret;
-                _payload.buildType = configData.buildType;
+                _runtimeAuth.appId = configData.appId;
+                _runtimeAuth.orgId = configData.orgId;
+                _runtimeAuth.authSecret = configData.authSecret;
             }
+            _runtimeAuth.CopyAuthFieldsTo(_payload);
         }
 
+        /// <summary>
+        /// When ArborMdmClient is available and connected: updates deviceId, partner, tags from MDM; for production_custom that is all we accept (org credentials stay from config). For other build types, updates orgToken (app tokens) or orgId/authSecret (legacy) from MDM.
+        /// When MDM is not available, returns immediately (runtime auth is updated by Abxr.SetOrgId/SetAuthSecret/SetDeviceId/SetDeviceTags directly).
+        /// </summary>
         private void GetArborData()
         {
-            // Partner/deviceId/tags when we have a connected client; when not connected, still apply deviceId from subsystem if set (e.g. Abxr.SetDeviceId).
-            if (_ArborMdmClient != null && _ArborMdmClient.IsConnected())
-            {
-                _payload.partner = "arborxr";
-                _payload.deviceId = Abxr.GetDeviceId();
-                _payload.tags = Abxr.GetDeviceTags();
-            }
-            else
-            {
-                string deviceIdFromSubsystem = Abxr.GetDeviceId();
-                if (!string.IsNullOrEmpty(deviceIdFromSubsystem))
-                    _payload.deviceId = deviceIdFromSubsystem;
-            }
-
-            if (_payload.buildType == "production_custom")
+            if (_ArborMdmClient == null || !_ArborMdmClient.IsConnected())
                 return;
 
-            // Always apply orgId/authSecret/orgToken from subsystem (GetOrgId/GetFingerprint) when not production_custom,
-            // so developer overrides or Configuration are used when client is null or not connected.
-            if (Configuration.Instance.useAppTokens)
+            // MDM available: always accept deviceId, partner, tags from Arbor.
+            _runtimeAuth.partner = "arborxr";
+            _runtimeAuth.deviceId = Abxr.GetDeviceId();
+            _runtimeAuth.tags = Abxr.GetDeviceTags();
+
+            // production_custom: only deviceId/partner/tags from MDM; org credentials stay from config.
+            if (_runtimeAuth.buildType == "production_custom")
+            {
+                _runtimeAuth.CopyAuthFieldsTo(_payload);
+                return;
+            }
+
+            // Non-production_custom: update auth from MDM (dynamic org token or orgId/authSecret).
+            if (_runtimeAuth.useAppTokens)
             {
                 try
                 {
@@ -873,7 +896,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     string orgId = Abxr.GetOrgId();
                     string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, fingerprint);
                     if (!string.IsNullOrEmpty(dynamicToken))
-                        _payload.orgToken = dynamicToken;
+                        _runtimeAuth.orgToken = dynamicToken;
                 }
                 catch (Exception ex)
                 {
@@ -884,10 +907,10 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             else
             {
-                _payload.orgId = Abxr.GetOrgId();
+                _runtimeAuth.orgId = Abxr.GetOrgId();
                 try
                 {
-                    _payload.authSecret = Abxr.GetFingerprint();
+                    _runtimeAuth.authSecret = Abxr.GetFingerprint();
                 }
                 catch (Exception ex)
                 {
@@ -896,16 +919,21 @@ namespace AbxrLib.Runtime.Services.Auth
                                   $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 }
             }
+
+            _runtimeAuth.CopyAuthFieldsTo(_payload);
         }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         private void GetQueryData()
         {
-            if (_payload.buildType == "production_custom")
+            if (_runtimeAuth.buildType == "production_custom")
                 return;
             string orgTokenQuery = Utils.GetQueryParam("org_token", Application.absoluteURL);
             if (!string.IsNullOrEmpty(orgTokenQuery))
-                _payload.orgToken = orgTokenQuery;
+            {
+                _runtimeAuth.orgToken = orgTokenQuery;
+                _runtimeAuth.CopyAuthFieldsTo(_payload);
+            }
         }
 
         private static string GetOrCreateDeviceId()
@@ -920,11 +948,14 @@ namespace AbxrLib.Runtime.Services.Auth
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
         private void GetQueryData()
         {
-            if (_payload.buildType == "production_custom")
+            if (_runtimeAuth.buildType == "production_custom")
                 return;
             string orgToken = Utils.GetOrgTokenFromDesktopSources();
             if (!string.IsNullOrEmpty(orgToken))
-                _payload.orgToken = orgToken;
+            {
+                _runtimeAuth.orgToken = orgToken;
+                _runtimeAuth.CopyAuthFieldsTo(_payload);
+            }
         }
 #endif
 
@@ -933,59 +964,6 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.IsNullOrEmpty(value)) return false;
             var parts = value.Split('.');
             return parts.Length == 3;
-        }
-
-        private bool ValidateConfigValues()
-        {
-            var config = Configuration.Instance;
-
-            if (config.useAppTokens)
-            {
-                if (string.IsNullOrEmpty(_payload.appToken))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
-                    return false;
-                }
-                if (!LooksLikeJwt(_payload.appToken))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
-                    return false;
-                }
-                if (_payload.buildType == "development" && string.IsNullOrEmpty(_payload.orgToken))
-                    _payload.orgToken = _payload.appToken;
-                if (string.IsNullOrEmpty(_payload.orgToken))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                    return false;
-                }
-                if (!LooksLikeJwt(_payload.orgToken))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                    return false;
-                }
-            }
-            else
-            {
-                if (string.IsNullOrEmpty(_payload.appId))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
-                    return false;
-                }
-                if (string.IsNullOrEmpty(_payload.orgId))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                    return false;
-                }
-                if (string.IsNullOrEmpty(_payload.authSecret))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                    return false;
-                }
-            }
-
-            if (!config.IsValid())
-                return false;
-            return true;
         }
 
         private void SetSessionData()
@@ -1097,6 +1075,100 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             
             return true;
+        }
+
+        // ── Testing only (For TestRunner) ───────────────────────────────
+
+        /// <summary>Testing only. Overwrites runtime auth with the given config so Authenticate() uses it instead of loading from Configuration. ApplyAbxrOverridesToRuntimeAuth still runs and applies Abxr.SetOrgId/SetAuthSecret/SetDeviceId/SetDeviceTags. Only overwrites enableAutoStartAuthentication when config has it set (HasValue). Mirrors ExtractConfigData: when buildType is "production" (not production_custom), orgToken/orgId/authSecret are not accepted and are cleared.</summary>
+        internal void SetRuntimeAuthForTesting(RuntimeAuthConfig config)
+        {
+            if (config == null) return;
+            _runtimeAuth.useAppTokens = config.useAppTokens;
+            _runtimeAuth.appToken = config.appToken;
+            _runtimeAuth.orgToken = config.orgToken;
+            _runtimeAuth.appId = config.appId;
+            _runtimeAuth.orgId = config.orgId;
+            _runtimeAuth.authSecret = config.authSecret;
+            _runtimeAuth.buildType = config.buildType ?? "production";
+            if (config.enableAutoStartAuthentication.HasValue)
+                _runtimeAuth.enableAutoStartAuthentication = config.enableAutoStartAuthentication;
+            // Production (non-custom) does not accept org credentials from config; they must come from device/MDM at runtime (same as ExtractConfigData).
+            if (_runtimeAuth.buildType == "production")
+            {
+                _runtimeAuth.orgToken = null;
+                _runtimeAuth.orgId = null;
+                _runtimeAuth.authSecret = null;
+            }
+            _runtimeAuth.CopyAuthFieldsTo(_payload);
+            _useInjectedRuntimeAuthForTesting = true;
+        }
+
+        /// <summary>Testing only. Applies only the fields set on overrides (e.g. enableAutoStartAuthentication) without replacing auth credentials. Used when a pending config is applied at subsystem creation so the Configuration asset is not modified.</summary>
+        internal void ApplyRuntimeAuthOverridesForTesting(RuntimeAuthConfig overrides)
+        {
+            if (overrides == null) return;
+            if (overrides.enableAutoStartAuthentication.HasValue)
+                _runtimeAuth.enableAutoStartAuthentication = overrides.enableAutoStartAuthentication;
+        }
+
+        /// <summary>Returns enableAutoStartAuthentication from the runtime auth config (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting).</summary>
+        internal bool GetEnableAutoStartAuthentication()
+        {
+            return _runtimeAuth.enableAutoStartAuthentication ?? true;
+        }
+
+        /// <summary>Testing only. Clears the injected runtime auth flag so the next Authenticate() loads from Configuration again.</summary>
+        internal void ClearRuntimeAuthInjectionForTesting()
+        {
+            _useInjectedRuntimeAuthForTesting = false;
+        }
+
+        // ── Runtime auth overrides (Abxr.SetOrgId / SetAuthSecret / SetDeviceId / SetDeviceTags) ─────
+
+        /// <summary>Updates runtime auth orgId. Called by subsystem when Abxr.SetOrgId() is used.</summary>
+        internal void SetRuntimeAuthOrgId(string value)
+        {
+            if (_runtimeAuth != null)
+                _runtimeAuth.orgId = value ?? "";
+        }
+
+        /// <summary>Updates runtime auth authSecret. Called by subsystem when Abxr.SetAuthSecret() is used.</summary>
+        internal void SetRuntimeAuthAuthSecret(string value)
+        {
+            if (_runtimeAuth != null)
+                _runtimeAuth.authSecret = value ?? "";
+        }
+
+        /// <summary>Updates runtime auth deviceId. Called by subsystem when Abxr.SetDeviceId() is used.</summary>
+        internal void SetRuntimeAuthDeviceId(string value)
+        {
+            if (_runtimeAuth != null)
+                _runtimeAuth.deviceId = value ?? "";
+        }
+
+        /// <summary>Updates runtime auth tags. Called by subsystem when Abxr.SetDeviceTags() is used.</summary>
+        internal void SetRuntimeAuthDeviceTags(string[] value)
+        {
+            if (_runtimeAuth != null)
+                _runtimeAuth.tags = value;
+        }
+
+        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters are used even when MDM is not available.</summary>
+        private void ApplyAbxrOverridesToRuntimeAuth()
+        {
+            if (_runtimeAuth == null) return;
+            string orgId = Abxr.GetOrgId();
+            if (orgId != null)
+                _runtimeAuth.orgId = orgId;
+            string authSecret = Abxr.GetFingerprint();
+            if (authSecret != null)
+                _runtimeAuth.authSecret = authSecret;
+            string deviceId = Abxr.GetDeviceId();
+            if (deviceId != null)
+                _runtimeAuth.deviceId = deviceId;
+            string[] tags = Abxr.GetDeviceTags();
+            if (tags != null)
+                _runtimeAuth.tags = tags;
         }
     }
 }

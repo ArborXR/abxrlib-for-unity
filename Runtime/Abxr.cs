@@ -690,6 +690,12 @@ public static partial class Abxr
 	/// </summary>
 	public static void SetDeviceId(string deviceId) => X?.SetDeviceId(deviceId);
 
+	/// <summary>
+	///   Sets the device tags to use for auth and elsewhere. When set, this value is used instead of ArborMdmClient.
+	///   Call before StartAuthentication() when using config/setter credentials. Pass null to clear the override.
+	/// </summary>
+	public static void SetDeviceTags(string[] deviceTags) => X?.SetDeviceTags(deviceTags);
+
 	/// <summary>Gets the serial number assigned to device by OEM.</summary>
 	/// <returns>Serial number is provided as a string.</returns>
 	public static string GetDeviceSerial() => X?.GetDeviceSerial();
