@@ -27,7 +27,7 @@ namespace AbxrLib.Runtime.Types
     }
 
     /// <summary>
-    /// Runtime auth configuration: auth-related values copied from Configuration and updated by GetArborData, GetQueryData, intent, and Abxr.SetOrgId/SetAuthSecret/SetDeviceId/SetDeviceTags.
+    /// Runtime auth configuration: auth-related values copied from Configuration and updated by GetArborData, GetQueryData, intent, and Abxr.SetOrgId/SetAuthSecret/SetDeviceId.
     /// Validated via IsValid() before building the auth request; does not touch the Configuration asset.
     /// </summary>
     public class RuntimeAuthConfig

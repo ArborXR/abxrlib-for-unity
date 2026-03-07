@@ -94,7 +94,6 @@ namespace AbxrLib.Runtime
         private string _overrideOrgId;
         private string _overrideAuthSecret;
         private string _overrideDeviceId;
-        private string[] _overrideDeviceTags;
 
         // ── Super metadata ───────────────────────────────────────────
         private const string SuperMetaDataPrefsKey = "AbxrSuperMetaData";
@@ -1046,7 +1045,7 @@ internal void StartNewSession()
 			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTitle() : "";
 		
 		internal string[] GetDeviceTags() =>
-			_overrideDeviceTags != null ? _overrideDeviceTags : (_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTags() : null);
+			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTags() : null;
 		
 		internal void SetOrgId(string orgId)
 		{
@@ -1062,11 +1061,6 @@ internal void StartNewSession()
 		{
 			_overrideDeviceId = deviceId;
 			_authService?.SetRuntimeAuthDeviceId(deviceId);
-		}
-		internal void SetDeviceTags(string[] deviceTags)
-		{
-			_overrideDeviceTags = deviceTags;
-			_authService?.SetRuntimeAuthDeviceTags(deviceTags);
 		}
 
 		internal string GetOrgId() =>

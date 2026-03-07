@@ -146,7 +146,7 @@ namespace AbxrLib.Runtime.Services.Auth
             // GetArborData() no-ops when ArborMdmClient is not available; when available it applies device/org from MDM.
             GetArborData();
 
-            // Apply Abxr.SetOrgId/SetAuthSecret/SetDeviceId/SetDeviceTags into runtime auth (after config load so overrides win; before GetArborData so MDM can still overlay).
+            // Apply Abxr.SetOrgId/SetAuthSecret/SetDeviceId into runtime auth (after config load so overrides win; before GetArborData so MDM can still overlay).
             ApplyAbxrOverridesToRuntimeAuth();
 
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -928,7 +928,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// When ArborMdmClient is available and connected: updates deviceId, partner, tags from MDM; for production_custom that is all we accept (org credentials stay from config). For other build types, updates orgToken (app tokens) or orgId/authSecret (legacy) from MDM.
-        /// When MDM is not available, returns immediately (runtime auth is updated by Abxr.SetOrgId/SetAuthSecret/SetDeviceId/SetDeviceTags directly).
+        /// When MDM is not available, returns immediately (runtime auth is updated by Abxr.SetOrgId/SetAuthSecret/SetDeviceId directly).
         /// </summary>
         private void GetArborData()
         {
@@ -1140,7 +1140,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Testing only (For TestRunner) ───────────────────────────────
 
-        /// <summary>Testing only. Overwrites runtime auth with the given config so Authenticate() uses it instead of loading from Configuration. ApplyAbxrOverridesToRuntimeAuth still runs and applies Abxr.SetOrgId/SetAuthSecret/SetDeviceId/SetDeviceTags. Only overwrites enableAutoStartAuthentication when config has it set (HasValue). Mirrors ExtractConfigData: when buildType is "production" (not production_custom), orgToken/orgId/authSecret are not accepted and are cleared.</summary>
+        /// <summary>Testing only. Overwrites runtime auth with the given config so Authenticate() uses it instead of loading from Configuration. ApplyAbxrOverridesToRuntimeAuth still runs and applies Abxr.SetOrgId/SetAuthSecret/SetDeviceId. Only overwrites enableAutoStartAuthentication when config has it set (HasValue). Mirrors ExtractConfigData: when buildType is "production" (not production_custom), orgToken/orgId/authSecret are not accepted and are cleared.</summary>
         internal void SetRuntimeAuthForTesting(RuntimeAuthConfig config)
         {
             if (config == null) return;
@@ -1214,7 +1214,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _useInjectedRuntimeAuthForTesting = false;
         }
 
-        // ── Runtime auth overrides (Abxr.SetOrgId / SetAuthSecret / SetDeviceId / SetDeviceTags) ─────
+        // ── Runtime auth overrides (Abxr.SetOrgId / SetAuthSecret / SetDeviceId) ─────
 
         /// <summary>Updates runtime auth orgId. Called by subsystem when Abxr.SetOrgId() is used.</summary>
         internal void SetRuntimeAuthOrgId(string value)
@@ -1237,14 +1237,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 _runtimeAuth.deviceId = value ?? "";
         }
 
-        /// <summary>Updates runtime auth tags. Called by subsystem when Abxr.SetDeviceTags() is used.</summary>
-        internal void SetRuntimeAuthDeviceTags(string[] value)
-        {
-            if (_runtimeAuth != null)
-                _runtimeAuth.tags = value;
-        }
-
-        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters are used. Only overwrites when the getter returns a non-empty value so we do not wipe config/injected credentials with empty (e.g. Editor with no MDM).</summary>
+        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters (or from MDM via GetDeviceTags) are used. Only overwrites when the getter returns a non-empty value so we do not wipe config/injected credentials with empty (e.g. Editor with no MDM).</summary>
         private void ApplyAbxrOverridesToRuntimeAuth()
         {
             if (_runtimeAuth == null) return;
