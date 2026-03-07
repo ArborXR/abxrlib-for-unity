@@ -244,12 +244,16 @@ namespace AbxrLib.Editor
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.LabelField("When enabled, PlayMode tests that trigger auth input (e.g. PIN or email) will auto-respond using the values below so tests don't block waiting for user input.", EditorStyles.wordWrappedLabel);
                 EditorGUILayout.EndVertical();
+                config.unitTestAuthPin = EditorGUILayout.TextField(new GUIContent(
+                    "PIN / assessment PIN", "Used when auth requests type \"pin\" or \"assessmentPin\"."), config.unitTestAuthPin);
+                config.unitTestAuthBadPin = EditorGUILayout.TextField(new GUIContent(
+                    "Bad PIN (always fail)", "PIN that backend must always reject. Set when running invalid-PIN tests; empty = those tests will ignore."), config.unitTestAuthBadPin);
                 config.unitTestAuthText = EditorGUILayout.TextField(new GUIContent(
                     "Text / default", "Used when auth type is text or unknown."), config.unitTestAuthText);
                 config.unitTestAuthEmail = EditorGUILayout.TextField(new GUIContent(
                     "Email", "Used when auth requests type \"email\"."), config.unitTestAuthEmail);
-                config.unitTestAuthPin = EditorGUILayout.TextField(new GUIContent(
-                    "PIN / assessment PIN", "Used when auth requests type \"pin\" or \"assessmentPin\"."), config.unitTestAuthPin);
+                config.unitTestAuthEmailDomain = EditorGUILayout.TextField(new GUIContent(
+                    "Email domain", "Reserved test domain for email auth (from lib-backend when available). Set when running email auth tests; empty = those tests may ignore or use app config."), config.unitTestAuthEmailDomain);
                 EditorGUI.indentLevel--;
             }
 

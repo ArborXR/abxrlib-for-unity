@@ -188,7 +188,7 @@ namespace AbxrLib.Runtime
             _authService.OnFailed = error =>
             {
                 Debug.LogError($"[AbxrLib] Authentication failure: {error}");
-                HandleAuthCompleted(false);
+                HandleAuthCompleted(false, error);
             };
 
             // Super metadata is per-session; clear any persisted value so we start fresh each run.
@@ -425,7 +425,7 @@ namespace AbxrLib.Runtime
 #endif
         }
 
-        private void HandleAuthCompleted(bool success)
+        private void HandleAuthCompleted(bool success, string errorMessage = null)
         {
 	        // Start default assessment tracking if no assessments are currently running
 	        // This ensures duration tracking starts immediately after authentication
@@ -441,7 +441,7 @@ namespace AbxrLib.Runtime
 		        }
 	        }
 	        
-	        Abxr.OnAuthCompleted?.Invoke(success, null);
+	        Abxr.OnAuthCompleted?.Invoke(success, errorMessage);
 	        if (!success) return;
 
 	        var modules = _authService.ResponseData.Modules;

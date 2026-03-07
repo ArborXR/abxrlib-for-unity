@@ -78,16 +78,12 @@ public class AbxrPlayModeTestBase
             }
             string value = type switch
             {
-                "email" => c.unitTestAuthEmail,
-                "pin" or "assessmentPin" => c.unitTestAuthPin,
-                _ => c.unitTestAuthText
+                "email" => c.unitTestAuthEmail ?? "",
+                "pin" or "assessmentPin" => c.unitTestAuthPin ?? "",
+                _ => c.unitTestAuthText ?? ""
             };
-            if (string.IsNullOrEmpty(value))
-            {
-                Assert.Fail($"Auth requested input type=\"{type}\" but the corresponding Unit Test Credentials value is not set. In the AbxrLib config asset, set unitTestAuthPin (for pin/assessmentPin), unitTestAuthEmail (for email), or unitTestAuthText (for text), then save the project.");
-                return;
-            }
-            Debug.Log($"[AbxrLib] (Test) OnInputRequested: type=" + type + ", prompt=" + prompt + ", submitting configured value " + value + ")");
+            // Allow empty string so tests can submit invalid input (e.g. AuthSecondStage_AssessmentPin_EmptyPin_Fails via ModifyConfig("unitTestAuthPin", "")).
+            Debug.Log($"[AbxrLib] (Test) OnInputRequested: type=" + type + ", prompt=" + prompt + ", submitting configured value " + (string.IsNullOrEmpty(value) ? "(empty)" : value) + ")");
             Abxr.OnInputSubmitted(value);
         };
     }
@@ -283,14 +279,14 @@ public class AbxrPlayModeTestBase
         bool authSuccess = false;
         var prevHandler = Abxr.OnAuthCompleted;
 
-        Abxr.OnAuthCompleted += (success, _) =>
+        Abxr.OnAuthCompleted += (success, errorMsg) =>
         {
             // Only accept the result from our subsystem; another (e.g. from Initialize) may still fire OnAuthCompleted(false).
             if (AbxrSubsystem.Instance != runner)
                 return;
             authSuccess = success;
             authCompletedReceived = true;
-            prevHandler?.Invoke(success, null);
+            prevHandler?.Invoke(success, errorMsg);
         };
 
         // Ensure current subsystem has the unit-test input handler (critical when subsystem was created in the test, e.g. AuthenticationFirstStageTests).
@@ -314,6 +310,76 @@ public class AbxrPlayModeTestBase
         }
 
         onComplete(authSuccess);
+    }
+
+    /// <summary>
+    /// Same as PerformAuth but onComplete receives (success, errorMessage). Use for second-stage tests that assert on API error messages.
+    /// When maxSecondStageSubmissions is set (e.g. 1), the input handler submits at most that many times; on the next request it calls Abxr.EndSession() so the test completes without looping.
+    /// </summary>
+    protected IEnumerator PerformAuthWithError(Action<bool, string> onComplete, float timeoutSeconds = 35f, float sceneLoadWaitSeconds = 5f, int? maxSecondStageSubmissions = null)
+    {
+        var runner = SubsystemGO != null ? SubsystemGO.GetComponent<AbxrSubsystem>() : null;
+        if (runner == null || onComplete == null)
+        {
+            onComplete?.Invoke(false, null);
+            yield break;
+        }
+
+        yield return new WaitForSeconds(sceneLoadWaitSeconds);
+
+        bool authCompletedReceived = false;
+        bool authSuccess = false;
+        string authError = null;
+        var prevHandler = Abxr.OnAuthCompleted;
+
+        Abxr.OnAuthCompleted += (success, errorMsg) =>
+        {
+            if (AbxrSubsystem.Instance != runner)
+                return;
+            authSuccess = success;
+            authError = errorMsg;
+            authCompletedReceived = true;
+            prevHandler?.Invoke(success, errorMsg);
+        };
+
+        if (maxSecondStageSubmissions.HasValue)
+        {
+            int submitCount = 0;
+            int maxSubmissions = maxSecondStageSubmissions.Value;
+            var innerHandler = GetUnitTestInputRequestedHandler();
+            Abxr.OnInputRequested = (type, prompt, domain, err) =>
+            {
+                submitCount++;
+                if (submitCount <= maxSubmissions)
+                    innerHandler(type, prompt, domain, err);
+                else
+                    Abxr.EndSession();
+            };
+        }
+        else
+        {
+            Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
+        }
+
+        Abxr.StartAuthentication();
+
+        float elapsed = 0f;
+        while (!authCompletedReceived && elapsed < timeoutSeconds)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        Abxr.OnAuthCompleted = prevHandler;
+
+        if (!authCompletedReceived)
+        {
+            Assert.Fail($"PerformAuthWithError: OnAuthCompleted was not invoked within {timeoutSeconds}s.");
+            onComplete(false, null);
+            yield break;
+        }
+
+        onComplete(authSuccess, authError);
     }
 
     /// <summary>

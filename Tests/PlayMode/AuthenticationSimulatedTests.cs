@@ -1,12 +1,15 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
-// PlayMode tests for authentication state, override setters, module list, and session management.
+// PlayMode tests using simulated auth only (no API calls): auth state, override setters, module list, session management.
+// First-stage auth (config, validation, handoff) is in AuthenticationFirstStageTests.
 using System.Collections.Generic;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 [TestFixture]
-public class AuthenticationTests : AbxrPlayModeTestBase
+public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
 {
     // ── Pre-authentication defaults ───────────────────────────────────────
 
@@ -81,7 +84,7 @@ public class AuthenticationTests : AbxrPlayModeTestBase
         Abxr.SetOrgId("my-org-uuid");
         Abxr.SetOrgId(null);
         var id = Abxr.GetOrgId();
-        Assert.IsTrue(id == null || id == "");
+        Assert.AreNotEqual("my-org-uuid", id, "Clearing override should stop returning the overridden value; GetOrgId now falls back to config or empty.");
     }
 
     [Test]
@@ -132,6 +135,10 @@ public class AuthenticationTests : AbxrPlayModeTestBase
         });
         var userData = Abxr.GetUserData();
         Assert.AreEqual("fallback@example.com", userData["userId"]);
+        // Simulated auth does not set transport auth headers; flush logs this. We EndSession here and expect the log so TearDown does not run EndSession (avoids unhandled log).
+        RunEndSessionInTearDown = false;
+        LogAssert.Expect(LogType.Error, "[AbxrLib] Cannot set auth headers - authentication tokens are missing");
+        Abxr.EndSession();
     }
 
     [Test]
@@ -176,6 +183,7 @@ public class AuthenticationTests : AbxrPlayModeTestBase
             new ModuleData { Id = "m1", Name = "Introduction", Target = "scene://intro", Order = 1 },
             new ModuleData { Id = "m2", Name = "Assessment",   Target = "scene://assess", Order = 2 }
         };
+        LogAssert.Expect(LogType.Error, "[AbxrLib] Subscribe to OnModuleTarget before running modules");
         SimulateAuth(BuildTestAuthResponse(modules: modules));
         var result = Abxr.GetModuleList();
         Assert.AreEqual(2, result.Count);
@@ -188,6 +196,7 @@ public class AuthenticationTests : AbxrPlayModeTestBase
     public void StartModuleAtIndex_NegativeIndex_ReturnsFalse()
     {
         SimulateAuth();
+        LogAssert.Expect(LogType.Error, "[AbxrLib] No modules available");
         Assert.IsFalse(Abxr.StartModuleAtIndex(-1));
     }
 
@@ -195,6 +204,7 @@ public class AuthenticationTests : AbxrPlayModeTestBase
     public void StartModuleAtIndex_IndexOutOfRange_ReturnsFalse()
     {
         SimulateAuth();
+        LogAssert.Expect(LogType.Error, "[AbxrLib] No modules available");
         Assert.IsFalse(Abxr.StartModuleAtIndex(99));
     }
 
@@ -206,7 +216,9 @@ public class AuthenticationTests : AbxrPlayModeTestBase
             new ModuleData { Id = "m1", Name = "Module 1", Target = "target1", Order = 1 }
         };
         Abxr.OnModuleTarget = null;
+        LogAssert.Expect(LogType.Error, "[AbxrLib] Subscribe to OnModuleTarget before running modules");
         SimulateAuth(BuildTestAuthResponse(modules: modules));
+        LogAssert.Expect(LogType.Error, "[AbxrLib] Need to subscribe to OnModuleTarget before running modules");
         Assert.IsFalse(Abxr.StartModuleAtIndex(0));
     }
 

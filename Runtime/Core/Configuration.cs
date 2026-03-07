@@ -270,10 +270,12 @@ namespace AbxrLib.Runtime.Core
 
 #if UNITY_EDITOR
         /// <summary>Editor-only: when true, PlayMode test base can auto-respond to OnInputRequested using unitTestAuth* values.</summary>
+        [HideInInspector] public string unitTestAuthPin = "";
+        [HideInInspector] public string unitTestAuthBadPin = "";
         [HideInInspector] public bool unitTestConfigEnabled = false;
         [HideInInspector] public string unitTestAuthText = "";
         [HideInInspector] public string unitTestAuthEmail = "";
-        [HideInInspector] public string unitTestAuthPin = "";
+        [HideInInspector] public string unitTestAuthEmailDomain = "";
 #endif
 
         /// <summary>For testing only. Clears the singleton and validation state so the next access creates a fresh instance.</summary>

@@ -55,6 +55,9 @@ namespace AbxrLib.Runtime.Types
         /// <summary>Device tags from MDM when connected; otherwise null/empty.</summary>
         public string[] tags;
 
+        /// <summary>Auth mechanism (type, prompt, domain). When null or empty type, filled from GET config when received; when set (e.g. by tests) before config is fetched, that value is used and not overwritten. Learner launcher is applied only when we just filled from config.</summary>
+        public AuthMechanism authMechanism;
+
         /// <summary>
         /// Validates the current runtime auth values. Returns null if valid, or an error message if invalid.
         /// Call after loading from Configuration and applying GetArborData/GetQueryData/overrides.

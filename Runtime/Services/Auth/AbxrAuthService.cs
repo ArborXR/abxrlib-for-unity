@@ -38,8 +38,9 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
-        /// <summary>Runtime auth values: loaded from Configuration then updated by GetArborData, GetQueryData, intent, SetOrgId/SetAuthSecret. Validated before each auth; then copied to _payload.</summary>
+        /// <summary>Runtime auth values: loaded from Configuration then updated by GetArborData, GetQueryData, intent, SetOrgId/SetAuthSecret. Holds authMechanism (from GET config when not already set, or set by tests); copied to _authMechanism so we can mutate prompt for user input.</summary>
         private readonly RuntimeAuthConfig _runtimeAuth = new RuntimeAuthConfig();
+        /// <summary>Working copy of _runtimeAuth.authMechanism for this session; prompt is temporarily set to user input in KeyboardAuthenticate. All code uses this.</summary>
         private AuthMechanism _authMechanism;
         private DateTime _tokenExpiry = DateTime.MinValue;
         private int _failedAuthAttempts;
@@ -344,7 +345,11 @@ namespace AbxrLib.Runtime.Services.Auth
             try
             {
                 var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
-                if (obj != null && obj.TryGetValue("message", out var msg) && msg != null)
+                if (obj == null) return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
+                // Backend (e.g. FastAPI) often returns "detail"; some APIs use "message".
+                if (obj.TryGetValue("detail", out var detail) && detail != null)
+                    return detail is string s ? s : detail.ToString();
+                if (obj.TryGetValue("message", out var msg) && msg != null)
                     return msg.ToString();
             }
             catch { /* ignore */ }
@@ -512,12 +517,26 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (config != null)
                     {
                         Configuration.Instance.ApplyConfigPayload(config);
-                        _authMechanism = config.authMechanism ?? new AuthMechanism();
-                        if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
-                        if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_authMechanism?.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
+                        // Use GET config only when _runtimeAuth.authMechanism not already set (e.g. by tests). Apply learner launcher only when we just filled from config.
+                        bool filledFromConfig = _runtimeAuth.authMechanism == null || string.IsNullOrEmpty(_runtimeAuth.authMechanism.type);
+                        if (filledFromConfig)
                         {
-                            _authMechanism.type = "assessmentPin";
-                            _authMechanism.prompt = "Enter your 6-digit PIN";
+                            _runtimeAuth.authMechanism = config.authMechanism ?? new AuthMechanism();
+                            if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.inputSource))
+                                _runtimeAuth.authMechanism.inputSource = "user";
+                            if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_runtimeAuth.authMechanism.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
+                            {
+                                _runtimeAuth.authMechanism.type = "assessmentPin";
+                                _runtimeAuth.authMechanism.prompt = "Enter your 6-digit PIN";
+                            }
+                        }
+                        _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
+                        if (!string.IsNullOrEmpty(_authMechanism.type) && string.IsNullOrEmpty(_authMechanism.prompt))
+                        {
+                            string defaultPrompt = GetDefaultPromptForAuthMechanismType(_authMechanism.type);
+                            _authMechanism.prompt = defaultPrompt;
+                            if (_runtimeAuth.authMechanism != null)
+                                _runtimeAuth.authMechanism.prompt = defaultPrompt;
                         }
                         string authType = _authMechanism?.type ?? "";
                         if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
@@ -602,6 +621,35 @@ namespace AbxrLib.Runtime.Services.Auth
             return "text";
         }
 
+        /// <summary>Default prompt when auth mechanism type is set (e.g. by tests or enableLearnerLauncherMode). Used for consistent prompts.</summary>
+        private static string GetDefaultPromptForAuthMechanismType(string type)
+        {
+            if (string.IsNullOrEmpty(type)) return "";
+            var t = type.Trim();
+            if (string.Equals(t, "assessmentPin", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "pin", StringComparison.OrdinalIgnoreCase))
+                return "Enter your 6-digit PIN";
+            if (string.Equals(t, "email", StringComparison.OrdinalIgnoreCase))
+                return "Enter your email address";
+            if (string.Equals(t, "text", StringComparison.OrdinalIgnoreCase))
+                return "Enter your Employee ID";
+            if (string.Equals(t, "none", StringComparison.OrdinalIgnoreCase))
+                return "";
+            return "";
+        }
+
+        /// <summary>Returns a mutable copy of the given auth mechanism so we can set prompt to user input without mutating _runtimeAuth.</summary>
+        private static AuthMechanism CopyAuthMechanism(AuthMechanism source)
+        {
+            if (source == null) return new AuthMechanism();
+            return new AuthMechanism
+            {
+                type = source.type ?? "",
+                prompt = source.prompt ?? "",
+                domain = source.domain ?? "",
+                inputSource = !string.IsNullOrEmpty(source.inputSource) ? source.inputSource : "user"
+            };
+        }
+
         /// <summary>True if auth mechanism type indicates the user must enter text/PIN/email (so we should show keyboard). Uses normalized type so pin variants are one place.</summary>
         private static bool RequiresUserInputType(string type)
         {
@@ -652,6 +700,9 @@ namespace AbxrLib.Runtime.Services.Auth
             _tokenExpiry = DateTime.MinValue;
             _payload.sessionId = null;
             _authMechanism = new AuthMechanism();
+            // Preserve test-injected authMechanism so GetConfigurationCoroutine does not overwrite with server config.
+            if (!_useInjectedRuntimeAuthForTesting)
+                _runtimeAuth.authMechanism = null;
             _failedAuthAttempts = 0;
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
@@ -1159,6 +1210,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 _runtimeAuth.enableAutoStartModules = config.enableAutoStartModules;
             if (config.enableAutoAdvanceModules.HasValue)
                 _runtimeAuth.enableAutoAdvanceModules = config.enableAutoAdvanceModules;
+            _runtimeAuth.authMechanism = config.authMechanism;
             // Production (non-custom) does not accept org credentials from config; they must come from device/MDM at runtime (same as ExtractConfigData).
             if (_runtimeAuth.buildType == "production")
             {
@@ -1182,6 +1234,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 _runtimeAuth.enableAutoStartModules = overrides.enableAutoStartModules;
             if (overrides.enableAutoAdvanceModules.HasValue)
                 _runtimeAuth.enableAutoAdvanceModules = overrides.enableAutoAdvanceModules;
+            if (overrides.authMechanism != null)
+                _runtimeAuth.authMechanism = overrides.authMechanism;
         }
 
         /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>

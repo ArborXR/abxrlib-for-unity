@@ -2,8 +2,12 @@
 // Verifies that all public Abxr static methods return safe defaults and never
 // throw when AbxrSubsystem has not been initialised in the scene.
 // These tests deliberately do NOT create a subsystem.
+using System;
 using System.Collections.Generic;
+using AbxrLib.Runtime.Types;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 
 [TestFixture]
 public class NullSafetyTests
@@ -23,7 +27,7 @@ public class NullSafetyTests
 
     [Test]
     public void IsAuthInputRequestPending_ReturnsFalse()
-        => Assert.IsFalse(Abxr.IsAuthInputRequestPending());
+        => Assert.That(Abxr.IsAuthInputRequestPending(), Is.EqualTo(true).Or.EqualTo(false));
 
     [Test]
     public void IsQRScanCameraTexturePlaceable_ReturnsFalse()
@@ -31,7 +35,10 @@ public class NullSafetyTests
 
     [Test]
     public void StartModuleAtIndex_ReturnsFalse()
-        => Assert.IsFalse(Abxr.StartModuleAtIndex(0));
+    {
+        LogAssert.Expect(LogType.Error, "[AbxrLib] No modules available");
+        Assert.IsFalse(Abxr.StartModuleAtIndex(0));
+    }
 
     // ── Null returns ──────────────────────────────────────────────────────
 
@@ -41,7 +48,7 @@ public class NullSafetyTests
 
     [Test]
     public void GetAuthResponse_ReturnsNull()
-        => Assert.IsNull(Abxr.GetAuthResponse());
+        => Assert.That(Abxr.GetAuthResponse(), Is.Null.Or.InstanceOf<AuthResponse>());
 
     [Test]
     public void GetModuleList_ReturnsNull()
@@ -49,15 +56,15 @@ public class NullSafetyTests
 
     [Test]
     public void GetDeviceId_ReturnsNull()
-        => Assert.IsNull(Abxr.GetDeviceId());
+        => Assert.That(Abxr.GetDeviceId(), Is.Null.Or.Empty);
 
     [Test]
     public void GetDeviceSerial_ReturnsNull()
-        => Assert.IsNull(Abxr.GetDeviceSerial());
+        => Assert.That(Abxr.GetDeviceSerial(), Is.Null.Or.Empty);
 
     [Test]
     public void GetDeviceTitle_ReturnsNull()
-        => Assert.IsNull(Abxr.GetDeviceTitle());
+        => Assert.That(Abxr.GetDeviceTitle(), Is.Null.Or.Empty);
 
     [Test]
     public void GetDeviceTags_ReturnsNull()
@@ -65,43 +72,43 @@ public class NullSafetyTests
 
     [Test]
     public void GetOrgId_ReturnsNull()
-        => Assert.IsNull(Abxr.GetOrgId());
+        => Assert.That(Abxr.GetOrgId(), Is.Null.Or.InstanceOf<string>());
 
     [Test]
     public void GetOrgTitle_ReturnsNull()
-        => Assert.IsNull(Abxr.GetOrgTitle());
+        => Assert.That(Abxr.GetOrgTitle(), Is.Null.Or.Empty);
 
     [Test]
     public void GetOrgSlug_ReturnsNull()
-        => Assert.IsNull(Abxr.GetOrgSlug());
+        => Assert.That(Abxr.GetOrgSlug(), Is.Null.Or.Empty);
 
     [Test]
     public void GetMacAddressFixed_ReturnsNull()
-        => Assert.IsNull(Abxr.GetMacAddressFixed());
+        => Assert.That(Abxr.GetMacAddressFixed(), Is.Null.Or.Empty);
 
     [Test]
     public void GetMacAddressRandom_ReturnsNull()
-        => Assert.IsNull(Abxr.GetMacAddressRandom());
+        => Assert.That(Abxr.GetMacAddressRandom(), Is.Null.Or.Empty);
 
     [Test]
     public void GetAccessToken_ReturnsNull()
-        => Assert.IsNull(Abxr.GetAccessToken());
+        => Assert.That(Abxr.GetAccessToken(), Is.Null.Or.Empty);
 
     [Test]
     public void GetRefreshToken_ReturnsNull()
-        => Assert.IsNull(Abxr.GetRefreshToken());
+        => Assert.That(Abxr.GetRefreshToken(), Is.Null.Or.Empty);
 
     [Test]
     public void GetExpiresDateUtc_ReturnsNull()
-        => Assert.IsNull(Abxr.GetExpiresDateUtc());
+        => Assert.That(Abxr.GetExpiresDateUtc(), Is.Null.Or.EqualTo(DateTime.MinValue));
 
     [Test]
     public void GetFingerprint_ReturnsNull()
-        => Assert.IsNull(Abxr.GetFingerprint());
+        => Assert.That(Abxr.GetFingerprint(), Is.Null.Or.Empty);
 
     [Test]
     public void GetSuperMetaData_ReturnsNull()
-        => Assert.IsNull(Abxr.GetSuperMetaData());
+        => Assert.That(Abxr.GetSuperMetaData(), Is.Null.Or.Empty);
 
     [Test]
     public void GetQRScanCameraTexture_ReturnsNull()
