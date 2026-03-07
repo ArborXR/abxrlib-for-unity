@@ -206,6 +206,8 @@ namespace AbxrLib.Runtime.Types
         public object UserId;
         public string AppId;
         public string PackageName;
+        /// <summary>When set in auth_handoff payload, the app that receives it should call LaunchAppWithAuthHandoff(this value) when assessment completes (return-to-launcher flow). Cleared after use.</summary>
+        public string ReturnToPackage;
         public List<ModuleData> Modules;
     }
 

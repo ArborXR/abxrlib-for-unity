@@ -102,6 +102,23 @@ AIDL → ArborInsightsClient (separate APK)
 - **Service “not ready” or bind fails on Android:** Ensure the ArborInsightsClient APK is installed and the client AAR in `Plugins/Android/` matches that service version (AAR must support set_OrgToken when using app tokens). Check logcat for `ArborInsightsClient`, `[AbxrLib]`, and the service package `app.xrdi.client`.
 - **Missing AAR:** If you see “bridge not initialized” or “AAR may be missing”, add the client AAR (e.g. `insights-client-service.aar`) to `Plugins/Android/`. Obtain it from your distribution channel; it is not built in this repo.
 
+## Return-to-launcher (returnToPackage handoff)
+
+When **Enable returnTo Launcher** (`enableReturnTo`) is on and the session came from auth handoff, after **EventAssessmentComplete()** the app either exits or returns the session to the app that launched it.
+
+- **App 1 (launcher):** Call **`Abxr.LaunchAppWithAuthHandoff(packageName, includeReturnToPackage: true)`** so the handoff includes **ReturnToPackage** = this app’s package. The receiving app (App 2) can then “return” the session when assessment completes.
+- **App 2 (assessment):** Receives handoff; **ReturnToPackage** is stored from the handoff JSON. When **EventAssessmentComplete()** runs and `enableReturnTo` is true, **ExitAfterAssessmentComplete** runs: if **returnToPackage** is set, the SDK calls **`Abxr.LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false)`** (sending the session back to App 1), then clears returnToPackage, then SendAll(), delay, quit. The handoff back to App 1 does **not** include ReturnToPackage, so App 1 does not get a return target and no loop occurs.
+- **Clearing:** **returnToPackage** is cleared after use (**GetAndClearReturnToPackage()**); the handoff sent back to App 1 is built with `includeReturnToPackage: false`, so the chain stops at App 1.
+
+| Step | App 1 (launcher) | App 2 (assessment) |
+|------|------------------|--------------------|
+| Build handoff | `LaunchAppWithAuthHandoff(app2Package, includeReturnToPackage: true)` → handoff includes `ReturnToPackage = Application.identifier` | — |
+| Receive handoff | — | ParseAuthResponse sets `_returnToPackage` from JSON |
+| Assessment complete + enableReturnTo | — | GetAndClearReturnToPackage(); LaunchAppWithAuthHandoff(returnTo, false); then SendAll(), delay, quit |
+| Receive handoff back | ParseAuthResponse; no ReturnToPackage in JSON → no return target | — |
+
+Config: **Configuration.enableReturnTo** (default true). When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff.
+
 ## StartNewSession and EndSession
 
 - **`Abxr.StartNewSession()`** starts an entirely fresh session, equivalent to the user closing the app and reopening it from a session perspective. It: (1) clears all pending events, telemetry, logs, and storage from the in-memory batchers; (2) on Android when using ArborInsightsClient, unbinds then rebinds the service so the connection and service-side session are fresh; (3) clears all auth state (tokens, ResponseData, user data, session id, _usedArborInsightsClientForSession); (4) assigns a new session ID and runs authentication again. The ArborInsightsClient removes the client session from its map in `onUnbind` (after flushing unsent data), so a new bind gets a new `ClientSession` and clean batcher on the service side.

@@ -405,6 +405,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── Return to App 1: full teardown (clear handoff) + full base setup ──────
         FullTeardownForAppSwitch(clearAuthHandoff: true);
+        Debug.Log("[AbxrLib] (Test) Leaving App 2, returning to App 1.");
         BaseSetUpForAppSwitch();
         CreateSubsystem();
         AssignUnitTestInputRequestedHandler(); // so PIN request is auto-submitted and OnAuthCompleted fires
@@ -421,6 +422,74 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         Assert.IsTrue(app1ReturnAuthCompleted, "Return to App 1 should eventually complete auth flow (success or input/failure).");
         // We expect either full success (if unit test credentials auto-submit) or that we are not authenticated via handoff.
         Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "Return to App 1 should not have used handoff; we are in starting state.");
+    }
+
+    /// <summary>
+    /// App 1 hands off to App 2 with includeReturnToPackage so App 2 has ReturnToPackage. We simulate App 2
+    /// "returning" the session to App 1 by injecting the handoff App 2 would send; App 1 re-adopts the session via handoff (no PIN).
+    /// </summary>
+    [UnityTest]
+    public IEnumerator AuthHandoff_App2AdoptsSession_ThenReturnToApp1_App1ReAdoptsSession()
+    {
+        // ── App 1: auth and hand off to App 2 with ReturnToPackage (JSON payload) ─
+        CreateSubsystem();
+        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+        bool app1Success = false;
+        yield return PerformAuth(r => app1Success = r);
+        Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
+        Assert.IsTrue(Abxr.GetAuthResponse() != null, "App 1 should have auth response after success.");
+
+        string packageName = GetHandoffTargetPackageName();
+        bool launched = AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest(packageName, includeReturnToPackage: true);
+        Assert.IsTrue(launched, "LaunchAppWithAuthHandoffForTest(includeReturnToPackage) should succeed.");
+        FullTeardownForAppSwitch(clearAuthHandoff: false);
+        Debug.Log("[AbxrLib] (Test) Leaving App 1, launching App 2 (auth_handoff with ReturnToPackage).");
+        BaseSetUpForAppSwitch();
+
+        // ── App 2: receive handoff (with ReturnToPackage), adopt session ─
+        CreateSubsystem();
+        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+
+        bool app2AuthCompleted = false;
+        bool app2Success = false;
+        Abxr.OnAuthCompleted += (success, _) => { app2AuthCompleted = true; app2Success = success; };
+        Abxr.StartAuthentication();
+        float deadline = Time.realtimeSinceStartup + 5f;
+        while (!app2AuthCompleted && Time.realtimeSinceStartup < deadline)
+            yield return null;
+        Abxr.OnAuthCompleted = null;
+        Assert.IsTrue(app2AuthCompleted, "App 2 should receive OnAuthCompleted.");
+        Assert.IsTrue(app2Success, "App 2 should adopt session via handoff.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "App 2 session should be marked as handoff.");
+
+        // Simulate "assessment complete" → App 2 would call LaunchAppWithAuthHandoff(returnToPackage). Get the handoff App 2 would send back to App 1.
+        string handoffBackToApp1 = AbxrSubsystem.Instance.GetHandoffJsonForTesting(includeReturnToPackage: false);
+        Assert.IsNotNull(handoffBackToApp1, "App 2 should be able to build handoff to return to App 1.");
+        Assert.IsFalse(string.IsNullOrEmpty(handoffBackToApp1), "Handoff back to App 1 should not be empty.");
+
+        Abxr.EventAssessmentComplete("handoff-test-re-adopt", 85, Abxr.EventStatus.Pass);
+        yield return null;
+
+        // ── Return to App 1: inject handoff so App 1 re-adopts the session (no PIN) ─
+        FullTeardownForAppSwitch(clearAuthHandoff: true);
+        Debug.Log("[AbxrLib] (Test) Leaving App 2, returning to App 1 (with handoff).");
+        AbxrAuthService.SetAuthHandoffForTesting(handoffBackToApp1);
+        BaseSetUpForAppSwitch();
+
+        CreateSubsystem();
+        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
+
+        bool app1ReAdoptCompleted = false;
+        bool app1ReAdoptSuccess = false;
+        Abxr.OnAuthCompleted += (success, _) => { app1ReAdoptCompleted = true; app1ReAdoptSuccess = success; };
+        Abxr.StartAuthentication();
+        deadline = Time.realtimeSinceStartup + 5f;
+        while (!app1ReAdoptCompleted && Time.realtimeSinceStartup < deadline)
+            yield return null;
+        Abxr.OnAuthCompleted = null;
+        Assert.IsTrue(app1ReAdoptCompleted, "Return to App 1 should receive OnAuthCompleted.");
+        Assert.IsTrue(app1ReAdoptSuccess, "App 1 should re-adopt session via handoff (no PIN).");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "App 1 should have adopted session via handoff when returning.");
     }
 
     /// <summary>
@@ -467,6 +536,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── Return to App 1 ───────────────────────────────────────────────────
         FullTeardownForAppSwitch(clearAuthHandoff: true);
+        Debug.Log("[AbxrLib] (Test) Leaving App 2, returning to App 1.");
         BaseSetUpForAppSwitch();
         CreateSubsystem();
         AssignUnitTestInputRequestedHandler();

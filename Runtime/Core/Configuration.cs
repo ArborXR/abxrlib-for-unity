@@ -223,8 +223,8 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("When enabled, the next module in the sequence will automatically start after completion of a module")]
         public bool enableAutoAdvanceModules = true;
         
-        [Tooltip("When enabled, the app will return to the launcher after an assessment is complete. When disabled, the app will stay open after an assessment is complete. Specifically used with Learner Launcher.")]
-        public bool returnToLauncherAfterAssessmentComplete = true;
+        [Tooltip("Allow returnTo Launcher. When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff.")]
+        public bool enableReturnTo = true;
 
         [Header("Authentication Prefabs")]
         public GameObject KeyboardPrefab;

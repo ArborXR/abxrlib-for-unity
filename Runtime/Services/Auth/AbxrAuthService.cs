@@ -66,6 +66,7 @@ namespace AbxrLib.Runtime.Services.Auth
         
         // Auth handoff for external launcher apps
         private bool _sessionUsedAuthHandoff;
+        private string _returnToPackage;
 
         /// <summary>
         /// True only when we completed authentication via ArborInsightsClient this session.
@@ -654,6 +655,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _failedAuthAttempts = 0;
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
+            _returnToPackage = null;
             _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
             _lastInputError = null;
@@ -757,8 +759,9 @@ namespace AbxrLib.Runtime.Services.Auth
         /// Builds the JSON payload passed via the auth_handoff Android intent extra.
         /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
         /// so the receiving app and its ArborInsightsClient service can fully adopt the session.
+        /// When includeReturnToPackage is true, adds ReturnToPackage (current app's identifier) so the receiving app can return the session when assessment completes.
         /// </summary>
-        internal string GetHandoffJson()
+        internal string GetHandoffJson(bool includeReturnToPackage = false)
         {
             if (ResponseData == null || !Authenticated) return null;
 
@@ -779,7 +782,17 @@ namespace AbxrLib.Runtime.Services.Auth
                 ["OrgId"]             = _payload?.orgId ?? "",
                 ["TokenExpirationMs"] = expiryMs,
             };
+            if (includeReturnToPackage)
+                handoff["ReturnToPackage"] = Application.identifier ?? "";
             return JsonConvert.SerializeObject(handoff);
+        }
+
+        /// <summary>Returns the stored returnToPackage from the handoff (so the assessment app can launch back to the launcher), then clears it so it is only used once.</summary>
+        internal string GetAndClearReturnToPackage()
+        {
+            var value = _returnToPackage;
+            _returnToPackage = null;
+            return value;
         }
         
         /// <summary>
@@ -1070,6 +1083,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 _tokenExpiry = DateTime.UtcNow.AddHours(24);
                 Debug.Log($"[AbxrLib] Auth handoff successful. Modules: {ResponseData.Modules?.Count ?? 0}");
                 _sessionUsedAuthHandoff = true;
+                _returnToPackage = ResponseData?.ReturnToPackage;
 
                 // For the ArborInsightsClient transport: the normal AuthRequestCoroutine is bypassed by handoff,
                 // so the service has no knowledge of this session. Pass the full auth response JSON so the

@@ -494,8 +494,9 @@ namespace AbxrLib.Runtime
 
 		/// <summary>Launches another Android app and passes the current auth session via the auth_handoff intent extra.
 		/// The target app must also use AbxrLib; it will adopt the session without re-authenticating.
-		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().</summary>
-		internal bool LaunchAppWithAuthHandoff(string packageName)
+		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().
+		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.</summary>
+		internal bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false)
 		{
 			if (string.IsNullOrEmpty(packageName))
 			{
@@ -510,7 +511,7 @@ namespace AbxrLib.Runtime
 #if UNITY_ANDROID && !UNITY_EDITOR
 			try
 			{
-				string handoffJson = _authService.GetHandoffJson();
+				string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
 				if (handoffJson == null)
 				{
 					Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: failed to build handoff payload");
@@ -545,9 +546,10 @@ namespace AbxrLib.Runtime
 		/// Use when testing flows that would call LaunchAppWithAuthHandoff in production.
 		/// </summary>
 		/// <param name="packageName">Target package name (validated like production; used only for consistency).</param>
+		/// <param name="includeReturnToPackage">If true, handoff includes ReturnToPackage so the receiving app can return the session.</param>
 		/// <param name="useBase64Encoding">If true, inject the handoff as base64-encoded JSON so NormalizeHandoffPayload is exercised.</param>
 		/// <returns>True if authenticated and handoff was injected, false otherwise.</returns>
-		internal bool LaunchAppWithAuthHandoffForTest(string packageName, bool useBase64Encoding = false)
+		internal bool LaunchAppWithAuthHandoffForTest(string packageName, bool includeReturnToPackage = false, bool useBase64Encoding = false)
 		{
 			if (string.IsNullOrEmpty(packageName))
 			{
@@ -559,7 +561,7 @@ namespace AbxrLib.Runtime
 				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: not authenticated");
 				return false;
 			}
-			string handoffJson = _authService.GetHandoffJson();
+			string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
 			if (handoffJson == null)
 			{
 				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: failed to build handoff payload");
@@ -572,6 +574,9 @@ namespace AbxrLib.Runtime
 			Debug.Log($"[AbxrLib] LaunchAppWithAuthHandoffForTest: injected handoff for '{packageName}'" + (useBase64Encoding ? " (base64)" : ""));
 			return true;
 		}
+
+		/// <summary>For testing only. Returns the handoff JSON that would be sent by LaunchAppWithAuthHandoff (e.g. so tests can simulate App 2 returning the session to App 1).</summary>
+		internal string GetHandoffJsonForTesting(bool includeReturnToPackage = false) => _authService?.GetHandoffJson(includeReturnToPackage);
 
 		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
 		private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)
@@ -902,7 +907,7 @@ internal void StartNewSession()
 			else
 			{
 				// Not in a module sequence - use original exit logic
-				if (_authService.SessionUsedAuthHandoff() && Configuration.Instance.returnToLauncherAfterAssessmentComplete)
+				if (_authService.SessionUsedAuthHandoff() && Configuration.Instance.enableReturnTo)
 				{
 					_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
 				}
@@ -917,10 +922,23 @@ internal void StartNewSession()
 
 		/// <summary>
 		/// Coroutine to exit the application after a 2-second delay when assessment is complete
-		/// and the session used auth handoff with return to launcher enabled
+		/// and the session used auth handoff with return to launcher enabled.
+		/// If the handoff included ReturnToPackage, launch that app with the current session first (then clear it so no loop).
 		/// </summary>
 		private IEnumerator ExitAfterAssessmentComplete()
 		{
+			string returnToPackage = _authService?.GetAndClearReturnToPackage();
+			if (!string.IsNullOrEmpty(returnToPackage))
+			{
+#if UNITY_ANDROID && !UNITY_EDITOR
+				if (LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false))
+					Debug.Log($"[AbxrLib] Launched '{returnToPackage}' with auth handoff (return to launcher)");
+				else
+					Debug.LogWarning($"[AbxrLib] Failed to launch return target '{returnToPackage}' with auth handoff");
+#else
+				Debug.Log($"[AbxrLib] ReturnToPackage '{returnToPackage}' ignored (not on Android); would launch with handoff on device.");
+#endif
+			}
 			SendAll();
 			Debug.Log("[AbxrLib] Assessment complete with auth handoff - returning to launcher in 2 seconds");
 			yield return new WaitForSeconds(2f);

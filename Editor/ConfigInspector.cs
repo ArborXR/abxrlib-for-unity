@@ -164,8 +164,8 @@ namespace AbxrLib.Editor
                 config.authenticationStartDelay = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
                     "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay), 0f, 60f);
             EditorGUI.EndDisabledGroup();
-            config.returnToLauncherAfterAssessmentComplete = !EditorGUILayout.Toggle(new GUIContent(
-                "Return to LL after Assessment Complete", "When enabled, the app will return to the Learner Launcher after an assessment is complete. When disabled, the app will stay open after an assessment is complete. Specifically used with Learner Launcher."), !config.returnToLauncherAfterAssessmentComplete);
+            config.enableReturnTo = !EditorGUILayout.Toggle(new GUIContent(
+                "Allow returnTo Launcher", "When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff."), !config.enableReturnTo);
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Prefabs", EditorStyles.boldLabel);
@@ -296,7 +296,7 @@ namespace AbxrLib.Editor
                 // Authentication Control
                 config.enableAutoStartAuthentication = defaultConfig.enableAutoStartAuthentication;
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
-                config.returnToLauncherAfterAssessmentComplete = defaultConfig.returnToLauncherAfterAssessmentComplete;
+                config.enableReturnTo = defaultConfig.enableReturnTo;
                 
                 // Authentication Prefabs
                 config.KeyboardPrefab = defaultConfig.KeyboardPrefab;
