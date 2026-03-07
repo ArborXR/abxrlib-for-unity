@@ -29,7 +29,16 @@ namespace AbxrLib.Runtime
         {
             _assessmentStarted = false;
             _nextRuntimeAuthConfigForTesting = null;
+            _simulateQuitInExitAfterAssessmentComplete = false;
         }
+
+        /// <summary>For testing only. When true, ExitAfterAssessmentComplete() does not call EditorApplication.isPlaying = false / Application.Quit(); it logs and ends the coroutine so PlayMode tests can complete.</summary>
+        internal static bool SimulateQuitInExitAfterAssessmentComplete
+        {
+            get => _simulateQuitInExitAfterAssessmentComplete;
+            set => _simulateQuitInExitAfterAssessmentComplete = value;
+        }
+        private static bool _simulateQuitInExitAfterAssessmentComplete;
 
         /// <summary>For testing only. When set before CreateSubsystem(), applied as overrides when the auth service is created (e.g. enableAutoStartAuthentication = false) so the Configuration asset is not modified.</summary>
         internal static RuntimeAuthConfig NextRuntimeAuthConfigForTesting
@@ -445,7 +454,7 @@ namespace AbxrLib.Runtime
 		        return;
 	        }
 
-	        if (Configuration.Instance.enableAutoStartModules && _currentModuleIndex < modules.Count)
+	        if (_authService.GetEffectiveEnableAutoStartModules() && _currentModuleIndex < modules.Count)
 	        {
 		        Abxr.OnModuleTarget.Invoke(modules[_currentModuleIndex].Target);
 	        }
@@ -899,18 +908,21 @@ internal void StartNewSession()
 			}
 			Event(assessmentName, meta);
 			
-			// Check if we're in a module sequence
-			if (_authService.ResponseData?.Modules?.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
+			// Module sequence: advance to next, or treat as "all modules complete"
+			var modules = _authService.ResponseData?.Modules;
+			bool inModuleSequence = modules != null && modules.Count > 0 && _authService.GetEffectiveEnableAutoAdvanceModules();
+			if (inModuleSequence)
 			{
 				AdvanceToNextModule();
 			}
-			else
+
+			// enableReturnTo: exit or return handoff only when "assessment is fully complete" —
+			// i.e. no module sequence, or we just completed the last module (same rule as original exit behavior).
+			bool shouldExitOrReturn = _authService.SessionUsedAuthHandoff() && _authService.GetEffectiveEnableReturnTo();
+			bool assessmentFullyComplete = !inModuleSequence || _currentModuleIndex >= (modules?.Count ?? 0);
+			if (shouldExitOrReturn && assessmentFullyComplete)
 			{
-				// Not in a module sequence - use original exit logic
-				if (_authService.SessionUsedAuthHandoff() && Configuration.Instance.enableReturnTo)
-				{
-					_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
-				}
+				_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
 			}
 		}
 		
@@ -936,12 +948,21 @@ internal void StartNewSession()
 				else
 					Debug.LogWarning($"[AbxrLib] Failed to launch return target '{returnToPackage}' with auth handoff");
 #else
-				Debug.Log($"[AbxrLib] ReturnToPackage '{returnToPackage}' ignored (not on Android); would launch with handoff on device.");
+				// Editor / test: inject handoff so the "return to launcher" app can adopt the session when it starts (e.g. PlayMode test).
+				if (LaunchAppWithAuthHandoffForTest(returnToPackage, includeReturnToPackage: false))
+					Debug.Log($"[AbxrLib] Injected handoff for return-to launcher '{returnToPackage}' (Editor/test).");
+				else
+					Debug.LogWarning($"[AbxrLib] Failed to inject handoff for return target '{returnToPackage}'.");
 #endif
 			}
 			SendAll();
 			Debug.Log("[AbxrLib] Assessment complete with auth handoff - returning to launcher in 2 seconds");
 			yield return new WaitForSeconds(2f);
+			if (_simulateQuitInExitAfterAssessmentComplete)
+			{
+				Debug.Log("[AbxrLib] (Test) Simulated app quit - ExitAfterAssessmentComplete would have exited.");
+				yield break;
+			}
 	#if UNITY_EDITOR
 			UnityEditor.EditorApplication.isPlaying = false;
 	#else

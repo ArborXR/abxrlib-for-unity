@@ -34,6 +34,12 @@ namespace AbxrLib.Runtime.Types
     {
         /// <summary>When set, overrides Configuration.enableAutoStartAuthentication so the asset is not modified. Null = use Configuration.</summary>
         public bool? enableAutoStartAuthentication;
+        /// <summary>When set, overrides Configuration.enableReturnTo so the asset is not modified. Null = use Configuration.</summary>
+        public bool? enableReturnTo;
+        /// <summary>When set, overrides Configuration.enableAutoStartModules. Null = use Configuration.</summary>
+        public bool? enableAutoStartModules;
+        /// <summary>When set, overrides Configuration.enableAutoAdvanceModules. Null = use Configuration.</summary>
+        public bool? enableAutoAdvanceModules;
 
         public bool useAppTokens;
         public string appToken;

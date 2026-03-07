@@ -87,7 +87,7 @@ public class AbxrPlayModeTestBase
                 Assert.Fail($"Auth requested input type=\"{type}\" but the corresponding Unit Test Credentials value is not set. In the AbxrLib config asset, set unitTestAuthPin (for pin/assessmentPin), unitTestAuthEmail (for email), or unitTestAuthText (for text), then save the project.");
                 return;
             }
-            Debug.Log($"[AbxrPlayModeTestBase] OnInputRequested: type=" + type + ", prompt=" + prompt + ", submitting configured value " + value + ")");
+            Debug.Log($"[AbxrLib] (Test) OnInputRequested: type=" + type + ", prompt=" + prompt + ", submitting configured value " + value + ")");
             Abxr.OnInputSubmitted(value);
         };
     }
@@ -232,13 +232,13 @@ public class AbxrPlayModeTestBase
             if (RunQuitHandlerInTearDown)
             {
                 RunQuitHandlerInTearDown = false;
-                Debug.Log("BaseTearDown: OnApplicationQuitHandler");
+                Debug.Log("[AbxrLib] (Test) BaseTearDown: OnApplicationQuitHandler");
                 AbxrSubsystem.Instance.OnApplicationQuitHandler();
             }
             if (RunEndSessionInTearDown)
             {
                 RunEndSessionInTearDown = true;
-                Debug.Log("BaseTearDown: Abxr.EndSession");
+                Debug.Log("[AbxrLib] (Test) BaseTearDown: Abxr.EndSession");
                 Abxr.EndSession();
             }
         }

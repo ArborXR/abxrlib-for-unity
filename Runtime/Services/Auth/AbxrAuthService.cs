@@ -896,6 +896,9 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             var config = Configuration.Instance;
             _runtimeAuth.enableAutoStartAuthentication = config != null ? config.enableAutoStartAuthentication : true;
+            _runtimeAuth.enableReturnTo = config != null ? config.enableReturnTo : true;
+            _runtimeAuth.enableAutoStartModules = config != null ? config.enableAutoStartModules : true;
+            _runtimeAuth.enableAutoAdvanceModules = config != null ? config.enableAutoAdvanceModules : true;
 
             var configData = Utils.ExtractConfigData(config);
             if (!configData.isValid)
@@ -1150,6 +1153,12 @@ namespace AbxrLib.Runtime.Services.Auth
             _runtimeAuth.buildType = config.buildType ?? "production";
             if (config.enableAutoStartAuthentication.HasValue)
                 _runtimeAuth.enableAutoStartAuthentication = config.enableAutoStartAuthentication;
+            if (config.enableReturnTo.HasValue)
+                _runtimeAuth.enableReturnTo = config.enableReturnTo;
+            if (config.enableAutoStartModules.HasValue)
+                _runtimeAuth.enableAutoStartModules = config.enableAutoStartModules;
+            if (config.enableAutoAdvanceModules.HasValue)
+                _runtimeAuth.enableAutoAdvanceModules = config.enableAutoAdvanceModules;
             // Production (non-custom) does not accept org credentials from config; they must come from device/MDM at runtime (same as ExtractConfigData).
             if (_runtimeAuth.buildType == "production")
             {
@@ -1167,6 +1176,30 @@ namespace AbxrLib.Runtime.Services.Auth
             if (overrides == null) return;
             if (overrides.enableAutoStartAuthentication.HasValue)
                 _runtimeAuth.enableAutoStartAuthentication = overrides.enableAutoStartAuthentication;
+            if (overrides.enableReturnTo.HasValue)
+                _runtimeAuth.enableReturnTo = overrides.enableReturnTo;
+            if (overrides.enableAutoStartModules.HasValue)
+                _runtimeAuth.enableAutoStartModules = overrides.enableAutoStartModules;
+            if (overrides.enableAutoAdvanceModules.HasValue)
+                _runtimeAuth.enableAutoAdvanceModules = overrides.enableAutoAdvanceModules;
+        }
+
+        /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
+        internal bool GetEffectiveEnableAutoStartModules()
+        {
+            return _runtimeAuth.enableAutoStartModules ?? Configuration.Instance?.enableAutoStartModules ?? true;
+        }
+
+        /// <summary>Returns enableAutoAdvanceModules from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
+        internal bool GetEffectiveEnableAutoAdvanceModules()
+        {
+            return _runtimeAuth.enableAutoAdvanceModules ?? Configuration.Instance?.enableAutoAdvanceModules ?? true;
+        }
+
+        /// <summary>Returns enableReturnTo from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
+        internal bool GetEffectiveEnableReturnTo()
+        {
+            return _runtimeAuth.enableReturnTo ?? Configuration.Instance?.enableReturnTo ?? true;
         }
 
         /// <summary>Returns enableAutoStartAuthentication from the runtime auth config (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting).</summary>

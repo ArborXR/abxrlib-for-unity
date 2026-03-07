@@ -104,10 +104,10 @@ AIDL → ArborInsightsClient (separate APK)
 
 ## Return-to-launcher (returnToPackage handoff)
 
-When **Enable returnTo Launcher** (`enableReturnTo`) is on and the session came from auth handoff, after **EventAssessmentComplete()** the app either exits or returns the session to the app that launched it.
+When **Enable returnTo Launcher** (`enableReturnTo`) is on and the session came from auth handoff, the app exits or returns the session to the app that launched it only when assessment is **fully complete**. That means: if there is no module sequence, after **EventAssessmentComplete()**; if there is a module sequence with auto-advance, only after the **last** module’s **EventAssessmentComplete()** (same rule as the original “exit after assessment” behavior). Exit and return-handoff are normalized to this single decision.
 
 - **App 1 (launcher):** Call **`Abxr.LaunchAppWithAuthHandoff(packageName, includeReturnToPackage: true)`** so the handoff includes **ReturnToPackage** = this app’s package. The receiving app (App 2) can then “return” the session when assessment completes.
-- **App 2 (assessment):** Receives handoff; **ReturnToPackage** is stored from the handoff JSON. When **EventAssessmentComplete()** runs and `enableReturnTo` is true, **ExitAfterAssessmentComplete** runs: if **returnToPackage** is set, the SDK calls **`Abxr.LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false)`** (sending the session back to App 1), then clears returnToPackage, then SendAll(), delay, quit. The handoff back to App 1 does **not** include ReturnToPackage, so App 1 does not get a return target and no loop occurs.
+- **App 2 (assessment):** Receives handoff; **ReturnToPackage** is stored from the handoff JSON. When assessment is fully complete (see above) and `enableReturnTo` is true, **ExitAfterAssessmentComplete** runs: if **returnToPackage** is set, the SDK calls **`Abxr.LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false)`** (sending the session back to App 1), then clears returnToPackage, then SendAll(), delay, quit. The handoff back to App 1 does **not** include ReturnToPackage, so App 1 does not get a return target and no loop occurs.
 - **Clearing:** **returnToPackage** is cleared after use (**GetAndClearReturnToPackage()**); the handoff sent back to App 1 is built with `includeReturnToPackage: false`, so the chain stops at App 1.
 
 | Step | App 1 (launcher) | App 2 (assessment) |
@@ -117,7 +117,7 @@ When **Enable returnTo Launcher** (`enableReturnTo`) is on and the session came 
 | Assessment complete + enableReturnTo | — | GetAndClearReturnToPackage(); LaunchAppWithAuthHandoff(returnTo, false); then SendAll(), delay, quit |
 | Receive handoff back | ParseAuthResponse; no ReturnToPackage in JSON → no return target | — |
 
-Config: **Configuration.enableReturnTo** (default true). When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff.
+Config: **Configuration.enableReturnTo** (default true). When enabled, the app will exit or return the session to the launcher when assessment is fully complete (no module sequence, or after the last module’s EventAssessmentComplete()). Can be overridden at runtime via **RuntimeAuthConfig.enableReturnTo** (e.g. in tests via SetRuntimeAuthForTesting or NextRuntimeAuthConfigForTesting); the subsystem uses **GetEffectiveEnableReturnTo()** (auth service), which falls back to Configuration when the override is null.
 
 ## StartNewSession and EndSession
 
@@ -130,7 +130,8 @@ Test-only APIs and hooks are **internal** and only visible to the Editor and Tes
 
 - **No test-only branching in production:** Test-only code runs only when tests invoke internal APIs (e.g. `SetRuntimeAuthForTesting`, `SimulateAuthSuccess`, `Configuration.ResetForTesting`, `AbxrSubsystem.ResetStaticStateForTesting`). In production those APIs are never called; flags like `_useInjectedRuntimeAuthForTesting` stay false and static test config stays null.
 - **Same production code paths:** Validation, auth payload building, transport selection, and auth flow are identical; tests only inject config (or simulate auth success) so the same logic can be asserted without the network. The same `_runtimeAuth` and request-building code is used in both cases.
-- **Test-only surface:** Auth: `SetRuntimeAuthForTesting`, `ApplyRuntimeAuthOverridesForTesting`, `ClearRuntimeAuthInjectionForTesting`, `SimulateAuthSuccess`. Subsystem: `NextRuntimeAuthConfigForTesting`, `ResetStaticStateForTesting`, `AuthServiceForTesting`, `DataServiceForTesting`, `RestTransportForTesting`, `GetTransportForTesting`, `GetPendingEventsForTesting` (and logs/telemetry). Config: `ResetForTesting`. Unit Test Credentials (`unitTestConfigEnabled`, `unitTestAuth*`) are `#if UNITY_EDITOR` and not in builds.
+- **Test-only surface:** Auth: `SetRuntimeAuthForTesting`, `ApplyRuntimeAuthOverridesForTesting`, `ClearRuntimeAuthInjectionForTesting`, `SimulateAuthSuccess`. Subsystem: `NextRuntimeAuthConfigForTesting`, `ResetStaticStateForTesting`, `SimulateQuitInExitAfterAssessmentComplete`, `AuthServiceForTesting`, `DataServiceForTesting`, `RestTransportForTesting`, `GetTransportForTesting`, `GetPendingEventsForTesting`, `LaunchAppWithAuthHandoffForTest`, `GetHandoffJsonForTesting` (and logs/telemetry). Config: `ResetForTesting`. Unit Test Credentials (`unitTestConfigEnabled`, `unitTestAuth*`) are `#if UNITY_EDITOR` and not in builds. When `SimulateQuitInExitAfterAssessmentComplete` is true, `ExitAfterAssessmentComplete()` does not quit the app; it logs and ends the coroutine so PlayMode tests can finish.
+- **Runtime auth overrides (no asset change):** `RuntimeAuthConfig` and the auth service support overriding these from Configuration for the current session: `enableAutoStartAuthentication`, `enableReturnTo`, `enableAutoStartModules`, `enableAutoAdvanceModules`. Set them on the config passed to `SetRuntimeAuth()` or `NextRuntimeAuthConfigForTesting`; the subsystem uses `GetEffective*` from the auth service so tests can force e.g. no auto-start modules or no return-to-launcher without editing the asset.
 
 When adding or changing tests, avoid production code paths that branch on “is this a test?”; prefer injection/simulation so behavior matches production.
 

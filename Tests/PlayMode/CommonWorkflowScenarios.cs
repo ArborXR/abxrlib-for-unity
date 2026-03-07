@@ -42,33 +42,33 @@ public class CommonWorkflowScenarios : AbxrPlayModeTestBase
         int objectiveNum = 0;
 
         // 4. Start assessment
-        Debug.Log("EventAssessmentStart: Assessment_" + randomName);
+        Debug.Log("[AbxrLib] (Test) EventAssessmentStart: Assessment_" + randomName);
         Abxr.EventAssessmentStart("Assessment_" + randomName);
 
         // 5. Wait 1 second
         yield return new WaitForSeconds(1f);
 
         // 6. Generic event
-        Debug.Log("Event: item_grabbed");
+        Debug.Log("[AbxrLib] (Test) Event: item_grabbed");
         Abxr.Event("item_grabbed", new Abxr.Dict().With("item_type", "tool").With("item_value", "hammer"), sendTelemetry: false);
 
         // 7. Start objective
         string objectiveName = $"Objective_{randomName}_{objectiveNum}";
-        Debug.Log("EventObjectiveStart: " + objectiveName);
+        Debug.Log("[AbxrLib] (Test) EventObjectiveStart: " + objectiveName);
         Abxr.EventObjectiveStart(objectiveName);
 
         // 8. Wait 1 second
         yield return new WaitForSeconds(1f);
 
         // 9. Interaction start
-        Debug.Log("EventInteractionStart: select_option_a");
+        Debug.Log("[AbxrLib] (Test) EventInteractionStart: select_option_a");
         Abxr.EventInteractionStart("select_option_a");
 
         // 10. Wait 1.5 seconds
         yield return new WaitForSeconds(1.5f);
 
         // 11. Interaction complete
-        Debug.Log("EventInteractionComplete: select_option_a");
+        Debug.Log("[AbxrLib] (Test) EventInteractionComplete: select_option_a");
         Abxr.EventInteractionComplete("select_option_a", Abxr.InteractionType.Select, Abxr.InteractionResult.Correct, "true");
 
         // 12. Wait 1 second
@@ -76,7 +76,7 @@ public class CommonWorkflowScenarios : AbxrPlayModeTestBase
 
         // 13. Objective complete (score 80–100, Pass)
         int objectiveScore = Random.Range(80, 101);
-        Debug.Log("EventObjectiveComplete: " + objectiveName + " score: " + objectiveScore);
+        Debug.Log("[AbxrLib] (Test) EventObjectiveComplete: " + objectiveName + " score: " + objectiveScore);
         Abxr.EventObjectiveComplete(objectiveName, objectiveScore, Abxr.EventStatus.Pass);
 
         // 14. Wait 1 second
@@ -84,7 +84,7 @@ public class CommonWorkflowScenarios : AbxrPlayModeTestBase
 
         // 15. Assessment complete (score 80–100, Pass)
         int assessmentScore = Random.Range(80, 101);
-        Debug.Log("EventAssessmentComplete: Assessment_" + randomName + " score: " + assessmentScore + " result: " + Abxr.EventStatus.Pass.ToString());
+        Debug.Log("[AbxrLib] (Test) EventAssessmentComplete: Assessment_" + randomName + " score: " + assessmentScore + " result: " + Abxr.EventStatus.Pass.ToString());
         Abxr.EventAssessmentComplete("Assessment_" + randomName, assessmentScore, Abxr.EventStatus.Pass);
     }
 
@@ -105,14 +105,14 @@ public class CommonWorkflowScenarios : AbxrPlayModeTestBase
         string objectiveName = "Objective_" + randomName;
 
         // 4. Generic event
-        Debug.Log("Event: option_selected");
+        Debug.Log("[AbxrLib] (Test) Event: option_selected");
         Abxr.Event("option_selected", new Abxr.Dict().With("door", "tool").With("item_value", "2"), sendTelemetry: false);
 
         // 5. Wait 1 second
         yield return new WaitForSeconds(1f);
 
         // 6. Start objective (no assessment)
-        Debug.Log("EventObjectiveStart: " + objectiveName);
+        Debug.Log("[AbxrLib] (Test) EventObjectiveStart: " + objectiveName);
         Abxr.EventObjectiveStart(objectiveName);
 
         // 7. Wait 1 second
