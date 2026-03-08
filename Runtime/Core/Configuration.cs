@@ -15,7 +15,6 @@
  */
 
 using System;
-using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Types;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -40,6 +39,16 @@ namespace AbxrLib.Runtime.Core
         /// Set by Editor build scripts only.
         /// </summary>
         internal static bool PreferValidationWarnings { get; set; }
+
+        /// <summary>
+        /// Last validation error message from <see cref="IsValid"/>. Set when IsValid returns false; cleared when it returns true. Callers use the return value of IsValid() plus this message to log as appropriate.
+        /// </summary>
+        private static string _lastValidationErrorMessage;
+
+        /// <summary>
+        /// Validation error message when <see cref="IsValid"/> last returned false. Null when valid. Callers use this with IsValid() return value to decide how to log.
+        /// </summary>
+        internal static string LastValidationErrorMessage => _lastValidationErrorMessage;
 
         public static Configuration Instance
         {
@@ -82,110 +91,31 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("Optional. Organization Token (JWT) from ArborXR Portal. Leave empty for shared production builds; set for single-org or dev builds.")] public string orgToken;
         
         /// <summary>
-        /// Validates configuration: required auth fields and restUrl can cause return false; numeric settings are clamped to valid range (log and continue).
+        /// Validates configuration: required auth fields and restUrl can cause return false; numeric settings are clamped to valid range (no log).
         /// When useAppTokens: requires appToken (non-empty, JWT shape). orgToken may be empty (can come from runtime); if set, validates JWT shape.
         /// When not useAppTokens: requires appID (non-empty, UUID). orgID and authSecret may be empty; if set, validates format.
-        /// restUrl must be set and valid (return false otherwise). Numeric values below min or above max are clamped to range and a warning is logged; validation still returns true.
-        /// Called automatically on first access to Configuration.Instance so ranges are applied early in the loading process.
+        /// restUrl must be set and valid (return false otherwise). Numeric values are clamped to range; validation still returns true after clamping.
+        /// Does not write to the debug log; callers use the return value and <see cref="LastValidationErrorMessage"/> to log as appropriate.
         /// </summary>
         /// <returns>True if configuration is valid, false otherwise</returns>
         public bool IsValid()
         {
-            const string uuidPattern = "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$";
-
-            if (useAppTokens)
+            var authError = RuntimeAuthConfig.ValidateAuthFields(useAppTokens, buildType, appID, orgID, authSecret, appToken, orgToken);
+            if (authError != null)
             {
-                // App-token mode: appToken is required and must be valid format. orgToken can come from runtime — only validate format when set.
-                if (string.IsNullOrEmpty(appToken))
-                {
-                    if (PreferValidationWarnings)
-                        Debug.LogWarning("[AbxrLib] Authentication error: App identification not set.");
-                    else
-                        Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
-                    return false;
-                }
-                if (!LooksLikeJwt(appToken))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
-                    return false;
-                }
-                // Production (Custom APK) requires orgToken to be set and JWT-shaped
-                if (buildType == "production_custom")
-                {
-                    if (string.IsNullOrEmpty(orgToken))
-                    {
-                        if (PreferValidationWarnings)
-                            Debug.LogWarning("[AbxrLib] Authentication error: Organization identification unavailable.");
-                        else
-                            Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                        return false;
-                    }
-                    if (!LooksLikeJwt(orgToken))
-                    {
-                        Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                        return false;
-                    }
-                }
-                else if (!string.IsNullOrEmpty(orgToken) && !LooksLikeJwt(orgToken))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                    return false;
-                }
-            }
-            else
-            {
-                // Legacy mode: appID is required and must be valid format. orgID and authSecret can come from runtime — only validate format when set. Production (Custom APK) requires both.
-                if (string.IsNullOrEmpty(appID))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
-                    return false;
-                }
-                if (!Regex.IsMatch(appID, uuidPattern))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
-                    return false;
-                }
-                if (buildType == "production_custom")
-                {
-                    if (string.IsNullOrEmpty(orgID))
-                    {
-                        if (PreferValidationWarnings)
-                            Debug.LogWarning("[AbxrLib] Authentication error: Organization identification unavailable.");
-                        else
-                            Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                        return false;
-                    }
-                    if (string.IsNullOrEmpty(authSecret) || string.IsNullOrWhiteSpace(authSecret))
-                    {
-                        if (PreferValidationWarnings)
-                            Debug.LogWarning("[AbxrLib] Authentication error: Organization identification unavailable.");
-                        else
-                            Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                        return false;
-                    }
-                }
-                if (!string.IsNullOrEmpty(orgID) && !Regex.IsMatch(orgID, uuidPattern))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                    return false;
-                }
-                if (!string.IsNullOrEmpty(authSecret) && string.IsNullOrWhiteSpace(authSecret))
-                {
-                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
-                    return false;
-                }
-            }
-
-            // Validate restUrl and numeric ranges for both modes
-            if (string.IsNullOrEmpty(restUrl))
-            {
-                Debug.LogError("[AbxrLib] Configuration validation failed - restUrl is required but not set");
+                _lastValidationErrorMessage = "Authentication error: " + authError;
                 return false;
             }
-            
+
+            if (string.IsNullOrEmpty(restUrl))
+            {
+                _lastValidationErrorMessage = "Configuration validation failed - restUrl is required but not set";
+                return false;
+            }
+
             if (!Utils.IsValidUrl(restUrl))
             {
-                Debug.LogError($"[AbxrLib] Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL");
+                _lastValidationErrorMessage = $"Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL";
                 return false;
             }
             
@@ -207,6 +137,7 @@ namespace AbxrLib.Runtime.Core
             ClampFloat(nameof(authenticationStartDelay), ref authenticationStartDelay, 0f, 60f, 0f);
             ClampFloat(nameof(defaultMaxDistanceLimit), ref defaultMaxDistanceLimit, 0f, 10000f, 50f);
 
+            _lastValidationErrorMessage = null;
             return true;
         }
 
@@ -214,13 +145,10 @@ namespace AbxrLib.Runtime.Core
         {
             if (value < min)
             {
-                int applied = Mathf.Clamp(defaultValue, min, max);
-                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
-                value = applied;
+                value = Mathf.Clamp(defaultValue, min, max);
             }
             else if (value > max)
             {
-                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value}, clamped to maximum {max}.");
                 value = max;
             }
         }
@@ -229,22 +157,12 @@ namespace AbxrLib.Runtime.Core
         {
             if (value < min)
             {
-                float applied = Mathf.Clamp(defaultValue, min, max);
-                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value} (empty or below min), set to default {applied}.");
-                value = applied;
+                value = Mathf.Clamp(defaultValue, min, max);
             }
             else if (value > max)
             {
-                Debug.LogWarning($"[AbxrLib] Configuration {fieldName} was {value}, clamped to maximum {max}.");
                 value = max;
             }
-        }
-
-        private static bool LooksLikeJwt(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return false;
-            var parts = value.Split('.');
-            return parts.Length == 3;
         }
 
         public void ApplyConfigPayload(ConfigPayload payload)
@@ -305,8 +223,8 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("When enabled, the next module in the sequence will automatically start after completion of a module")]
         public bool enableAutoAdvanceModules = true;
         
-        [Tooltip("When enabled, the app will return to the launcher after an assessment is complete. When disabled, the app will stay open after an assessment is complete. Specifically used with Learner Launcher.")]
-        public bool returnToLauncherAfterAssessmentComplete = true;
+        [Tooltip("Allow returnTo Launcher. When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff.")]
+        public bool enableReturnTo = true;
 
         [Header("Authentication Prefabs")]
         public GameObject KeyboardPrefab;
@@ -349,6 +267,24 @@ namespace AbxrLib.Runtime.Core
 
         [HideInInspector]
         public int maxDictionarySize = 50;
+
+#if UNITY_EDITOR
+        /// <summary>Editor-only: when true, PlayMode test base can auto-respond to OnInputRequested using unitTestAuth* values.</summary>
+        [HideInInspector] public string unitTestAuthPin = "";
+        [HideInInspector] public string unitTestAuthBadPin = "";
+        [HideInInspector] public bool unitTestConfigEnabled = false;
+        [HideInInspector] public string unitTestAuthText = "";
+        [HideInInspector] public string unitTestAuthEmail = "";
+        [HideInInspector] public string unitTestAuthEmailDomain = "";
+#endif
+
+        /// <summary>For testing only. Clears the singleton and validation state so the next access creates a fresh instance.</summary>
+        internal static void ResetForTesting()
+        {
+            _instance = null;
+            _validatedOnce = false;
+            _lastValidationErrorMessage = null;
+        }
 
         private void MigrateIfNeeded()
         {

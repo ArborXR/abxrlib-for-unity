@@ -34,5 +34,12 @@ namespace AbxrLib.Runtime.Services.Transport
 
         /// <summary>Clear pending data/storage (e.g. for StartNewSession). REST: clear queues; Service: no-op.</summary>
         void ClearAllPending();
+
+        /// <summary>For testing only. Pending events (REST: in-memory queue; service: empty, not available on device).</summary>
+        List<EventPayload> GetPendingEventsForTesting();
+        /// <summary>For testing only. Pending logs (REST: in-memory queue; service: empty).</summary>
+        List<LogPayload> GetPendingLogsForTesting();
+        /// <summary>For testing only. Pending telemetry (REST: in-memory queue; service: empty).</summary>
+        List<TelemetryPayload> GetPendingTelemetryForTesting();
     }
 }
