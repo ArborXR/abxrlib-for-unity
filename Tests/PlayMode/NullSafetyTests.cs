@@ -4,6 +4,7 @@
 // These tests deliberately do NOT create a subsystem.
 using System;
 using System.Collections.Generic;
+using AbxrLib.Runtime;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
@@ -36,7 +37,11 @@ public class NullSafetyTests
     [Test]
     public void StartModuleAtIndex_ReturnsFalse()
     {
-        LogAssert.Expect(LogType.Error, "[AbxrLib] No modules available");
+        // In PlayMode a subsystem may or may not exist (e.g. from Initialize or another fixture). Expect the log that will occur: "Not initialized yet" when Instance is null, "No modules available" when Instance exists but has no modules.
+        if (AbxrSubsystem.Instance == null)
+            LogAssert.Expect(LogType.Warning, "[AbxrLib] Not initialized yet.");
+        else
+            LogAssert.Expect(LogType.Error, "[AbxrLib] No modules available");
         Assert.IsFalse(Abxr.StartModuleAtIndex(0));
     }
 

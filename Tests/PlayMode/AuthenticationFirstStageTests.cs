@@ -33,6 +33,9 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     /// <summary>Auth mechanism "none" so first-stage tests skip second-stage PIN/input.</summary>
     private static AuthMechanism AuthMechanismNone => new AuthMechanism { type = "none", prompt = "", domain = "" };
 
+    /// <summary>Auth mechanism assessmentPin for handoff tests (launcher/receiver flow may request PIN).</summary>
+    private static AuthMechanism AuthMechanismAssessmentPin => new AuthMechanism { type = "assessmentPin", prompt = "Enter your 6-digit PIN", domain = "" };
+
     protected override void CreateSubsystemIfNeeded()
     {
         // First-stage tests set runtime auth then call CreateSubsystem() in each test.
@@ -359,6 +362,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     // ── Auth handoff (App 1 → App 2 → return to App 1) ─────────────────────
     // The only bridge between the two emulated apps/APKs is the auth_handoff intent payload (the JSON).
     // We use full teardown + full base setup so each "app" is otherwise isolated.
+    // Handoff tests use authMechanism = AuthMechanismAssessmentPin so the PIN flow runs where needed (unit test handler submits configured PIN).
 
     /// <summary>
     /// Simulates auth_handoff flow: App 1 authenticates, gets PackageName from response, stores handoff JSON,
@@ -372,7 +376,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // App 2 has enableReturnTo; EventAssessmentComplete would trigger exit path
         // ── App 1: normal auth flow (same as other tests) until success ───────
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
 
@@ -389,7 +393,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: fresh subsystem, receive handoff and adopt session; enableReturnTo so exit/return rule applies ───────
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app2AuthCompleted = false;
         bool app2Success = false;
@@ -415,7 +419,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         BaseSetUpForAppSwitch();
         CreateSubsystem();
         AssignUnitTestInputRequestedHandler(); // so PIN request is auto-submitted and OnAuthCompleted fires
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app1ReturnAuthCompleted = false;
         bool app1ReturnSuccess = false;
@@ -446,7 +450,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // don't stop play mode; simulate quit so test completes
         // ── App 1: auth and hand off to App 2 without ReturnToPackage ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
@@ -459,7 +463,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: receive handoff, adopt session; enableReturnTo true so EventAssessmentComplete triggers exit path ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app2AuthCompleted = false;
         bool app2Success = false;
         Abxr.OnAuthCompleted += (success, _) => { app2AuthCompleted = true; app2Success = success; };
@@ -489,7 +493,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         // ── App 1: auth and hand off to App 2 with ReturnToPackage ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
@@ -502,7 +506,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: receive handoff (with ReturnToPackage), adopt session; enableReturnTo false so exit/return path is NOT triggered ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = false });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = false });
         bool app2AuthCompleted = false;
         bool app2Success = false;
         Abxr.OnAuthCompleted += (success, _) => { app2AuthCompleted = true; app2Success = success; };
@@ -535,7 +539,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // App 2 would quit after handoff; we simulate so test continues
         // ── App 1: auth and hand off to App 2 with ReturnToPackage (JSON payload) ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
@@ -550,7 +554,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: receive handoff (with ReturnToPackage), adopt session; enableReturnTo so exit/return path runs on EventAssessmentComplete ─
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app2AuthCompleted = false;
         bool app2Success = false;
@@ -576,7 +580,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         BaseSetUpForAppSwitch();
 
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app1ReAdoptCompleted = false;
         bool app1ReAdoptSuccess = false;
@@ -601,7 +605,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // App 2 has enableReturnTo; EventAssessmentComplete would trigger exit path
         // ── App 1: normal auth flow until success ─────────────────────────────
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
         bool app1Success = false;
         yield return PerformAuth(r => app1Success = r);
 
@@ -617,7 +621,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // ── App 2: receive base64 handoff, normalize to JSON, adopt session; enableReturnTo so exit/return rule applies ────
         CreateSubsystem();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app2AuthCompleted = false;
         bool app2Success = false;
@@ -642,7 +646,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         BaseSetUpForAppSwitch();
         CreateSubsystem();
         AssignUnitTestInputRequestedHandler();
-        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
+        SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismAssessmentPin, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken, enableReturnTo = true });
 
         bool app1ReturnAuthCompleted = false;
         bool app1ReturnSuccess = false;
