@@ -328,13 +328,19 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         Abxr.SetAuthSecret(ConfigAuthSecret);
         bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
         if (!mdmCanSupplyOrgToken)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        {
+            // Editor: validation fails with OrgUnavailable before request. Player/device: request may be sent but fail (e.g. service returns empty) with Initial authentication request failed.
+            if (Application.isEditor)
+                LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+            else
+                LogAssert.Expect(LogType.Error, AuthFailureInitialRequestFailed);
+        }
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (mdmCanSupplyOrgToken)
             Assert.IsTrue(success, "With MDM connected, auth should succeed (dynamic orgToken).");
         else
-            Assert.IsFalse(success, "Without MDM (Editor or headset without MDM), auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM (Editor or headset without MDM), auth should fail.");
     }
 
     [UnityTest]
