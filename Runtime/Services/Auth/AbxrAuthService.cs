@@ -147,8 +147,23 @@ namespace AbxrLib.Runtime.Services.Auth
             // GetArborData() no-ops when ArborMdmClient is not available; when available it applies device/org from MDM.
             GetArborData();
 
-            // Apply Abxr.SetOrgId/SetAuthSecret/SetDeviceId into runtime auth (after config load so overrides win; before GetArborData so MDM can still overlay).
+            // Apply Abxr.SetOrgId/SetAuthSecret/SetDeviceId into runtime auth (after config load so overrides win; after GetArborData so MDM can have set org token first).
             ApplyAbxrOverridesToRuntimeAuth();
+
+            // When using app tokens with no org token yet, build dynamic org token from overrides (SetOrgId/SetAuthSecret) or from MDM (already set in GetArborData). Same logic as GetArborData but for when MDM is not connected—overrides supply orgId and authSecret (fingerprint) to sign the JWT.
+            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken) && !string.IsNullOrEmpty(_runtimeAuth.orgId) && !string.IsNullOrEmpty(_runtimeAuth.authSecret))
+            {
+                try
+                {
+                    string dynamicToken = Utils.BuildOrgTokenDynamic(_runtimeAuth.orgId, _runtimeAuth.authSecret);
+                    if (!string.IsNullOrEmpty(dynamicToken))
+                        _runtimeAuth.orgToken = dynamicToken;
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError($"[AbxrLib] BuildOrgTokenDynamic from overrides failed: {ex.Message}");
+                }
+            }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken))
@@ -374,6 +389,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             var transport = _getTransport();
+            const int maxConsecutiveEmptyFromService = 5;
+            int consecutiveEmptyFromService = 0;
 
             while (true)
             {
@@ -421,6 +438,24 @@ namespace AbxrLib.Runtime.Services.Auth
                     _payload.buildType = savedBuildType;
                     onComplete(false, ExtractAuthErrorMessage(holder.Response));
                     yield break;
+                }
+
+                bool emptyFromService = transport.IsServiceTransport && string.IsNullOrEmpty(holder.Response);
+                if (emptyFromService)
+                {
+                    consecutiveEmptyFromService++;
+                    if (consecutiveEmptyFromService >= maxConsecutiveEmptyFromService)
+                    {
+                        _payload.buildType = savedBuildType;
+                        string msg = $"ArborInsightsClient returned empty after {maxConsecutiveEmptyFromService} attempts (check service/logcat for backend error).";
+                        Debug.LogWarning($"[AbxrLib] AuthRequest failed: {msg}");
+                        onComplete(false, msg);
+                        yield break;
+                    }
+                }
+                else
+                {
+                    consecutiveEmptyFromService = 0;
                 }
 
                 string logDetail = !string.IsNullOrEmpty(holder.Response)

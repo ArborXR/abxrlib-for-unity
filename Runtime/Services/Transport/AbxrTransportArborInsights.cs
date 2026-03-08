@@ -42,11 +42,11 @@ namespace AbxrLib.Runtime.Services.Transport
                 string restUrl = Configuration.Instance.restUrl ?? "https://lib-backend.xrdm.app/";
                 ArborInsightsClient.SetAuthPayloadForRequest(restUrl, payload);
                 string responseJson = ArborInsightsClient.AuthRequest(payload.userId ?? "", Utils.DictToString(payload.authMechanism));
-                // Service returns success JSON (token/secret stripped) or error body; only treat as success when it looks like AuthResponse with token or modules.
+                // Service returns success JSON (token/secret stripped) or a response indicating more steps (e.g. first-step before second-stage PIN) or failure. Only treat as success when it looks like AuthResponse with token or modules.
                 bool success = !string.IsNullOrEmpty(responseJson) && LooksLikeSuccessAuthResponse(responseJson);
                 onComplete?.Invoke(success, responseJson ?? "", -1);
                 if (!success && !string.IsNullOrEmpty(responseJson))
-                    Debug.LogWarning($"[AbxrLib] ArborInsights auth returned error body: {responseJson}");
+                    Debug.LogWarning($"[AbxrLib] ArborInsights auth returned non-success response (may require second-stage or indicate failure): {responseJson}");
             }
             catch (Exception ex)
             {
@@ -168,7 +168,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public List<LogPayload> GetPendingLogsForTesting() => new List<LogPayload>();
         public List<TelemetryPayload> GetPendingTelemetryForTesting() => new List<TelemetryPayload>();
 
-        /// <summary>True if the response is valid auth success (has token or modules). Service returns success JSON with token/secret stripped, or error body on failure.</summary>
+        /// <summary>True if the response is valid auth success (has token or modules). Service returns success JSON with token/secret stripped, or a non-success response when more steps (e.g. second-stage) are needed or auth failed.</summary>
         private static bool LooksLikeSuccessAuthResponse(string responseJson)
         {
             if (string.IsNullOrWhiteSpace(responseJson)) return false;

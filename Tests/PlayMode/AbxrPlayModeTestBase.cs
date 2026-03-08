@@ -65,9 +65,10 @@ public class AbxrPlayModeTestBase
         Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
     }
 
-    /// <summary>Handler that submits Unit Test Credentials when auth requests input. Used so PerformAuth can re-assign it to the current subsystem (which may have been created in the test).</summary>
+    /// <summary>Handler that submits Unit Test Credentials when auth requests input. Used so PerformAuth can re-assign it to the current subsystem (which may have been created in the test). In Player/device builds, Unit Test Credentials are not available (Editor-only); the handler fails the test with a clear message.</summary>
     private static Action<string, string, string, string> GetUnitTestInputRequestedHandler()
     {
+#if UNITY_EDITOR
         return (type, prompt, domain, error) =>
         {
             var c = Configuration.Instance;
@@ -86,6 +87,12 @@ public class AbxrPlayModeTestBase
             Debug.Log($"[AbxrLib] (Test) OnInputRequested: type=" + type + ", prompt=" + prompt + ", submitting configured value " + (string.IsNullOrEmpty(value) ? "(empty)" : value) + ")");
             Abxr.OnInputSubmitted(value);
         };
+#else
+        return (type, prompt, domain, error) =>
+        {
+            Assert.Fail("Auth requested input (type=" + type + "). Unit Test Credentials are Editor-only and not available in Player/device builds. Run this test in the Editor, or assign a custom Abxr.OnInputRequested handler that submits input (e.g. PIN) for device test runs.");
+        };
+#endif
     }
 
     /// <summary>Saves the current config field value and sets the new one; TearDown restores from _savedConfig.</summary>
