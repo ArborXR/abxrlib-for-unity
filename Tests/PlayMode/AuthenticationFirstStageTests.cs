@@ -175,10 +175,15 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = "", authSecret = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyCredentials)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyCredentials)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (orgId/authSecret from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
 
     [UnityTest]
@@ -186,10 +191,15 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyCredentials)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyCredentials)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (authSecret from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
 
     [UnityTest]
@@ -298,10 +308,15 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        if (!mdmCanSupplyOrgToken)
+            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
         bool success = false;
         yield return PerformAuth(r => success = r);
-        Assert.IsFalse(success);
+        if (mdmCanSupplyOrgToken)
+            Assert.IsTrue(success, "With MDM connected, auth should succeed (org token/credentials from device).");
+        else
+            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
 
     [UnityTest]
@@ -594,7 +609,8 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "App 2 session should be marked as handoff.");
 
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // set here so not cleared by FullTeardown/BaseSetUp; exit coroutine runs after 2s
-        LogAssert.Expect(LogType.Log, $"[AbxrLib] Injected handoff for return-to launcher '{packageName}' (Editor/test).");
+        // ReturnToPackage in the handoff is the launcher's Application.identifier (set when App 1 built the handoff); on Test Runner Player that is com.UnityTestRunner.UnityTestRunner.
+        LogAssert.Expect(LogType.Log, $"[AbxrLib] Injected handoff for return-to launcher '{Application.identifier}' (Editor/test).");
         Debug.Log("[AbxrLib] (Test) EventAssessmentComplete: handoff-test-re-adopt score: 85 result: Abxr.EventStatus.Pass");
         Abxr.EventAssessmentComplete("handoff-test-re-adopt", 85, Abxr.EventStatus.Pass);
         yield return new WaitForSeconds(2.5f); // let ExitAfterAssessmentComplete run: returnToPackage set → LaunchAppWithAuthHandoffForTest injects handoff (Editor), SendAll, 2s delay, simulated quit

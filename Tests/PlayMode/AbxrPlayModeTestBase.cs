@@ -65,16 +65,16 @@ public class AbxrPlayModeTestBase
         Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
     }
 
-    /// <summary>Handler that submits Unit Test Credentials when auth requests input. Used so PerformAuth can re-assign it to the current subsystem (which may have been created in the test). In Player/device builds, Unit Test Credentials are not available (Editor-only); the handler fails the test with a clear message.</summary>
+    /// <summary>Handler that submits Unit Test Credentials when auth requests input. Used so PerformAuth can re-assign it to the current subsystem. In Editor and Development Builds (e.g. Test Runner Player) the handler reads from Configuration; in release Player builds the handler fails with a clear message.</summary>
     private static Action<string, string, string, string> GetUnitTestInputRequestedHandler()
     {
-#if UNITY_EDITOR
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
         return (type, prompt, domain, error) =>
         {
             var c = Configuration.Instance;
             if (c == null || !c.unitTestConfigEnabled)
             {
-                Assert.Fail("Auth requested input but Unit Test Credentials are disabled. Enable \"Unit Test Credentials (Editor only)\" in the AbxrLib config and set the PIN/email/text values you need, then save the project.");
+                Assert.Fail("Auth requested input but Unit Test Credentials are disabled. Enable \"Unit Test Credentials (Editor & development builds)\" in the AbxrLib config and set the PIN/email/text values you need, then save the project.");
                 return;
             }
             string value = type switch
@@ -90,7 +90,7 @@ public class AbxrPlayModeTestBase
 #else
         return (type, prompt, domain, error) =>
         {
-            Assert.Fail("Auth requested input (type=" + type + "). Unit Test Credentials are Editor-only and not available in Player/device builds. Run this test in the Editor, or assign a custom Abxr.OnInputRequested handler that submits input (e.g. PIN) for device test runs.");
+            Assert.Fail("Auth requested input (type=" + type + "). Unit Test Credentials are not available in release Player builds. Run in the Editor, use a Development Build (e.g. Test Runner Player) with Unit Test Credentials enabled in config, or assign a custom Abxr.OnInputRequested handler that submits input (e.g. PIN).");
         };
 #endif
     }

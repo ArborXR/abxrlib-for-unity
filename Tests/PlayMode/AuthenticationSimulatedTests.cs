@@ -68,7 +68,7 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Abxr.SetDeviceId("test-device-001");
         Abxr.SetDeviceId(null);
         var id = Abxr.GetDeviceId();
-        Assert.IsTrue(id == null || id == "", "Clearing override should fall back to empty (no ArborInsightsClient)");
+        Assert.AreNotEqual("test-device-001", id, "Clearing override should stop returning the overridden value; GetDeviceId now falls back to platform (e.g. MDM on device) or empty.");
     }
 
     [Test]

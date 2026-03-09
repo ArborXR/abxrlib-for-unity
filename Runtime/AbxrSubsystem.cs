@@ -941,17 +941,26 @@ internal void StartNewSession()
 			string returnToPackage = _authService?.GetAndClearReturnToPackage();
 			if (!string.IsNullOrEmpty(returnToPackage))
 			{
+				// In tests (Editor or Test Runner Player), "return to launcher" is simulated: inject handoff so the next subsystem can adopt the session. Do not start an Activity (e.g. com.UnityTestRunner.UnityTestRunner has no launchable Activity on device).
+				bool useInject = _simulateQuitInExitAfterAssessmentComplete;
+#if !(UNITY_ANDROID && !UNITY_EDITOR)
+				useInject = true; // Editor: always inject
+#endif
+				if (useInject)
+				{
+					if (LaunchAppWithAuthHandoffForTest(returnToPackage, includeReturnToPackage: false))
+						Debug.Log($"[AbxrLib] Injected handoff for return-to launcher '{returnToPackage}' (Editor/test).");
+					else
+						Debug.LogWarning($"[AbxrLib] Failed to inject handoff for return target '{returnToPackage}'.");
+				}
 #if UNITY_ANDROID && !UNITY_EDITOR
-				if (LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false))
-					Debug.Log($"[AbxrLib] Launched '{returnToPackage}' with auth handoff (return to launcher)");
 				else
-					Debug.LogWarning($"[AbxrLib] Failed to launch return target '{returnToPackage}' with auth handoff");
-#else
-				// Editor / test: inject handoff so the "return to launcher" app can adopt the session when it starts (e.g. PlayMode test).
-				if (LaunchAppWithAuthHandoffForTest(returnToPackage, includeReturnToPackage: false))
-					Debug.Log($"[AbxrLib] Injected handoff for return-to launcher '{returnToPackage}' (Editor/test).");
-				else
-					Debug.LogWarning($"[AbxrLib] Failed to inject handoff for return target '{returnToPackage}'.");
+				{
+					if (LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false))
+						Debug.Log($"[AbxrLib] Launched '{returnToPackage}' with auth handoff (return to launcher)");
+					else
+						Debug.LogWarning($"[AbxrLib] Failed to launch return target '{returnToPackage}' with auth handoff");
+				}
 #endif
 			}
 			SendAll();

@@ -6,6 +6,12 @@ namespace AbxrLib.Runtime.Core
 {
     public static class Initialize
     {
+        /// <summary>
+        /// When true, OnBeforeSceneLoad will not create the AbxrSubsystem.
+        /// Allows tests (or other code) to skip the default subsystem so they create their own and avoid one full init that would be destroyed in SetUp.
+        /// </summary>
+        public static bool SkipCreatingSubsystemInInitialize { get; set; }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void OnBeforeSceneLoad()
         {
@@ -18,7 +24,11 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<QRCodeReader>("QRCodeReader");
 #endif
 #endif
-            if (AbxrSubsystem.Instance != null) return;
+            bool skip = SkipCreatingSubsystemInInitialize || AbxrSubsystem.Instance != null;
+#if ABXR_TEST_RUNNER_PLAYER
+            skip = true; // Test Runner Player build: tests create their own subsystem; avoid redundant init.
+#endif
+            if (skip) return;
             var go = new GameObject("[AbxrLib]");
             go.AddComponent<AbxrSubsystem>();
         }
