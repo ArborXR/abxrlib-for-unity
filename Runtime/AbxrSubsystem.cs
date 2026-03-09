@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.AI;
 using AbxrLib.Runtime.Types;
@@ -22,6 +23,52 @@ namespace AbxrLib.Runtime
     {
         // ── Singleton ────────────────────────────────────────────────
         internal static AbxrSubsystem Instance { get; private set; }
+
+        /// <summary>For testing only. Resets static state that survives MonoBehaviour destruction.</summary>
+        internal static void ResetStaticStateForTesting()
+        {
+            _assessmentStarted = false;
+            _nextRuntimeAuthConfigForTesting = null;
+            _simulateQuitInExitAfterAssessmentComplete = false;
+        }
+
+        /// <summary>For testing only. When true, ExitAfterAssessmentComplete() does not call EditorApplication.isPlaying = false / Application.Quit(); it logs and ends the coroutine so PlayMode tests can complete.</summary>
+        internal static bool SimulateQuitInExitAfterAssessmentComplete
+        {
+            get => _simulateQuitInExitAfterAssessmentComplete;
+            set => _simulateQuitInExitAfterAssessmentComplete = value;
+        }
+        private static bool _simulateQuitInExitAfterAssessmentComplete;
+
+        /// <summary>For testing only. When set before CreateSubsystem(), applied as overrides when the auth service is created (e.g. enableAutoStartAuthentication = false) so the Configuration asset is not modified.</summary>
+        internal static RuntimeAuthConfig NextRuntimeAuthConfigForTesting
+        {
+            get => _nextRuntimeAuthConfigForTesting;
+            set => _nextRuntimeAuthConfigForTesting = value;
+        }
+        private static RuntimeAuthConfig _nextRuntimeAuthConfigForTesting;
+
+        /// <summary>For testing only. Exposes the auth service so tests can simulate auth success.</summary>
+        internal AbxrAuthService AuthServiceForTesting => _authService;
+
+        /// <summary>For testing only. True when ArborMdmClient is available and connected (e.g. on Android device with MDM). Used to decide expected auth outcome in environment-dependent tests.</summary>
+        internal bool IsArborMdmClientAvailableAndConnected => _arborMdmClient != null && _arborMdmClient.IsConnected();
+
+        /// <summary>For testing only. Exposes the data service so tests can inspect pending events/logs/telemetry.</summary>
+        internal AbxrDataService DataServiceForTesting => _dataService;
+
+        /// <summary>For testing only. REST transport when active; null when using ArborInsightsClient. Use for GetPending*ForTesting in PlayMode.</summary>
+        internal AbxrTransportRest RestTransportForTesting => _transport as AbxrTransportRest;
+
+        /// <summary>For testing only. Current transport (REST or ArborInsights). Use to check IsServiceTransport and call GetPending*ForTesting on any transport.</summary>
+        internal IAbxrTransport GetTransportForTesting() => _transport;
+
+        /// <summary>For testing only. Pending events from current transport; empty list when transport is null or service (device).</summary>
+        internal List<EventPayload> GetPendingEventsForTesting() => _transport?.GetPendingEventsForTesting() ?? new List<EventPayload>();
+        /// <summary>For testing only. Pending logs from current transport; empty when null or service.</summary>
+        internal List<LogPayload> GetPendingLogsForTesting() => _transport?.GetPendingLogsForTesting() ?? new List<LogPayload>();
+        /// <summary>For testing only. Pending telemetry from current transport; empty when null or service.</summary>
+        internal List<TelemetryPayload> GetPendingTelemetryForTesting() => _transport?.GetPendingTelemetryForTesting() ?? new List<TelemetryPayload>();
 
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
@@ -112,6 +159,11 @@ namespace AbxrLib.Runtime
                 _arborInsightsClient.Start();
 #endif
             _authService = new AbxrAuthService(this, _arborMdmClient);
+            if (_nextRuntimeAuthConfigForTesting != null)
+            {
+                _authService.ApplyRuntimeAuthOverridesForTesting(_nextRuntimeAuthConfigForTesting);
+                _nextRuntimeAuthConfigForTesting = null;
+            }
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
             _dataService = new AbxrDataService(this, () => _transport);
@@ -135,8 +187,8 @@ namespace AbxrLib.Runtime
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
             {
-                Debug.LogWarning($"[AbxrLib] Auth failed: {error}");
-                HandleAuthCompleted(false);
+                Debug.LogError($"[AbxrLib] Authentication failure: {error}");
+                HandleAuthCompleted(false, error);
             };
 
             // Super metadata is per-session; clear any persisted value so we start fresh each run.
@@ -150,7 +202,6 @@ namespace AbxrLib.Runtime
             _headsetDetector = new HeadsetDetector(_authService, this);
             _headsetDetector.Start();
             
-            _dataService.Start();
             KeyboardManager.AuthService = _authService;
             
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -160,10 +211,25 @@ namespace AbxrLib.Runtime
 #endif
 #endif
 
-            // Auto-start auth (gated on transport selection so first auth uses correct backend)
+            // Log version/init result first so it always appears before any auth failure from the coroutine.
             var settings = Configuration.Instance;
-            if (settings.enableAutoStartAuthentication)
+            var configInvalid = !string.IsNullOrEmpty(Configuration.LastValidationErrorMessage);
+            if (configInvalid)
+            {
+                var reason = Configuration.LastValidationErrorMessage ?? "required configuration missing or invalid";
+                if (reason.StartsWith("Authentication error: ", StringComparison.Ordinal))
+                    reason = reason.Substring("Authentication error: ".Length);
+                Debug.LogError($"[AbxrLib] Version {AbxrLibVersion.Version} Initialization Failed: {reason}");
+            }
+            else
+                Debug.Log($"[AbxrLib] Version {AbxrLibVersion.Version} Initialized.");
+
+            // Auto-start auth (gated on transport selection so first auth uses correct backend). Do not start when config validation failed.
+            bool enableAutoStart = _authService.GetEnableAutoStartAuthentication();
+            if (enableAutoStart && !configInvalid)
                 StartCoroutine(AuthStartAfterTransportSelectionCoroutine(settings.authenticationStartDelay));
+            else if (enableAutoStart && configInvalid)
+                HandleAuthCompleted(false);
             else
                 Debug.Log("[AbxrLib] Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
 
@@ -172,8 +238,6 @@ namespace AbxrLib.Runtime
             {
                 _telemetryService.Start();
             }
-            
-            Debug.Log($"[AbxrLib] Version {AbxrLibVersion.Version} Initialized.");
         }
 
         private void OnDestroy()
@@ -185,7 +249,6 @@ namespace AbxrLib.Runtime
                 _transportSelectionCoroutine = null;
             }
             _authService?.Shutdown();
-            _dataService?.Stop();
             _telemetryService?.Stop();
             _sceneChangeDetector?.Stop();
             _headsetDetector?.Stop();
@@ -362,7 +425,7 @@ namespace AbxrLib.Runtime
 #endif
         }
 
-        private void HandleAuthCompleted(bool success)
+        private void HandleAuthCompleted(bool success, string errorMessage = null)
         {
 	        // Start default assessment tracking if no assessments are currently running
 	        // This ensures duration tracking starts immediately after authentication
@@ -378,7 +441,7 @@ namespace AbxrLib.Runtime
 		        }
 	        }
 	        
-	        Abxr.OnAuthCompleted?.Invoke(success, null);
+	        Abxr.OnAuthCompleted?.Invoke(success, errorMessage);
 	        if (!success) return;
 
 	        var modules = _authService.ResponseData.Modules;
@@ -390,7 +453,7 @@ namespace AbxrLib.Runtime
 		        return;
 	        }
 
-	        if (Configuration.Instance.enableAutoStartModules && _currentModuleIndex < modules.Count)
+	        if (_authService.GetEffectiveEnableAutoStartModules() && _currentModuleIndex < modules.Count)
 	        {
 		        Abxr.OnModuleTarget.Invoke(modules[_currentModuleIndex].Target);
 	        }
@@ -439,8 +502,9 @@ namespace AbxrLib.Runtime
 
 		/// <summary>Launches another Android app and passes the current auth session via the auth_handoff intent extra.
 		/// The target app must also use AbxrLib; it will adopt the session without re-authenticating.
-		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().</summary>
-		internal bool LaunchAppWithAuthHandoff(string packageName)
+		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().
+		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.</summary>
+		internal bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false)
 		{
 			if (string.IsNullOrEmpty(packageName))
 			{
@@ -455,7 +519,7 @@ namespace AbxrLib.Runtime
 #if UNITY_ANDROID && !UNITY_EDITOR
 			try
 			{
-				string handoffJson = _authService.GetHandoffJson();
+				string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
 				if (handoffJson == null)
 				{
 					Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: failed to build handoff payload");
@@ -483,6 +547,44 @@ namespace AbxrLib.Runtime
 			return false;
 #endif
 		}
+
+		/// <summary>
+		/// For testing only. Same validation and handoff payload as LaunchAppWithAuthHandoff but does not start an app;
+		/// injects the handoff via SetAuthHandoffForTesting so the test can emulate "App 2" receiving it.
+		/// Use when testing flows that would call LaunchAppWithAuthHandoff in production.
+		/// </summary>
+		/// <param name="packageName">Target package name (validated like production; used only for consistency).</param>
+		/// <param name="includeReturnToPackage">If true, handoff includes ReturnToPackage so the receiving app can return the session.</param>
+		/// <param name="useBase64Encoding">If true, inject the handoff as base64-encoded JSON so NormalizeHandoffPayload is exercised.</param>
+		/// <returns>True if authenticated and handoff was injected, false otherwise.</returns>
+		internal bool LaunchAppWithAuthHandoffForTest(string packageName, bool includeReturnToPackage = false, bool useBase64Encoding = false)
+		{
+			if (string.IsNullOrEmpty(packageName))
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: packageName is empty");
+				return false;
+			}
+			if (!(_authService?.Authenticated ?? false))
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: not authenticated");
+				return false;
+			}
+			string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
+			if (handoffJson == null)
+			{
+				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: failed to build handoff payload");
+				return false;
+			}
+			string payload = useBase64Encoding
+				? Convert.ToBase64String(Encoding.UTF8.GetBytes(handoffJson))
+				: handoffJson;
+			AbxrAuthService.SetAuthHandoffForTesting(payload);
+			Debug.Log($"[AbxrLib] LaunchAppWithAuthHandoffForTest: injected handoff for '{packageName}'" + (useBase64Encoding ? " (base64)" : ""));
+			return true;
+		}
+
+		/// <summary>For testing only. Returns the handoff JSON that would be sent by LaunchAppWithAuthHandoff (e.g. so tests can simulate App 2 returning the session to App 1).</summary>
+		internal string GetHandoffJsonForTesting(bool includeReturnToPackage = false) => _authService?.GetHandoffJson(includeReturnToPackage);
 
 		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
 		private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)
@@ -805,18 +907,21 @@ internal void StartNewSession()
 			}
 			Event(assessmentName, meta);
 			
-			// Check if we're in a module sequence
-			if (_authService.ResponseData?.Modules?.Count > 0 && Configuration.Instance.enableAutoAdvanceModules)
+			// Module sequence: advance to next, or treat as "all modules complete"
+			var modules = _authService.ResponseData?.Modules;
+			bool inModuleSequence = modules != null && modules.Count > 0 && _authService.GetEffectiveEnableAutoAdvanceModules();
+			if (inModuleSequence)
 			{
 				AdvanceToNextModule();
 			}
-			else
+
+			// enableReturnTo: exit or return handoff only when "assessment is fully complete" —
+			// i.e. no module sequence, or we just completed the last module (same rule as original exit behavior).
+			bool shouldExitOrReturn = _authService.SessionUsedAuthHandoff() && _authService.GetEffectiveEnableReturnTo();
+			bool assessmentFullyComplete = !inModuleSequence || _currentModuleIndex >= (modules?.Count ?? 0);
+			if (shouldExitOrReturn && assessmentFullyComplete)
 			{
-				// Not in a module sequence - use original exit logic
-				if (_authService.SessionUsedAuthHandoff() && Configuration.Instance.returnToLauncherAfterAssessmentComplete)
-				{
-					_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
-				}
+				_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
 			}
 		}
 		
@@ -828,13 +933,44 @@ internal void StartNewSession()
 
 		/// <summary>
 		/// Coroutine to exit the application after a 2-second delay when assessment is complete
-		/// and the session used auth handoff with return to launcher enabled
+		/// and the session used auth handoff with return to launcher enabled.
+		/// If the handoff included ReturnToPackage, launch that app with the current session first (then clear it so no loop).
 		/// </summary>
 		private IEnumerator ExitAfterAssessmentComplete()
 		{
+			string returnToPackage = _authService?.GetAndClearReturnToPackage();
+			if (!string.IsNullOrEmpty(returnToPackage))
+			{
+				// In tests (Editor or Test Runner Player), "return to launcher" is simulated: inject handoff so the next subsystem can adopt the session. Do not start an Activity (e.g. com.UnityTestRunner.UnityTestRunner has no launchable Activity on device).
+				bool useInject = _simulateQuitInExitAfterAssessmentComplete;
+#if !(UNITY_ANDROID && !UNITY_EDITOR)
+				useInject = true; // Editor: always inject
+#endif
+				if (useInject)
+				{
+					if (LaunchAppWithAuthHandoffForTest(returnToPackage, includeReturnToPackage: false))
+						Debug.Log($"[AbxrLib] Injected handoff for return-to launcher '{returnToPackage}' (Editor/test).");
+					else
+						Debug.LogWarning($"[AbxrLib] Failed to inject handoff for return target '{returnToPackage}'.");
+				}
+#if UNITY_ANDROID && !UNITY_EDITOR
+				else
+				{
+					if (LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false))
+						Debug.Log($"[AbxrLib] Launched '{returnToPackage}' with auth handoff (return to launcher)");
+					else
+						Debug.LogWarning($"[AbxrLib] Failed to launch return target '{returnToPackage}' with auth handoff");
+				}
+#endif
+			}
 			SendAll();
 			Debug.Log("[AbxrLib] Assessment complete with auth handoff - returning to launcher in 2 seconds");
 			yield return new WaitForSeconds(2f);
+			if (_simulateQuitInExitAfterAssessmentComplete)
+			{
+				Debug.Log("[AbxrLib] (Test) Simulated app quit - ExitAfterAssessmentComplete would have exited.");
+				yield break;
+			}
 	#if UNITY_EDITOR
 			UnityEditor.EditorApplication.isPlaying = false;
 	#else
@@ -920,9 +1056,21 @@ internal void StartNewSession()
 		internal string[] GetDeviceTags() =>
 			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetDeviceTags() : null;
 		
-		internal void SetOrgId(string orgId) => _overrideOrgId = orgId;
-		internal void SetAuthSecret(string authSecret) => _overrideAuthSecret = authSecret;
-		internal void SetDeviceId(string deviceId) => _overrideDeviceId = deviceId;
+		internal void SetOrgId(string orgId)
+		{
+			_overrideOrgId = orgId;
+			_authService?.SetRuntimeAuthOrgId(orgId);
+		}
+		internal void SetAuthSecret(string authSecret)
+		{
+			_overrideAuthSecret = authSecret;
+			_authService?.SetRuntimeAuthAuthSecret(authSecret);
+		}
+		internal void SetDeviceId(string deviceId)
+		{
+			_overrideDeviceId = deviceId;
+			_authService?.SetRuntimeAuthDeviceId(deviceId);
+		}
 
 		internal string GetOrgId() =>
 			_overrideOrgId != null ? _overrideOrgId : (_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetOrgId() : Configuration.Instance?.orgID ?? "");
