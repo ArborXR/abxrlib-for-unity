@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
 using System.IO;
@@ -17,13 +17,16 @@ namespace AbxrLib.Runtime.Core
         androidLog.CallStatic<int>(logLevel, "AbxrLib", "(Line: " + lineNumber + "), Class: " + className + ", Method: " + memberName + "- Message: " + message);
     }
     
-    [Conditional("ENABLE_LOGS"), Conditional("DEVELOPMENT_BUILD")]
     public static void Info(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
+#if ENABLE_LOGS || DEVELOPMENT_BUILD
 #if UNITY_EDITOR
         UnityEngine.Debug.Log($"[AbxrLib] {message} {lineNumber} {memberName} {filePath} ");
 #endif
         Logcat.Log ("i", message, lineNumber, memberName, filePath);
+#else
+        UnityEngine.Debug.Log($"[AbxrLib] {message}");
+#endif
     }
 
     [Conditional("ENABLE_LOGS"), Conditional("DEVELOPMENT_BUILD")]
@@ -44,13 +47,16 @@ namespace AbxrLib.Runtime.Core
         Logcat.Log ("w", message, lineNumber, memberName, filePath);
     }
 
-    [Conditional("ENABLE_LOGS"), Conditional("DEVELOPMENT_BUILD")]
     public static void Error(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
     {
+#if ENABLE_LOGS || DEVELOPMENT_BUILD
 #if UNITY_EDITOR
         UnityEngine.Debug.LogError($"[AbxrLib] {message} {lineNumber} {memberName} {filePath} ");
 #endif
         Logcat.Log ("e", message, lineNumber, memberName, filePath);
+#else
+        UnityEngine.Debug.LogError($"[AbxrLib] {message}");
+#endif
     }
 }
 }

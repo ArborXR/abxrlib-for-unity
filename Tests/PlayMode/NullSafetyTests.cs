@@ -39,9 +39,9 @@ public class NullSafetyTests
     {
         // In PlayMode a subsystem may or may not exist (e.g. from Initialize or another fixture). Expect the log that will occur: "Not initialized yet" when Instance is null, "No modules available" when Instance exists but has no modules.
         if (AbxrSubsystem.Instance == null)
-            LogAssert.Expect(LogType.Warning, "[AbxrLib] Not initialized yet.");
+            LogAssert.Expect(LogType.Warning, "Not initialized yet.");
         else
-            LogAssert.Expect(LogType.Error, "[AbxrLib] No modules available");
+            LogAssert.Expect(LogType.Error, "No modules available");
         Assert.IsFalse(Abxr.StartModuleAtIndex(0));
     }
 

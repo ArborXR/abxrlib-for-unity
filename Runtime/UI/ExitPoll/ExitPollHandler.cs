@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.UI.Keyboard;
@@ -47,7 +47,7 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             _panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
             if (!_ratingPrefab)
             {
-                Debug.LogError("[AbxrLib] Failed to load exit poll prefab");
+                Logcat.Error("Failed to load exit poll prefab");
             }
         }
 

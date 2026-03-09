@@ -71,11 +71,11 @@ namespace AbxrLib.Runtime.Core
             {
                 if (!IsDeviceSupported())
                 {
-                    Debug.LogWarning($"[AbxrLib] Disabling QR Code Scanner. Device '{DeviceModel.deviceModel}' is not supported for QR code reading.");
+                    Logcat.Warning($"Disabling QR Code Scanner. Device '{DeviceModel.deviceModel}' is not supported for QR code reading.");
                     return;
                 }
                 
-                Debug.Log($"[AbxrLib] Device '{DeviceModel.deviceModel}' is supported for QR code reading.");
+                Logcat.Info($"Device '{DeviceModel.deviceModel}' is supported for QR code reading.");
             }
             else
             {
@@ -90,22 +90,22 @@ namespace AbxrLib.Runtime.Core
                 _barcodeReader = new BarcodeReader();
                 // Configure to only read QR codes
                 _barcodeReader.Options.PossibleFormats = new System.Collections.Generic.List<BarcodeFormat> { BarcodeFormat.QR_CODE };
-                Debug.Log("[AbxrLib] ZXing barcode reader initialized successfully.");
+                Logcat.Debug("ZXing barcode reader initialized successfully.");
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"[AbxrLib] Failed to initialize ZXing: {ex.Message}");
+                Logcat.Error($"Failed to initialize ZXing: {ex.Message}");
                 return;
             }
             
             if (Instance == null)
             {
                 Instance = this;
-                Debug.Log("[AbxrLib] QRCodeReader Instance activated successfully.");
+                Logcat.Debug("QRCodeReader Instance activated successfully.");
             }
             else
             {
-                Debug.LogWarning("[AbxrLib] QRCodeReader Instance already exists. Destroying duplicate.");
+                Logcat.Warning("QRCodeReader Instance already exists. Destroying duplicate.");
                 Destroy(gameObject);
             }
         }
@@ -158,7 +158,7 @@ namespace AbxrLib.Runtime.Core
             {
                 if (IsDeviceSupported())
                 {
-                    Debug.Log($"[AbxrLib] Device '{DeviceModel.deviceModel}' is QR Code Reader supported. Initializing...");
+                    Logcat.Info($"Device '{DeviceModel.deviceModel}' is QR Code Reader supported. Initializing...");
                     
                     // Initialize ZXing if not already done
                     if (_barcodeReader == null)
@@ -170,7 +170,7 @@ namespace AbxrLib.Runtime.Core
                         }
                         catch (System.Exception ex)
                         {
-                            Debug.LogError($"[AbxrLib] Failed to initialize ZXing in delayed check: {ex.Message}");
+                            Logcat.Error($"Failed to initialize ZXing in delayed check: {ex.Message}");
                             yield break;
                         }
                     }
@@ -192,12 +192,12 @@ namespace AbxrLib.Runtime.Core
                 }
                 else
                 {
-                    Debug.LogWarning($"[AbxrLib] Device '{DeviceModel.deviceModel}' is not supported. QR code scanning will not be available.");
+                    Logcat.Warning($"Device '{DeviceModel.deviceModel}' is not supported. QR code scanning will not be available.");
                 }
             }
             else
             {
-                Debug.LogWarning("[AbxrLib] Device model not available after delay. QR code scanning will not be available.");
+                Logcat.Warning("Device model not available after delay. QR code scanning will not be available.");
             }
         }
         
@@ -271,14 +271,14 @@ namespace AbxrLib.Runtime.Core
                         }
                         catch (System.Exception ex)
                         {
-                            Debug.LogWarning($"[AbxrLib] Error searching assembly {assemblyName}: {ex.Message}");
+                            Logcat.Warning($"Error searching assembly {assemblyName}: {ex.Message}");
                         }
                     }
                 }
                 
                 if (openXRSettingsType == null)
                 {
-                    Debug.LogWarning("[AbxrLib] OpenXRSettings type not found. Cannot verify OpenXR features. Assuming they are enabled.");
+                    Logcat.Warning("OpenXRSettings type not found. Cannot verify OpenXR features. Assuming they are enabled.");
                     return true; // Don't block if we can't check
                 }
                 
@@ -286,14 +286,14 @@ namespace AbxrLib.Runtime.Core
                 PropertyInfo instanceProperty = openXRSettingsType.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
                 if (instanceProperty == null)
                 {
-                    Debug.LogWarning("[AbxrLib] OpenXRSettings.Instance property not found. Cannot verify OpenXR features. Assuming they are enabled.");
+                    Logcat.Warning("OpenXRSettings.Instance property not found. Cannot verify OpenXR features. Assuming they are enabled.");
                     return true; // Don't block if we can't check
                 }
                 
                 object openXRSettingsInstance = instanceProperty.GetValue(null);
                 if (openXRSettingsInstance == null)
                 {
-                    Debug.LogWarning("[AbxrLib] OpenXRSettings.Instance is null. Cannot verify OpenXR features. Assuming they are enabled.");
+                    Logcat.Warning("OpenXRSettings.Instance is null. Cannot verify OpenXR features. Assuming they are enabled.");
                     return true; // Don't block if we can't check
                 }
                 
@@ -311,7 +311,7 @@ namespace AbxrLib.Runtime.Core
                 
                 if (getFeatureMethod == null)
                 {
-                    Debug.LogWarning("[AbxrLib] OpenXRSettings.GetFeature generic method not found. Cannot verify OpenXR features. Assuming they are enabled.");
+                    Logcat.Warning("OpenXRSettings.GetFeature generic method not found. Cannot verify OpenXR features. Assuming they are enabled.");
                     return true; // Don't block if we can't check
                 }
                 
@@ -333,24 +333,24 @@ namespace AbxrLib.Runtime.Core
                                 bool sessionEnabled = (bool)enabledProperty.GetValue(sessionFeature);
                                 if (!sessionEnabled)
                                 {
-                                    Debug.LogError("[AbxrLib] OpenXR feature 'Meta Quest: Session' is NOT enabled in Project Settings.");
+                                    Logcat.Error("OpenXR feature 'Meta Quest: Session' is NOT enabled in Project Settings.");
                                     allFeaturesEnabled = false;
                                     missingFeatures += "Meta Quest: Session, ";
                                 }
                                 else if (verbose)
                                 {
-                                    Debug.Log("[AbxrLib] OpenXR feature 'Meta Quest: Session' is enabled.");
+                                    Logcat.Debug("OpenXR feature 'Meta Quest: Session' is enabled.");
                                 }
                             }
                         }
                         else
                         {
-                            Debug.LogWarning("[AbxrLib] MetaSessionFeature not found. It may not be installed or configured.");
+                            Logcat.Warning("MetaSessionFeature not found. It may not be installed or configured.");
                         }
                     }
                     catch (System.Exception ex)
                     {
-                        Debug.LogWarning($"[AbxrLib] Could not check Meta Quest: Session feature: {ex.Message}");
+                        Logcat.Warning($"Could not check Meta Quest: Session feature: {ex.Message}");
                     }
                 }
                 else
@@ -373,24 +373,24 @@ namespace AbxrLib.Runtime.Core
                                 bool cameraEnabled = (bool)enabledProperty.GetValue(cameraFeature);
                                 if (!cameraEnabled)
                                 {
-                                    Debug.LogError("[AbxrLib] OpenXR feature 'Meta Quest: Camera (Passthrough)' is NOT enabled in Project Settings.");
+                                    Logcat.Error("OpenXR feature 'Meta Quest: Camera (Passthrough)' is NOT enabled in Project Settings.");
                                     allFeaturesEnabled = false;
                                     missingFeatures += "Meta Quest: Camera (Passthrough), ";
                                 }
                                 else if (verbose)
                                 {
-                                    Debug.Log("[AbxrLib] OpenXR feature 'Meta Quest: Camera (Passthrough)' is enabled.");
+                                    Logcat.Debug("OpenXR feature 'Meta Quest: Camera (Passthrough)' is enabled.");
                                 }
                             }
                         }
                         else
                         {
-                            Debug.LogWarning("[AbxrLib] MetaCameraFeature not found. It may not be installed or configured.");
+                            Logcat.Warning("MetaCameraFeature not found. It may not be installed or configured.");
                         }
                     }
                     catch (System.Exception ex)
                     {
-                        Debug.LogWarning($"[AbxrLib] Could not check Meta Quest: Camera (Passthrough) feature: {ex.Message}");
+                        Logcat.Warning($"Could not check Meta Quest: Camera (Passthrough) feature: {ex.Message}");
                     }
                 }
                 else
@@ -400,7 +400,7 @@ namespace AbxrLib.Runtime.Core
                 
                 if (!allFeaturesEnabled)
                 {
-                    Debug.LogError($"[AbxrLib] Missing required OpenXR features: {missingFeatures.TrimEnd(',', ' ')}");
+                    Logcat.Error($"Missing required OpenXR features: {missingFeatures.TrimEnd(',', ' ')}");
                     LogMetaOpenXRHelp();
                     return false;
                 }
@@ -409,7 +409,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"[AbxrLib] Error checking OpenXR features: {ex.Message}. Assuming features are enabled.");
+                Logcat.Warning($"Error checking OpenXR features: {ex.Message}. Assuming features are enabled.");
                 return true; // Don't block if we can't check
             }
         }
@@ -417,10 +417,10 @@ namespace AbxrLib.Runtime.Core
         private static void LogMetaOpenXRHelp()
         {
             if (!IsMetaDevice()) return;
-            Debug.LogError("[AbxrLib] Please enable the following in Project Settings > XR Plug-in Management > OpenXR > OpenXR Feature Groups:");
-            Debug.LogError("[AbxrLib]   - Meta Quest Support");
-            Debug.LogError("[AbxrLib]   - Meta Quest: Camera (Passthrough)");
-            Debug.LogError("[AbxrLib]   - Meta Quest: Session");
+            Logcat.Error("Please enable the following in Project Settings > XR Plug-in Management > OpenXR > OpenXR Feature Groups:");
+            Logcat.Error("Meta Quest Support");
+            Logcat.Error("Meta Quest: Camera (Passthrough)");
+            Logcat.Error("Meta Quest: Session");
         }
         
         /// <summary>
@@ -430,14 +430,14 @@ namespace AbxrLib.Runtime.Core
         {
             if (_isScanning || _isInitializing)
             {
-                Debug.Log("[AbxrLib] QR code scanning or initialization already in progress");
+                Logcat.Info("QR code scanning or initialization already in progress");
                 return;
             }
             
             // Check if QR scanning is available (device support, permissions)
             if (!IsQRScanningAvailable())
             {
-                Debug.LogWarning("[AbxrLib] QR code scanning is not available. Check device support and camera permissions.");
+                Logcat.Warning("QR code scanning is not available. Check device support and camera permissions.");
                 return;
             }
             
@@ -469,7 +469,7 @@ namespace AbxrLib.Runtime.Core
             // Reset both states
             _isInitializing = false;
             StopScanning();
-            Debug.Log("[AbxrLib] QR code scanning cancelled by user");
+            Logcat.Info("QR code scanning cancelled by user");
         }
         
         /// <summary>
@@ -490,7 +490,7 @@ namespace AbxrLib.Runtime.Core
             // Check if device is supported
             if (!IsDeviceSupported())
             {
-                Debug.LogWarning("[AbxrLib] QR scanning not available - device not supported");
+                Logcat.Warning("QR scanning not available - device not supported");
                 return false;
             }
             
@@ -499,7 +499,7 @@ namespace AbxrLib.Runtime.Core
             bool cameraPermissionGranted = UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera);
             if (!cameraPermissionGranted)
             {
-                Debug.LogWarning("[AbxrLib] QR scanning not available - CAMERA permission not granted");
+                Logcat.Warning("QR scanning not available - CAMERA permission not granted");
                 return false;
             }
             
@@ -515,13 +515,13 @@ namespace AbxrLib.Runtime.Core
                         currentActivity.Call<string>("getPackageName"));
                     if (permissionCheck != 0)
                     {
-                        Debug.LogWarning("[AbxrLib] QR scanning not available - HEADSET_CAMERA permission check failed (Quest)");
+                        Logcat.Warning("QR scanning not available - HEADSET_CAMERA permission check failed (Quest)");
                         return false;
                     }
                 }
                 catch (System.Exception)
                 {
-                    Debug.LogWarning("[AbxrLib] QR scanning not available - HEADSET_CAMERA permission check failed");
+                    Logcat.Warning("QR scanning not available - HEADSET_CAMERA permission check failed");
                     return false;
                 }
             }
@@ -556,15 +556,15 @@ namespace AbxrLib.Runtime.Core
                         
                 // Start the activity
                 currentActivity.Call("startActivity", intent);
-                Debug.Log("[AbxrLib] Opened app settings. Please enable 'Headset Cameras' permission and return to the app.");
+                Logcat.Info("Opened app settings. Please enable 'Headset Cameras' permission and return to the app.");
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"[AbxrLib] Failed to open app settings: {ex.Message}");
-                Debug.LogWarning("[AbxrLib] Please manually open Quest Settings > Privacy & Safety > App Permissions > Headset Cameras");
+                Logcat.Error($"Failed to open app settings: {ex.Message}");
+                Logcat.Warning("Please manually open Quest Settings > Privacy & Safety > App Permissions > Headset Cameras");
             }
 #else
-            Debug.LogWarning("[AbxrLib] OpenAppSettings() is only available on Android devices.");
+            Logcat.Warning("OpenAppSettings() is only available on Android devices.");
 #endif
         }
         
@@ -601,7 +601,7 @@ namespace AbxrLib.Runtime.Core
             // On Meta Quest, verify OpenXR camera features are enabled; other devices skip this
             if (IsMetaDevice() && !CheckOpenXRFeatures())
             {
-                Debug.LogError("[AbxrLib] Cannot initialize camera - required OpenXR features are not enabled.");
+                Logcat.Error("Cannot initialize camera - required OpenXR features are not enabled.");
                 LogMetaOpenXRHelp();
                 _isInitializing = false;
                 yield break;
@@ -616,7 +616,7 @@ namespace AbxrLib.Runtime.Core
                 
                 if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
                 {
-                    Debug.LogError("[AbxrLib] Camera permission denied. Cannot scan QR codes.");
+                    Logcat.Error("Camera permission denied. Cannot scan QR codes.");
                     _isInitializing = false; // Reset on failure
                     yield break;
                 }
@@ -627,7 +627,7 @@ namespace AbxrLib.Runtime.Core
             
             if (!_cameraInitialized)
             {
-                Debug.LogError("[AbxrLib] Failed to initialize camera. QR code scanning will not be available.");
+                Logcat.Error("Failed to initialize camera. QR code scanning will not be available.");
                 _isInitializing = false; // Reset on failure
             }
         }
@@ -669,7 +669,7 @@ namespace AbxrLib.Runtime.Core
                 if (nameContains != null && nameContains.Any(k => lower.Contains(k)))
                     return device;
             }
-            Debug.Log($"[AbxrLib] No preferred camera found for device '{model}'. Using first available: '{devices[0].name}'");
+            Logcat.Debug($"No preferred camera found for device '{model}'. Using first available: '{devices[0].name}'");
             return devices[0];
         }
 
@@ -688,7 +688,7 @@ namespace AbxrLib.Runtime.Core
                 
                 if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
                 {
-                    Debug.LogError("[AbxrLib] Camera permission denied. Cannot scan QR codes.");
+                    Logcat.Error("Camera permission denied. Cannot scan QR codes.");
                     _isInitializing = false; // Reset on failure
                     yield break;
                 }
@@ -704,9 +704,9 @@ namespace AbxrLib.Runtime.Core
                     int permissionCheck = packageManager.Call<int>("checkPermission", "horizonos.permission.HEADSET_CAMERA",
                         currentActivity.Call<string>("getPackageName"));
                     if (permissionCheck != 0)
-                        Debug.LogWarning("[AbxrLib] HEADSET_CAMERA permission not granted. Quest camera may not work.");
+                        Logcat.Warning("HEADSET_CAMERA permission not granted. Quest camera may not work.");
                 }
-                catch (System.Exception ex) { Debug.LogWarning($"[AbxrLib] Could not check HEADSET_CAMERA: {ex.Message}"); }
+                catch (System.Exception ex) { Logcat.Warning($"Could not check HEADSET_CAMERA: {ex.Message}"); }
             }
 #endif
 
@@ -715,7 +715,7 @@ namespace AbxrLib.Runtime.Core
             
             if (!selectedCamera.HasValue)
             {
-                Debug.LogError("[AbxrLib] No camera found. Cannot scan QR codes.");
+                Logcat.Error("No camera found. Cannot scan QR codes.");
                 yield break;
             }
             
@@ -737,7 +737,7 @@ namespace AbxrLib.Runtime.Core
                 waitCount++;
                 if (waitCount % 10 == 0)
                 {
-                    Debug.Log($"[AbxrLib] Waiting for WebCamTexture dimensions... (attempt {waitCount}/50, size: {_webCamTexture.width}x{_webCamTexture.height}, isPlaying: {_webCamTexture.isPlaying})");
+                    Logcat.Debug($"Waiting for WebCamTexture dimensions... (attempt {waitCount}/50, size: {_webCamTexture.width}x{_webCamTexture.height}, isPlaying: {_webCamTexture.isPlaying})");
                 }
             }
             
@@ -765,7 +765,7 @@ namespace AbxrLib.Runtime.Core
                         
                         if (gotValidFrame)
                         {
-                            Debug.Log($"[AbxrLib] Camera initialized successfully after {waitForFrames * 0.1f:F1} seconds");
+                            Logcat.Debug($"Camera initialized successfully after {waitForFrames * 0.1f:F1} seconds");
                         }
                     }
                 }
@@ -833,9 +833,9 @@ namespace AbxrLib.Runtime.Core
             }
             else
             {
-                Debug.LogError($"[AbxrLib] Failed to initialize WebCamTexture. Final state: isPlaying={_webCamTexture.isPlaying}, size={_webCamTexture.width}x{_webCamTexture.height}");
-                Debug.LogError("[AbxrLib] TROUBLESHOOTING:");
-                Debug.LogError("[AbxrLib] Check camera permissions and that a camera is available for this device.");
+                Logcat.Error($"Failed to initialize WebCamTexture. Final state: isPlaying={_webCamTexture.isPlaying}, size={_webCamTexture.width}x{_webCamTexture.height}");
+                Logcat.Error("TROUBLESHOOTING:");
+                Logcat.Error("Check camera permissions and that a camera is available for this device.");
                 _isInitializing = false; // Reset on failure
                 if (_webCamTexture != null)
                 {
@@ -871,7 +871,7 @@ namespace AbxrLib.Runtime.Core
             // Check if we have a valid camera source
             if (_webCamTexture == null || !_webCamTexture.isPlaying || _webCamRenderTexture == null)
             {
-                Debug.LogError($"[AbxrLib] Camera not ready for scanning. WebCamTexture: {_webCamTexture != null}, isPlaying: {_webCamTexture?.isPlaying}, RenderTexture: {_webCamRenderTexture != null}");
+                Logcat.Error($"Camera not ready for scanning. WebCamTexture: {_webCamTexture != null}, isPlaying: {_webCamTexture?.isPlaying}, RenderTexture: {_webCamRenderTexture != null}");
                 return;
             }
             
@@ -901,12 +901,12 @@ namespace AbxrLib.Runtime.Core
                 }
                 if (!found)
                 {
-                    Debug.LogWarning("[AbxrLib] CameraDisplay RawImage not found in overlay UI");
+                    Logcat.Warning("CameraDisplay RawImage not found in overlay UI");
                 }
             }
             else
             {
-                Debug.LogWarning($"[AbxrLib] Cannot update overlay - overlayCanvas: {_overlayCanvas != null}");
+                Logcat.Warning($"Cannot update overlay - overlayCanvas: {_overlayCanvas != null}");
             }
             
             _scanningCoroutine = StartCoroutine(ScanForQRCode());
@@ -1004,7 +1004,7 @@ namespace AbxrLib.Runtime.Core
                             }
                             catch (System.Exception ex)
                             {
-                                Debug.LogWarning($"[AbxrLib] Error getting pixels directly from WebCamTexture: {ex.Message}. Trying RenderTexture approach...");
+                                Logcat.Warning($"Error getting pixels directly from WebCamTexture: {ex.Message}. Trying RenderTexture approach...");
                                 // Fallback to RenderTexture approach
                                 Graphics.Blit(_webCamTexture, _webCamRenderTexture);
                                 RenderTexture.active = _webCamRenderTexture;
@@ -1016,19 +1016,19 @@ namespace AbxrLib.Runtime.Core
                         }
                         else
                         {
-                            Debug.LogWarning($"[AbxrLib] WebCamTexture not ready (scan #{scanCount}): width={_webCamTexture.width}, height={_webCamTexture.height}, isPlaying={_webCamTexture.isPlaying}");
+                            Logcat.Warning($"WebCamTexture not ready (scan #{scanCount}): width={_webCamTexture.width}, height={_webCamTexture.height}, isPlaying={_webCamTexture.isPlaying}");
                             frameError = true;
                         }
                     }
                     else
                     {
-                        Debug.LogWarning($"[AbxrLib] No camera source available (scan #{scanCount})");
+                        Logcat.Warning($"No camera source available (scan #{scanCount})");
                         frameError = true;
                     }
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogError($"[AbxrLib] Error capturing camera frame: {ex.Message}\n{ex.StackTrace}");
+                    Logcat.Error($"Error capturing camera frame: {ex.Message}\n{ex.StackTrace}");
                     frameError = true;
                 }
                 
@@ -1058,7 +1058,7 @@ namespace AbxrLib.Runtime.Core
                         // Only process QR codes that start with "ABXR:"
                         if (result.StartsWith("ABXR:", System.StringComparison.OrdinalIgnoreCase))
                         {
-                            Debug.Log($"[AbxrLib] QR code detected: '{result}' (scan #{scanCount})");
+                            Logcat.Debug($"QR code detected: '{result}' (scan #{scanCount})");
                             // Process the QR code result
                             OnQRCodeScanned(result);
                             if (toDecode != null) Destroy(toDecode);
@@ -1070,7 +1070,7 @@ namespace AbxrLib.Runtime.Core
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogError($"[AbxrLib] Error in QR scanning loop: {ex.Message}\n{ex.StackTrace}");
+                    Logcat.Error($"Error in QR scanning loop: {ex.Message}\n{ex.StackTrace}");
                 }
                 finally
                 {
@@ -1084,7 +1084,7 @@ namespace AbxrLib.Runtime.Core
                 yield return new WaitForSeconds(0.1f);
             }
             
-            Debug.Log($"[AbxrLib] QR code scanning stopped. Total scans: {scanCount}");
+            Logcat.Debug($"QR code scanning stopped. Total scans: {scanCount}");
         }
         
         /// <summary>
@@ -1100,7 +1100,7 @@ namespace AbxrLib.Runtime.Core
         {
             if (texture == null)
             {
-                Debug.LogWarning("[AbxrLib] TestCameraValidity - texture is null");
+                Logcat.Warning("TestCameraValidity - texture is null");
                 return false;
             }
             
@@ -1115,7 +1115,7 @@ namespace AbxrLib.Runtime.Core
                 {
                     if (webCam.width <= 0 || webCam.height <= 0 || !webCam.isPlaying)
                     {
-                        Debug.LogWarning($"[AbxrLib] TestCameraValidity - WebCamTexture not ready: {webCam.width}x{webCam.height}, isPlaying: {webCam.isPlaying}");
+                        Logcat.Warning($"TestCameraValidity - WebCamTexture not ready: {webCam.width}x{webCam.height}, isPlaying: {webCam.isPlaying}");
                         return false;
                     }
                     pixels = webCam.GetPixels32();
@@ -1126,7 +1126,7 @@ namespace AbxrLib.Runtime.Core
                 {
                     if (tex2d.width <= 0 || tex2d.height <= 0)
                     {
-                        Debug.LogWarning($"[AbxrLib] TestCameraValidity - Texture2D invalid size: {tex2d.width}x{tex2d.height}");
+                        Logcat.Warning($"TestCameraValidity - Texture2D invalid size: {tex2d.width}x{tex2d.height}");
                         return false;
                     }
                     pixels = tex2d.GetPixels32();
@@ -1135,13 +1135,13 @@ namespace AbxrLib.Runtime.Core
                 }
                 else
                 {
-                    Debug.LogWarning($"[AbxrLib] TestCameraValidity - Unsupported texture type: {texture.GetType().Name}");
+                    Logcat.Warning($"TestCameraValidity - Unsupported texture type: {texture.GetType().Name}");
                     return false;
                 }
                 
                 if (pixels == null || pixels.Length == 0)
                 {
-                    Debug.LogWarning($"[AbxrLib] TestCameraValidity - No pixel data in texture ({width}x{height})");
+                    Logcat.Warning($"TestCameraValidity - No pixel data in texture ({width}x{height})");
                     return false;
                 }
                 
@@ -1188,11 +1188,11 @@ namespace AbxrLib.Runtime.Core
                 {
                     if (isValid)
                     {
-                        Debug.Log($"[AbxrLib] Camera Validity Test PASSED - Camera is producing valid frames ({width}x{height}, brightness: {avgBrightness:F3})");
+                        Logcat.Debug($"Camera Validity Test PASSED - Camera is producing valid frames ({width}x{height}, brightness: {avgBrightness:F3})");
                     }
                     else
                     {
-                        Debug.LogWarning($"[AbxrLib] Camera Validity Test FAILED - Camera appears to be producing black/empty frames ({width}x{height}, brightness: {avgBrightness:F3})");
+                        Logcat.Warning($"Camera Validity Test FAILED - Camera appears to be producing black/empty frames ({width}x{height}, brightness: {avgBrightness:F3})");
                     }
                 }
                 
@@ -1200,7 +1200,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"[AbxrLib] TestCameraValidity error: {ex.Message}\n{ex.StackTrace}");
+                Logcat.Error($"TestCameraValidity error: {ex.Message}\n{ex.StackTrace}");
                 return false;
             }
         }
@@ -1212,13 +1212,13 @@ namespace AbxrLib.Runtime.Core
         {
             if (_barcodeReader == null)
             {
-                Debug.LogWarning("[AbxrLib] barcodeReader is null, cannot decode QR code");
+                Logcat.Warning("barcodeReader is null, cannot decode QR code");
                 return null;
             }
             
             if (texture == null)
             {
-                Debug.LogWarning("[AbxrLib] texture is null, cannot decode QR code");
+                Logcat.Warning("texture is null, cannot decode QR code");
                 return null;
             }
             
@@ -1229,7 +1229,7 @@ namespace AbxrLib.Runtime.Core
                 
                 if (pixels == null || pixels.Length == 0)
                 {
-                    Debug.LogWarning($"[AbxrLib] No pixel data in texture ({texture.width}x{texture.height})");
+                    Logcat.Warning($"No pixel data in texture ({texture.width}x{texture.height})");
                     return null;
                 }
                 
@@ -1243,7 +1243,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"[AbxrLib] QR code decoding error: {ex.Message}\n{ex.StackTrace}");
+                Logcat.Warning($"QR code decoding error: {ex.Message}\n{ex.StackTrace}");
             }
             
             return null;
@@ -1263,10 +1263,10 @@ namespace AbxrLib.Runtime.Core
                     if (match.Success)
                     {
                         pin = match.Value;
-                        Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
+                        Logcat.Debug($"Extracted PIN from QR code: {pin}");
                     }
                     else
-                        Debug.LogWarning($"[AbxrLib] Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
+                        Logcat.Warning($"Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
                 }
                 var cb = _scanResultCallback;
                 _scanResultCallback = null;
@@ -1286,13 +1286,13 @@ namespace AbxrLib.Runtime.Core
             if (m.Success)
             {
                 string pin = m.Value;
-                Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
+                Logcat.Debug($"Extracted PIN from QR code: {pin}");
                 AuthService.SetInputSource("QRlms");
                 AuthService.KeyboardAuthenticate(pin);
             }
             else
             {
-                Debug.LogWarning($"[AbxrLib] Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
+                Logcat.Warning($"Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
                 AuthService.SetInputSource("QRlms");
                 AuthService.KeyboardAuthenticate(null);
             }
@@ -1374,7 +1374,7 @@ namespace AbxrLib.Runtime.Core
             {
                 // Set a placeholder color so we can see the area
                 cameraImage.color = new Color(0.2f, 0.2f, 0.2f, 1f);
-                Debug.LogWarning("[AbxrLib] No camera texture available when creating overlay. Will update when camera is ready.");
+                Logcat.Warning("No camera texture available when creating overlay. Will update when camera is ready.");
             }
             
             RectTransform cameraRect = cameraDisplay.GetComponent<RectTransform>();

@@ -84,7 +84,7 @@ public class AbxrPlayModeTestBase
                 _ => c.unitTestAuthText ?? ""
             };
             // Allow empty string so tests can submit invalid input (e.g. AuthSecondStage_AssessmentPin_EmptyPin_Fails via ModifyConfig("unitTestAuthPin", "")).
-            Debug.Log($"[AbxrLib] (Test) OnInputRequested: type=" + type + ", prompt=" + prompt + ", submitting configured value " + (string.IsNullOrEmpty(value) ? "(empty)" : value) + ")");
+            Logcat.Info($"(Test) OnInputRequested: type=" + type + ", prompt=" + prompt + ", submitting configured value " + (string.IsNullOrEmpty(value) ? "(empty)" : value) + ")");
             Abxr.OnInputSubmitted(value);
         };
 #else
@@ -235,13 +235,13 @@ public class AbxrPlayModeTestBase
             if (RunQuitHandlerInTearDown)
             {
                 RunQuitHandlerInTearDown = false;
-                Debug.Log("[AbxrLib] (Test) BaseTearDown: OnApplicationQuitHandler");
+                Logcat.Info("(Test) BaseTearDown: OnApplicationQuitHandler");
                 AbxrSubsystem.Instance.OnApplicationQuitHandler();
             }
             if (RunEndSessionInTearDown)
             {
                 RunEndSessionInTearDown = true;
-                Debug.Log("[AbxrLib] (Test) BaseTearDown: Abxr.EndSession");
+                Logcat.Info("(Test) BaseTearDown: Abxr.EndSession");
                 Abxr.EndSession();
             }
         }

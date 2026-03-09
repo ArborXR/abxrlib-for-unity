@@ -46,11 +46,11 @@ namespace AbxrLib.Runtime.Services.Transport
                 bool success = !string.IsNullOrEmpty(responseJson) && LooksLikeSuccessAuthResponse(responseJson);
                 onComplete?.Invoke(success, responseJson ?? "", -1);
                 if (!success && !string.IsNullOrEmpty(responseJson))
-                    Debug.LogWarning($"[AbxrLib] ArborInsights auth returned non-success response (may require second-stage or indicate failure): {responseJson}");
+                    Logcat.Warning($"ArborInsights auth returned non-success response (may require second-stage or indicate failure): {responseJson}");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[AbxrLib] ArborInsights auth failed: {ex.Message}");
+                Logcat.Error($"ArborInsights auth failed: {ex.Message}");
                 onComplete?.Invoke(false, ex.Message, -1);
             }
             yield return null;
@@ -65,7 +65,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[AbxrLib] ArborInsights GetAppConfig failed: {ex.Message}");
+                Logcat.Error($"ArborInsights GetAppConfig failed: {ex.Message}");
                 onComplete?.Invoke(false, ex.Message);
             }
             yield return null;
@@ -136,7 +136,7 @@ namespace AbxrLib.Runtime.Services.Transport
                         if (list != null) result = list;
                     }
                 }
-                catch (Exception ex) { Debug.LogWarning($"[AbxrLib] Storage GET parse failed: {ex.Message}"); }
+                catch (Exception ex) { Logcat.Warning($"Storage GET parse failed: {ex.Message}"); }
             }
             onComplete?.Invoke(result);
             yield return null;

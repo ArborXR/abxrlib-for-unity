@@ -96,13 +96,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 {
 #if PICO_ENTERPRISE_SDK_3
                     if (hasPico)
-                        Debug.Log("[AbxrLib] QR Code button enabled for PICO (SDK 3+)");
+                        Logcat.Info("QR Code button enabled for PICO (SDK 3+)");
                     else
 #endif
-                        Debug.Log("[AbxrLib] QR Code button enabled (device supported, permissions granted)");
+                        Logcat.Info("QR Code button enabled (device supported, permissions granted)");
                 }
                 else
-                    Debug.LogWarning("[AbxrLib] QR Code button hidden - QR scanning not available. Check device support and camera permissions.");
+                    Logcat.Warning("QR Code button hidden - QR scanning not available. Check device support and camera permissions.");
                 _lastQRButtonState = isAvailable;
             }
 #endif
@@ -174,7 +174,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
             catch (System.Exception ex)
             {
-                Debug.LogError($"[AbxrLib] KeyboardManager - Error during authentication submission: {ex.Message}");
+                Logcat.Error($"KeyboardManager - Error during authentication submission: {ex.Message}");
                 // Stop processing visual and clear input on error
                 inputField.text = "";
             }

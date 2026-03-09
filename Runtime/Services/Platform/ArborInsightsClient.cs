@@ -56,7 +56,7 @@ namespace AbxrLib.Runtime.Services.Platform
 			}
 			catch (Exception e)
 			{
-				Debug.LogWarning($"[ArborInsightsClient] Init failed ({PackageName}): {e.Message}");
+				Logcat.Warning($"[ArborInsightsClient] Init failed ({PackageName}): {e.Message}");
 			}
 		}
 		/// <summary>
@@ -68,7 +68,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		{
 			if (_client == null)
 			{
-				Debug.LogWarning("[ArborInsightsClient] Bind() skipped: bridge not initialized (Unity ArborInsightsClient AAR may be missing from Plugins/Android).");
+				Logcat.Warning("[ArborInsightsClient] Bind() skipped: bridge not initialized (Unity ArborInsightsClient AAR may be missing from Plugins/Android).");
 				return false;
 			}
 			return _client.Call<bool>("bind", null, explicitPackage); // listener null for brevity
@@ -102,7 +102,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		{
 			if (_client == null)
 			{
-				Debug.LogError($"[ArborInsightsClient] AuthRequest called but _client is null!");
+				Logcat.Error($"[ArborInsightsClient] AuthRequest called but _client is null!");
 				return "{\"result\":0}";
 			}
 			try
@@ -111,7 +111,7 @@ namespace AbxrLib.Runtime.Services.Platform
 			}
 			catch (Exception e)
 			{
-				Debug.LogError($"[ArborInsightsClient] AuthRequest exception: {e.GetType().Name}: {e.Message}\nStackTrace: {e.StackTrace}");
+				Logcat.Error($"[ArborInsightsClient] AuthRequest exception: {e.GetType().Name}: {e.Message}\nStackTrace: {e.StackTrace}");
 				return "{\"result\":0}";
 			}
 		}
@@ -122,7 +122,7 @@ namespace AbxrLib.Runtime.Services.Platform
 		{
 			if (_client == null) return (int)AbxrResult.NOT_INITIALIZED;
 			try { return _client.Call<int>("setAuthFromHandoff", szAuthResponseJson ?? "", szRestUrl ?? ""); }
-			catch (Exception e) { Debug.LogWarning($"[ArborInsightsClient] SetAuthFromHandoff failed: {e.Message}"); return (int)AbxrResult.NOT_INITIALIZED; }
+			catch (Exception e) { Logcat.Warning($"[ArborInsightsClient] SetAuthFromHandoff failed: {e.Message}"); return (int)AbxrResult.NOT_INITIALIZED; }
 		}
 		public static int ReAuthenticate(bool bObtainAuthSecret) => _client.Call<int>("reAuthenticate", bObtainAuthSecret);
 		public static int ForceSendUnsent() => _client.Call<int>("forceSendUnsent");
@@ -368,14 +368,14 @@ namespace AbxrLib.Runtime.Services.Platform
 				ArborInsightsClientBridge.Init();
 				if (!ArborInsightsClientBridge.IsInitialized())
 				{
-					Debug.LogWarning("[ArborInsightsClient] Init failed (ClassNotFoundException usually means the ArborInsightsClient unity-client AAR is not in Assets/Plugins/Android). Skipping Bind().");
+					Logcat.Warning("[ArborInsightsClient] Init failed (ClassNotFoundException usually means the ArborInsightsClient unity-client AAR is not in Assets/Plugins/Android). Skipping Bind().");
 					return;
 				}
 				ArborInsightsClientBridge.Bind();
 			}
 			catch (Exception e)
 			{
-				Debug.LogWarning($"[ArborInsightsClient] Bind failed: {e.Message}");
+				Logcat.Warning($"[ArborInsightsClient] Bind failed: {e.Message}");
 			}
 		}
 		public void Stop()

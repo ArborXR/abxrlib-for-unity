@@ -50,7 +50,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"[AbxrLib] TrackInputDevices - Failed to initialize XR device tracking: {ex.Message}");
+                Logcat.Warning($"TrackInputDevices - Failed to initialize XR device tracking: {ex.Message}");
             }
 
             var sysInfoWait = new WaitForSeconds(Configuration.Instance.telemetryTrackingPeriodSeconds);
@@ -137,7 +137,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"[AbxrLib] Memory profiling not available: {ex.Message}");
+                Logcat.Warning($"Memory profiling not available: {ex.Message}");
                 _memoryData["Total Allocated"] = "N/A";
                 _memoryData["Total Reserved"] = "N/A";
                 _memoryData["Total Unused Reserved"] = "N/A";

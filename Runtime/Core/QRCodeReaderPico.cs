@@ -72,7 +72,7 @@ namespace AbxrLib.Runtime.Core
             string productName = Unity.XR.PXR.PXR_System.GetProductName();
             if (!IsPicoEnterprise(productName))
             {
-                Debug.LogWarning("[AbxrLib] Disabling PICO QR Code Scanner. Must be run on a PICO Enterprise device. Product: " + productName);
+                Logcat.Warning("Disabling PICO QR Code Scanner. Must be run on a PICO Enterprise device. Product: " + productName);
                 return;
             }
 
@@ -80,11 +80,11 @@ namespace AbxrLib.Runtime.Core
             {
                 _qrUnsupportedThisSession = GetPicoQrUnsupportedFromPrefs();
                 Instance = this;
-                Debug.Log("[AbxrLib] QRCodeReaderPico Instance activated successfully.");
+                Logcat.Info("QRCodeReaderPico Instance activated successfully.");
             }
             else
             {
-                Debug.LogWarning("[AbxrLib] QRCodeReaderPico Instance already exists. Destroying duplicate.");
+                Logcat.Warning("QRCodeReaderPico Instance already exists. Destroying duplicate.");
                 Destroy(gameObject);
             }
         }
@@ -107,7 +107,7 @@ namespace AbxrLib.Runtime.Core
             {
                 _qrUnsupportedThisSession = true;
                 SetPicoQrUnsupportedInPrefs();
-                Debug.LogWarning("[AbxrLib] PICO QR Code Scanner: Enterprise service bind failed. QR scan disabled for this device (saved in preferences; device may be PICO 4 Enterprise rather than 4EU).");
+                Logcat.Warning("PICO QR Code Scanner: Enterprise service bind failed. QR scan disabled for this device (saved in preferences; device may be PICO 4 Enterprise rather than 4EU).");
             }
         }
 
@@ -144,7 +144,7 @@ namespace AbxrLib.Runtime.Core
                 {
                     _qrUnsupportedThisSession = true;
                     SetPicoQrUnsupportedInPrefs();
-                    Debug.LogWarning("[AbxrLib] PICO QR Code Scanner: ScanQRCode failed. QR scan disabled for this device (saved in preferences). " + e.Message);
+                    Logcat.Warning("PICO QR Code Scanner: ScanQRCode failed. QR scan disabled for this device (saved in preferences). " + e.Message);
                 }
                 if (_scanResultCallback != null)
                 {
@@ -166,10 +166,10 @@ namespace AbxrLib.Runtime.Core
                     if (match.Success)
                     {
                         pin = match.Value;
-                        Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
+                        Logcat.Info($"Extracted PIN from QR code: {pin}");
                     }
                     else
-                        Debug.LogWarning($"[AbxrLib] Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
+                        Logcat.Warning($"Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
                 }
                 var cb = _scanResultCallback;
                 _scanResultCallback = null;
@@ -182,12 +182,12 @@ namespace AbxrLib.Runtime.Core
             if (authMatch.Success)
             {
                 string pin = authMatch.Value;
-                Debug.Log($"[AbxrLib] Extracted PIN from QR code: {pin}");
+                Logcat.Info($"Extracted PIN from QR code: {pin}");
                 AuthService.KeyboardAuthenticate(pin);
             }
             else
             {
-                Debug.LogWarning($"[AbxrLib] Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
+                Logcat.Warning($"Invalid QR code format (expected ABXR:XXXXXX): {scanResult}");
                 AuthService.KeyboardAuthenticate(null);
             }
         }

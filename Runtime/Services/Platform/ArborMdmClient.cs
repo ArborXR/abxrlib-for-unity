@@ -2,6 +2,7 @@
 using System;
 using System.Threading.Tasks;
 using UnityEngine;
+using AbxrLib.Runtime.Core;
 
 namespace AbxrLib.Runtime.Services.Platform
 {
@@ -19,13 +20,13 @@ namespace AbxrLib.Runtime.Services.Platform
                 else
                 {
                     var error = result?.Call<string>("getError") ?? "Unknown SDK error";
-                    Debug.LogWarning($"[AbxrLib] SDK call {methodName} failed: {error}");
+                    Logcat.Warning($"SDK call {methodName} failed: {error}");
                     return default(T)!;
                 }
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[AbxrLib] SDK call {methodName} threw exception: {ex.Message}");
+                Logcat.Error($"SDK call {methodName} threw exception: {ex.Message}");
                 return default(T)!;
             }
         }
@@ -53,7 +54,7 @@ namespace AbxrLib.Runtime.Services.Platform
             {
                 if (_sdk is null)
                 {
-                    Debug.LogWarning("[AbxrLib] ArborMdmClient SDK is not initialized. This MonoBehaviour may not be enabled.");
+                    Logcat.Warning("ArborMdmClient SDK is not initialized. This MonoBehaviour may not be enabled.");
                 }
 
                 return _sdk;

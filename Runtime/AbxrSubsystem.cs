@@ -142,7 +142,7 @@ namespace AbxrLib.Runtime
 
             if (jsonVersion < new Version(13, 0, 0))
             {
-	            Debug.LogError("[AbxrLib] Incompatible Newtonsoft.Json version loaded.");
+	            Logcat.Error("Incompatible Newtonsoft.Json version loaded.");
             }
 
             // Create services
@@ -187,7 +187,7 @@ namespace AbxrLib.Runtime
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
             {
-                Debug.LogError($"[AbxrLib] Authentication failure: {error}");
+                Logcat.Error($"Authentication failure: {error}");
                 HandleAuthCompleted(false, error);
             };
 
@@ -219,10 +219,10 @@ namespace AbxrLib.Runtime
                 var reason = Configuration.LastValidationErrorMessage ?? "required configuration missing or invalid";
                 if (reason.StartsWith("Authentication error: ", StringComparison.Ordinal))
                     reason = reason.Substring("Authentication error: ".Length);
-                Debug.LogError($"[AbxrLib] Version {AbxrLibVersion.Version} Initialization Failed: {reason}");
+                Logcat.Error($"Version {AbxrLibVersion.Version} Initialization Failed: {reason}");
             }
             else
-                Debug.Log($"[AbxrLib] Version {AbxrLibVersion.Version} Initialized.");
+                Logcat.Info($"Version {AbxrLibVersion.Version} Initialized.");
 
             // Auto-start auth (gated on transport selection so first auth uses correct backend). Do not start when config validation failed.
             bool enableAutoStart = _authService.GetEnableAutoStartAuthentication();
@@ -231,7 +231,7 @@ namespace AbxrLib.Runtime
             else if (enableAutoStart && configInvalid)
                 HandleAuthCompleted(false);
             else
-                Debug.Log("[AbxrLib] Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
+                Logcat.Info("Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
 
             // Telemetry collector
             if (settings.enableAutomaticTelemetry)
@@ -291,7 +291,7 @@ namespace AbxrLib.Runtime
         /// </summary>
         internal void OnApplicationQuitHandler()
         {
-	        Debug.Log("[AbxrLib] Ending session: closing running events and flushing");
+	        Logcat.Info("Ending session: closing running events and flushing");
 	        if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
 	        if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 	        CloseRunningEvents();
@@ -330,7 +330,7 @@ namespace AbxrLib.Runtime
             if (_transport is AbxrTransportRest rest)
                 rest.Stop();
             _transport = new AbxrTransportArborInsights();
-            Debug.Log("[AbxrLib] Switched to ArborInsightsClient transport.");
+            Logcat.Info("Switched to ArborInsightsClient transport.");
 #endif
         }
 
@@ -449,7 +449,7 @@ namespace AbxrLib.Runtime
 
 	        if (Abxr.OnModuleTarget == null)
 	        {
-		        Debug.LogError("[AbxrLib] Subscribe to OnModuleTarget before running modules");
+		        Logcat.Error("Subscribe to OnModuleTarget before running modules");
 		        return;
 	        }
 
@@ -508,12 +508,12 @@ namespace AbxrLib.Runtime
 		{
 			if (string.IsNullOrEmpty(packageName))
 			{
-				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: packageName is empty");
+				Logcat.Warning("LaunchAppWithAuthHandoff: packageName is empty");
 				return false;
 			}
 			if (!(_authService?.Authenticated ?? false))
 			{
-				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: not authenticated");
+				Logcat.Warning("LaunchAppWithAuthHandoff: not authenticated");
 				return false;
 			}
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -522,7 +522,7 @@ namespace AbxrLib.Runtime
 				string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
 				if (handoffJson == null)
 				{
-					Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff: failed to build handoff payload");
+					Logcat.Warning("LaunchAppWithAuthHandoff: failed to build handoff payload");
 					return false;
 				}
 				using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
@@ -534,16 +534,16 @@ namespace AbxrLib.Runtime
 				intent.Call<AndroidJavaObject>("putExtra", "auth_handoff", handoffJson);
 				intent.Call<AndroidJavaObject>("addFlags", intentClass.GetStatic<int>("FLAG_ACTIVITY_NEW_TASK"));
 				activity.Call("startActivity", intent);
-				Debug.Log($"[AbxrLib] Launched '{packageName}' with auth handoff");
+				Logcat.Info($"Launched '{packageName}' with auth handoff");
 				return true;
 			}
 			catch (Exception ex)
 			{
-				Debug.LogError($"[AbxrLib] LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}");
+				Logcat.Error($"LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}");
 				return false;
 			}
 #else
-			Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoff is only supported on Android");
+			Logcat.Warning("LaunchAppWithAuthHandoff is only supported on Android");
 			return false;
 #endif
 		}
@@ -561,25 +561,25 @@ namespace AbxrLib.Runtime
 		{
 			if (string.IsNullOrEmpty(packageName))
 			{
-				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: packageName is empty");
+				Logcat.Warning("LaunchAppWithAuthHandoffForTest: packageName is empty");
 				return false;
 			}
 			if (!(_authService?.Authenticated ?? false))
 			{
-				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: not authenticated");
+				Logcat.Warning("LaunchAppWithAuthHandoffForTest: not authenticated");
 				return false;
 			}
 			string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
 			if (handoffJson == null)
 			{
-				Debug.LogWarning("[AbxrLib] LaunchAppWithAuthHandoffForTest: failed to build handoff payload");
+				Logcat.Warning("LaunchAppWithAuthHandoffForTest: failed to build handoff payload");
 				return false;
 			}
 			string payload = useBase64Encoding
 				? Convert.ToBase64String(Encoding.UTF8.GetBytes(handoffJson))
 				: handoffJson;
 			AbxrAuthService.SetAuthHandoffForTesting(payload);
-			Debug.Log($"[AbxrLib] LaunchAppWithAuthHandoffForTest: injected handoff for '{packageName}'" + (useBase64Encoding ? " (base64)" : ""));
+			Logcat.Info($"LaunchAppWithAuthHandoffForTest: injected handoff for '{packageName}'" + (useBase64Encoding ? " (base64)" : ""));
 			return true;
 		}
 
@@ -671,19 +671,19 @@ internal void StartNewSession()
 			var response = _authService.ResponseData;
 			if (response?.Modules == null || response.Modules.Count == 0)
 			{
-				Debug.LogError("[AbxrLib] No modules available");
+				Logcat.Error("No modules available");
 				return false;
 			}
 		
 			if (moduleIndex >= response.Modules.Count || moduleIndex < 0)
 			{
-				Debug.LogError($"[AbxrLib] Invalid module index - {moduleIndex}");
+				Logcat.Error($"Invalid module index - {moduleIndex}");
 				return false;
 			}
 
 			if (Abxr.OnModuleTarget == null)
 			{
-				Debug.LogError("[AbxrLib] Need to subscribe to OnModuleTarget before running modules");
+				Logcat.Error("Need to subscribe to OnModuleTarget before running modules");
 				return false;
 			}
 		
@@ -704,14 +704,14 @@ internal void StartNewSession()
             _currentModuleIndex++;
             if (_currentModuleIndex < modules.Count)
             {
-                Debug.Log($"[AbxrLib] Module '{modules[_currentModuleIndex - 1].Name}' complete. " +
+                Logcat.Info($"Module '{modules[_currentModuleIndex - 1].Name}' complete. " +
                              $"Advancing to next module - '{modules[_currentModuleIndex].Name}'");
                 Abxr.OnModuleTarget?.Invoke(modules[_currentModuleIndex].Target);
             }
             else
             {
                 Abxr.OnAllModulesCompleted?.Invoke();
-                Debug.Log("[AbxrLib] All modules complete");
+                Logcat.Info("All modules complete");
             }
         }
 		
@@ -949,26 +949,26 @@ internal void StartNewSession()
 				if (useInject)
 				{
 					if (LaunchAppWithAuthHandoffForTest(returnToPackage, includeReturnToPackage: false))
-						Debug.Log($"[AbxrLib] Injected handoff for return-to launcher '{returnToPackage}' (Editor/test).");
+						Logcat.Info($"Injected handoff for return-to launcher '{returnToPackage}' (Editor/test).");
 					else
-						Debug.LogWarning($"[AbxrLib] Failed to inject handoff for return target '{returnToPackage}'.");
+						Logcat.Warning($"Failed to inject handoff for return target '{returnToPackage}'.");
 				}
 #if UNITY_ANDROID && !UNITY_EDITOR
 				else
 				{
 					if (LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false))
-						Debug.Log($"[AbxrLib] Launched '{returnToPackage}' with auth handoff (return to launcher)");
+						Logcat.Info($"Launched '{returnToPackage}' with auth handoff (return to launcher)");
 					else
-						Debug.LogWarning($"[AbxrLib] Failed to launch return target '{returnToPackage}' with auth handoff");
+						Logcat.Warning($"Failed to launch return target '{returnToPackage}' with auth handoff");
 				}
 #endif
 			}
 			SendAll();
-			Debug.Log("[AbxrLib] Assessment complete with auth handoff - returning to launcher in 2 seconds");
+			Logcat.Info("Assessment complete with auth handoff - returning to launcher in 2 seconds");
 			yield return new WaitForSeconds(2f);
 			if (_simulateQuitInExitAfterAssessmentComplete)
 			{
-				Debug.Log("[AbxrLib] (Test) Simulated app quit - ExitAfterAssessmentComplete would have exited.");
+				Logcat.Info("(Test) Simulated app quit - ExitAfterAssessmentComplete would have exited.");
 				yield break;
 			}
 	#if UNITY_EDITOR
@@ -1175,7 +1175,7 @@ internal void StartNewSession()
 			// Validate prompt
 			if (string.IsNullOrWhiteSpace(prompt))
 			{
-				Debug.LogError("[AbxrLib] Poll prompt cannot be null or empty");
+				Logcat.Error("Poll prompt cannot be null or empty");
 				return;
 			}
 
@@ -1183,13 +1183,13 @@ internal void StartNewSession()
 			{
 				if (responses == null)
 				{
-					Debug.LogError("[AbxrLib] List of responses required for multiple choice poll");
+					Logcat.Error("List of responses required for multiple choice poll");
 					return;
 				}
 
 				if (responses.Count is < 2 or > 8)
 				{
-					Debug.LogError("[AbxrLib] Multiple choice poll must have at least two and no more than 8 responses");
+					Logcat.Error("Multiple choice poll must have at least two and no more than 8 responses");
 					return;
 				}
 
@@ -1198,7 +1198,7 @@ internal void StartNewSession()
 				{
 					if (string.IsNullOrWhiteSpace(responses[i]))
 					{
-						Debug.LogError($"[AbxrLib] Response at index {i} cannot be null or empty");
+						Logcat.Error($"Response at index {i} cannot be null or empty");
 						return;
 					}
 				}
@@ -1249,8 +1249,8 @@ internal void StartNewSession()
 		{
 			if (IsReservedSuperMetaDataKey(key))
 			{
-				string errorMessage = $"[AbxrLib] Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
-				Debug.LogWarning(errorMessage);
+				string errorMessage = $"Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
+				Logcat.Warning(errorMessage);
 				Abxr.LogInfo(errorMessage, new Dictionary<string, string> { 
 					{ "attempted_key", key }, 
 					{ "attempted_value", value },
@@ -1345,7 +1345,7 @@ internal void StartNewSession()
 			catch (Exception ex)
 			{
 				// Log error with consistent format and include stack trace for debugging
-				Debug.LogError($"[AbxrLib] Failed to load super metadata: {ex.Message}\n" +
+				Logcat.Error($"Failed to load super metadata: {ex.Message}\n" +
 				               $"Exception Type: {ex.GetType().Name}\n" +
 				               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 			}
@@ -1370,7 +1370,7 @@ internal void StartNewSession()
 			catch (Exception ex)
 			{
 				// Log error with consistent format and include stack trace for debugging
-				Debug.LogError($"[AbxrLib] Failed to save super metadata: {ex.Message}\n" +
+				Logcat.Error($"Failed to save super metadata: {ex.Message}\n" +
 				               $"Exception Type: {ex.GetType().Name}\n" +
 				               $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
 			}

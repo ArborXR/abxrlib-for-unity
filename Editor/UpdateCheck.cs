@@ -1,11 +1,11 @@
-﻿using System;
+using System;
 using System.Net.Http;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
-using Debug = UnityEngine.Debug;
+using AbxrLib.Runtime.Core;
 
 namespace AbxrLib.Editor
 {
@@ -32,7 +32,7 @@ namespace AbxrLib.Editor
         
             if (string.IsNullOrEmpty(currentVersion))
             {
-                Debug.LogError("[AbxrLib] Failed to get current package version.");
+                Logcat.Error("Failed to get current package version.");
                 return;
             }
 
@@ -81,9 +81,9 @@ namespace AbxrLib.Editor
                 if (addRequest.IsCompleted)
                 {
                     if (addRequest.Status == StatusCode.Success)
-                        Debug.Log("[AbxrLib] Package updated successfully");
+                        Logcat.Info("Package updated successfully");
                     else if (addRequest.Status >= StatusCode.Failure)
-                        Debug.LogError($"[AbxrLib] Package update failed: {addRequest.Error.message}");
+                        Logcat.Error($"Package update failed: {addRequest.Error.message}");
 
                     EditorApplication.update -= ProgressUpdate;
                 }
@@ -109,11 +109,11 @@ namespace AbxrLib.Editor
                     }
                 }
             
-                Debug.LogWarning($"[AbxrLib] Package {PackageName} not found.");
+                Logcat.Warning($"Package {PackageName} not found.");
             }
             else if (listRequest.Status >= StatusCode.Failure)
             {
-                Debug.LogError($"[AbxrLib] {listRequest.Error.message}");
+                Logcat.Error($"{listRequest.Error.message}");
             }
 
             return "";
@@ -133,15 +133,15 @@ namespace AbxrLib.Editor
                 {
                     string jsonResponse = response.Content.ReadAsStringAsync().Result;
                     var releaseInfo = JsonUtility.FromJson<GitHubRelease>(jsonResponse);
-                    Debug.Log("[AbxrLib] Latest release version: " + releaseInfo.tag_name);
+                    Logcat.Info("Latest release version: " + releaseInfo.tag_name);
                     return releaseInfo.tag_name.Replace("v", "");
                 }
 
-                Debug.LogError("[AbxrLib] Error: " + response.ReasonPhrase);
+                Logcat.Error("Error: " + response.ReasonPhrase);
             }
             catch (Exception ex)
             {
-                Debug.LogError("[AbxrLib] Exception occurred: " + ex.Message);
+                Logcat.Error("Exception occurred: " + ex.Message);
             }
 
             return "";

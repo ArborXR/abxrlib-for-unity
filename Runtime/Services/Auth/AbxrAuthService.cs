@@ -161,7 +161,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[AbxrLib] BuildOrgTokenDynamic from overrides failed: {ex.Message}");
+                    Logcat.Error($"BuildOrgTokenDynamic from overrides failed: {ex.Message}");
                 }
             }
 
@@ -206,14 +206,14 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             if (!_inputRequestPending)
             {
-                Debug.LogWarning("[AbxrLib] OnInputSubmitted was ignored: no input request is pending. Call OnInputSubmitted only once, after OnInputRequested has been invoked.");
+                Logcat.Warning("OnInputSubmitted was ignored: no input request is pending. Call OnInputSubmitted only once, after OnInputRequested has been invoked.");
                 return;
             }
             _inputRequestPending = false;
 
             if (input == "**skip**")
             {
-                Debug.LogWarning("[AbxrLib] Skipping user authentication.");
+                Logcat.Warning("Skipping user authentication.");
                 KeyboardHandler.Destroy();
                 AuthSucceeded();
                 return;
@@ -260,7 +260,7 @@ namespace AbxrLib.Runtime.Services.Auth
             // When using ArborInsightsClient for data, Token/Secret are not set; only REST path should call this.
             if (ResponseData == null || string.IsNullOrEmpty(ResponseData.Token) || string.IsNullOrEmpty(ResponseData.Secret))
             {
-                Debug.LogError("[AbxrLib] Cannot set auth headers - authentication tokens are missing");
+                Logcat.Error("Cannot set auth headers - authentication tokens are missing");
                 return;
             }
 
@@ -307,7 +307,7 @@ namespace AbxrLib.Runtime.Services.Auth
             if (!authOk)
             {
                 _attemptActive = false;
-                OnFailed?.Invoke("[AbxrLib] Initial authentication request failed");
+                OnFailed?.Invoke("Initial authentication request failed");
                 yield break;
             }
 
@@ -322,8 +322,8 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 _attemptActive = false;
                 string message = string.IsNullOrEmpty(configFailureDetail)
-                    ? "[AbxrLib] Config request failed"
-                    : $"[AbxrLib] Config request failed: {configFailureDetail}";
+                    ? "Config request failed"
+                    : $"Config request failed: {configFailureDetail}";
                 OnFailed?.Invoke(message);
                 yield break;
             }
@@ -331,7 +331,7 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_stopping || !_attemptActive)
             {
                 _attemptActive = false;
-                OnFailed?.Invoke("[AbxrLib] Auth stopped or attempt inactive");
+                OnFailed?.Invoke("Auth stopped or attempt inactive");
                 yield break;
             }
 
@@ -448,7 +448,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     {
                         _payload.buildType = savedBuildType;
                         string msg = $"ArborInsightsClient returned empty after {maxConsecutiveEmptyFromService} attempts (check service/logcat for backend error).";
-                        Debug.LogWarning($"[AbxrLib] AuthRequest failed: {msg}");
+                        Logcat.Warning($"AuthRequest failed: {msg}");
                         onComplete(false, msg);
                         yield break;
                     }
@@ -463,7 +463,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     : (transport.IsServiceTransport
                         ? "ArborInsightsClient returned empty (check service/logcat for backend error)."
                         : "No response body.");
-                Debug.LogWarning($"[AbxrLib] AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
+                Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
         }
@@ -487,18 +487,18 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     if (string.IsNullOrEmpty(postResponse.Token))
                     {
-                        Debug.LogError("[AbxrLib] Invalid authentication response: missing token");
+                        Logcat.Error("Invalid authentication response: missing token");
                         return false;
                     }
                     Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
                     if (decodedJwt == null)
                     {
-                        Debug.LogError("[AbxrLib] Failed to decode JWT token");
+                        Logcat.Error("Failed to decode JWT token");
                         return false;
                     }
                     if (!decodedJwt.ContainsKey("exp"))
                     {
-                        Debug.LogError("[AbxrLib] JWT token missing expiration field");
+                        Logcat.Error("JWT token missing expiration field");
                         return false;
                     }
                     try
@@ -507,7 +507,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogError($"[AbxrLib] Invalid JWT token expiration: {ex.Message}");
+                        Logcat.Error($"Invalid JWT token expiration: {ex.Message}");
                         return false;
                     }
                 }
@@ -525,7 +525,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[AbxrLib] Authentication response handling failed: {ex.Message}");
+                Logcat.Error($"Authentication response handling failed: {ex.Message}");
                 return false;
             }
         }
@@ -575,9 +575,12 @@ namespace AbxrLib.Runtime.Services.Auth
                         }
                         string authType = _authMechanism?.type ?? "";
                         if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
-                            Debug.Log($"[AbxrLib] User Authentication Required. Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
+                        {
+                            Logcat.Info($"User Authentication Required.");
+                            Logcat.Debug($" - Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
+                        }
                         else
-                            Debug.Log("[AbxrLib] User authentication not required. Using anonymous session.");
+                            Logcat.Info("User authentication not required. Using anonymous session.");
                         onComplete(true, null);
                         yield break;
                     }
@@ -585,7 +588,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 catch (Exception ex)
                 {
                     failureDetail = ex.Message;
-                    Debug.LogError($"[AbxrLib] GetConfiguration response handling failed: {ex.Message}");
+                    Logcat.Error($"GetConfiguration response handling failed: {ex.Message}");
                 }
             }
 
@@ -710,7 +713,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _attemptActive = false;
             Authenticated = true;
             OnSucceeded?.Invoke();
-            Debug.Log("[AbxrLib] Authenticated successfully");
+            Logcat.Info("Authenticated successfully");
         }
 
         /// <summary>For testing only. Applies the given auth response and invokes OnSucceeded so subsystem and Abxr.OnAuthCompleted behave as after a real auth.</summary>
@@ -784,7 +787,7 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.IsNullOrEmpty(handoffPayload)) return false;
             string normalized = NormalizeHandoffPayload(handoffPayload);
             if (string.IsNullOrEmpty(normalized)) return false;
-            Debug.Log("[AbxrLib] Processing authentication handoff from external launcher");
+            Logcat.Info("Processing authentication handoff from external launcher");
             return ParseAuthResponse(normalized, true);
         }
 
@@ -803,7 +806,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 string decoded = Encoding.UTF8.GetString(bytes);
                 if (string.IsNullOrEmpty(decoded)) return null;
                 decoded = decoded.Trim();
-                Debug.Log("[AbxrLib] Normalized handoff payload from base64");
+                Logcat.Info("Normalized handoff payload from base64");
                 if (decoded.StartsWith("{")) return decoded;
             }
             catch
@@ -891,13 +894,13 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             if (!Authenticated)
             {
-                Debug.LogWarning("[AbxrLib] Cannot set user data - not authenticated. Call Authenticate() first.");
+                Logcat.Warning("Cannot set user data - not authenticated. Call Authenticate() first.");
                 return;
             }
 
             if (_stopping || _attemptActive)
             {
-                Debug.LogWarning("[AbxrLib] Authentication in progress. Unable to sync user data.");
+                Logcat.Warning("Authentication in progress. Unable to sync user data.");
                 return;
             }
 
@@ -1046,7 +1049,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[AbxrLib] BuildOrgTokenDynamic failed: {ex.Message}\n" +
+                    Logcat.Error($"BuildOrgTokenDynamic failed: {ex.Message}\n" +
                                   $"Exception Type: {ex.GetType().Name}\n" +
                                   $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 }
@@ -1060,7 +1063,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError($"[AbxrLib] Authentication initialization failed: {ex.Message}\n" +
+                    Logcat.Error($"Authentication initialization failed: {ex.Message}\n" +
                                   $"Exception Type: {ex.GetType().Name}\n" +
                                   $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 }
@@ -1149,7 +1152,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             catch (Exception e)
             {
-                Debug.LogError($"[AbxrLib] Failed to parse auth response: {e.Message}");
+                Logcat.Error($"Failed to parse auth response: {e.Message}");
                 return false;
             }
             
@@ -1170,7 +1173,7 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 // Set token expiry to far in the future since we're trusting the handoff
                 _tokenExpiry = DateTime.UtcNow.AddHours(24);
-                Debug.Log($"[AbxrLib] Auth handoff successful. Modules: {ResponseData.Modules?.Count ?? 0}");
+                Logcat.Info($"Auth handoff successful. Modules: {ResponseData.Modules?.Count ?? 0}");
                 _sessionUsedAuthHandoff = true;
                 _returnToPackage = ResponseData?.ReturnToPackage;
 
@@ -1186,7 +1189,7 @@ namespace AbxrLib.Runtime.Services.Auth
                         string handoffRestUrl = Configuration.Instance?.restUrl ?? "";
                         ArborInsightsClient.SetAuthFromHandoff(responseText, handoffRestUrl);
                     }
-                    catch (Exception ex) { Debug.LogWarning($"[AbxrLib] SetAuthFromHandoff failed: {ex.Message}"); }
+                    catch (Exception ex) { Logcat.Warning($"SetAuthFromHandoff failed: {ex.Message}"); }
 #endif
                     // Mark as service-authenticated so re-auth polling is skipped (service manages token refresh)
                     _usedArborInsightsClientForSession = true;
@@ -1201,13 +1204,13 @@ namespace AbxrLib.Runtime.Services.Auth
             Dictionary<string, object> decodedJwt = Utils.DecodeJwt(ResponseData.Token);
             if (decodedJwt == null)
             {
-                Debug.LogError("[AbxrLib] Failed to decode JWT token");
+                Logcat.Error("Failed to decode JWT token");
                 return false;
             }
                     
             if (!decodedJwt.ContainsKey("exp"))
             {
-                Debug.LogError("[AbxrLib] JWT token missing expiration field");
+                Logcat.Error("JWT token missing expiration field");
                 return false;
             }
                     
@@ -1217,7 +1220,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             catch (Exception e)
             {
-                Debug.LogError($"[AbxrLib] Invalid JWT token expiration {e.Message}");
+                Logcat.Error($"Invalid JWT token expiration {e.Message}");
                 return false;
             }
             

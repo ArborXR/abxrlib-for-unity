@@ -279,7 +279,7 @@ public class RobustKeyboardHandler : MonoBehaviour
         }
         catch (System.Exception ex)
         {
-            Debug.LogError($"Failed to create keyboard: {ex.Message}");
+            Logcat.Error($"Failed to create keyboard: {ex.Message}");
             
             // Log error for analytics
             Abxr.EventInteractionComplete("keyboard_creation_error", 

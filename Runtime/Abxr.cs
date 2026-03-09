@@ -534,7 +534,7 @@ public static partial class Abxr
 	/// Get the session data with the default name 'state'
 	/// Call this as follows:
 	/// StartCoroutine(StorageGetDefaultEntry(scope, result => {
-	///	    Debug.Log("Result: " + result);
+	///	    Logcat.Info("Result: " + result);
 	/// }));
 	/// </summary>
 	/// <param name="scope">Get from 'device' or 'user'</param>
@@ -547,7 +547,7 @@ public static partial class Abxr
 	/// Get the session data with the given name
 	/// Call this as follows:
 	/// StartCoroutine(StorageGetDefaultEntry(scope, result => {
-	///	    Debug.Log("Result: " + result);
+	///	    Logcat.Info("Result: " + result);
 	/// }));
 	/// </summary>
 	/// <param name="entryName">The name of the entry to retrieve</param>
@@ -604,7 +604,7 @@ public static partial class Abxr
 	/// <summary>
 	/// Send a prompt to the LLM provider
 	/// StartCoroutine(AIProxy(prompt, llmProvider, result => {
-	///	    Debug.Log("Result: " + result);
+	///	    Logcat.Info("Result: " + result);
 	/// }));
 	/// </summary>
 	/// <param name="prompt">The prompt to send</param>
@@ -617,7 +617,7 @@ public static partial class Abxr
 	///  <summary>
 	///  Send a prompt to the LLM provider
 	///  StartCoroutine(AIProxy(prompt, llmProvider, result => {
-	/// 	    Debug.Log("Result: " + result);
+	/// 	    Logcat.Info("Result: " + result);
 	///  }));
 	///  </summary>
 	///  <param name="prompt">The prompt to send</param>
@@ -764,7 +764,7 @@ public static partial class Abxr
 		{
 			if (AbxrSubsystem.Instance == null)
 			{
-				Debug.LogWarning("[AbxrLib] Not initialized yet.");
+				Logcat.Warning("Not initialized yet.");
 				return null;
 			}
 			return AbxrSubsystem.Instance;

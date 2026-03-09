@@ -171,12 +171,12 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
                 else if (_originalStates.Count >= Configuration.Instance.maxDictionarySize)
                 {
-                    Debug.LogWarning($"[AbxrLib] LaserPointerManager - Maximum dictionary size ({Configuration.Instance.maxDictionarySize}) reached, skipping additional ray interactors");
+                    Logcat.Warning($"LaserPointerManager - Maximum dictionary size ({Configuration.Instance.maxDictionarySize}) reached, skipping additional ray interactors");
                     break;
                 }
             }
             if (anyEnabled)
-                Debug.Log("[AbxrLib] LaserPointerManager - Enabled laser pointer(s) for keyboard interaction (were previously disabled).");
+                Logcat.Debug("LaserPointerManager - Enabled laser pointer(s) for keyboard interaction (were previously disabled).");
         }
 
         /// <summary>
@@ -251,7 +251,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
             _isManagingLaserPointers = false;
             if (anyRestored)
-                Debug.Log("[AbxrLib] LaserPointerManager - Restored laser pointer(s) to original state.");
+                Logcat.Debug("LaserPointerManager - Restored laser pointer(s) to original state.");
         }
 
         /// <summary>

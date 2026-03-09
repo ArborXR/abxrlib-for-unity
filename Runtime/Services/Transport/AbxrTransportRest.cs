@@ -82,7 +82,7 @@ namespace AbxrLib.Runtime.Services.Transport
             if (request.result == UnityWebRequest.Result.Success && code >= 200 && code < 300)
                 response = request.downloadHandler?.text;
             else if (!string.IsNullOrEmpty(request.downloadHandler?.text))
-                Debug.LogWarning($"[AbxrLib] AuthRequest REST failed: {code} - {request.downloadHandler.text}");
+                Logcat.Warning($"AuthRequest REST failed: {code} - {request.downloadHandler.text}");
 
             onComplete?.Invoke(!string.IsNullOrEmpty(response), response, code);
         }
@@ -100,7 +100,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[AbxrLib] GetConfig request creation failed: {ex.Message}");
+                Logcat.Error($"GetConfig request creation failed: {ex.Message}");
                 request?.Dispose();
                 onComplete?.Invoke(false, ex.Message);
                 yield break;
@@ -216,7 +216,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             else
             {
-                Debug.LogWarning($"[AbxrLib] Storage GET failed: {request.error}");
+                Logcat.Warning($"Storage GET failed: {request.error}");
                 onComplete?.Invoke(null);
             }
         }
@@ -276,7 +276,7 @@ namespace AbxrLib.Runtime.Services.Transport
                 var op = request.SendWebRequest();
                 while (!op.isDone) { Thread.Sleep(1); }
                 if (request.result != UnityWebRequest.Result.Success)
-                    Debug.LogWarning($"[AbxrLib] Sync flush (data) failed ({request.responseCode}): {request.error}");
+                    Logcat.Warning($"Sync flush (data) failed ({request.responseCode}): {request.error}");
             }
             finally
             {
@@ -312,7 +312,7 @@ namespace AbxrLib.Runtime.Services.Transport
                 var op = request.SendWebRequest();
                 while (!op.isDone) { Thread.Sleep(1); }
                 if (request.result != UnityWebRequest.Result.Success)
-                    Debug.LogWarning($"[AbxrLib] Sync flush (storage) failed ({request.responseCode}): {request.error}");
+                    Logcat.Warning($"Sync flush (storage) failed ({request.responseCode}): {request.error}");
             }
             finally
             {
@@ -371,7 +371,7 @@ namespace AbxrLib.Runtime.Services.Transport
         private static bool IsQueueAtLimit<T>(List<T> queue, string queueType)
         {
             int max = Configuration.Instance.maximumCachedItems;
-            if (max > 0 && queue.Count >= max) { Debug.LogWarning($"[AbxrLib] {queueType} queue limit reached ({max})"); return true; }
+            if (max > 0 && queue.Count >= max) { Logcat.Warning($"{queueType} queue limit reached ({max})"); return true; }
             return false;
         }
 
@@ -401,7 +401,7 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             string json;
             try { json = JsonConvert.SerializeObject(new DataPayloadWrapper { @event = events, telemetry = telemetries, basicLog = logs }); }
-            catch (Exception ex) { Debug.LogError($"[AbxrLib] Data serialization failed: {ex.Message}"); yield break; }
+            catch (Exception ex) { Logcat.Error($"Data serialization failed: {ex.Message}"); yield break; }
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
@@ -435,7 +435,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             if (!success)
             {
-                Debug.LogError($"[AbxrLib] Data POST failed after {retryCount} attempts: {lastError}");
+                Logcat.Error($"Data POST failed after {retryCount} attempts: {lastError}");
                 _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
                 lock (_lock)
                 {
@@ -478,7 +478,7 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             string json;
             try { json = JsonConvert.SerializeObject(new StoragePayloadWrapper { data = toSend }); }
-            catch (Exception ex) { Debug.LogError($"[AbxrLib] Storage serialization failed: {ex.Message}"); yield break; }
+            catch (Exception ex) { Logcat.Error($"Storage serialization failed: {ex.Message}"); yield break; }
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
@@ -512,7 +512,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             if (!success)
             {
-                Debug.LogError($"[AbxrLib] Storage POST failed after {retryCount} attempts: {lastError}");
+                Logcat.Error($"Storage POST failed after {retryCount} attempts: {lastError}");
                 _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
                 lock (_lock) { foreach (var p in toSend) { if (!IsQueueAtLimit(_storagePayloads, "Storage")) _storagePayloads.Insert(0, p); } }
             }

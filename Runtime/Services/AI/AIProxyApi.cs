@@ -85,7 +85,7 @@ namespace AbxrLib.Runtime.Services.AI
                 catch (Exception ex)
                 {
                     lastError = $"AI request creation failed: {ex.Message}";
-                    Debug.LogError($"[AbxrLib] {lastError}");
+                    Logcat.Error($"{lastError}");
 
                     if (IsAIRetryableException(ex) && retryCount < maxRetries)
                     {
@@ -97,7 +97,7 @@ namespace AbxrLib.Runtime.Services.AI
                 if (shouldRetry)
                 {
                     retryCount++;
-                    Debug.LogWarning($"[AbxrLib] AI request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+                    Logcat.Warning($"AI request creation failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
                     yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
                     continue;
                 }
@@ -134,7 +134,7 @@ namespace AbxrLib.Runtime.Services.AI
                 catch (System.Exception ex)
                 {
                     lastError = $"AI response handling failed: {ex.Message}";
-                    Debug.LogError($"[AbxrLib] {lastError}");
+                    Logcat.Error($"{lastError}");
 
                     if (IsAIRetryableException(ex) && retryCount < maxRetries)
                     {
@@ -153,7 +153,7 @@ namespace AbxrLib.Runtime.Services.AI
                     retryCount++;
                     if (retryCount <= maxRetries)
                     {
-                        Debug.LogWarning($"[AbxrLib] AI POST Request failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
+                        Logcat.Warning($"AI POST Request failed (attempt {retryCount}), retrying in {Configuration.Instance.sendRetryIntervalSeconds} seconds...");
                         yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds);
                     }
                 }
@@ -171,7 +171,7 @@ namespace AbxrLib.Runtime.Services.AI
             }
             else
             {
-                Debug.LogError($"[AbxrLib] AI POST Request failed after {retryCount} attempts: {lastError}");
+                Logcat.Error($"AI POST Request failed after {retryCount} attempts: {lastError}");
                 callback?.Invoke(null);
             }
         }

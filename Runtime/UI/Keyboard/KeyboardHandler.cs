@@ -51,7 +51,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
             else
             {
-                Debug.Log("[AbxrLib] KeyboardHandler - Using custom keyboard prefab from configuration");
+                Logcat.Info("KeyboardHandler - Using custom keyboard prefab from configuration");
             }
             
             if (!_pinPadPrefab)
@@ -60,12 +60,12 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
             else
             {
-                Debug.Log("[AbxrLib] KeyboardHandler - Using custom PIN pad prefab from configuration");
+                Logcat.Info("KeyboardHandler - Using custom PIN pad prefab from configuration");
             }
             
             if (!_keyboardPrefab)
             {
-                Debug.LogError("[AbxrLib] KeyboardHandler - Failed to load keyboard prefab from both configuration and Resources. Assign Keyboard Prefab in AbxrLib Configuration or ensure package Resources are available.");
+                Logcat.Error("KeyboardHandler - Failed to load keyboard prefab from both configuration and Resources. Assign Keyboard Prefab in AbxrLib Configuration or ensure package Resources are available.");
             }
         }
     
@@ -93,7 +93,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public static void RefreshPrefabs()
         {
             LoadPrefabs();
-            Debug.Log("[AbxrLib] KeyboardHandler - Prefabs refreshed from configuration");
+            Logcat.Debug("KeyboardHandler - Prefabs refreshed from configuration");
         }
 
         public static void SetPrompt(string prompt)
@@ -116,7 +116,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 if (_pinPadPrefab == null)
                 {
-                    Debug.LogError("[AbxrLib] KeyboardHandler - Cannot show PIN pad: prefab not found. Assign Pin Prefab in AbxrLib Configuration or ensure package Resources are available.");
+                    Logcat.Error("KeyboardHandler - Cannot show PIN pad: prefab not found. Assign Pin Prefab in AbxrLib Configuration or ensure package Resources are available.");
                     return;
                 }
                 if (_pinPadInstance) return; // Prevent duplicate PIN pad creation
@@ -136,7 +136,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 if (_keyboardPrefab == null)
                 {
-                    Debug.LogError("[AbxrLib] KeyboardHandler - Cannot show keyboard: prefab not found. Assign Keyboard Prefab in AbxrLib Configuration or ensure package Resources are available.");
+                    Logcat.Error("KeyboardHandler - Cannot show keyboard: prefab not found. Assign Keyboard Prefab in AbxrLib Configuration or ensure package Resources are available.");
                     return;
                 }
                 if( _keyboardInstance) return; // Prevent duplicate full keyboard creation

@@ -146,7 +146,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
             // Ensure it's not empty after sanitization
             if (string.IsNullOrEmpty(sanitizedName))
             {
-                Debug.LogWarning($"AbxrTarget: Target name '{name}' was sanitized to empty string. Using original name.", this);
+                Logcat.Warning($"AbxrTarget: Target name '{name}' was sanitized to empty string. Using original name.");
                 targetName = name;
             }
             else
@@ -156,7 +156,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 // Warn if name was changed during sanitization
                 if (sanitizedName != name)
                 {
-                    Debug.LogWarning($"AbxrTarget: Target name '{name}' was sanitized to '{sanitizedName}' for safe use in telemetry keys.", this);
+                    Logcat.Warning($"AbxrTarget: Target name '{name}' was sanitized to '{sanitizedName}' for safe use in telemetry keys.");
                 }
             }
         }
@@ -316,12 +316,11 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 // If we find a duplicate targetName, warn the user
                 if (otherTargetName == currentTargetName)
                 {
-                    Debug.LogWarning(
+                    Logcat.Warning(
                         $"AbxrTarget: Duplicate targetName '{currentTargetName}' detected! " +
                         $"Both '{gameObject.name}' and '{target.gameObject.name}' have the same targetName. " +
                         $"This may cause confusion when using Abxr.TargetEnable/Disable by targetName. " +
-                        $"Please assign unique targetNames to each AbxrTarget component.",
-                        this
+                        $"Please assign unique targetNames to each AbxrTarget component."
                     );
                     return; // Only warn once per duplicate
                 }
@@ -575,7 +574,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
             }
             catch (System.Exception ex)
             {
-                Debug.LogWarning($"AbxrTarget: Failed to get renderer bounds from parent '{parent.name}': {ex.Message}", this);
+                Logcat.Warning($"AbxrTarget: Failed to get renderer bounds from parent '{parent.name}': {ex.Message}");
             }
 
             // If no renderers, check colliders
@@ -610,7 +609,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 }
                 catch (System.Exception ex)
                 {
-                    Debug.LogWarning($"AbxrTarget: Failed to get collider bounds from parent '{parent.name}': {ex.Message}", this);
+                    Logcat.Warning($"AbxrTarget: Failed to get collider bounds from parent '{parent.name}': {ex.Message}");
                 }
             }
 

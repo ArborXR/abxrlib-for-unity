@@ -1,4 +1,4 @@
-﻿using AbxrLib.UiRoundedCorners;
+using AbxrLib.UiRoundedCorners;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
