@@ -182,10 +182,10 @@ namespace AbxrLib.Runtime.Services.Transport
             var p = new StoragePayload
             {
                 timestamp = iso,
-                keepPolicy = policy.ToString(),
+                keepPolicy = Utils.PascalToCamelCase(policy.ToString()),
                 name = name,
                 data = new List<Dictionary<string, string>> { entry ?? new Dictionary<string, string>() },
-                scope = scope.ToString()
+                scope = Utils.PascalToCamelCase(scope.ToString())
             };
             lock (_lock)
             {
@@ -198,7 +198,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)
         {
             if (!_authService.Authenticated) { onComplete?.Invoke(null); yield break; }
-            var queryParams = new Dictionary<string, string> { { "name", name }, { "scope", scope.ToString() } };
+            var queryParams = new Dictionary<string, string> { { "name", name }, { "scope", Utils.PascalToCamelCase(scope.ToString()) } };
             string url = Utils.BuildUrlWithParams(_storageUri.ToString(), queryParams);
             using var request = UnityWebRequest.Get(url);
             request.SetRequestHeader("Accept", "application/json");
@@ -224,7 +224,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public IEnumerator StorageDeleteCoroutine(global::Abxr.StorageScope scope, string name, Action<bool> onComplete)
         {
             if (!_authService.Authenticated) { onComplete?.Invoke(false); yield break; }
-            var queryParams = new Dictionary<string, string> { { "scope", scope.ToString() } };
+            var queryParams = new Dictionary<string, string> { { "scope", Utils.PascalToCamelCase(scope.ToString()) } };
             if (!string.IsNullOrEmpty(name)) queryParams.Add("name", name);
             string url = Utils.BuildUrlWithParams(_storageUri.ToString(), queryParams);
             using var request = UnityWebRequest.Delete(url);

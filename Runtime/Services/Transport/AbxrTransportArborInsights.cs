@@ -105,10 +105,10 @@ namespace AbxrLib.Runtime.Services.Transport
             var p = new StoragePayload
             {
                 timestamp = iso,
-                keepPolicy = policy.ToString(),
+                keepPolicy = Utils.PascalToCamelCase(policy.ToString()),
                 name = name,
                 data = new List<Dictionary<string, string>> { entry ?? new Dictionary<string, string>() },
-                scope = scope.ToString()
+                scope = Utils.PascalToCamelCase(scope.ToString())
             };
             string json = JsonConvert.SerializeObject(p);
             bool keepLatest = policy == global::Abxr.StoragePolicy.KeepLatest;

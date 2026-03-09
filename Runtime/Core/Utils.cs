@@ -226,6 +226,13 @@ namespace AbxrLib.Runtime.Core
             return dictRet;
         }
 
+        /// <summary>Converts PascalCase to camelCase (first character lower, rest unchanged). Use for API strings that expect camelCase (e.g. storage scope, policy).</summary>
+        public static string PascalToCamelCase(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            return char.ToLowerInvariant(s[0]) + s.Substring(1);
+        }
+
         public static long filetime_to_timet(long ft) => ft / 10000000L - 11644473600L;
         public static long timet_to_filetime(long tt) => (tt + 11644473600L) * 10000000L;
 
