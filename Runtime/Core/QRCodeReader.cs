@@ -46,6 +46,9 @@ namespace AbxrLib.Runtime.Core
         private WebCamTexture _webCamTexture;
         private RenderTexture _webCamRenderTexture; // RenderTexture for WebCamTexture processing
         
+        // Latest raw camera frame (Texture2D snapshot) from the scan loop; returned by GetCameraTexture() for custom UI.
+        private Texture2D _rawCameraFrameTexture;
+        
         private bool _isScanning;
         private bool _isInitializing; // True when camera is being initialized
         private bool _cameraInitialized;
@@ -120,6 +123,11 @@ namespace AbxrLib.Runtime.Core
         {
             if (Instance == this)
                 Instance = null;
+            if (_rawCameraFrameTexture != null)
+            {
+                Destroy(_rawCameraFrameTexture);
+                _rawCameraFrameTexture = null;
+            }
             if (_webCamRenderTexture != null)
             {
                 _webCamRenderTexture.Release();
@@ -847,11 +855,12 @@ namespace AbxrLib.Runtime.Core
         }
 
         /// <summary>
-        /// Returns the camera texture (WebCamTexture) for embedding in custom UI. Null if not available or not yet initialized.
+        /// Returns the raw camera frame (Texture2D snapshot from the scan loop) for embedding in custom UI when scanning;
+        /// otherwise the WebCamTexture. Null if not available or not yet initialized.
         /// </summary>
         public Texture GetCameraTexture()
         {
-            return _webCamTexture;
+            return _rawCameraFrameTexture != null ? _rawCameraFrameTexture : _webCamTexture;
         }
 
         /// <summary>
@@ -909,6 +918,11 @@ namespace AbxrLib.Runtime.Core
         private void StopScanning()
         {
             _isScanning = false;
+            if (_rawCameraFrameTexture != null)
+            {
+                Destroy(_rawCameraFrameTexture);
+                _rawCameraFrameTexture = null;
+            }
             if (_scanningCoroutine != null)
             {
                 StopCoroutine(_scanningCoroutine);
@@ -1024,10 +1038,17 @@ namespace AbxrLib.Runtime.Core
                     continue;
                 }
                 
+                // Store raw frame for GetCameraTexture(); previous frame is replaced each loop
+                if (_rawCameraFrameTexture != null)
+                    Destroy(_rawCameraFrameTexture);
+                _rawCameraFrameTexture = snapshot;
+                Texture2D toDecode = snapshot;
+                snapshot = null; // so finally does not destroy the stored texture
+                
                 try
                 {
                     // Decode QR code using ZXing
-                    string result = DecodeQRCode(snapshot);
+                    string result = DecodeQRCode(toDecode);
                     
                     scanCount++;
                     
@@ -1040,7 +1061,8 @@ namespace AbxrLib.Runtime.Core
                             Debug.Log($"[AbxrLib] QR code detected: '{result}' (scan #{scanCount})");
                             // Process the QR code result
                             OnQRCodeScanned(result);
-                            if (snapshot != null) Destroy(snapshot);
+                            if (toDecode != null) Destroy(toDecode);
+                            _rawCameraFrameTexture = null;
                             yield break; // Stop scanning after successful read
                         }
                         // QR code found but doesn't have ABXR: prefix - ignore silently
