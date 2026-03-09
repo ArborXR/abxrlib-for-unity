@@ -24,6 +24,13 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     internal static string ConfigAuthSecret => Configuration.Instance?.authSecret ?? "";
     internal static string ConfigAppToken => Configuration.Instance?.appToken ?? "";
     internal static string ConfigOrgToken => Configuration.Instance?.orgToken ?? "";
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    internal static string ConfigDeviceId => Configuration.Instance?.unitTestDeviceId ?? "";
+    internal static string ConfigFingerprint => Configuration.Instance?.unitTestFingerprint ?? "";
+#else
+    internal static string ConfigDeviceId => "";
+    internal static string ConfigFingerprint => "";
+#endif
 
     // Expected auth failure messages (for LogAssert.Expect and assertions). Outcome may depend on IsArborMdmClientAvailableAndConnected.
     internal const string AuthFailureAppIdNotSet = "[AbxrLib] Authentication failure: App identification not set.";
@@ -325,11 +332,21 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
         Abxr.SetOrgId(ConfigOrgId);
-        Abxr.SetAuthSecret(ConfigAuthSecret);
-        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyOrgToken)
+        bool hasUnitTestDeviceCredentials = !string.IsNullOrEmpty(ConfigDeviceId) && !string.IsNullOrEmpty(ConfigFingerprint);
+        if (hasUnitTestDeviceCredentials)
         {
-            // Editor: validation fails with OrgUnavailable before request. Player/device: request may be sent but fail (e.g. service returns empty) with Initial authentication request failed.
+            Abxr.SetDeviceId(ConfigDeviceId);
+            Abxr.SetAuthSecret(ConfigFingerprint);
+        }
+        else
+        {
+            Abxr.SetAuthSecret(ConfigAuthSecret);
+        }
+        
+        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
+        // With unitTestDeviceId & unitTestFingerprint set: we build a valid dynamic org token from overrides → auth can pass. Without them we use configured authSecret + random device ID → backend rejects the token → auth fails.
+        if (!mdmCanSupplyOrgToken && !hasUnitTestDeviceCredentials)
+        {
             if (Application.isEditor)
                 LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
             else
@@ -339,8 +356,10 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         yield return PerformAuth(r => success = r);
         if (mdmCanSupplyOrgToken)
             Assert.IsTrue(success, "With MDM connected, auth should succeed (dynamic orgToken).");
+        else if (hasUnitTestDeviceCredentials)
+            Assert.IsTrue(success, "With unit test device ID and fingerprint set, dynamic org token from overrides should allow auth to succeed.");
         else
-            Assert.IsFalse(success, "Without MDM (Editor or headset without MDM), auth should fail.");
+            Assert.IsFalse(success, "Without MDM or unit test device credentials, auth should fail.");
     }
 
     [UnityTest]
