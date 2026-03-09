@@ -38,9 +38,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
-        /// <summary>Runtime auth values: loaded from Configuration then updated by GetArborData, GetQueryData, intent, SetOrgId/SetAuthSecret. Holds authMechanism (from GET config when not already set, or set by tests); copied to _authMechanism so we can mutate prompt for user input.</summary>
-        private readonly RuntimeAuthConfig _runtimeAuth = new RuntimeAuthConfig();
-        /// <summary>Working copy of _runtimeAuth.authMechanism for this session; prompt is temporarily set to user input in KeyboardAuthenticate. All code uses this.</summary>
         private AuthMechanism _authMechanism;
         private DateTime _tokenExpiry = DateTime.MinValue;
         private int _failedAuthAttempts;
@@ -67,7 +64,6 @@ namespace AbxrLib.Runtime.Services.Auth
         
         // Auth handoff for external launcher apps
         private bool _sessionUsedAuthHandoff;
-        private string _returnToPackage;
 
         /// <summary>
         /// True only when we completed authentication via ArborInsightsClient this session.
@@ -81,9 +77,6 @@ namespace AbxrLib.Runtime.Services.Auth
         /// (the service handles token refresh). Data/events/telemetry/storage routing is via the current transport.
         /// </summary>
         public bool UsingArborInsightsClientForData() => _usedArborInsightsClientForSession;
-
-        /// <summary>When true, Authenticate() skips LoadRuntimeAuthFromConfig() and uses the already-set _runtimeAuth (set via SetRuntimeAuthForTesting). Testing only.</summary>
-        private bool _useInjectedRuntimeAuthForTesting;
 
         public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient ArborMdmClient)
         {
@@ -105,14 +98,12 @@ namespace AbxrLib.Runtime.Services.Auth
             GetConfigData();
 #if UNITY_ANDROID && !UNITY_EDITOR
             GetArborData();
-            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken))
+            // On non-XRDM devices, org_token can be provided via launch intent (e.g. adb shell am start --es org_token "JWT...")
+            if (Configuration.Instance.useAppTokens && string.IsNullOrEmpty(_payload.orgToken))
             {
                 string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
                 if (!string.IsNullOrEmpty(orgTokenIntent))
-                {
-                    _runtimeAuth.orgToken = orgTokenIntent;
-                    _runtimeAuth.CopyAuthFieldsTo(_payload);
-                }
+                    _payload.orgToken = orgTokenIntent;
             }
 #elif UNITY_WEBGL && !UNITY_EDITOR
             GetQueryData();
@@ -127,7 +118,7 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         internal void SetTransportGetter(Func<IAbxrTransport> getter) => _getTransport = getter;
-
+        
         // ── Public API ───────────────────────────────────────────────
         
         /// <param name="clearStateFirst">If true (default), clears auth state before running. If false, caller has already cleared and set session (e.g. StartNewSession).</param>
@@ -139,52 +130,28 @@ namespace AbxrLib.Runtime.Services.Auth
             if (clearStateFirst)
                 ClearAuthenticationState();
 
-            // Load runtime auth from Configuration, then apply GetArborData/GetQueryData/intent so runtime config reflects all sources.
-            // When tests inject runtime auth, skip loading from Configuration so the injected values are used.
-            if (!_useInjectedRuntimeAuthForTesting)
-                LoadRuntimeAuthFromConfig();
-
-            // GetArborData() no-ops when ArborMdmClient is not available; when available it applies device/org from MDM.
-            GetArborData();
-
-            // Apply Abxr.SetOrgId/SetAuthSecret/SetDeviceId into runtime auth (after config load so overrides win; after GetArborData so MDM can have set org token first).
-            ApplyAbxrOverridesToRuntimeAuth();
-
-            // When using app tokens with no org token yet, build dynamic org token from overrides (SetOrgId/SetAuthSecret) or from MDM (already set in GetArborData). Same logic as GetArborData but for when MDM is not connected—overrides supply orgId and authSecret (fingerprint) to sign the JWT.
-            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken) && !string.IsNullOrEmpty(_runtimeAuth.orgId) && !string.IsNullOrEmpty(_runtimeAuth.authSecret))
-            {
-                try
-                {
-                    string dynamicToken = Utils.BuildOrgTokenDynamic(_runtimeAuth.orgId, _runtimeAuth.authSecret);
-                    if (!string.IsNullOrEmpty(dynamicToken))
-                        _runtimeAuth.orgToken = dynamicToken;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"[AbxrLib] BuildOrgTokenDynamic from overrides failed: {ex.Message}");
-                }
-            }
-
+            // Load config into payload first, then re-apply Arbor/device overrides so they are not lost.
+            LoadConfigIntoPayload();
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken))
+            GetArborData();
+            if (Configuration.Instance.useAppTokens && string.IsNullOrEmpty(_payload.orgToken))
             {
                 string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
                 if (!string.IsNullOrEmpty(orgTokenIntent))
-                    _runtimeAuth.orgToken = orgTokenIntent;
+                    _payload.orgToken = orgTokenIntent;
             }
 #elif UNITY_WEBGL && !UNITY_EDITOR
             GetQueryData();
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
             GetQueryData();
 #endif
-            var validationError = _runtimeAuth.IsValidToSend();
-            if (validationError != null)
+
+            if (!ValidateConfigValues())
             {
                 _attemptActive = false;
-                OnFailed?.Invoke(validationError);
+                OnFailed?.Invoke("Abxr settings are invalid");
                 return;
             }
-            _runtimeAuth.CopyAuthFieldsTo(_payload);
 
             // Check auth handoff (command-line / intent)
             if (CheckAuthHandoff())
@@ -360,11 +327,7 @@ namespace AbxrLib.Runtime.Services.Auth
             try
             {
                 var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
-                if (obj == null) return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
-                // Backend (e.g. FastAPI) often returns "detail"; some APIs use "message".
-                if (obj.TryGetValue("detail", out var detail) && detail != null)
-                    return detail is string s ? s : detail.ToString();
-                if (obj.TryGetValue("message", out var msg) && msg != null)
+                if (obj != null && obj.TryGetValue("message", out var msg) && msg != null)
                     return msg.ToString();
             }
             catch { /* ignore */ }
@@ -389,15 +352,13 @@ namespace AbxrLib.Runtime.Services.Auth
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             var transport = _getTransport();
-            const int maxConsecutiveEmptyFromService = 5;
-            int consecutiveEmptyFromService = 0;
 
             while (true)
             {
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
-                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret). Use _runtimeAuth so injected test config and runtime overrides are respected.
-                if (_runtimeAuth.useAppTokens)
+                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret).
+                if (Configuration.Instance.useAppTokens)
                 {
                     _payload.appId = null;
                     _payload.orgId = null;
@@ -438,24 +399,6 @@ namespace AbxrLib.Runtime.Services.Auth
                     _payload.buildType = savedBuildType;
                     onComplete(false, ExtractAuthErrorMessage(holder.Response));
                     yield break;
-                }
-
-                bool emptyFromService = transport.IsServiceTransport && string.IsNullOrEmpty(holder.Response);
-                if (emptyFromService)
-                {
-                    consecutiveEmptyFromService++;
-                    if (consecutiveEmptyFromService >= maxConsecutiveEmptyFromService)
-                    {
-                        _payload.buildType = savedBuildType;
-                        string msg = $"ArborInsightsClient returned empty after {maxConsecutiveEmptyFromService} attempts (check service/logcat for backend error).";
-                        Debug.LogWarning($"[AbxrLib] AuthRequest failed: {msg}");
-                        onComplete(false, msg);
-                        yield break;
-                    }
-                }
-                else
-                {
-                    consecutiveEmptyFromService = 0;
                 }
 
                 string logDetail = !string.IsNullOrEmpty(holder.Response)
@@ -552,26 +495,12 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (config != null)
                     {
                         Configuration.Instance.ApplyConfigPayload(config);
-                        // Use GET config only when _runtimeAuth.authMechanism not already set (e.g. by tests). Apply learner launcher only when we just filled from config.
-                        bool filledFromConfig = _runtimeAuth.authMechanism == null || string.IsNullOrEmpty(_runtimeAuth.authMechanism.type);
-                        if (filledFromConfig)
+                        _authMechanism = config.authMechanism ?? new AuthMechanism();
+                        if (string.IsNullOrEmpty(_authMechanism.inputSource)) _authMechanism.inputSource = "user";
+                        if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_authMechanism?.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
                         {
-                            _runtimeAuth.authMechanism = config.authMechanism ?? new AuthMechanism();
-                            if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.inputSource))
-                                _runtimeAuth.authMechanism.inputSource = "user";
-                            if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_runtimeAuth.authMechanism.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
-                            {
-                                _runtimeAuth.authMechanism.type = "assessmentPin";
-                                _runtimeAuth.authMechanism.prompt = "Enter your 6-digit PIN";
-                            }
-                        }
-                        _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
-                        if (!string.IsNullOrEmpty(_authMechanism.type) && string.IsNullOrEmpty(_authMechanism.prompt))
-                        {
-                            string defaultPrompt = GetDefaultPromptForAuthMechanismType(_authMechanism.type);
-                            _authMechanism.prompt = defaultPrompt;
-                            if (_runtimeAuth.authMechanism != null)
-                                _runtimeAuth.authMechanism.prompt = defaultPrompt;
+                            _authMechanism.type = "assessmentPin";
+                            _authMechanism.prompt = "Enter your 6-digit PIN";
                         }
                         string authType = _authMechanism?.type ?? "";
                         if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
@@ -613,36 +542,34 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        /// <summary>Load auth-related values from Configuration into _runtimeAuth. GetArborData/GetQueryData/intent will update _runtimeAuth next.</summary>
-        private void LoadRuntimeAuthFromConfig()
+        private void LoadConfigIntoPayload()
         {
             var s = Configuration.Instance;
-            _runtimeAuth.useAppTokens = s.useAppTokens;
-            _runtimeAuth.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
             if (s.useAppTokens)
             {
-                _runtimeAuth.appToken = s.appToken;
-                _runtimeAuth.orgToken = string.Equals(s.buildType, "production", StringComparison.OrdinalIgnoreCase) ? null : s.orgToken;
+                _payload.appToken = s.appToken;
+                // Production: org token must come from runtime (MDM, intent, query), not config — match ExtractConfigData behavior so Editor/standalone fail when no runtime source.
+                _payload.orgToken = string.Equals(s.buildType, "production", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : s.orgToken;
+                _payload.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
             }
             else
             {
-                _runtimeAuth.appId = s.appID;
+                _payload.appId = s.appID;
+                // Production (non–custom): orgId/authSecret must come from runtime (MDM), not config — match ExtractConfigData so Editor/standalone fail when no runtime source.
                 if (string.Equals(s.buildType, "production", StringComparison.OrdinalIgnoreCase))
                 {
-                    _runtimeAuth.orgId = null;
-                    _runtimeAuth.authSecret = null;
+                    _payload.orgId = null;
+                    _payload.authSecret = null;
                 }
                 else
                 {
-                    _runtimeAuth.orgId = s.orgID;
-                    _runtimeAuth.authSecret = s.authSecret;
+                    _payload.orgId = s.orgID;
+                    _payload.authSecret = s.authSecret;
                 }
+                _payload.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : "production";
             }
-            // Establish subsystem defaults for device/partner/tags whenever we load runtime auth (e.g. each Authenticate call).
-            string deviceIdFromSubsystem = Abxr.GetDeviceId();
-            _runtimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : _payload.deviceId;
-            _runtimeAuth.partner = "none";
-            _runtimeAuth.tags = null;
         }
 
         /// <summary>Normalize backend auth mechanism type to "text" | "pin" | "email" for OnInputRequested, or "" if no input required (e.g. "none", empty). Single source of truth for pin variants (assessmentPin, assessment_pin → "pin").</summary>
@@ -654,35 +581,6 @@ namespace AbxrLib.Runtime.Services.Auth
             if (t == "email") return "email";
             if (t == "pin" || t == "assessmentpin" || t == "assessment_pin") return "pin";
             return "text";
-        }
-
-        /// <summary>Default prompt when auth mechanism type is set (e.g. by tests or enableLearnerLauncherMode). Used for consistent prompts.</summary>
-        private static string GetDefaultPromptForAuthMechanismType(string type)
-        {
-            if (string.IsNullOrEmpty(type)) return "";
-            var t = type.Trim();
-            if (string.Equals(t, "assessmentPin", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "pin", StringComparison.OrdinalIgnoreCase))
-                return "Enter your 6-digit PIN";
-            if (string.Equals(t, "email", StringComparison.OrdinalIgnoreCase))
-                return "Enter your email address";
-            if (string.Equals(t, "text", StringComparison.OrdinalIgnoreCase))
-                return "Enter your Employee ID";
-            if (string.Equals(t, "none", StringComparison.OrdinalIgnoreCase))
-                return "";
-            return "";
-        }
-
-        /// <summary>Returns a mutable copy of the given auth mechanism so we can set prompt to user input without mutating _runtimeAuth.</summary>
-        private static AuthMechanism CopyAuthMechanism(AuthMechanism source)
-        {
-            if (source == null) return new AuthMechanism();
-            return new AuthMechanism
-            {
-                type = source.type ?? "",
-                prompt = source.prompt ?? "",
-                domain = source.domain ?? "",
-                inputSource = !string.IsNullOrEmpty(source.inputSource) ? source.inputSource : "user"
-            };
         }
 
         /// <summary>True if auth mechanism type indicates the user must enter text/PIN/email (so we should show keyboard). Uses normalized type so pin variants are one place.</summary>
@@ -713,21 +611,6 @@ namespace AbxrLib.Runtime.Services.Auth
             Debug.Log("[AbxrLib] Authenticated successfully");
         }
 
-        /// <summary>For testing only. Applies the given auth response and invokes OnSucceeded so subsystem and Abxr.OnAuthCompleted behave as after a real auth.</summary>
-        internal void SimulateAuthSuccess(AuthResponse response)
-        {
-            if (response == null) return;
-            ResponseData = response;
-            if (ResponseData.Modules?.Count > 1)
-                ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
-            ResponseData.UserData ??= new Dictionary<string, string>();
-            var userIdStr = ResponseData.UserId?.ToString();
-            if (!string.IsNullOrEmpty(userIdStr))
-                ResponseData.UserData["userId"] = userIdStr;
-            Authenticated = true;
-            OnSucceeded?.Invoke();
-        }
-
         private void ClearAuthenticationState()
         {
             Authenticated = false;
@@ -735,13 +618,9 @@ namespace AbxrLib.Runtime.Services.Auth
             _tokenExpiry = DateTime.MinValue;
             _payload.sessionId = null;
             _authMechanism = new AuthMechanism();
-            // Preserve test-injected authMechanism so GetConfigurationCoroutine does not overwrite with server config.
-            if (!_useInjectedRuntimeAuthForTesting)
-                _runtimeAuth.authMechanism = null;
             _failedAuthAttempts = 0;
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
-            _returnToPackage = null;
             _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
             _lastInputError = null;
@@ -760,73 +639,29 @@ namespace AbxrLib.Runtime.Services.Auth
         
         /// <summary>
         /// Check for authentication handoff from external launcher apps
-        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params.
-        /// For TestRunner: tests can inject payload via SetAuthHandoffForTesting so the flow can be asserted without a real intent.
+        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params
         /// </summary>
         private bool CheckAuthHandoff()
         {
-            string handoffPayload = null;
-            if (!string.IsNullOrEmpty(_authHandoffForTesting))
+            string handoffJson = Utils.GetAndroidIntentParam("auth_handoff");
+
+            if (string.IsNullOrEmpty(handoffJson))
             {
-                handoffPayload = _authHandoffForTesting;
-                _authHandoffForTesting = null;
+                handoffJson = Utils.GetCommandLineArg("auth_handoff");
             }
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetCommandLineArg("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
+
+            if (string.IsNullOrEmpty(handoffJson))
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
-                handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
+                handoffJson = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
 #endif
             }
-            if (string.IsNullOrEmpty(handoffPayload)) return false;
-            string normalized = NormalizeHandoffPayload(handoffPayload);
-            if (string.IsNullOrEmpty(normalized)) return false;
+
+            if (string.IsNullOrEmpty(handoffJson)) return false;
+            
             Debug.Log("[AbxrLib] Processing authentication handoff from external launcher");
-            return ParseAuthResponse(normalized, true);
+            return ParseAuthResponse(handoffJson, true);
         }
-
-        /// <summary>
-        /// Returns the JSON string to use for handoff: if the value is raw JSON (starts with '{') use as-is;
-        /// if it is base64-encoded JSON, decode and return the decoded string. Returns null if decoding fails or result is not JSON.
-        /// </summary>
-        private static string NormalizeHandoffPayload(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return null;
-            string s = value.Trim();
-            if (s.StartsWith("{")) return s;
-            try
-            {
-                byte[] bytes = Convert.FromBase64String(s);
-                string decoded = Encoding.UTF8.GetString(bytes);
-                if (string.IsNullOrEmpty(decoded)) return null;
-                decoded = decoded.Trim();
-                Debug.Log("[AbxrLib] Normalized handoff payload from base64");
-                if (decoded.StartsWith("{")) return decoded;
-            }
-            catch
-            {
-                // Not valid base64; treat as raw and let ParseAuthResponse validate
-                return s;
-            }
-            return null;
-        }
-
-        /// <summary>Testing only. Injects the next auth_handoff payload so the next Authenticate() sees it (e.g. to simulate App 2 receiving handoff from App 1). Cleared after one use.</summary>
-        internal static void SetAuthHandoffForTesting(string handoffJson)
-        {
-            _authHandoffForTesting = handoffJson;
-        }
-
-        /// <summary>Testing only. Clears any injected auth_handoff payload.</summary>
-        internal static void ClearAuthHandoffForTesting()
-        {
-            _authHandoffForTesting = null;
-        }
-
-        private static string _authHandoffForTesting;
 
         private static bool ShouldRetry(UnityWebRequest request)
         {
@@ -845,9 +680,8 @@ namespace AbxrLib.Runtime.Services.Auth
         /// Builds the JSON payload passed via the auth_handoff Android intent extra.
         /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
         /// so the receiving app and its ArborInsightsClient service can fully adopt the session.
-        /// When includeReturnToPackage is true, adds ReturnToPackage (current app's identifier) so the receiving app can return the session when assessment completes.
         /// </summary>
-        internal string GetHandoffJson(bool includeReturnToPackage = false)
+        internal string GetHandoffJson()
         {
             if (ResponseData == null || !Authenticated) return null;
 
@@ -868,17 +702,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 ["OrgId"]             = _payload?.orgId ?? "",
                 ["TokenExpirationMs"] = expiryMs,
             };
-            if (includeReturnToPackage)
-                handoff["ReturnToPackage"] = Application.identifier ?? "";
             return JsonConvert.SerializeObject(handoff);
-        }
-
-        /// <summary>Returns the stored returnToPackage from the handoff (so the assessment app can launch back to the launcher), then clears it so it is only used once.</summary>
-        internal string GetAndClearReturnToPackage()
-        {
-            var value = _returnToPackage;
-            _returnToPackage = null;
-            return value;
         }
         
         /// <summary>
@@ -981,60 +805,52 @@ namespace AbxrLib.Runtime.Services.Auth
         private void GetConfigData()
         {
             var config = Configuration.Instance;
-            _runtimeAuth.enableAutoStartAuthentication = config != null ? config.enableAutoStartAuthentication : true;
-            _runtimeAuth.enableReturnTo = config != null ? config.enableReturnTo : true;
-            _runtimeAuth.enableAutoStartModules = config != null ? config.enableAutoStartModules : true;
-            _runtimeAuth.enableAutoAdvanceModules = config != null ? config.enableAutoAdvanceModules : true;
 
             var configData = Utils.ExtractConfigData(config);
+
             if (!configData.isValid)
+            {
+                Debug.LogError($"[AbxrLib] {configData.errorMessage}");
                 return;
+            }
 
-            // Establish subsystem defaults for device/partner/tags when runtime auth is first loaded (e.g. constructor / Awake sequence).
-            string deviceIdFromSubsystem = Abxr.GetDeviceId();
-            _runtimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : _payload.deviceId;
-            _runtimeAuth.partner = "none";
-            _runtimeAuth.tags = null;
-
-            _runtimeAuth.useAppTokens = configData.useAppTokens;
-            _runtimeAuth.buildType = configData.buildType ?? "production";
             if (configData.useAppTokens)
             {
-                _runtimeAuth.appToken = configData.appToken;
-                _runtimeAuth.orgToken = configData.orgToken;
+                _payload.appToken = configData.appToken;
+                _payload.orgToken = configData.orgToken;
+                _payload.buildType = configData.buildType;
             }
             else
             {
-                _runtimeAuth.appId = configData.appId;
-                _runtimeAuth.orgId = configData.orgId;
-                _runtimeAuth.authSecret = configData.authSecret;
+                _payload.appId = configData.appId;
+                _payload.orgId = configData.orgId;
+                _payload.authSecret = configData.authSecret;
+                _payload.buildType = configData.buildType;
             }
-            _runtimeAuth.CopyAuthFieldsTo(_payload);
         }
 
-        /// <summary>
-        /// When ArborMdmClient is available and connected: updates deviceId, partner, tags from MDM; for production_custom that is all we accept (org credentials stay from config). For other build types, updates orgToken (app tokens) or orgId/authSecret (legacy) from MDM.
-        /// When MDM is not available, returns immediately (runtime auth is updated by Abxr.SetOrgId/SetAuthSecret/SetDeviceId directly).
-        /// </summary>
         private void GetArborData()
         {
-            if (_ArborMdmClient == null || !_ArborMdmClient.IsConnected())
-                return;
-
-            // MDM available: always accept deviceId, partner, tags from Arbor.
-            _runtimeAuth.partner = "arborxr";
-            _runtimeAuth.deviceId = Abxr.GetDeviceId();
-            _runtimeAuth.tags = Abxr.GetDeviceTags();
-
-            // production_custom: only deviceId/partner/tags from MDM; org credentials stay from config.
-            if (_runtimeAuth.buildType == "production_custom")
+            // Partner/deviceId/tags when we have a connected client; when not connected, still apply deviceId from subsystem if set (e.g. Abxr.SetDeviceId).
+            if (_ArborMdmClient != null && _ArborMdmClient.IsConnected())
             {
-                _runtimeAuth.CopyAuthFieldsTo(_payload);
-                return;
+                _payload.partner = "arborxr";
+                _payload.deviceId = Abxr.GetDeviceId();
+                _payload.tags = Abxr.GetDeviceTags();
+            }
+            else
+            {
+                string deviceIdFromSubsystem = Abxr.GetDeviceId();
+                if (!string.IsNullOrEmpty(deviceIdFromSubsystem))
+                    _payload.deviceId = deviceIdFromSubsystem;
             }
 
-            // Non-production_custom: update auth from MDM (dynamic org token or orgId/authSecret).
-            if (_runtimeAuth.useAppTokens)
+            if (_payload.buildType == "production_custom")
+                return;
+
+            // Always apply orgId/authSecret/orgToken from subsystem (GetOrgId/GetFingerprint) when not production_custom,
+            // so developer overrides or Configuration are used when client is null or not connected.
+            if (Configuration.Instance.useAppTokens)
             {
                 try
                 {
@@ -1042,7 +858,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     string orgId = Abxr.GetOrgId();
                     string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, fingerprint);
                     if (!string.IsNullOrEmpty(dynamicToken))
-                        _runtimeAuth.orgToken = dynamicToken;
+                        _payload.orgToken = dynamicToken;
                 }
                 catch (Exception ex)
                 {
@@ -1053,10 +869,10 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             else
             {
-                _runtimeAuth.orgId = Abxr.GetOrgId();
+                _payload.orgId = Abxr.GetOrgId();
                 try
                 {
-                    _runtimeAuth.authSecret = Abxr.GetFingerprint();
+                    _payload.authSecret = Abxr.GetFingerprint();
                 }
                 catch (Exception ex)
                 {
@@ -1065,21 +881,16 @@ namespace AbxrLib.Runtime.Services.Auth
                                   $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
                 }
             }
-
-            _runtimeAuth.CopyAuthFieldsTo(_payload);
         }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         private void GetQueryData()
         {
-            if (_runtimeAuth.buildType == "production_custom")
+            if (_payload.buildType == "production_custom")
                 return;
             string orgTokenQuery = Utils.GetQueryParam("org_token", Application.absoluteURL);
             if (!string.IsNullOrEmpty(orgTokenQuery))
-            {
-                _runtimeAuth.orgToken = orgTokenQuery;
-                _runtimeAuth.CopyAuthFieldsTo(_payload);
-            }
+                _payload.orgToken = orgTokenQuery;
         }
 
         private static string GetOrCreateDeviceId()
@@ -1094,14 +905,11 @@ namespace AbxrLib.Runtime.Services.Auth
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
         private void GetQueryData()
         {
-            if (_runtimeAuth.buildType == "production_custom")
+            if (_payload.buildType == "production_custom")
                 return;
             string orgToken = Utils.GetOrgTokenFromDesktopSources();
             if (!string.IsNullOrEmpty(orgToken))
-            {
-                _runtimeAuth.orgToken = orgToken;
-                _runtimeAuth.CopyAuthFieldsTo(_payload);
-            }
+                _payload.orgToken = orgToken;
         }
 #endif
 
@@ -1110,6 +918,59 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.IsNullOrEmpty(value)) return false;
             var parts = value.Split('.');
             return parts.Length == 3;
+        }
+
+        private bool ValidateConfigValues()
+        {
+            var config = Configuration.Instance;
+
+            if (config.useAppTokens)
+            {
+                if (string.IsNullOrEmpty(_payload.appToken))
+                {
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
+                    return false;
+                }
+                if (!LooksLikeJwt(_payload.appToken))
+                {
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
+                    return false;
+                }
+                if (_payload.buildType == "development" && string.IsNullOrEmpty(_payload.orgToken))
+                    _payload.orgToken = _payload.appToken;
+                if (string.IsNullOrEmpty(_payload.orgToken))
+                {
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
+                    return false;
+                }
+                if (!LooksLikeJwt(_payload.orgToken))
+                {
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
+                    return false;
+                }
+            }
+            else
+            {
+                if (string.IsNullOrEmpty(_payload.appId))
+                {
+                    Debug.LogError("[AbxrLib] Authentication error: App identification not set.");
+                    return false;
+                }
+                if (string.IsNullOrEmpty(_payload.orgId))
+                {
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
+                    return false;
+                }
+                if (string.IsNullOrEmpty(_payload.authSecret))
+                {
+                    Debug.LogError("[AbxrLib] Authentication error: Organization identification unavailable.");
+                    return false;
+                }
+            }
+
+            if (!config.IsValid())
+                return false;
+            return true;
         }
 
         private void SetSessionData()
@@ -1172,7 +1033,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 _tokenExpiry = DateTime.UtcNow.AddHours(24);
                 Debug.Log($"[AbxrLib] Auth handoff successful. Modules: {ResponseData.Modules?.Count ?? 0}");
                 _sessionUsedAuthHandoff = true;
-                _returnToPackage = ResponseData?.ReturnToPackage;
 
                 // For the ArborInsightsClient transport: the normal AuthRequestCoroutine is bypassed by handoff,
                 // so the service has no knowledge of this session. Pass the full auth response JSON so the
@@ -1222,126 +1082,6 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             
             return true;
-        }
-
-        // ── Testing only (For TestRunner) ───────────────────────────────
-
-        /// <summary>Testing only. Overwrites runtime auth with the given config so Authenticate() uses it instead of loading from Configuration. ApplyAbxrOverridesToRuntimeAuth still runs and applies Abxr.SetOrgId/SetAuthSecret/SetDeviceId. Only overwrites enableAutoStartAuthentication when config has it set (HasValue). Mirrors ExtractConfigData: when buildType is "production" (not production_custom), orgToken/orgId/authSecret are not accepted and are cleared.</summary>
-        internal void SetRuntimeAuthForTesting(RuntimeAuthConfig config)
-        {
-            if (config == null) return;
-            _runtimeAuth.useAppTokens = config.useAppTokens;
-            _runtimeAuth.appToken = config.appToken;
-            _runtimeAuth.orgToken = config.orgToken;
-            _runtimeAuth.appId = config.appId;
-            _runtimeAuth.orgId = config.orgId;
-            _runtimeAuth.authSecret = config.authSecret;
-            _runtimeAuth.buildType = config.buildType ?? "production";
-            if (config.enableAutoStartAuthentication.HasValue)
-                _runtimeAuth.enableAutoStartAuthentication = config.enableAutoStartAuthentication;
-            if (config.enableReturnTo.HasValue)
-                _runtimeAuth.enableReturnTo = config.enableReturnTo;
-            if (config.enableAutoStartModules.HasValue)
-                _runtimeAuth.enableAutoStartModules = config.enableAutoStartModules;
-            if (config.enableAutoAdvanceModules.HasValue)
-                _runtimeAuth.enableAutoAdvanceModules = config.enableAutoAdvanceModules;
-            _runtimeAuth.authMechanism = config.authMechanism;
-            // Production (non-custom) does not accept org credentials from config; they must come from device/MDM at runtime (same as ExtractConfigData).
-            if (_runtimeAuth.buildType == "production")
-            {
-                _runtimeAuth.orgToken = null;
-                _runtimeAuth.orgId = null;
-                _runtimeAuth.authSecret = null;
-            }
-            _runtimeAuth.CopyAuthFieldsTo(_payload);
-            _useInjectedRuntimeAuthForTesting = true;
-        }
-
-        /// <summary>Testing only. Applies only the fields set on overrides (e.g. enableAutoStartAuthentication) without replacing auth credentials. Used when a pending config is applied at subsystem creation so the Configuration asset is not modified.</summary>
-        internal void ApplyRuntimeAuthOverridesForTesting(RuntimeAuthConfig overrides)
-        {
-            if (overrides == null) return;
-            if (overrides.enableAutoStartAuthentication.HasValue)
-                _runtimeAuth.enableAutoStartAuthentication = overrides.enableAutoStartAuthentication;
-            if (overrides.enableReturnTo.HasValue)
-                _runtimeAuth.enableReturnTo = overrides.enableReturnTo;
-            if (overrides.enableAutoStartModules.HasValue)
-                _runtimeAuth.enableAutoStartModules = overrides.enableAutoStartModules;
-            if (overrides.enableAutoAdvanceModules.HasValue)
-                _runtimeAuth.enableAutoAdvanceModules = overrides.enableAutoAdvanceModules;
-            if (overrides.authMechanism != null)
-                _runtimeAuth.authMechanism = overrides.authMechanism;
-        }
-
-        /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
-        internal bool GetEffectiveEnableAutoStartModules()
-        {
-            return _runtimeAuth.enableAutoStartModules ?? Configuration.Instance?.enableAutoStartModules ?? true;
-        }
-
-        /// <summary>Returns enableAutoAdvanceModules from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
-        internal bool GetEffectiveEnableAutoAdvanceModules()
-        {
-            return _runtimeAuth.enableAutoAdvanceModules ?? Configuration.Instance?.enableAutoAdvanceModules ?? true;
-        }
-
-        /// <summary>Returns enableReturnTo from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
-        internal bool GetEffectiveEnableReturnTo()
-        {
-            return _runtimeAuth.enableReturnTo ?? Configuration.Instance?.enableReturnTo ?? true;
-        }
-
-        /// <summary>Returns enableAutoStartAuthentication from the runtime auth config (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting).</summary>
-        internal bool GetEnableAutoStartAuthentication()
-        {
-            return _runtimeAuth.enableAutoStartAuthentication ?? true;
-        }
-
-        /// <summary>Testing only. Clears the injected runtime auth flag so the next Authenticate() loads from Configuration again.</summary>
-        internal void ClearRuntimeAuthInjectionForTesting()
-        {
-            _useInjectedRuntimeAuthForTesting = false;
-        }
-
-        // ── Runtime auth overrides (Abxr.SetOrgId / SetAuthSecret / SetDeviceId) ─────
-
-        /// <summary>Updates runtime auth orgId. Called by subsystem when Abxr.SetOrgId() is used.</summary>
-        internal void SetRuntimeAuthOrgId(string value)
-        {
-            if (_runtimeAuth != null)
-                _runtimeAuth.orgId = value ?? "";
-        }
-
-        /// <summary>Updates runtime auth authSecret. Called by subsystem when Abxr.SetAuthSecret() is used.</summary>
-        internal void SetRuntimeAuthAuthSecret(string value)
-        {
-            if (_runtimeAuth != null)
-                _runtimeAuth.authSecret = value ?? "";
-        }
-
-        /// <summary>Updates runtime auth deviceId. Called by subsystem when Abxr.SetDeviceId() is used.</summary>
-        internal void SetRuntimeAuthDeviceId(string value)
-        {
-            if (_runtimeAuth != null)
-                _runtimeAuth.deviceId = value ?? "";
-        }
-
-        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters (or from MDM via GetDeviceTags) are used. Only overwrites when the getter returns a non-empty value so we do not wipe config/injected credentials with empty (e.g. Editor with no MDM).</summary>
-        private void ApplyAbxrOverridesToRuntimeAuth()
-        {
-            if (_runtimeAuth == null) return;
-            string orgId = Abxr.GetOrgId();
-            if (!string.IsNullOrEmpty(orgId))
-                _runtimeAuth.orgId = orgId;
-            string authSecret = Abxr.GetFingerprint();
-            if (!string.IsNullOrEmpty(authSecret))
-                _runtimeAuth.authSecret = authSecret;
-            string deviceId = Abxr.GetDeviceId();
-            if (!string.IsNullOrEmpty(deviceId))
-                _runtimeAuth.deviceId = deviceId;
-            string[] tags = Abxr.GetDeviceTags();
-            if (tags != null && tags.Length > 0)
-                _runtimeAuth.tags = tags;
         }
     }
 }

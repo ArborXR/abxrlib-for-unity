@@ -185,13 +185,11 @@ public static partial class Abxr
 	/// Launch another Android app and pass the current auth session to it via intent.
 	/// The target app must also use AbxrLib; it will adopt the active session without re-authenticating.
 	/// Call this in your OnAuthCompleted handler. The PackageName from GetAuthResponse() is the typical target.
-	/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's package) so the receiving app can return the session when assessment completes (return-to-launcher flow).
 	/// No-op on non-Android platforms.
 	/// </summary>
 	/// <param name="packageName">Android package name of the app to launch (e.g. "com.example.myapp")</param>
-	/// <param name="includeReturnToPackage">If true, add ReturnToPackage to the handoff so the receiving app can call LaunchAppWithAuthHandoff(returnToPackage) when done.</param>
 	/// <returns>True if the launch was initiated, false if not authenticated or launch failed</returns>
-	public static bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false) => X?.LaunchAppWithAuthHandoff(packageName, includeReturnToPackage) ?? false;
+	public static bool LaunchAppWithAuthHandoff(string packageName) => X?.LaunchAppWithAuthHandoff(packageName) ?? false;
 
 	/// <summary>
 	/// Get the learner/user data from the most recent authentication completion

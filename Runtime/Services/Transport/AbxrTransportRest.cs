@@ -331,24 +331,6 @@ namespace AbxrLib.Runtime.Services.Transport
             }
         }
 
-        /// <summary>For testing only. Returns a copy of pending event payloads.</summary>
-        public List<EventPayload> GetPendingEventsForTesting()
-        {
-            lock (_lock) { return new List<EventPayload>(_eventPayloads); }
-        }
-
-        /// <summary>For testing only. Returns a copy of pending log payloads.</summary>
-        public List<LogPayload> GetPendingLogsForTesting()
-        {
-            lock (_lock) { return new List<LogPayload>(_logPayloads); }
-        }
-
-        /// <summary>For testing only. Returns a copy of pending telemetry payloads.</summary>
-        public List<TelemetryPayload> GetPendingTelemetryForTesting()
-        {
-            lock (_lock) { return new List<TelemetryPayload>(_telemetryPayloads); }
-        }
-
         private IEnumerator TickCoroutine()
         {
             while (!_stopped)
