@@ -35,6 +35,11 @@ public static partial class Abxr
 	public static Action<bool, string> OnAuthCompleted;
 
 	/// <summary>
+	/// Fired when the re-auth triggered by SetUserData completes (authMechanism type=custom). (success, errorMessage). Subscribe only if you need to know when the user-data sync with the server has finished. Do not add to public documentation.
+	/// </summary>
+	public static Action<bool, string> OnUserDataSyncCompleted;
+
+	/// <summary>
 	/// Event triggered when a headset is put on, starting a new session
 	/// Subscribe to this event to handle new session initialization
 	/// </summary>
@@ -194,23 +199,44 @@ public static partial class Abxr
 	public static bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false) => X?.LaunchAppWithAuthHandoff(packageName, includeReturnToPackage) ?? false;
 
 	/// <summary>
-	/// Get the learner/user data from the most recent authentication completion
-	/// This is the userData object from the authentication response, containing user preferences and information
-	/// The API handles normalization and adds OrgId to the UserData
-	/// Returns null if authentication has not completed or UserData is not available
+	/// Get the learner/user data from the most recent authentication completion.
+	/// Returns the userData from the auth response only (no session userId key). Use GetAnonymizedUserId() for the session userId.
+	/// Returns null if authentication has not completed or UserData is not available.
 	/// </summary>
-	/// <returns>Dictionary containing learner data, or null if not authenticated or UserData is not available</returns>
+	/// <returns>Dictionary containing learner/user data, or null if not authenticated or UserData is not available</returns>
 	public static Dictionary<string, string> GetUserData() => X?.GetUserData();
+
+	/// <summary>Returns the session userId (read-only, set by backend). Not for public documentation.</summary>
+	public static string GetAnonymizedUserId() => X?.GetAnonymizedUserId();
 	
 	/// <summary>
-	/// Update user data (UserId and UserData) and reauthenticate to sync with server
-	/// Updates the authentication response with new user information without clearing authentication state
-	/// The server API allows reauthenticate to update these values
+	/// Update user data (userData only) and reauthenticate to sync with server.
+	/// Session userId is read-only and set only by the backend. Provide the primary user identifier as id (userData.id); the backend will set session userId from it.
 	/// </summary>
-	/// <param name="userId">Optional user ID to update</param>
-	/// <param name="additionalUserData">Optional additional user data dictionary to merge with existing UserData</param>
-	public static void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null) =>
-		X?.SetUserData(userId, additionalUserData);
+	/// <param name="id">Optional primary user identifier (userData.id); can be null when only updating additional fields or clearing.</param>
+	/// <param name="additionalUserData">Optional key-value pairs to merge with existing UserData (overwrites existing keys). May be empty to clear all userData.</param>
+	public static void SetUserData(string id = null, Dictionary<string, string> additionalUserData = null) =>
+		X?.SetUserData(id, additionalUserData);
+
+	/// <summary>
+	/// Update user data (userData only) and reauthenticate to sync with server. Overload that takes id plus variable key-value pairs, e.g. SetUserData("user@example.com", ("first_name", "Chad"), ("last_name", "Tester")).
+	/// </summary>
+	/// <param name="id">Optional primary user identifier (userData.id); can be null.</param>
+	/// <param name="keyValuePairs">Variable key-value pairs to merge with existing UserData (overwrites existing keys).</param>
+	public static void SetUserData(string id, params (string key, string value)[] keyValuePairs)
+	{
+		Dictionary<string, string> additionalUserData = null;
+		if (keyValuePairs != null && keyValuePairs.Length > 0)
+		{
+			additionalUserData = new Dictionary<string, string>();
+			foreach (var (key, value) in keyValuePairs)
+			{
+				if (key == null) continue;
+				additionalUserData[key] = value ?? "";
+			}
+		}
+		X?.SetUserData(id, additionalUserData);
+	}
 	
 	/// <summary>
 	/// Manually start the authentication process
@@ -661,10 +687,14 @@ public static partial class Abxr
 	public static void Reset() => X?.Reset();
 
 	/// <summary>
-	/// Get a copy of all current super metadata
+	/// Get a copy of all current super metadata. Returns null when there is no subsystem or when the subsystem has no super metadata set.
 	/// </summary>
-	/// <returns>Dictionary containing all super metadata</returns>
-	public static Dictionary<string, string> GetSuperMetaData() => X?.GetSuperMetaData();
+	/// <returns>Dictionary containing all super metadata, or null when none</returns>
+	public static Dictionary<string, string> GetSuperMetaData()
+	{
+		var d = X?.GetSuperMetaData();
+		return (d != null && d.Count == 0) ? null : d;
+	}
 	
 	
 	// ── Modules ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -764,7 +794,7 @@ public static partial class Abxr
 		{
 			if (AbxrSubsystem.Instance == null)
 			{
-				Logcat.Warning("Not initialized yet.");
+				Logcat.Warn("Not initialized yet.");
 				return null;
 			}
 			return AbxrSubsystem.Instance;

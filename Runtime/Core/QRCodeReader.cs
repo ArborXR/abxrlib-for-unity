@@ -1062,7 +1062,7 @@ namespace AbxrLib.Runtime.Core
                             // Process the QR code result
                             OnQRCodeScanned(result);
                             if (toDecode != null) Destroy(toDecode);
-                            _rawCameraFrameTexture = null;
+                            //_rawCameraFrameTexture = null;
                             yield break; // Stop scanning after successful read
                         }
                         // QR code found but doesn't have ABXR: prefix - ignore silently

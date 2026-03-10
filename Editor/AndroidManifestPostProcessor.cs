@@ -69,13 +69,24 @@ namespace AbxrLib.Editor
         public int callbackOrder => 1;
 
         /// <summary>
-        /// Gets the app_id from Configuration, or extracts it from App Token if using app tokens.
+        /// Gets the app_id from Configuration, or extracts it from the App Token JWT payload when useAppTokens is true.
+        /// The insights_id manifest metadata uses this so the device/service can identify the app (e.g. from appToken's appId claim).
         /// Returns null if not found.
         /// </summary>
         private static string GetAppId()
         {
             var configData = GetCachedConfigData();
-            return configData.isValid ? configData.appId : null;
+            if (!configData.isValid)
+                return null;
+            if (!string.IsNullOrEmpty(configData.appId))
+                return configData.appId;
+            if (configData.useAppTokens && !string.IsNullOrEmpty(configData.appToken))
+            {
+                var tokenData = Utils.ExtractAppTokenData(configData.appToken);
+                if (tokenData != null && tokenData.TryGetValue("appId", out var appIdFromToken) && !string.IsNullOrEmpty(appIdFromToken))
+                    return appIdFromToken;
+            }
+            return null;
         }
 
         /// <summary>

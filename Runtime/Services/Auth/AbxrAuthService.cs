@@ -27,6 +27,12 @@ namespace AbxrLib.Runtime.Services.Auth
         public Action OnSucceeded;
         public Action<string> OnFailed;
 
+        /// <summary>
+        /// Fired only when the re-auth triggered by SetUserData (authMechanism type=custom) completes. Not fired for normal session auth.
+        /// Subsystem forwards to Abxr.OnUserDataSyncCompleted. Do not add to public documentation.
+        /// </summary>
+        internal Action<bool, string> OnUserDataSyncCompleted;
+
         // ── Public state ─────────────────────────────────────────────
         public bool Authenticated { get; private set; }
         public AuthResponse ResponseData { get; private set; } = new();
@@ -54,8 +60,10 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _attemptActive;
         private Coroutine _reAuthCoroutine;
         private Coroutine _retryCoroutine;
-        private Dictionary<string, string> _userData = new();
-        
+        private Dictionary<string, string> _userData;
+        /// <summary>True while the auth request is from SetUserData re-auth; ensures we send type=custom with userData instead of current _authMechanism (e.g. email).</summary>
+        private bool _setUserDataReAuthActive;
+
         private readonly MonoBehaviour _runner;
         private readonly ArborMdmClient _ArborMdmClient;
         private Func<IAbxrTransport> _getTransport;
@@ -225,7 +233,11 @@ namespace AbxrLib.Runtime.Services.Auth
         public void KeyboardAuthenticate(string input)
         {
             string originalPrompt = _authMechanism.prompt;
-            _authMechanism.prompt = input;
+            // For email type: put full email (userInput + "@" + domain) into prompt for the auth request; server does not use domain from payload. Domain is client-only for prompting and building this value.
+            if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
+                _authMechanism.prompt = input + "@" + _authMechanism.domain;
+            else
+                _authMechanism.prompt = input;
 
             _runner.StartCoroutine(AuthRequestCoroutineWithError((success, errorMessage) =>
             {
@@ -233,12 +245,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (_authMechanism.type == "email" || _authMechanism.type == "text")
                 {
                     _enteredAuthValue = input;
-
-                    // For email type, combine with domain if provided
-                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain))
-                    {
-                        _enteredAuthValue += $"@{_authMechanism.domain}";
-                    }
+                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
+                        _enteredAuthValue += "@" + _authMechanism.domain;
                 }
 
                 _authMechanism.prompt = originalPrompt;
@@ -250,7 +258,11 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                 {
                     _lastInputError = !string.IsNullOrEmpty(errorMessage) ? errorMessage : "Authentication failed";
-                    RequestKeyboardInput();
+                    OnFailed?.Invoke(_lastInputError);
+                    // Re-invoke OnInputRequested with the error so the built-in keyboard (or custom handler) can show the message and let the user try again.
+                    string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism.type);
+                    string displayError = ShortenPinErrorForDisplay(normalizedType, _lastInputError);
+                    OnInputRequested?.Invoke(normalizedType, originalPrompt, _authMechanism.domain ?? "", displayError);
                 }
             }, withRetry: false));
         }
@@ -354,6 +366,7 @@ namespace AbxrLib.Runtime.Services.Auth
             public long ResponseCode;
         }
 
+        /// <summary>Extract a user-facing error string from auth failure JSON. Same keys for REST and service so behavior is identical.</summary>
         private static string ExtractAuthErrorMessage(string responseJson)
         {
             if (string.IsNullOrEmpty(responseJson)) return null;
@@ -361,11 +374,20 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
                 if (obj == null) return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
-                // Backend (e.g. FastAPI) often returns "detail"; some APIs use "message".
-                if (obj.TryGetValue("detail", out var detail) && detail != null)
-                    return detail is string s ? s : detail.ToString();
-                if (obj.TryGetValue("message", out var msg) && msg != null)
-                    return msg.ToString();
+                // Backend (e.g. FastAPI) uses "detail" (string or array); other APIs use "message" or "error". Check all so REST and service behave the same.
+                string FromValue(object v)
+                {
+                    if (v == null) return null;
+                    if (v is string s) return s;
+                    // Newtonsoft deserializes to JValue/JArray; JArray.ToString() is not useful; try first element.
+                    var jarr = v as Newtonsoft.Json.Linq.JArray;
+                    if (jarr != null && jarr.Count > 0 && jarr[0] != null)
+                        return jarr[0].ToString();
+                    return v.ToString();
+                }
+                if (obj.TryGetValue("detail", out var detail)) { var s = FromValue(detail); if (!string.IsNullOrEmpty(s)) return s; }
+                if (obj.TryGetValue("message", out var msg)) { var s = FromValue(msg); if (!string.IsNullOrEmpty(s)) return s; }
+                if (obj.TryGetValue("error", out var err)) { var s = FromValue(err); if (!string.IsNullOrEmpty(s)) return s; }
             }
             catch { /* ignore */ }
             return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
@@ -378,7 +400,8 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
-            _payload.authMechanism = CreateAuthMechanismDict();
+            var authMech = CreateAuthMechanismDict();
+            _payload.authMechanism = IsAuthMechanismMeaningful(authMech) ? authMech : null;
 
             string savedBuildType = _payload.buildType;
             if (_payload.buildType == "production_custom")
@@ -409,6 +432,14 @@ namespace AbxrLib.Runtime.Services.Auth
                     _payload.orgToken = null;
                 }
 
+                // Debug: log what we send in this auth request. When authMechanism is null we omit it from the payload (first-stage); only log when present.
+                if (_payload.authMechanism != null)
+                {
+                    var authMechLog = string.Join(", ", _payload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
+                    //Logcat.Debug
+                    Logcat.Info($"Auth request: authMechanism=[{authMechLog}], _authMechanism.prompt={(_authMechanism?.prompt ?? "(null)")} (length={_authMechanism?.prompt?.Length ?? 0})");
+                }
+
                 var holder = new AuthRequestResultHolder();
                 yield return transport.AuthRequestCoroutine(_payload, (ok, json, code) =>
                 {
@@ -424,7 +455,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield break;
                 }
 
-                if (ApplyAuthResponse(holder.Response, fromService: transport.IsServiceTransport))
+                if (ApplyAuthResponse(holder.Response))
                 {
                     if (transport.IsServiceTransport)
                         _usedArborInsightsClientForSession = true;
@@ -437,6 +468,16 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     _payload.buildType = savedBuildType;
                     onComplete(false, ExtractAuthErrorMessage(holder.Response));
+                    yield break;
+                }
+
+                // First auth (withRetry): explicit backend error (e.g. "Invalid assessment pin or the assessment is already active.") — do not retry; fail so OnFailed runs and tests don't hang.
+                string explicitError = ExtractAuthErrorMessage(holder.Response);
+                if (!string.IsNullOrEmpty(holder.Response) && !string.IsNullOrEmpty(explicitError))
+                {
+                    _payload.buildType = savedBuildType;
+                    Logcat.Warning($"AuthRequest failed: {explicitError}");
+                    onComplete(false, explicitError);
                     yield break;
                 }
 
@@ -474,8 +515,8 @@ namespace AbxrLib.Runtime.Services.Auth
             yield return AuthRequestCoroutineWithError((ok, _) => onComplete(ok), withRetry);
         }
 
-        /// <summary>Parses auth response and applies it. When fromService: no token/expiry validation. When !fromService: require Token and set expiry from JWT. Single place for ResponseData, UserData, Modules, and (when fromService) _usedArborInsightsClientForSession.</summary>
-        private bool ApplyAuthResponse(string responseText, bool fromService)
+        /// <summary>Parses auth response and applies it. Uses the same success rule as both transports (AuthResponse.IsValidSuccess): token or modules or appId-only (second-stage required). When token is present (REST), validates JWT and sets expiry; service responses have token stripped so we skip that. Single place for ResponseData, UserData, Modules.</summary>
+        private bool ApplyAuthResponse(string responseText)
         {
             if (string.IsNullOrEmpty(responseText)) return false;
             try
@@ -483,13 +524,12 @@ namespace AbxrLib.Runtime.Services.Auth
                 var postResponse = JsonConvert.DeserializeObject<AuthResponse>(responseText);
                 if (postResponse == null) return false;
 
-                if (!fromService)
+                if (!AuthResponse.IsValidSuccess(postResponse))
+                    return false;
+
+                // When we have a token (REST path), validate JWT and set expiry. Service strips token from response so this only runs for REST.
+                if (!string.IsNullOrEmpty(postResponse.Token))
                 {
-                    if (string.IsNullOrEmpty(postResponse.Token))
-                    {
-                        Logcat.Error("Invalid authentication response: missing token");
-                        return false;
-                    }
                     Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
                     if (decodedJwt == null)
                     {
@@ -513,8 +553,15 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
 
                 ResponseData = postResponse;
+                // Debug: log full auth response after deserialization.
+                var userDataLog = ResponseData.UserData == null ? "(null)" : string.Join(", ", ResponseData.UserData.Select(kvp => kvp.Key + "=" + kvp.Value));
+                //Logcat.Debug
+                Logcat.Info($"Auth response: userId={ResponseData.UserId ?? "(null)"}, userData=[{userDataLog}], token={(!string.IsNullOrEmpty(ResponseData.Token) ? "present" : "(null)")}, appId={ResponseData.AppId ?? "(null)"}, modules={ResponseData.Modules?.Count ?? 0}");
                 if (ResponseData.Modules?.Count > 1)
                     ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
+                // Keep ResponseData.UserId for read-only use (GetAnonymizedUserId). Sync UserData into _userData.
+                if (ResponseData.UserData != null)
+                    _userData = new Dictionary<string, string>(ResponseData.UserData);
                 if (!string.IsNullOrEmpty(_enteredAuthValue))
                 {
                     ResponseData.UserData ??= new Dictionary<string, string>();
@@ -659,6 +706,17 @@ namespace AbxrLib.Runtime.Services.Auth
             return "text";
         }
 
+        /// <summary>For PIN/pinpad display, shorten long backend error messages to "Invalid PIN" so they fit on the pinpad.</summary>
+        private static string ShortenPinErrorForDisplay(string normalizedInputType, string errorMessage)
+        {
+            if (normalizedInputType != "pin" || string.IsNullOrEmpty(errorMessage)) return errorMessage;
+            if (errorMessage.IndexOf("assessment pin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                errorMessage.IndexOf("assessment is already active", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                errorMessage.Length > 40)
+                return "Invalid PIN";
+            return errorMessage;
+        }
+
         /// <summary>Default prompt when auth mechanism type is set (e.g. by tests or enableLearnerLauncherMode). Used for consistent prompts.</summary>
         private static string GetDefaultPromptForAuthMechanismType(string type)
         {
@@ -723,10 +781,10 @@ namespace AbxrLib.Runtime.Services.Auth
             ResponseData = response;
             if (ResponseData.Modules?.Count > 1)
                 ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
+            // Keep ResponseData.UserId for read-only use (GetAnonymizedUserId). Sync UserData into _userData.
             ResponseData.UserData ??= new Dictionary<string, string>();
-            var userIdStr = ResponseData.UserId?.ToString();
-            if (!string.IsNullOrEmpty(userIdStr))
-                ResponseData.UserData["userId"] = userIdStr;
+            if (ResponseData.UserData != null)
+                _userData = new Dictionary<string, string>(ResponseData.UserData);
             Authenticated = true;
             OnSucceeded?.Invoke();
         }
@@ -748,7 +806,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
             _lastInputError = null;
-            _userData?.Clear();
+            _userData = null;
         }
 
         /// <summary>
@@ -865,6 +923,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 ["Secret"]            = ResponseData.Secret ?? "",
                 ["AppId"]             = ResponseData.AppId ?? _payload?.appId ?? "",
                 ["UserId"]            = ResponseData.UserId?.ToString() ?? "",
+                ["UserData"]          = ResponseData.UserData != null ? new Dictionary<string, string>(ResponseData.UserData) : new Dictionary<string, string>(),
                 ["DeviceId"]          = _payload?.deviceId ?? "",
                 ["AppToken"]          = _payload?.appToken ?? "",
                 ["OrgToken"]          = _payload?.orgToken ?? "",
@@ -885,12 +944,12 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         /// <summary>
-        /// Update user data (UserId and UserData) and reauthenticate to sync with server.
-        /// Merges existing UserData with the optional userId and additionalUserData, then sends the updated list via re-auth (REST or ArborInsightsClient as appropriate).
+        /// Update user data (userData only) and reauthenticate to sync with server.
+        /// Session userId is read-only and set only by the backend. Merges existing UserData with the optional id (userData.id) and additionalUserData, then sends via re-auth.
         /// </summary>
-        /// <param name="userId">Optional user ID to set or update</param>
-        /// <param name="additionalUserData">Optional key-value pairs to merge with existing UserData (overwrites existing keys)</param>
-        public void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null)
+        /// <param name="id">Optional primary user identifier (maps to userData.id); can be null to clear or when only updating additional fields.</param>
+        /// <param name="additionalUserData">Optional key-value pairs to merge with existing UserData (overwrites existing keys). May be empty to clear all userData.</param>
+        public void SetUserData(string id = null, Dictionary<string, string> additionalUserData = null)
         {
             if (!Authenticated)
             {
@@ -904,24 +963,13 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
 
-            // Build merged user data: start from current response, then apply userId and additionalUserData
+            // Build merged user data: start from current response, then apply id (userData.id) and additionalUserData. Do not set session userId (read-only, set by backend).
             var merged = ResponseData?.UserData != null
                 ? new Dictionary<string, string>(ResponseData.UserData)
                 : new Dictionary<string, string>();
 
-            if (!string.IsNullOrEmpty(userId))
-            {
-                _payload.userId = userId;
-                merged["userId"] = userId;
-            }
-            else
-            {
-                // Retain original: do not overwrite _payload.userId; keep merged["userId"] from existing data when present
-                if (merged.TryGetValue("userId", out var existingUserId) && !string.IsNullOrEmpty(existingUserId))
-                    merged["userId"] = existingUserId;
-                else
-                    merged["userId"] = ResponseData?.UserId?.ToString() ?? _payload.userId ?? "";
-            }
+            if (!string.IsNullOrEmpty(id))
+                merged["id"] = id;
 
             if (additionalUserData != null)
             {
@@ -931,42 +979,75 @@ namespace AbxrLib.Runtime.Services.Auth
 
             _userData = merged;
 
-            // Reauthenticate to sync with server (REST or service as appropriate)
+            // Reauthenticate to sync with server. Do not fire OnSucceeded/OnAuthCompleted (users think they are just updating user reference).
+            // Completion is reported via OnUserDataSyncCompleted only; tests and optional app code can subscribe there.
             _attemptActive = true;
-            _runner.StartCoroutine(AuthRequestCoroutine(_ =>
+            _runner.StartCoroutine(CoSetUserDataReAuth());
+        }
+
+        /// <summary>Runs the re-auth for SetUserData; on completion invokes OnUserDataSyncCompleted only (not AuthSucceeded/OnAuthCompleted).</summary>
+        private IEnumerator CoSetUserDataReAuth()
+        {
+            _setUserDataReAuthActive = true;
+            yield return AuthRequestCoroutineWithError((success, errorMsg) =>
             {
+                _setUserDataReAuthActive = false;
                 _attemptActive = false;
-            }));
+                OnUserDataSyncCompleted?.Invoke(success, errorMsg ?? "");
+            });
         }
         
+        /// <summary>True when the dict has a non-empty "type" (second-stage or custom). Without type, we omit authMechanism so first-stage sends no auth_mechanism (prompt/inputSource alone are not meaningful).</summary>
+        private static bool IsAuthMechanismMeaningful(Dictionary<string, string> dict)
+        {
+            if (dict == null || dict.Count == 0) return false;
+            return dict.TryGetValue("type", out var type) && !string.IsNullOrEmpty(type);
+        }
+
         private Dictionary<string, string> CreateAuthMechanismDict()
         {
             var dict = new Dictionary<string, string>();
 
-            if (!string.IsNullOrEmpty(_payload.userId))
+            // SetUserData re-auth must send type=custom with userData; do not use current _authMechanism (e.g. email).
+            if (_setUserDataReAuthActive && _userData != null)
             {
                 dict["type"] = "custom";
-                dict["prompt"] = _payload.userId;
-                if (_userData != null)
-                {
-                    foreach (var item in _userData)
-                    {
-                        if (item.Key != "type" && item.Key != "prompt")
-                        {
-                            dict[item.Key] = item.Value;
-                        }
-                    }
-                }
-
-                // For custom auth, use "user" as default inputSource if not provided
                 dict["inputSource"] = "user";
+                foreach (var item in _userData)
+                {
+                    if (item.Key != "type" && item.Key != "prompt" && item.Key != "inputSource")
+                        dict[item.Key] = item.Value;
+                }
+                return dict;
+            }
+
+            // When we have an explicit auth mechanism (assessmentPin, email, text), use it so second-stage auth sends the correct type and prompt. Exclude "none" so that after anonymous session we still send type=custom when _userData is set (SetUserData re-auth).
+            bool useExplicitMechanism = _authMechanism != null && !string.IsNullOrEmpty(_authMechanism.type) && _authMechanism.type != "custom" && !string.Equals(_authMechanism.type, "none", StringComparison.OrdinalIgnoreCase);
+            if (useExplicitMechanism)
+            {
+                if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
+                dict["prompt"] = _authMechanism.prompt ?? "";
+                // Domain is client-only (prompting and building full email for prompt); server does not use it in the request.
+                if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
+                return dict;
+            }
+
+            // Custom auth when we have a userData dictionary to send (may be empty so developers can clear all userData). Session userId is not set by client. Only when _userData is non-null (set from response or SetUserData); when null we skip so first request does not send type=custom.
+            if (_userData != null)
+            {
+                dict["type"] = "custom";
+                dict["inputSource"] = "user";
+                foreach (var item in _userData)
+                {
+                    if (item.Key != "type" && item.Key != "prompt" && item.Key != "inputSource")
+                        dict[item.Key] = item.Value;
+                }
                 return dict;
             }
 
             if (_authMechanism == null) return dict;
             if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
             if (!string.IsNullOrEmpty(_authMechanism.prompt)) dict["prompt"] = _authMechanism.prompt;
-            if (!string.IsNullOrEmpty(_authMechanism.domain)) dict["domain"] = _authMechanism.domain;
             if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
             return dict;
         }

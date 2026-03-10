@@ -40,6 +40,7 @@ public class AbxrPlayModeTestBase
 
         // Clear any static event subscriptions left by previous tests.
         Abxr.OnAuthCompleted = null;
+        Abxr.OnUserDataSyncCompleted = null;
         Abxr.OnModuleTarget = null;
         Abxr.OnAllModulesCompleted = null;
         Abxr.OnHeadsetPutOnNewSession = null;
@@ -165,6 +166,7 @@ public class AbxrPlayModeTestBase
         Configuration.ResetForTesting();
         AbxrSubsystem.ResetStaticStateForTesting();
         Abxr.OnAuthCompleted = null;
+        Abxr.OnUserDataSyncCompleted = null;
         Abxr.OnModuleTarget = null;
         Abxr.OnAllModulesCompleted = null;
         Abxr.OnHeadsetPutOnNewSession = null;
@@ -183,6 +185,7 @@ public class AbxrPlayModeTestBase
         foreach (var existing in UnityEngine.Object.FindObjectsOfType<AbxrSubsystem>())
             UnityEngine.Object.DestroyImmediate(existing.gameObject);
         Abxr.OnAuthCompleted = null;
+        Abxr.OnUserDataSyncCompleted = null;
         Abxr.OnModuleTarget = null;
         Abxr.OnAllModulesCompleted = null;
         Abxr.OnHeadsetPutOnNewSession = null;
@@ -257,6 +260,7 @@ public class AbxrPlayModeTestBase
         Configuration.ResetForTesting();
         AbxrSubsystem.ResetStaticStateForTesting();
         Abxr.OnAuthCompleted = null;
+        Abxr.OnUserDataSyncCompleted = null;
         Abxr.OnModuleTarget = null;
         Abxr.OnAllModulesCompleted = null;
         Abxr.OnHeadsetPutOnNewSession = null;

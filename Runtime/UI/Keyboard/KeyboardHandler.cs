@@ -104,6 +104,12 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
         }
 
+        /// <summary>Stops the Processing animation so the prompt can show an error or new message (e.g. after auth failure).</summary>
+        public static void StopProcessing()
+        {
+            _processingSubmit = false;
+        }
+
         public static void Create(KeyboardType keyboardType)
         {
             _processingSubmit = false;

@@ -54,6 +54,12 @@ namespace AbxrLib.Runtime
         /// <summary>For testing only. True when ArborMdmClient is available and connected (e.g. on Android device with MDM). Used to decide expected auth outcome in environment-dependent tests.</summary>
         internal bool IsArborMdmClientAvailableAndConnected => _arborMdmClient != null && _arborMdmClient.IsConnected();
 
+        /// <summary>For testing only. True when transport selection has finished (REST or ArborInsights). Use before reading DeviceCanSupplyOrgCredentialForAuth so device/ArborInsights state is stable.</summary>
+        internal bool TransportSelectionComplete => _transportSelectionComplete;
+
+        /// <summary>For testing only. True when the device can supply org credentials for auth: MDM connected or ArborInsightsClient transport active (service supplies org). Read after transport selection is complete.</summary>
+        internal bool DeviceCanSupplyOrgCredentialForAuth => IsArborMdmClientAvailableAndConnected || IsUsingArborInsightsTransport();
+
         /// <summary>For testing only. Exposes the data service so tests can inspect pending events/logs/telemetry.</summary>
         internal AbxrDataService DataServiceForTesting => _dataService;
 
@@ -190,6 +196,7 @@ namespace AbxrLib.Runtime
                 Logcat.Error($"Authentication failure: {error}");
                 HandleAuthCompleted(false, error);
             };
+            _authService.OnUserDataSyncCompleted = (success, errorMsg) => Abxr.OnUserDataSyncCompleted?.Invoke(success, errorMsg);
 
             // Super metadata is per-session; clear any persisted value so we start fresh each run.
             PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
@@ -271,6 +278,10 @@ namespace AbxrLib.Runtime
 	            _exitAfterAssessmentCoroutine = null;
             }
 
+            _superMetaData.Clear();
+            PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
+            PlayerPrefs.Save();
+
             if (Instance == this) Instance = null;
         }
         
@@ -331,6 +342,16 @@ namespace AbxrLib.Runtime
                 rest.Stop();
             _transport = new AbxrTransportArborInsights();
             Logcat.Info("Switched to ArborInsightsClient transport.");
+#endif
+        }
+
+        /// <summary>For testing only. True when current transport is ArborInsightsClient (Android only).</summary>
+        private bool IsUsingArborInsightsTransport()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return _transport is AbxrTransportArborInsights;
+#else
+            return false;
 #endif
         }
 
@@ -462,40 +483,18 @@ namespace AbxrLib.Runtime
 		internal Dictionary<string, string> GetUserData()
 		{
 			if (!_authService.Authenticated) return null;
-			
 			var authResponse = _authService.ResponseData;
 			if (authResponse == null) return null;
-			
-			// Build a copy of UserData (or empty dict) and always include userId (from top-level or fallbacks)
-			var userData = authResponse.UserData != null
+			return authResponse.UserData != null
 				? new Dictionary<string, string>(authResponse.UserData)
 				: new Dictionary<string, string>();
-			var userIdStr = authResponse.UserId?.ToString();
-			if (string.IsNullOrEmpty(userIdStr))
-			{
-				// Fallback: fill userId from other fields in userData, in priority order
-				// 1) userId / id / userName variants
-				userIdStr = GetFirstNonEmpty(userData, "userId", "id", "userName", "username", "user_name", "user")
-					// 2) email variants
-					?? GetFirstNonEmpty(userData, "email", "emailAddress", "email_address", "e-mail", "e_mail")
-					// 3) full name variants or merge of first & last
-					?? GetFirstNonEmpty(userData, "fullname", "fullName", "full_name", "name", "displayName", "display_name");
-				if (string.IsNullOrEmpty(userIdStr))
-				{
-					var first = GetFirstNonEmpty(userData, "firstName", "first_name", "first", "givenName", "given_name");
-					var last = GetFirstNonEmpty(userData, "lastName", "last_name", "last", "surname", "familyName", "family_name");
-					if (!string.IsNullOrEmpty(first) && !string.IsNullOrEmpty(last))
-						userIdStr = (first + " " + last).Trim();
-					else if (!string.IsNullOrEmpty(first))
-						userIdStr = first;
-					else if (!string.IsNullOrEmpty(last))
-						userIdStr = last;
-				}
-			}
-			// Always set userId in the dictionary so callers can rely on the key being present
-			userData["userId"] = userIdStr ?? "";
-			return userData;
 		}
+
+		internal void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null) =>
+			_authService.SetUserData(userId, additionalUserData);
+
+		/// <summary>Returns the session userId (read-only, set by backend). Do not document for now.</summary>
+		internal string GetAnonymizedUserId() => _authService?.ResponseData?.UserId?.ToString();
 
 		/// <summary>Returns the full auth response from the last successful authentication (Token, UserData, AppId, Modules, PackageName, etc.). Null if not authenticated.</summary>
 		internal AuthResponse GetAuthResponse() => _authService?.ResponseData;
@@ -597,9 +596,6 @@ namespace AbxrLib.Runtime
 			}
 			return null;
 		}
-
-		internal void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null) =>
-			_authService.SetUserData(userId, additionalUserData);
 		
 		/// <summary>Starts authentication. Waits for transport selection to complete first so the first auth uses the correct backend (service if available, else REST).</summary>
 		internal void StartAuthentication() => StartCoroutine(AuthStartAfterTransportSelectionCoroutine(0f));
@@ -1414,6 +1410,9 @@ internal void StartNewSession()
 
 		private void PresentKeyboard(string type, string prompt, string domain, string error)
 		{
+			// When showing an error (e.g. invalid PIN), stop the Processing animation so the message is visible.
+			if (!string.IsNullOrEmpty(error))
+				KeyboardHandler.StopProcessing();
 			string displayPrompt = string.IsNullOrEmpty(error) ? (prompt ?? "") : $"{error}\n{prompt ?? ""}";
 			if (type is "text" or null or "")
 			{

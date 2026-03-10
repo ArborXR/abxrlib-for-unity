@@ -4,6 +4,7 @@
 // These tests deliberately do NOT create a subsystem.
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
@@ -13,8 +14,14 @@ using UnityEngine.TestTools;
 [TestFixture]
 public class NullSafetyTests
 {
-    // No [SetUp] — we intentionally leave AbxrSubsystem.Instance as null.
-    // Each test expects warnings from Abxr when not initialized; warnings do not fail tests.
+    /// <summary>Ensure no subsystem exists so each test sees "uninitialized" behavior. Other fixtures (or tests that call e.g. EventExperienceStart) can leave a subsystem with super metadata (module/moduleName) otherwise.</summary>
+    [SetUp]
+    public void SetUp()
+    {
+        foreach (var existing in UnityEngine.Object.FindObjectsOfType<AbxrSubsystem>())
+            UnityEngine.Object.DestroyImmediate(existing.gameObject);
+        AbxrSubsystem.ResetStaticStateForTesting();
+    }
 
     // ── Boolean defaults ──────────────────────────────────────────────────
 
@@ -37,11 +44,9 @@ public class NullSafetyTests
     [Test]
     public void StartModuleAtIndex_ReturnsFalse()
     {
-        // In PlayMode a subsystem may or may not exist (e.g. from Initialize or another fixture). Expect the log that will occur: "Not initialized yet" when Instance is null, "No modules available" when Instance exists but has no modules.
-        if (AbxrSubsystem.Instance == null)
-            LogAssert.Expect(LogType.Warning, "Not initialized yet.");
-        else
-            LogAssert.Expect(LogType.Error, "No modules available");
+        // SetUp ensures no subsystem; Abxr.StartModuleAtIndex(0) triggers X getter which logs "Not initialized yet." and returns false. Use Regex so we match regardless of build adding extra context to the log.
+        Assert.IsNull(AbxrSubsystem.Instance, "NullSafetyTests expect no subsystem; SetUp should have destroyed any.");
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Not initialized yet.")));
         Assert.IsFalse(Abxr.StartModuleAtIndex(0));
     }
 

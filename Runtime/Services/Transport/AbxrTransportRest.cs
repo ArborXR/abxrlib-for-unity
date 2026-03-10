@@ -65,10 +65,12 @@ namespace AbxrLib.Runtime.Services.Transport
             _tickCoroutine = _runner.StartCoroutine(TickCoroutine());
         }
 
+        private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
+
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, long> onComplete)
         {
             string url = new Uri(_baseUri, AuthPath).ToString();
-            string json = JsonConvert.SerializeObject(payload);
+            string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
             using var request = new UnityWebRequest(url, "POST");
             byte[] body = Encoding.UTF8.GetBytes(json);
             request.uploadHandler = new UploadHandlerRaw(body);
@@ -78,13 +80,23 @@ namespace AbxrLib.Runtime.Services.Transport
             yield return request.SendWebRequest();
 
             long code = request.responseCode;
-            string response = null;
-            if (request.result == UnityWebRequest.Result.Success && code >= 200 && code < 300)
-                response = request.downloadHandler?.text;
-            else if (!string.IsNullOrEmpty(request.downloadHandler?.text))
-                Logcat.Warning($"AuthRequest REST failed: {code} - {request.downloadHandler.text}");
+            // Always pass response body when present so auth service gets the same error payload as service transport (ExtractAuthErrorMessage, OnFailed message).
+            string response = request.downloadHandler?.text;
+            if (!string.IsNullOrEmpty(response) && !(request.result == UnityWebRequest.Result.Success && code >= 200 && code < 300))
+                Logcat.Warning($"AuthRequest REST failed: {code} - {response}");
 
-            onComplete?.Invoke(!string.IsNullOrEmpty(response), response, code);
+            // Same success rule as service transport (AuthResponse.IsValidSuccess) so auth service sees consistent behavior.
+            bool success = false;
+            if (!string.IsNullOrEmpty(response))
+            {
+                try
+                {
+                    var parsed = JsonConvert.DeserializeObject<AuthResponse>(response);
+                    success = AuthResponse.IsValidSuccess(parsed);
+                }
+                catch { /* treat as failure */ }
+            }
+            onComplete?.Invoke(success, response ?? "", code);
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)

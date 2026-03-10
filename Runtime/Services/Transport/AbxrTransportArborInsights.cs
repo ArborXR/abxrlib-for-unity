@@ -42,8 +42,8 @@ namespace AbxrLib.Runtime.Services.Transport
                 string restUrl = Configuration.Instance.restUrl ?? "https://lib-backend.xrdm.app/";
                 ArborInsightsClient.SetAuthPayloadForRequest(restUrl, payload);
                 string responseJson = ArborInsightsClient.AuthRequest(payload.userId ?? "", Utils.DictToString(payload.authMechanism));
-                // Service returns success JSON (token/secret stripped) or a response indicating more steps (e.g. first-step before second-stage PIN) or failure. Only treat as success when it looks like AuthResponse with token or modules.
-                bool success = !string.IsNullOrEmpty(responseJson) && LooksLikeSuccessAuthResponse(responseJson);
+                // Use same success rule as auth service (AuthResponse.IsValidSuccess): full success or second-stage required.
+                bool success = !string.IsNullOrEmpty(responseJson) && ParseAndCheckValidSuccess(responseJson);
                 onComplete?.Invoke(success, responseJson ?? "", -1);
                 if (!success && !string.IsNullOrEmpty(responseJson))
                     Logcat.Warning($"ArborInsights auth returned non-success response (may require second-stage or indicate failure): {responseJson}");
@@ -168,15 +168,14 @@ namespace AbxrLib.Runtime.Services.Transport
         public List<LogPayload> GetPendingLogsForTesting() => new List<LogPayload>();
         public List<TelemetryPayload> GetPendingTelemetryForTesting() => new List<TelemetryPayload>();
 
-        /// <summary>True if the response is valid auth success (has token or modules). Service returns success JSON with token/secret stripped, or a non-success response when more steps (e.g. second-stage) are needed or auth failed.</summary>
-        private static bool LooksLikeSuccessAuthResponse(string responseJson)
+        /// <summary>Parses auth response and returns true if valid success (same rule as auth service: token/modules or appId-only for second-stage).</summary>
+        private static bool ParseAndCheckValidSuccess(string responseJson)
         {
             if (string.IsNullOrWhiteSpace(responseJson)) return false;
             try
             {
                 var parsed = JsonConvert.DeserializeObject<AuthResponse>(responseJson);
-                if (parsed == null) return false;
-                return !string.IsNullOrEmpty(parsed.Token) || (parsed.Modules != null && parsed.Modules.Count > 0);
+                return AuthResponse.IsValidSuccess(parsed);
             }
             catch
             {

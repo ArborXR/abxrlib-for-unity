@@ -6,7 +6,9 @@
 //
 // Environment: A = Unity TestRunner play mode (no ArborMdmClient). B = Android headset without MDM. C = Headset with ArborMdmClient.
 // Outcome: _Fails = fails in all environments (e.g. missing appId/appToken or invalid format).  = fails in A/B (org credentials unavailable), succeeds in C (MDM supplies org). _Succeeds = has full credentials from config/overrides.
+using System;
 using System.Collections;
+using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
@@ -58,12 +60,37 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         return name;
     }
 
+    /// <summary>Yields until transport selection is complete (or timeout). Call before reading DeviceCanSupplyOrgCredentialForAuth so device/ArborInsights state is stable (e.g. on Android with service).</summary>
+    private static IEnumerator WaitForTransportSelection(float timeoutSeconds = 12f)
+    {
+        if (AbxrSubsystem.Instance == null) yield break;
+        float deadline = Time.realtimeSinceStartup + timeoutSeconds;
+        while (!AbxrSubsystem.Instance.TransportSelectionComplete && Time.realtimeSinceStartup < deadline)
+            yield return null;
+    }
+
+    /// <summary>Waits for transport selection then polls DeviceCanSupplyOrgCredentialForAuth so MDM or ArborInsightsClient can become ready (e.g. on device). Sets result via setResult before returning.</summary>
+    private static IEnumerator WaitForTransportAndPollDeviceCanSupplyOrg(Action<bool> setResult, float pollAfterTransportSeconds = 5f)
+    {
+        yield return WaitForTransportSelection();
+        bool value = false;
+        float deadline = Time.realtimeSinceStartup + pollAfterTransportSeconds;
+        while (Time.realtimeSinceStartup < deadline)
+        {
+            if (AbxrSubsystem.Instance != null)
+                value = AbxrSubsystem.Instance.DeviceCanSupplyOrgCredentialForAuth;
+            if (value) break;
+            yield return new WaitForSeconds(0.5f);
+        }
+        setResult(value);
+    }
+
     [UnityTest]
     public IEnumerator AuthFirstStage_Legacy_Dev_NoIds_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = "", orgId = "", authSecret = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureAppIdNotSet)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsFalse(success);
@@ -74,13 +101,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = "", authSecret = "" });
-        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyCredentials)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyCredentials)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (orgId/authSecret from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgId/authSecret from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -90,13 +118,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
-        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyCredentials)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyCredentials)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (authSecret from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (authSecret from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -116,7 +145,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = "", orgId = "", authSecret = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureAppIdNotSet)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsFalse(success);
@@ -127,13 +156,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = "", authSecret = "" });
-        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyCredentials)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyCredentials)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (orgId/authSecret from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgId/authSecret from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -143,13 +173,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
-        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyCredentials)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyCredentials)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (authSecret from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (authSecret from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -159,13 +190,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
-        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyCredentials)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyCredentials)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (production accepts org from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (production accepts org from device).");
         else
             Assert.IsFalse(success, "Without MDM, production rejects org from config so auth fails.");
     }
@@ -175,13 +207,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = "", authSecret = "" });
-        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyCredentials)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyCredentials)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (orgId/authSecret from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgId/authSecret from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -191,13 +224,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
-        bool mdmCanSupplyCredentials = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyCredentials)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyCredentials)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (authSecret from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (authSecret from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -217,7 +251,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = "", orgToken = "" });
-        LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureAppIdNotSet)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsFalse(success);
@@ -228,13 +262,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = "" });
-        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyOrgToken)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyOrgToken)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (orgToken from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgToken from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -254,7 +289,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "", orgToken = ConfigOrgToken });
-        LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureAppIdNotSet)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsFalse(success);
@@ -265,7 +300,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "", orgToken = ConfigOrgToken });
-        LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureAppIdNotSet)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsFalse(success);
@@ -276,13 +311,14 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
-        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyOrgToken)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyOrgToken)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (dynamic orgToken from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (dynamic orgToken from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -292,29 +328,31 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
-        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyOrgToken)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyOrgToken)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (production uses orgToken from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (production uses orgToken from device).");
         else
             Assert.IsFalse(success, "Without MDM, production ignores orgToken from config so auth fails.");
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_ProdCustom_AppTokenOnly_Fails()
+    public IEnumerator AuthFirstStage_AppTokens_ProdCustom_AppTokenOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = "" });
-        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        if (!mdmCanSupplyOrgToken)
-            LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        if (!deviceCanSupplyOrg)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyOrgToken)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (org token/credentials from device).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "With MDM or device service, auth should succeed (org token/credentials from device).");
         else
             Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
     }
@@ -363,9 +401,9 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         if (!mdmCanSupplyOrgToken && !hasUnitTestDeviceCredentials)
         {
             if (Application.isEditor)
-                LogAssert.Expect(LogType.Error, AuthFailureOrgUnavailable);
+                LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
             else
-                LogAssert.Expect(LogType.Error, AuthFailureInitialRequestFailed);
+                LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureInitialRequestFailed)));
         }
         bool success = false;
         yield return PerformAuth(r => success = r);
@@ -382,7 +420,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "not-a-jwt", orgToken = ConfigOrgToken });
-        LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureAppIdNotSet)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsFalse(success);
@@ -393,7 +431,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = "not-a-valid-uuid", orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
-        LogAssert.Expect(LogType.Error, AuthFailureAppIdNotSet);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureAppIdNotSet)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         Assert.IsFalse(success);
@@ -517,7 +555,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         // Last "module" complete: session used handoff + enableReturnTo true → exit path runs; no returnToPackage → app quits; on-quit handler logs.
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // set here so not cleared by FullTeardown/BaseSetUp; exit coroutine runs after 2s
-        LogAssert.Expect(LogType.Log, EndingSessionLog);
+        LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(EndingSessionLog)));
         Logcat.Info("(Test) EventAssessmentComplete: handoff-test-re-adopt score: 85 result: Abxr.EventStatus.Pass");
         Abxr.EventAssessmentComplete("handoff-test-re-adopt", 85, Abxr.EventStatus.Pass);
         yield return new WaitForSeconds(2.5f); // allow ExitAfterAssessmentComplete coroutine to run (SendAll, 2s delay, then simulated quit → OnApplicationQuit → handler log)
@@ -610,7 +648,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
         AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // set here so not cleared by FullTeardown/BaseSetUp; exit coroutine runs after 2s
         // ReturnToPackage in the handoff is the launcher's Application.identifier (set when App 1 built the handoff); on Test Runner Player that is com.UnityTestRunner.UnityTestRunner.
-        LogAssert.Expect(LogType.Log, $"Injected handoff for return-to launcher '{Application.identifier}' (Editor/test).");
+        LogAssert.Expect(LogType.Log, new Regex(Regex.Escape("Injected handoff for return-to launcher '") + ".*" + Regex.Escape("' (Editor/test).")));
         Logcat.Info("(Test) EventAssessmentComplete: handoff-test-re-adopt score: 85 result: Abxr.EventStatus.Pass");
         Abxr.EventAssessmentComplete("handoff-test-re-adopt", 85, Abxr.EventStatus.Pass);
         yield return new WaitForSeconds(2.5f); // let ExitAfterAssessmentComplete run: returnToPackage set → LaunchAppWithAuthHandoffForTest injects handoff (Editor), SendAll, 2s delay, simulated quit

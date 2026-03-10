@@ -2,6 +2,7 @@
 // PlayMode tests using simulated auth only (no API calls): auth state, override setters, module list, session management.
 // First-stage auth (config, validation, handoff) is in AuthenticationFirstStageTests.
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
@@ -104,10 +105,11 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
     public void SimulateAuth_GetUserData_ContainsUserId()
     {
         SimulateAuth(BuildTestAuthResponse(userId: "learner-42"));
+        Assert.AreEqual("learner-42", Abxr.GetAnonymizedUserId());
         var userData = Abxr.GetUserData();
         Assert.IsNotNull(userData);
-        Assert.IsTrue(userData.ContainsKey("userId"));
-        Assert.AreEqual("learner-42", userData["userId"]);
+        // GetUserData returns userData only; session userId is read via GetAnonymizedUserId()
+        Assert.IsFalse(userData.ContainsKey("userId"));
     }
 
     [Test]
@@ -134,10 +136,12 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
             Modules = new List<ModuleData>()
         });
         var userData = Abxr.GetUserData();
-        Assert.AreEqual("fallback@example.com", userData["userId"]);
+        Assert.AreEqual("fallback@example.com", userData["email"]);
+        Assert.IsFalse(userData.ContainsKey("userId"));
+        Assert.IsNull(Abxr.GetAnonymizedUserId());
         // Simulated auth does not set transport auth headers; flush logs this. We EndSession here and expect the log so TearDown does not run EndSession (avoids unhandled log).
         RunEndSessionInTearDown = false;
-        LogAssert.Expect(LogType.Error, "Cannot set auth headers - authentication tokens are missing");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Cannot set auth headers - authentication tokens are missing")));
         Abxr.EndSession();
     }
 
@@ -183,7 +187,7 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
             new ModuleData { Id = "m1", Name = "Introduction", Target = "scene://intro", Order = 1 },
             new ModuleData { Id = "m2", Name = "Assessment",   Target = "scene://assess", Order = 2 }
         };
-        LogAssert.Expect(LogType.Error, "Subscribe to OnModuleTarget before running modules");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Subscribe to OnModuleTarget before running modules")));
         SimulateAuth(BuildTestAuthResponse(modules: modules));
         var result = Abxr.GetModuleList();
         Assert.AreEqual(2, result.Count);
@@ -196,7 +200,7 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
     public void StartModuleAtIndex_NegativeIndex_ReturnsFalse()
     {
         SimulateAuth();
-        LogAssert.Expect(LogType.Error, "No modules available");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("No modules available")));
         Assert.IsFalse(Abxr.StartModuleAtIndex(-1));
     }
 
@@ -204,7 +208,7 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
     public void StartModuleAtIndex_IndexOutOfRange_ReturnsFalse()
     {
         SimulateAuth();
-        LogAssert.Expect(LogType.Error, "No modules available");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("No modules available")));
         Assert.IsFalse(Abxr.StartModuleAtIndex(99));
     }
 
@@ -216,9 +220,9 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
             new ModuleData { Id = "m1", Name = "Module 1", Target = "target1", Order = 1 }
         };
         Abxr.OnModuleTarget = null;
-        LogAssert.Expect(LogType.Error, "Subscribe to OnModuleTarget before running modules");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Subscribe to OnModuleTarget before running modules")));
         SimulateAuth(BuildTestAuthResponse(modules: modules));
-        LogAssert.Expect(LogType.Error, "Need to subscribe to OnModuleTarget before running modules");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Need to subscribe to OnModuleTarget before running modules")));
         Assert.IsFalse(Abxr.StartModuleAtIndex(0));
     }
 
@@ -270,7 +274,7 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         SimulateAuth();
         Abxr.Register("context", "training");
         Abxr.StartNewSession();
-        Assert.AreEqual(0, Abxr.GetSuperMetaData().Count);
+        Assert.That(Abxr.GetSuperMetaData(), Is.Null.Or.Empty);
     }
 
     // ── SetUserData ───────────────────────────────────────────────────────
@@ -279,6 +283,7 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
     public void SetUserData_DoesNotThrow()
     {
         SimulateAuth();
+        // id = primary user identifier (userData.id); additionalUserData merged into userData
         Assert.DoesNotThrow(() => Abxr.SetUserData("new-user-id", new Dictionary<string, string> { ["role"] = "admin" }));
     }
 }

@@ -201,6 +201,7 @@ namespace AbxrLib.Runtime.Types
         public string abxrLibType;
         public string abxrLibVersion;
         public string buildFingerprint;
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public Dictionary<string, string> authMechanism;
     }
 
@@ -211,13 +212,24 @@ namespace AbxrLib.Runtime.Types
     {
         public string Token;
         public string Secret;
+        [JsonProperty("userData")]
         public Dictionary<string, string> UserData;
+        [JsonProperty("userId")]
         public object UserId;
         public string AppId;
         public string PackageName;
         /// <summary>When set in auth_handoff payload, the app that receives it should call LaunchAppWithAuthHandoff(this value) when assessment completes (return-to-launcher flow). Cleared after use.</summary>
         public string ReturnToPackage;
         public List<ModuleData> Modules;
+
+        /// <summary>Single rule for both REST and service transports: response is a valid auth success (full success or second-stage required). Full success = Token or Modules present. Second-stage required = AppId present but no token/modules (proceed to config and PIN prompt). Error payloads (e.g. {"message":"..."}) have no AppId/Token/Modules.</summary>
+        public static bool IsValidSuccess(AuthResponse r)
+        {
+            if (r == null) return false;
+            bool hasTokenOrModules = !string.IsNullOrEmpty(r.Token) || (r.Modules != null && r.Modules.Count > 0);
+            bool secondStageRequired = !hasTokenOrModules && !string.IsNullOrEmpty(r.AppId);
+            return hasTokenOrModules || secondStageRequired;
+        }
     }
 
     // ── Config payload received from /v1/storage/config ──────────────

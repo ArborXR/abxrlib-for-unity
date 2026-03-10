@@ -356,18 +356,17 @@ namespace AbxrLib.Runtime.Core
 
             var result = new Dictionary<string, string>();
 
-            // Extract appId (App token payload may contain appId; legacy only)
+            // Extract appId (App token payload may contain appId or app_id; used for manifest insights_id when useAppTokens)
             if (jwtPayload.ContainsKey("appId") && jwtPayload["appId"] != null)
-            {
                 result["appId"] = jwtPayload["appId"].ToString();
-            }
+            else if (jwtPayload.ContainsKey("app_id") && jwtPayload["app_id"] != null)
+                result["appId"] = jwtPayload["app_id"].ToString();
 
             // Extract orgId (optional in token payload)
             if (jwtPayload.ContainsKey("orgId") && jwtPayload["orgId"] != null)
-            {
                 result["orgId"] = jwtPayload["orgId"].ToString();
-            }
-
+            else if (jwtPayload.ContainsKey("org_id") && jwtPayload["org_id"] != null)
+                result["orgId"] = jwtPayload["org_id"].ToString();
             return result;
         }
 
