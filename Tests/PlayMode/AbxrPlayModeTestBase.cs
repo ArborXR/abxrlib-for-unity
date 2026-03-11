@@ -326,8 +326,9 @@ public class AbxrPlayModeTestBase
     /// <summary>
     /// Same as PerformAuth but onComplete receives (success, errorMessage). Use for second-stage tests that assert on API error messages.
     /// When maxSecondStageSubmissions is set (e.g. 1), the input handler submits at most that many times; on the next request it calls Abxr.EndSession() so the test completes without looping.
+    /// When customOnInputRequested is non-null, it is used instead of the unit-test credentials handler (e.g. for empty-then-valid flow tests).
     /// </summary>
-    protected IEnumerator PerformAuthWithError(Action<bool, string> onComplete, float timeoutSeconds = 35f, float sceneLoadWaitSeconds = 5f, int? maxSecondStageSubmissions = null)
+    protected IEnumerator PerformAuthWithError(Action<bool, string> onComplete, float timeoutSeconds = 35f, float sceneLoadWaitSeconds = 5f, int? maxSecondStageSubmissions = null, Action<string, string, string, string> customOnInputRequested = null)
     {
         var runner = SubsystemGO != null ? SubsystemGO.GetComponent<AbxrSubsystem>() : null;
         if (runner == null || onComplete == null)
@@ -353,23 +354,23 @@ public class AbxrPlayModeTestBase
             prevHandler?.Invoke(success, errorMsg);
         };
 
+        var inputHandler = customOnInputRequested ?? GetUnitTestInputRequestedHandler();
         if (maxSecondStageSubmissions.HasValue)
         {
             int submitCount = 0;
             int maxSubmissions = maxSecondStageSubmissions.Value;
-            var innerHandler = GetUnitTestInputRequestedHandler();
             Abxr.OnInputRequested = (type, prompt, domain, err) =>
             {
                 submitCount++;
                 if (submitCount <= maxSubmissions)
-                    innerHandler(type, prompt, domain, err);
+                    inputHandler(type, prompt, domain, err);
                 else
                     Abxr.EndSession();
             };
         }
         else
         {
-            Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
+            Abxr.OnInputRequested = inputHandler;
         }
 
         Abxr.StartAuthentication();

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using AbxrLib.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
@@ -14,12 +14,7 @@ namespace AbxrLib.Editor
     
         static Core()
         {
-            string nextUpdateCheck = EditorPrefs.GetString(UpdateCheck.UpdateCheckPref, DateTime.UtcNow.ToString("G"));
-            var parsedDate = DateTime.ParseExact(nextUpdateCheck, "G", null);
-            if (parsedDate < DateTime.UtcNow)
-            {
-                _ = UpdateCheck.CheckForUpdates();
-            }
+            // Stub function nicase we need it at some point.
         }
     
         /// <summary>

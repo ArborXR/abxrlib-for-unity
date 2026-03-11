@@ -217,7 +217,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// Submit user input when there is an outstanding OnInputRequested. Called by subsystem (Abxr.OnInputSubmitted).
-        /// If no input was requested, this is a no-op.
+        /// If no input was requested, this is a no-op. Empty or whitespace-only input is rejected and OnInputRequested is re-invoked with an error (no transport call).
         /// </summary>
         public void SubmitInput(string input)
         {
@@ -226,16 +226,28 @@ namespace AbxrLib.Runtime.Services.Auth
                 Logcat.Warning("OnInputSubmitted was ignored: no input request is pending. Call OnInputSubmitted only once, after OnInputRequested has been invoked.");
                 return;
             }
-            _inputRequestPending = false;
 
             if (input == "**skip**")
             {
+                _inputRequestPending = false;
                 Logcat.Warning("Skipping user authentication.");
                 KeyboardHandler.Destroy();
                 AuthSucceeded();
                 return;
             }
 
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
+                string prompt = _authMechanism?.prompt ?? "";
+                string domain = _authMechanism?.domain ?? "";
+                string displayError = GetEmptyInputErrorMessage(normalizedType);
+                Logcat.Info($"Auth input rejected (empty): type={normalizedType}, re-prompting with: {displayError}");
+                OnInputRequested?.Invoke(normalizedType, prompt, domain, displayError);
+                return;
+            }
+
+            _inputRequestPending = false;
             KeyboardAuthenticate(input);
         }
         
@@ -713,6 +725,14 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.Equals(t, "none", StringComparison.OrdinalIgnoreCase))
                 return "";
             return "";
+        }
+
+        /// <summary>Display message when user submits empty/whitespace input; used to re-invoke OnInputRequested without calling the transport.</summary>
+        private static string GetEmptyInputErrorMessage(string normalizedType)
+        {
+            if (normalizedType == "pin") return "Please enter your PIN.";
+            if (normalizedType == "email") return "Please enter your email address.";
+            return "Please enter a value.";
         }
 
         /// <summary>Returns a mutable copy of the given auth mechanism so we can set prompt to user input without mutating _runtimeAuth.</summary>

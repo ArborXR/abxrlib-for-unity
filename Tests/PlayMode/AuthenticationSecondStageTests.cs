@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode tests for second-stage auth. Tests force authMechanism by type: assessmentPin (PIN), email (with domain from unitTestAuthEmailDomain), or text. OnInputRequested is auto-answered from Unit Test Credentials (unitTestAuthPin, unitTestAuthEmail, unitTestAuthText). Only AuthSecondStage_NoAuthMechanism_* uses type=none.
-// Failed-PIN tests (e.g. EmptyPin_Fails): the keyboard auth path uses a single attempt (withRetry: false), so one wrong/empty PIN yields OnFailed and "Authentication failure". In production, the app would typically show the error and re-prompt; the test imposes the single-attempt limit.
+// Failed-PIN tests (e.g. InvalidPin): the keyboard auth path uses a single attempt (withRetry: false), so one wrong PIN yields OnFailed and "Authentication failure". Empty input is rejected locally (no transport call); OnInputRequested is re-invoked with an error so the user can try again.
 // Requires backend (lib-backend) and project config: useAppTokens=true, buildType=production_custom, appToken and orgToken from Configuration; Unit Test Credentials enabled and PIN/email/text/domain set as needed.
 using System;
 using System.Collections;
@@ -121,23 +121,40 @@ public class AuthenticationSecondStageTests : AbxrPlayModeTestBase
         Assert.IsFalse(success, "Auth with bad PIN should fail.");
     }
 
-    /// <summary>Forces authMechanism type=assessmentPin; submits empty PIN. Expects auth to fail.</summary>
+    /// <summary>Submits empty PIN first; SDK rejects locally and re-invokes OnInputRequested. Second submit uses valid PIN; auth succeeds (no transport call for empty).</summary>
     [UnityTest]
-    public IEnumerator AuthSecondStage_AssessmentPin_EmptyPin_Fails()
+    public IEnumerator AuthSecondStage_AssessmentPin_EmptyPin_RejectedLocally_ThenValidSucceeds()
     {
         if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
         {
             Assert.Ignore("App token and org token required.");
             yield break;
         }
-        LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Authentication failure:.*"));
+        string validPin = ConfigUnitTestAuthPin;
+        if (string.IsNullOrEmpty(validPin))
+        {
+            Assert.Ignore("Unit test PIN required. Set unitTestAuthPin in AbxrLib config.");
+            yield break;
+        }
         CreateSubsystem();
         SetRuntimeAuth(SecondStageRuntimeAuthWithAssessmentPin());
-        ModifyConfig("unitTestAuthPin", "");
+        int onInputCount = 0;
+        Action<string, string, string, string> customHandler = (type, prompt, domain, err) =>
+        {
+            onInputCount++;
+            if (onInputCount == 1)
+            {
+                Logcat.Info("(Test) Submitting empty PIN to trigger local rejection (no transport call).");
+                Abxr.OnInputSubmitted("");
+            }
+            else
+                Abxr.OnInputSubmitted(validPin);
+        };
         bool success = false;
         string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
-        Assert.IsFalse(success, "Auth with empty PIN should fail.");
+        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f, customOnInputRequested: customHandler);
+        Assert.IsTrue(success, $"Auth should succeed after re-prompt. Error: {error}");
+        Assert.AreEqual(2, onInputCount, "OnInputRequested should be called twice: initial prompt, then re-prompt after empty (no transport call for empty).");
     }
 
     /// <summary>Forces authMechanism type=assessmentPin; submits too-short PIN. Expects auth to fail.</summary>
@@ -277,23 +294,40 @@ public class AuthenticationSecondStageTests : AbxrPlayModeTestBase
         Assert.IsTrue(success, $"Auth with text and configured unitTestAuthText should succeed. Error: {error}");
     }
 
-    /// <summary>Forces authMechanism type=text; submits empty (unitTestAuthText overridden). Expects auth to fail.</summary>
+    /// <summary>Submits empty text first; SDK rejects locally and re-invokes OnInputRequested. Second submit uses valid text; auth succeeds (no transport call for empty).</summary>
     [UnityTest]
-    public IEnumerator AuthSecondStage_Text_Empty_Fails()
+    public IEnumerator AuthSecondStage_Text_Empty_RejectedLocally_ThenValidSucceeds()
     {
         if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
         {
             Assert.Ignore("App token and org token required.");
             yield break;
         }
-        LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Authentication failure:.*"));
+        string validText = ConfigUnitTestAuthText;
+        if (string.IsNullOrEmpty(validText))
+        {
+            Assert.Ignore("Unit test text required. Set unitTestAuthText in AbxrLib config.");
+            yield break;
+        }
         CreateSubsystem();
         SetRuntimeAuth(SecondStageRuntimeAuthWithText());
-        ModifyConfig("unitTestAuthText", "");
+        int onInputCount = 0;
+        Action<string, string, string, string> customHandler = (type, prompt, domain, err) =>
+        {
+            onInputCount++;
+            if (onInputCount == 1)
+            {
+                Logcat.Info("(Test) Submitting empty text to trigger local rejection (no transport call).");
+                Abxr.OnInputSubmitted("");
+            }
+            else
+                Abxr.OnInputSubmitted(validText);
+        };
         bool success = false;
         string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
-        Assert.IsFalse(success, "Auth with empty text should fail.");
+        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f, customOnInputRequested: customHandler);
+        Assert.IsTrue(success, $"Auth should succeed after re-prompt. Error: {error}");
+        Assert.AreEqual(2, onInputCount, "OnInputRequested should be called twice: initial prompt, then re-prompt after empty (no transport call for empty).");
     }
 
     // ── userData.id and GetAnonymizedUserId (backend contract; see linear-ticket-lib-backend-userid-userdata.md) ──
