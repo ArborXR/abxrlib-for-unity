@@ -454,15 +454,16 @@ namespace AbxrLib.Runtime.Services.Auth
                     _payload.orgToken = null;
                 }
 
-                // Log what we send (same for REST and ArborInsightsClient) so both transports show the request.
+                // Log what we send (same for REST and ArborInsightsClient) so both transports show the request. Tag with stage so response logs pair clearly.
+                bool isFirstStage = _payload.authMechanism == null;
+                string stageLabel = isFirstStage ? "device-auth" : "user-auth";
                 if (_payload.authMechanism != null)
                 {
                     var authMechLog = string.Join(", ", _payload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
-                    //Logcat.Debug
-                    Logcat.Info($"Auth request: authMechanism=[{authMechLog}], _authMechanism.prompt={(_authMechanism?.prompt ?? "(null)")} (length={_authMechanism?.prompt?.Length ?? 0})");
+                    Logcat.Debug($"Auth request ({stageLabel}): authMechanism=[{authMechLog}], _authMechanism.prompt={(_authMechanism?.prompt ?? "(null)")} (length={_authMechanism?.prompt?.Length ?? 0})");
                 }
                 else
-                    Logcat.Info("Auth request: (first-stage, no auth_mechanism)");
+                    Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
                 var holder = new AuthRequestResultHolder();
                 yield return transport.AuthRequestCoroutine(_payload, (ok, json) =>
@@ -471,7 +472,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     holder.Response = json;
                 });
 
-                if (ApplyAuthResponse(holder.Response))
+                if (ApplyAuthResponse(holder.Response, stageLabel))
                 {
                     if (transport.IsServiceTransport)
                         _usedArborInsightsClientForSession = true;
@@ -510,7 +511,8 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>Parses auth response and applies it. Uses the same success rule as both transports (AuthResponse.IsValidSuccess): token or modules or appId-only (second-stage required). When token is present (REST), validates JWT and sets expiry; service responses have token stripped so we skip that. Single place for ResponseData, UserData, Modules.</summary>
-        private bool ApplyAuthResponse(string responseText)
+        /// <param name="stageLabel">Optional label for logging, e.g. "first-stage" or "second-stage", so logs clearly pair request and response.</param>
+        private bool ApplyAuthResponse(string responseText, string stageLabel = null)
         {
             if (string.IsNullOrEmpty(responseText)) return false;
             try
@@ -547,10 +549,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
 
                 ResponseData = postResponse;
-                // Debug: log full auth response after deserialization.
+                // Debug: log full auth response after deserialization. Include stage so first-stage vs second-stage responses are unambiguous.
                 var userDataLog = ResponseData.UserData == null ? "(null)" : string.Join(", ", ResponseData.UserData.Select(kvp => kvp.Key + "=" + kvp.Value));
-                //Logcat.Debug
-                Logcat.Info($"Auth response: userId={ResponseData.UserId ?? "(null)"}, userData=[{userDataLog}], token={(!string.IsNullOrEmpty(ResponseData.Token) ? "present" : "(null)")}, appId={ResponseData.AppId ?? "(null)"}, modules={ResponseData.Modules?.Count ?? 0}");
+                string stagePrefix = !string.IsNullOrEmpty(stageLabel) ? $" ({stageLabel})" : "";
+                Logcat.Debug($"Auth response{stagePrefix}: userId={ResponseData.UserId ?? "(null)"}, userData=[{userDataLog}], token={(!string.IsNullOrEmpty(ResponseData.Token) ? "present" : "(null)")}, appId={ResponseData.AppId ?? "(null)"}, modules={ResponseData.Modules?.Count ?? 0}");
                 if (ResponseData.Modules?.Count > 1)
                     ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
                 // Keep ResponseData.UserId for read-only use (GetAnonymizedUserId). Sync UserData into _userData.
