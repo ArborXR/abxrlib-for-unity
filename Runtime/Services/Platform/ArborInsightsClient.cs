@@ -250,7 +250,8 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void set_SessionAuthMechanism(Dictionary<String, String> dictValue) => _client.Call<int>("set_SessionAuthMechanism", Utils.DictToString(dictValue));
 		// --- Environment / Storage functions.
 		public static String StorageGetDefaultEntryAsString() => _client.Call<String>("storageGetDefaultEntryAsString");
-		public static String StorageGetEntryAsString(String szName) => _client.Call<String>("storageGetEntryAsString", szName);
+		/// <param name="szScope">CamelCase scope, e.g. "device" or "user", matching REST GET /v1/storage?name=&amp;scope=</param>
+		public static String StorageGetEntryAsString(String szName, String szScope) => _client.Call<String>("storageGetEntryAsString", szName ?? "", szScope ?? "");
 		// ---
 		public static int StorageSetDefaultEntryFromString(String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => _client.Call<int>("storageSetDefaultEntryFromString", szStorageEntry, bKeepLatest, szOrigin, bSessionData);
 		public static int StorageSetEntryFromString(String szName, String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => _client.Call<int>("storageSetEntryFromString", szName, szStorageEntry, bKeepLatest, szOrigin, bSessionData);
@@ -536,7 +537,8 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void set_SessionAuthMechanism(Dictionary<String, String> dictValue) => ArborInsightsClientBridge.set_SessionAuthMechanism(dictValue);
 		// --- Environment / Storage functions.
 		public static String StorageGetDefaultEntryAsString() => ArborInsightsClientBridge.StorageGetDefaultEntryAsString();
-		public static String StorageGetEntryAsString(String szName) => ArborInsightsClientBridge.StorageGetEntryAsString(szName ?? "");
+		/// <param name="szScope">CamelCase scope, e.g. "device" or "user", matching REST GET /v1/storage?name=&amp;scope=</param>
+		public static String StorageGetEntryAsString(String szName, String szScope) => ArborInsightsClientBridge.StorageGetEntryAsString(szName ?? "", szScope ?? "");
 		// ---
 		public static int StorageSetDefaultEntryFromString(String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => ArborInsightsClientBridge.StorageSetDefaultEntryFromString(szStorageEntry ?? "", bKeepLatest, szOrigin ?? "", bSessionData);
 		public static int StorageSetEntryFromString(String szName, String szStorageEntry, bool bKeepLatest, String szOrigin, bool bSessionData) => ArborInsightsClientBridge.StorageSetEntryFromString(szName ?? "", szStorageEntry ?? "", bKeepLatest, szOrigin ?? "", bSessionData);

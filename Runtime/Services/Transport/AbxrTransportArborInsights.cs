@@ -125,7 +125,8 @@ namespace AbxrLib.Runtime.Services.Transport
 
         public IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)
         {
-            string json = name == "state" ? ArborInsightsClient.StorageGetDefaultEntryAsString() : ArborInsightsClient.StorageGetEntryAsString(name);
+            string scopeParam = Utils.PascalToCamelCase(scope.ToString());
+            string json = ArborInsightsClient.StorageGetEntryAsString(name ?? "state", scopeParam);
             List<Dictionary<string, string>> result = null;
             if (!string.IsNullOrEmpty(json))
             {
@@ -137,7 +138,15 @@ namespace AbxrLib.Runtime.Services.Transport
                     else
                     {
                         var list = JsonConvert.DeserializeObject<List<Dictionary<string, string>>>(json);
-                        if (list != null) result = list;
+                        if (list != null && list.Count > 0)
+                            result = list;
+                        else
+                        {
+                            // Device service may return a single key-value object (AbxrDictStrings.toString()), not StoragePayload or array.
+                            var single = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
+                            if (single != null && single.Count > 0)
+                                result = new List<Dictionary<string, string>> { single };
+                        }
                     }
                 }
                 catch (Exception ex) { Logcat.Warning($"Storage GET parse failed: {ex.Message}"); }
