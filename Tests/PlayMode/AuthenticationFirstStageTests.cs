@@ -34,7 +34,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     internal static string ConfigFingerprint => "";
 #endif
 
-    // Expected auth failure messages (for LogAssert.Expect and assertions). Outcome may depend on IsArborMdmClientAvailableAndConnected.
+    // Expected auth failure messages (for LogAssert.Expect and assertions). Outcome may depend on DeviceCanSupplyOrgCredentialForAuth.
     internal const string AuthFailureAppIdNotSet = "Authentication failure: App identification not set.";
     internal const string AuthFailureOrgUnavailable = "Authentication failure: Organization identification unavailable.";
     internal const string AuthFailureInitialRequestFailed = "Authentication failure: Initial authentication request failed";
@@ -395,10 +395,11 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         {
             Abxr.SetAuthSecret(ConfigAuthSecret);
         }
-        
-        bool mdmCanSupplyOrgToken = AbxrSubsystem.Instance.IsArborMdmClientAvailableAndConnected;
-        // With unitTestDeviceId & unitTestFingerprint set: we build a valid dynamic org token from overrides → auth can pass. Without them we use configured authSecret + random device ID → backend rejects the token → auth fails.
-        if (!mdmCanSupplyOrgToken && !hasUnitTestDeviceCredentials)
+
+        bool deviceCanSupplyOrg = false;
+        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
+        // With unitTestDeviceId & unitTestFingerprint set: we build a valid dynamic org token from overrides → auth can pass. Without them we use configured authSecret + random device ID → backend rejects the token → auth fails. When device can supply org (MDM or ArborInsights), auth can succeed.
+        if (!deviceCanSupplyOrg && !hasUnitTestDeviceCredentials)
         {
             if (Application.isEditor)
                 LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
@@ -407,12 +408,12 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
         }
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (mdmCanSupplyOrgToken)
-            Assert.IsTrue(success, "With MDM connected, auth should succeed (dynamic orgToken).");
+        if (deviceCanSupplyOrg)
+            Assert.IsTrue(success, "When device can supply org (MDM or ArborInsights), auth should succeed (dynamic orgToken).");
         else if (hasUnitTestDeviceCredentials)
             Assert.IsTrue(success, "With unit test device ID and fingerprint set, dynamic org token from overrides should allow auth to succeed.");
         else
-            Assert.IsFalse(success, "Without MDM or unit test device credentials, auth should fail.");
+            Assert.IsFalse(success, "Without device-supplied org or unit test device credentials, auth should fail.");
     }
 
     [UnityTest]

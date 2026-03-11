@@ -126,10 +126,16 @@ namespace AbxrLib.Runtime.Services.Transport
         public IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)
         {
             string scopeParam = Utils.PascalToCamelCase(scope.ToString());
-            string json = ArborInsightsClient.StorageGetEntryAsString(name ?? "state", scopeParam);
+            string raw = ArborInsightsClient.StorageGetEntryAsString(name ?? "state", scopeParam);
             List<Dictionary<string, string>> result = null;
-            if (!string.IsNullOrEmpty(json))
+            if (!string.IsNullOrEmpty(raw))
             {
+                string json = raw;
+                // Device service can return a JSON-encoded string (leading "); unwrap one level so we parse the inner content.
+                if (raw.Length >= 2 && raw[0] == '"' && raw[raw.Length - 1] == '"')
+                {
+                    try { json = JsonConvert.DeserializeObject<string>(raw); } catch { /* use raw as-is */ }
+                }
                 try
                 {
                     var payload = JsonConvert.DeserializeObject<StoragePayload>(json);
@@ -142,17 +148,62 @@ namespace AbxrLib.Runtime.Services.Transport
                             result = list;
                         else
                         {
-                            // Device service may return a single key-value object (AbxrDictStrings.toString()), not StoragePayload or array.
                             var single = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
                             if (single != null && single.Count > 0)
                                 result = new List<Dictionary<string, string>> { single };
                         }
                     }
                 }
-                catch (Exception ex) { Logcat.Warning($"Storage GET parse failed: {ex.Message}"); }
+                catch
+                {
+                    // Device service returns AbxrDictStrings.toString(): comma-separated key=value (e.g. "device_progress=75%,device_last_checkpoint=mid").
+                    result = ParseKeyValueCommaSeparated(json);
+                }
+                if (result == null || result.Count == 0)
+                    Logcat.Warning("Storage GET parse failed: could not parse response as JSON or key=value format.");
             }
             onComplete?.Invoke(result);
             yield return null;
+        }
+
+        /// <summary>Parses device service format: key=value,key=value (AbxrDictStrings.toString()). Escapes: \\ and \".</summary>
+        private static List<Dictionary<string, string>> ParseKeyValueCommaSeparated(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var dict = new Dictionary<string, string>();
+            int i = 0;
+            while (i < text.Length)
+            {
+                int eq = text.IndexOf('=', i);
+                if (eq < 0) break;
+                string key = UnescapeKeyValue(text.Substring(i, eq - i));
+                i = eq + 1;
+                int nextComma = text.IndexOf(',', i);
+                string value = nextComma < 0 ? UnescapeKeyValue(text.Substring(i)) : UnescapeKeyValue(text.Substring(i, nextComma - i));
+                i = nextComma < 0 ? text.Length : nextComma + 1;
+                dict[key ?? ""] = value ?? "";
+            }
+            if (dict.Count == 0) return null;
+            return new List<Dictionary<string, string>> { dict };
+        }
+
+        private static string UnescapeKeyValue(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            var sb = new System.Text.StringBuilder(s.Length);
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (s[i] == '\\' && i + 1 < s.Length)
+                {
+                    char n = s[i + 1];
+                    if (n == '\\') { sb.Append('\\'); i++; }
+                    else if (n == '"') { sb.Append('"'); i++; }
+                    else sb.Append(s[i]);
+                }
+                else
+                    sb.Append(s[i]);
+            }
+            return sb.ToString();
         }
 
         public IEnumerator StorageDeleteCoroutine(global::Abxr.StorageScope scope, string name, Action<bool> onComplete)
