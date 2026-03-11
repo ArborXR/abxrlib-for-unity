@@ -15,7 +15,7 @@ namespace AbxrLib.Runtime.Services.Transport
     {
         public bool IsServiceTransport => true;
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, long> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string> onComplete)
         {
             // If unbound (e.g. after EndSession), re-establish bind so StartAuthentication() works without StartNewSession.
             // Yields must be outside any try-catch block in C# iterators.
@@ -23,7 +23,7 @@ namespace AbxrLib.Runtime.Services.Transport
             {
                 if (!ArborInsightsClient.Bind(null))
                 {
-                    onComplete?.Invoke(false, "ArborInsightsClient.Bind failed", -1);
+                    onComplete?.Invoke(false, "ArborInsightsClient.Bind failed");
                     yield break;
                 }
                 const int maxAttempts = 40;
@@ -32,7 +32,7 @@ namespace AbxrLib.Runtime.Services.Transport
                     yield return new WaitForSecondsRealtime(intervalSeconds);
                 if (!ArborInsightsClient.ServiceIsFullyInitialized())
                 {
-                    onComplete?.Invoke(false, "ArborInsightsClient service not ready after bind", -1);
+                    onComplete?.Invoke(false, "ArborInsightsClient service not ready after bind");
                     yield break;
                 }
             }
@@ -48,14 +48,14 @@ namespace AbxrLib.Runtime.Services.Transport
                 string body = responseJson ?? "";
                 if (string.IsNullOrEmpty(body) && !success)
                     body = "No response body.";
-                onComplete?.Invoke(success, body, -1);
-                if (!success && !string.IsNullOrEmpty(responseJson))
-                    Logcat.Warning($"ArborInsights auth returned non-success response (may require second-stage or indicate failure): {responseJson}");
+                if (!success)
+                    Logcat.Warning($"AuthRequest failed: {body}");
+                onComplete?.Invoke(success, body);
             }
             catch (Exception ex)
             {
                 Logcat.Error($"ArborInsights auth failed: {ex.Message}");
-                onComplete?.Invoke(false, ex.Message, -1);
+                onComplete?.Invoke(false, ex.Message);
             }
             yield return null;
         }

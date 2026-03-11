@@ -14,8 +14,8 @@ namespace AbxrLib.Runtime.Services.Transport
         /// <summary>True when this transport is the ArborInsightsClient (service) implementation.</summary>
         bool IsServiceTransport { get; }
 
-        /// <summary>Perform auth request. onComplete(success, responseJson, responseCode). Auth service parses response and sets ResponseData. responseCode &lt; 0 when not applicable (e.g. service).</summary>
-        IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, long> onComplete);
+        /// <summary>Perform auth request. onComplete(success, responseJson). Auth service parses response and sets ResponseData. Both transports normalize to the same success/failure semantics.</summary>
+        IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string> onComplete);
 
         /// <summary>Get app config JSON. onComplete(success, configJson).</summary>
         IEnumerator GetConfigCoroutine(Action<bool, string> onComplete);

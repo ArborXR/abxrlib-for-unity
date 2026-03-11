@@ -372,7 +372,6 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             public bool Success;
             public string Response;
-            public long ResponseCode;
         }
 
         /// <summary>Extract a user-facing error string from auth failure JSON. Same keys for REST and service so behavior is identical.</summary>
@@ -454,19 +453,11 @@ namespace AbxrLib.Runtime.Services.Auth
                     Logcat.Info("Auth request: (first-stage, no auth_mechanism)");
 
                 var holder = new AuthRequestResultHolder();
-                yield return transport.AuthRequestCoroutine(_payload, (ok, json, code) =>
+                yield return transport.AuthRequestCoroutine(_payload, (ok, json) =>
                 {
                     holder.Success = ok;
                     holder.Response = json;
-                    holder.ResponseCode = code;
                 });
-
-                if (holder.ResponseCode >= 400 && holder.ResponseCode < 500)
-                {
-                    _payload.buildType = savedBuildType;
-                    onComplete(false, ExtractAuthErrorMessage(holder.Response));
-                    yield break;
-                }
 
                 if (ApplyAuthResponse(holder.Response))
                 {

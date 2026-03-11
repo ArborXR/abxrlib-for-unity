@@ -67,7 +67,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, long> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string> onComplete)
         {
             string url = new Uri(_baseUri, AuthPath).ToString();
             string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
@@ -79,11 +79,8 @@ namespace AbxrLib.Runtime.Services.Transport
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
             yield return request.SendWebRequest();
 
-            long code = request.responseCode;
             // Always pass response body when present so auth service gets the same error payload as service transport (ExtractAuthErrorMessage, OnFailed message).
             string response = request.downloadHandler?.text;
-            if (!string.IsNullOrEmpty(response) && !(request.result == UnityWebRequest.Result.Success && code >= 200 && code < 300))
-                Logcat.Warning($"AuthRequest REST failed: {code} - {response}");
 
             // Same success rule as service transport (AuthResponse.IsValidSuccess) so auth service sees consistent behavior.
             bool success = false;
@@ -100,7 +97,9 @@ namespace AbxrLib.Runtime.Services.Transport
             string responseBody = response ?? "";
             if (string.IsNullOrEmpty(responseBody) && !success)
                 responseBody = "No response body.";
-            onComplete?.Invoke(success, responseBody, code);
+            if (!success)
+                Logcat.Warning($"AuthRequest failed: {responseBody}");
+            onComplete?.Invoke(success, responseBody);
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
@@ -225,8 +224,15 @@ namespace AbxrLib.Runtime.Services.Transport
             {
                 try
                 {
-                    var wrapper = JsonConvert.DeserializeObject<StoragePayloadWrapper>(request.downloadHandler?.text);
-                    onComplete?.Invoke(wrapper?.data?.Count > 0 ? wrapper.data[0].data : null);
+                    string text = request.downloadHandler?.text;
+                    var wrapper = JsonConvert.DeserializeObject<StoragePayloadWrapper>(text);
+                    List<Dictionary<string, string>> result = wrapper?.data?.Count > 0 ? wrapper.data[0].data : null;
+                    if (result == null && !string.IsNullOrEmpty(text))
+                    {
+                        var list = JsonConvert.DeserializeObject<List<Dictionary<string, string>>>(text);
+                        if (list != null) result = list;
+                    }
+                    onComplete?.Invoke(result);
                 }
                 catch { onComplete?.Invoke(null); }
             }
