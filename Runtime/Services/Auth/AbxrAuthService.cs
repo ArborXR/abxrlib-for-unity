@@ -201,6 +201,15 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
 
+            // Use runtime auth mechanism for the first auth request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
+            _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
+            if (!string.IsNullOrEmpty(_authMechanism.type) && string.IsNullOrEmpty(_authMechanism.prompt))
+            {
+                string defaultPrompt = GetDefaultPromptForAuthMechanismType(_authMechanism.type);
+                if (!string.IsNullOrEmpty(defaultPrompt))
+                    _authMechanism.prompt = defaultPrompt;
+            }
+
             _runner.StartCoroutine(AuthenticateCoroutine());
         }
         
@@ -401,7 +410,11 @@ namespace AbxrLib.Runtime.Services.Auth
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
             var authMech = CreateAuthMechanismDict();
-            _payload.authMechanism = IsAuthMechanismMeaningful(authMech) ? authMech : null;
+            // First auth (withRetry): never send auth_mechanism; backend returns token or second-stage required. When withRetry is false (keyboard submit or SetUserData re-auth), send authMech so we send type=custom + userData for SetUserData or type+prompt for second-stage.
+            if (withRetry)
+                _payload.authMechanism = null;
+            else
+                _payload.authMechanism = IsAuthMechanismMeaningful(authMech) ? authMech : null;
 
             string savedBuildType = _payload.buildType;
             if (_payload.buildType == "production_custom")
@@ -412,8 +425,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             var transport = _getTransport();
-            const int maxConsecutiveEmptyFromService = 5;
-            int consecutiveEmptyFromService = 0;
 
             while (true)
             {
@@ -432,13 +443,15 @@ namespace AbxrLib.Runtime.Services.Auth
                     _payload.orgToken = null;
                 }
 
-                // Debug: log what we send in this auth request. When authMechanism is null we omit it from the payload (first-stage); only log when present.
+                // Log what we send (same for REST and ArborInsightsClient) so both transports show the request.
                 if (_payload.authMechanism != null)
                 {
                     var authMechLog = string.Join(", ", _payload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
                     //Logcat.Debug
                     Logcat.Info($"Auth request: authMechanism=[{authMechLog}], _authMechanism.prompt={(_authMechanism?.prompt ?? "(null)")} (length={_authMechanism?.prompt?.Length ?? 0})");
                 }
+                else
+                    Logcat.Info("Auth request: (first-stage, no auth_mechanism)");
 
                 var holder = new AuthRequestResultHolder();
                 yield return transport.AuthRequestCoroutine(_payload, (ok, json, code) =>
@@ -481,29 +494,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield break;
                 }
 
-                bool emptyFromService = transport.IsServiceTransport && string.IsNullOrEmpty(holder.Response);
-                if (emptyFromService)
-                {
-                    consecutiveEmptyFromService++;
-                    if (consecutiveEmptyFromService >= maxConsecutiveEmptyFromService)
-                    {
-                        _payload.buildType = savedBuildType;
-                        string msg = $"ArborInsightsClient returned empty after {maxConsecutiveEmptyFromService} attempts (check service/logcat for backend error).";
-                        Logcat.Warning($"AuthRequest failed: {msg}");
-                        onComplete(false, msg);
-                        yield break;
-                    }
-                }
-                else
-                {
-                    consecutiveEmptyFromService = 0;
-                }
-
-                string logDetail = !string.IsNullOrEmpty(holder.Response)
-                    ? ExtractAuthErrorMessage(holder.Response)
-                    : (transport.IsServiceTransport
-                        ? "ArborInsightsClient returned empty (check service/logcat for backend error)."
-                        : "No response body.");
+                string logDetail = ExtractAuthErrorMessage(holder.Response) ?? "No response body.";
                 Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
@@ -994,7 +985,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 _setUserDataReAuthActive = false;
                 _attemptActive = false;
                 OnUserDataSyncCompleted?.Invoke(success, errorMsg ?? "");
-            });
+            }, withRetry: false);
         }
         
         /// <summary>True when the dict has a non-empty "type" (second-stage or custom). Without type, we omit authMechanism so first-stage sends no auth_mechanism (prompt/inputSource alone are not meaningful).</summary>

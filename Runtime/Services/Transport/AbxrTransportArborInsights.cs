@@ -44,7 +44,11 @@ namespace AbxrLib.Runtime.Services.Transport
                 string responseJson = ArborInsightsClient.AuthRequest(payload.userId ?? "", Utils.DictToString(payload.authMechanism));
                 // Use same success rule as auth service (AuthResponse.IsValidSuccess): full success or second-stage required.
                 bool success = !string.IsNullOrEmpty(responseJson) && ParseAndCheckValidSuccess(responseJson);
-                onComplete?.Invoke(success, responseJson ?? "", -1);
+                // Normalize empty failure body so auth service logs the same message for both transports.
+                string body = responseJson ?? "";
+                if (string.IsNullOrEmpty(body) && !success)
+                    body = "No response body.";
+                onComplete?.Invoke(success, body, -1);
                 if (!success && !string.IsNullOrEmpty(responseJson))
                     Logcat.Warning($"ArborInsights auth returned non-success response (may require second-stage or indicate failure): {responseJson}");
             }

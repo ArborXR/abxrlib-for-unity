@@ -221,7 +221,7 @@ public class AuthenticationSecondStageTests : AbxrPlayModeTestBase
         Abxr.OnAuthCompleted = null;
         Assert.IsTrue(authCompleted, "OnAuthCompleted should be invoked.");
         Assert.AreEqual(0, onInputRequestedCount, "When authMechanism is none, OnInputRequested must not be invoked.");
-        Assert.IsTrue(success, "Auth should succeed without second-stage input when no authMechanism is required.");
+        Assert.IsTrue(success, "Auth should succeed when no authMechanism is required (same for REST and ArborInsightsClient transport).");
     }
 
     /// <summary>Forces authMechanism type=email with domain from config; auto-answer uses unitTestAuthEmail. Expects auth to succeed.</summary>

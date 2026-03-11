@@ -96,7 +96,11 @@ namespace AbxrLib.Runtime.Services.Transport
                 }
                 catch { /* treat as failure */ }
             }
-            onComplete?.Invoke(success, response ?? "", code);
+            // Normalize empty failure body so auth service logs the same message for both transports.
+            string responseBody = response ?? "";
+            if (string.IsNullOrEmpty(responseBody) && !success)
+                responseBody = "No response body.";
+            onComplete?.Invoke(success, responseBody, code);
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
