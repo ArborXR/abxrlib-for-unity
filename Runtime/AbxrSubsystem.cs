@@ -881,13 +881,40 @@ internal void StartNewSession()
 				Event(assessmentName, meta);
 			}
 		}
+
+		/// <summary>Reads an integer from meta by trying each key in order; returns defaultValue if none found or unparseable. Supports backwards compatibility with multiple key names (e.g. score_min, scoreMin, min_score, minScore).</summary>
+		private static int GetMetaInt(Dictionary<string, string> meta, int defaultValue, params string[] keys)
+		{
+			if (keys == null) return defaultValue;
+			foreach (var key in keys)
+			{
+				if (string.IsNullOrEmpty(key)) continue;
+				if (meta.TryGetValue(key, out var s) && int.TryParse(s, out var n)) return n;
+			}
+			return defaultValue;
+		}
 		
 		internal void EventAssessmentComplete(string assessmentName, int score, Abxr.EventStatus status, Dictionary<string, string> meta)
 		{
 			meta ??= new Dictionary<string, string>();
+			int minScore = GetMetaInt(meta, 0, "score_min", "scoreMin", "min_score", "minScore");
+			int maxScore = GetMetaInt(meta, 100, "score_max", "scoreMax", "max_score", "maxScore");
+			int clampedScore = score;
+			if (score > maxScore)
+			{
+				clampedScore = maxScore;
+				Logcat.Warning($"EventAssessmentComplete: score of {score} exceeded the score_max limit of {maxScore} for assessment '{assessmentName}'; score was set to {maxScore}. Provide score_min and score_max in meta when your scoring range is not 0-100.");
+			}
+			else if (score < minScore)
+			{
+				clampedScore = minScore;
+				Logcat.Warning($"EventAssessmentComplete: score of {score} was below the score_min limit of {minScore} for assessment '{assessmentName}'; score was set to {minScore}. Provide score_min and score_max in meta when your scoring range is not 0-100.");
+			}
 			meta["type"] = "assessment";
 			meta["verb"] = "completed";
-			meta["score"] = score.ToString();
+			meta["score"] = clampedScore.ToString();
+			meta["score_min"] = minScore.ToString();
+			meta["score_max"] = maxScore.ToString();
 			meta["status"] = status.ToString().ToLower();
 			lock (_assessmentStartTimesLock)
 			{
@@ -986,9 +1013,24 @@ internal void StartNewSession()
 		internal void EventObjectiveComplete(string objectiveName, int score, Abxr.EventStatus status, Dictionary<string, string> meta)
 		{
 			meta ??= new Dictionary<string, string>();
+			int minScore = GetMetaInt(meta, 0, "score_min", "scoreMin", "min_score", "minScore");
+			int maxScore = GetMetaInt(meta, 100, "score_max", "scoreMax", "max_score", "maxScore");
+			int clampedScore = score;
+			if (score > maxScore)
+			{
+				clampedScore = maxScore;
+				Logcat.Warning($"EventObjectiveComplete: score of {score} exceeded the score_max limit of {maxScore} for objective '{objectiveName}'; score was set to {maxScore}. Provide score_min and score_max in meta when your scoring range is not 0-100.");
+			}
+			else if (score < minScore)
+			{
+				clampedScore = minScore;
+				Logcat.Warning($"EventObjectiveComplete: score of {score} was below the score_min limit of {minScore} for objective '{objectiveName}'; score was set to {minScore}. Provide score_min and score_max in meta when your scoring range is not 0-100.");
+			}
 			meta["type"] = "objective";
 			meta["verb"] = "completed";
-			meta["score"] = score.ToString();
+			meta["score"] = clampedScore.ToString();
+			meta["score_min"] = minScore.ToString();
+			meta["score_max"] = maxScore.ToString();
 			meta["status"] = status.ToString().ToLower();
 			AddDuration(_objectiveStartTimes, objectiveName, meta);
 			Event(objectiveName, meta);

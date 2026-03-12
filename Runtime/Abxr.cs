@@ -351,12 +351,13 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Complete an assessment with score and status - triggers LMS grade recording
-	/// When complete, automatically records and closes the assessment in supported LMS platforms
+	/// When complete, automatically records and closes the assessment in supported LMS platforms.
+	/// Score is clamped to [score_min, score_max]; defaults are 0 and 100. If your scale differs, pass score_min and score_max in meta to avoid clamping and a warning in logs.
 	/// </summary>
 	/// <param name="assessmentName">Name of the assessment (must match the start event)</param>
-	/// <param name="score">Numerical score achieved (typically 0-100, but any integer is valid)</param>
+	/// <param name="score">Numerical score achieved (typically 0-100; if your range differs, set score_min and score_max in meta)</param>
 	/// <param name="status">Result status of the assessment (Pass, Fail, Complete, etc.)</param>
-	/// <param name="meta">Optional metadata with completion details</param>
+	/// <param name="meta">Optional metadata; include score_min and score_max when your scoring range is not 0-100</param>
 	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		X?.EventAssessmentComplete(assessmentName, score, status, meta);
 	public static void EventAssessmentComplete(string assessmentName, string score) =>
@@ -397,12 +398,13 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Complete an objective with score and status - contributes to overall assessment
-	/// Objectives automatically calculate duration if corresponding start event was logged
+	/// Objectives automatically calculate duration if corresponding start event was logged.
+	/// Score is clamped to [score_min, score_max]; defaults are 0 and 100. If your scale differs, pass score_min and score_max in meta to avoid clamping and a warning in logs.
 	/// </summary>
 	/// <param name="objectiveName">Name of the objective (must match the start event)</param>
-	/// <param name="score">Numerical score achieved for this objective</param>
+	/// <param name="score">Numerical score achieved (typically 0-100; if your range differs, set score_min and score_max in meta)</param>
 	/// <param name="status">Result status (Complete, Pass, Fail, etc.)</param>
-	/// <param name="meta">Optional metadata with completion details</param>
+	/// <param name="meta">Optional metadata; include score_min and score_max when your scoring range is not 0-100</param>
 	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		X?.EventObjectiveComplete(objectiveName, score, status, meta);
 	public static void EventObjectiveComplete(string objectiveName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>

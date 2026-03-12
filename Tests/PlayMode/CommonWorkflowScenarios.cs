@@ -66,14 +66,14 @@ public class CommonWorkflowScenarios : AbxrPlayModeTestBase
         yield return new WaitForSeconds(0.25f);
         Logcat.Info("(Test) Event: objective_task_" + randomName + " (duration from StartTimedEvent)");
         Abxr.Event("objective_task_" + randomName, new Abxr.Dict().With("objective", objectiveName), sendTelemetry: false);
-        int objectiveScore = Random.Range(80, 101);
+        int objectiveScore = Random.Range(80, 200);
         Logcat.Info("(Test) EventObjectiveComplete: " + objectiveName + " score=" + objectiveScore + " Pass");
         Abxr.EventObjectiveComplete(objectiveName, objectiveScore, Abxr.EventStatus.Pass);
         Logcat.Info("(Test) Log Debug: Objective completed (meta: score)");
         Abxr.Log("Objective completed", Abxr.LogLevel.Debug, new Abxr.Dict().With("score", objectiveScore.ToString()));
         yield return new WaitForSeconds(0.2f);
 
-        int assessmentScore = Random.Range(80, 101);
+        int assessmentScore = Random.Range(80, 200);
         Logcat.Info("(Test) EventAssessmentComplete: Assessment_" + randomName + " score=" + assessmentScore + " Pass (meta: max_score=100)");
         Abxr.EventAssessmentComplete("Assessment_" + randomName, assessmentScore, Abxr.EventStatus.Pass, new Abxr.Dict().With("max_score", "100"));
     }
