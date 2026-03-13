@@ -4,7 +4,7 @@ using AbxrLib.Runtime.Core;
 
 namespace AbxrLib.Runtime.UI.Keyboard
 {
-#if XR_TOOLKIT_AVAILABLE
+#if XR_TOOLKIT_AVAILABLE && UNITY_2022_3_OR_NEWER
     /// <summary>
     /// Manages XR ray interactors (laser pointers) to ensure they are enabled during keyboard/PIN pad interactions.
     /// Automatically detects and restores the original state when interactions are complete.
