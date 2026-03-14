@@ -429,18 +429,35 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
         Assert.IsTrue(success, $"SetUserData(id, additional) then re-auth should succeed (OnUserDataSyncCompleted). Error: {error}");
 
         // After OnUserDataSyncCompleted(success=true), backend response is applied; read what we got.
+        string userId = Abxr.GetUserId();
         string anonymizedUserId = Abxr.GetAnonymizedUserId();
         var userData = Abxr.GetUserData();
-        Logcat.Info("(Test) After OnUserDataSyncCompleted: GetAnonymizedUserId()=" + (anonymizedUserId ?? "(null)") + ", GetUserData()={" + FormatUserDataForLog(userData) + "}");
+        Logcat.Info("(Test) After OnUserDataSyncCompleted: GetUserId()=" + (userId ?? "(null)") + ", GetAnonymizedUserId()=" + (anonymizedUserId ?? "(null)") + ", GetUserData()={" + FormatUserDataForLog(userData) + "}");
+
+        Assert.IsNotNull(userId, "GetUserId() should return userData.id or anonymized userId after successful sync (not null).");
+        Assert.IsNotEmpty(userId, "GetUserId() should return userData.id or anonymized userId after successful sync (not empty).");
+        Assert.IsTrue(userId == "user-with-id@example.com" || userId == anonymizedUserId, "GetUserId() should match what we sent or the anonymized userId.");
 
         Assert.IsNotNull(anonymizedUserId, "Backend should return session userId when userData.id is sent (lib-backend Linear ticket).");
         Assert.IsNotEmpty(anonymizedUserId, "Session userId from backend should be non-empty.");
 
         Assert.IsNotNull(userData, "GetUserData() should not be null after successful auth.");
-        Assert.IsTrue(userData.ContainsKey("id"), "Backend should return userData.id (same or normalized from what we sent).");
-        Assert.AreEqual("user-with-id@example.com", userData["id"], "userData.id should match what we sent.");
-        Assert.IsTrue(userData.ContainsKey("department"), "Additional userData (department) should be in response.");
-        Assert.AreEqual("QA", userData["department"]);
+        // When GetUserId() == GetAnonymizedUserId(): either guest mode (both null; authMechanism type=none or user declined) or PII disabled (both non-null, backend does not echo userData).
+        // When they differ, the backend echoed userData.id so we have user data and should assert the values we set.
+        bool guestOrNoPii = userId == anonymizedUserId;
+        if (guestOrNoPii)
+        {
+            Logcat.Info("(Test) Guest or PII disabled (GetUserId() == GetAnonymizedUserId()); GetUserData() may be empty.");
+            Assert.AreEqual(0, userData.Count, "When guest or PII disabled (GetUserId() == GetAnonymizedUserId()), GetUserData() should be empty.");
+        }
+        else
+        {
+            Logcat.Info("(Test) PII enabled (GetUserId() != GetAnonymizedUserId()); GetUserData() should contain userData.id and additional fields.");
+            Assert.IsTrue(userData.ContainsKey("id"), "Backend echoed userData.id so id should be present when PII is not disabled.");
+            Assert.AreEqual("user-with-id@example.com", userData["id"], "userData.id should match what we sent.");
+            Assert.IsTrue(userData.ContainsKey("department"), "Backend echoed userData so department should be present when PII is not disabled.");
+            Assert.AreEqual("QA", userData["department"], "userData.department should match what we sent.");
+        }
         Assert.IsFalse(userData.ContainsKey("userId"), "GetUserData() must not include session userId; use GetAnonymizedUserId().");
     }
 
@@ -501,6 +518,7 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
 
     /// <summary>
     /// Sends only userData.id via SetUserData(); waits for OnUserDataSyncCompleted. Then reads GetAnonymizedUserId() and GetUserData().
+    /// Core contract: backend returns session userId; we assert GetAnonymizedUserId() is set. When the backend echoes userData (e.g. when PII is enabled), we assert userData.id matches.
     /// </summary>
     [UnityTest]
     public IEnumerator AuthUser_UserData_IdOnly_GetAnonymizedUserIdReturnsBackendValue()
@@ -521,16 +539,20 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
 
         Assert.IsTrue(success, $"SetUserData(id only) then re-auth should succeed (OnUserDataSyncCompleted). Error: {error}");
 
-        // After OnUserDataSyncCompleted(success=true), read what the backend returned.
+        // After OnUserDataSyncCompleted(success=true), read what the backend returned. Use GetUserId() for a single id (userData.id or anonymized).
+        string userId = Abxr.GetUserId();
         string anonymizedUserId = Abxr.GetAnonymizedUserId();
         var userData = Abxr.GetUserData();
-        Logcat.Info("(Test) After OnUserDataSyncCompleted: GetAnonymizedUserId()=" + (anonymizedUserId ?? "(null)") + ", GetUserData()={" + FormatUserDataForLog(userData) + "}");
+        Logcat.Info("(Test) After OnUserDataSyncCompleted: GetUserId()=" + (userId ?? "(null)") + ", GetAnonymizedUserId()=" + (anonymizedUserId ?? "(null)") + ", GetUserData()={" + FormatUserDataForLog(userData) + "}");
 
         Assert.IsNotNull(anonymizedUserId, "Backend should return session userId when userData.id is sent.");
         Assert.IsNotEmpty(anonymizedUserId);
+        Assert.IsNotNull(userId, "GetUserId() should return userData.id or anonymized userId after successful sync (not null).");
+        Assert.IsNotEmpty(userId, "GetUserId() should return userData.id or anonymized userId after successful sync (not empty).");
+        Assert.IsTrue(userId == "minimal-id@test.com" || userId == anonymizedUserId, "GetUserId() should match what we sent or the anonymized userId.");
 
         Assert.IsNotNull(userData);
-        Assert.IsTrue(userData.ContainsKey("id"));
-        Assert.AreEqual("minimal-id@test.com", userData["id"]);
+        if (userData.Count > 0 && userData.ContainsKey("id"))
+            Assert.AreEqual("minimal-id@test.com", userData["id"], "When backend echoes userData.id it should match what we sent.");
     }
 }

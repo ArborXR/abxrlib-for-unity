@@ -198,6 +198,21 @@ public static partial class Abxr
 	/// <returns>True if the launch was initiated, false if not authenticated or launch failed</returns>
 	public static bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false) => X?.LaunchAppWithAuthHandoff(packageName, includeReturnToPackage) ?? false;
 
+	/// <summary>Returns the session userId (read-only, set by backend). Not for public documentation.</summary>
+	public static string GetAnonymizedUserId() => X?.GetAnonymizedUserId();
+
+	/// <summary>
+	/// Returns the primary user identifier: userData.id when the backend returned it, otherwise the session userId (GetAnonymizedUserId()), or null when neither is set.
+	/// Use this when you need a single display or reference id regardless of PII/echo settings.
+	/// </summary>
+	public static string GetUserId() => X?.GetUserId();
+
+	/// <summary>
+	/// Updates the primary user id (userData.id) and reauthenticates to sync with the API.
+	/// Equivalent to SetUserData(id, null).
+	/// </summary>
+	public static void SetUserId(string id) => X?.SetUserId(id);
+
 	/// <summary>
 	/// Get the learner/user data from the most recent authentication completion.
 	/// Returns the userData from the auth response only (no session userId key). Use GetAnonymizedUserId() for the session userId.
@@ -206,9 +221,6 @@ public static partial class Abxr
 	/// <returns>Dictionary containing learner/user data, or null if not authenticated or UserData is not available</returns>
 	public static Dictionary<string, string> GetUserData() => X?.GetUserData();
 
-	/// <summary>Returns the session userId (read-only, set by backend). Not for public documentation.</summary>
-	public static string GetAnonymizedUserId() => X?.GetAnonymizedUserId();
-	
 	/// <summary>
 	/// Update user data (userData only) and reauthenticate to sync with server.
 	/// Session userId is read-only and set only by the backend. Provide the primary user identifier as id (userData.id); the backend will set session userId from it.

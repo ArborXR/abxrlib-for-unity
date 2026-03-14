@@ -570,6 +570,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (ResponseData.Modules?.Count > 1)
                     ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
                 // Keep ResponseData.UserId for read-only use (GetAnonymizedUserId). Sync UserData into _userData.
+                ResponseData.UserData ??= new Dictionary<string, string>();
                 if (ResponseData.UserData != null)
                     _userData = new Dictionary<string, string>(ResponseData.UserData);
                 if (!string.IsNullOrEmpty(_enteredAuthValue))
@@ -987,7 +988,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 ? new Dictionary<string, string>(ResponseData.UserData)
                 : new Dictionary<string, string>();
 
-            if (!string.IsNullOrEmpty(id))
+            // Do not send id when it equals the session userId (anonymizedUserId); that would cause the server to hash an already-hashed value.
+            string anonymizedUserId = ResponseData?.UserId?.ToString();
+            if (!string.IsNullOrEmpty(id) && id != anonymizedUserId)
                 merged["id"] = id;
 
             if (additionalUserData != null)

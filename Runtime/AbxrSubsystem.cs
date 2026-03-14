@@ -479,7 +479,22 @@ namespace AbxrLib.Runtime
 		        Abxr.OnModuleTarget.Invoke(modules[_currentModuleIndex].Target);
 	        }
         }
-        
+
+		/// <summary>Returns the session userId (read-only, set by backend). Do not document for now.</summary>
+		internal string GetAnonymizedUserId() => _authService?.ResponseData?.UserId?.ToString();
+
+		/// <summary>Returns userData.id when present, otherwise GetAnonymizedUserId(), or null when neither is set.</summary>
+		internal string GetUserId()
+		{
+			var userData = GetUserData();
+			if (userData != null && userData.TryGetValue("id", out var id) && !string.IsNullOrEmpty(id))
+				return id;
+			return GetAnonymizedUserId();
+		}
+
+		/// <summary>Updates the primary user id (userData.id) and syncs to the API via SetUserData.</summary>
+		internal void SetUserId(string id) => SetUserData(id, null);
+
 		internal Dictionary<string, string> GetUserData()
 		{
 			if (!_authService.Authenticated) return null;
@@ -492,9 +507,6 @@ namespace AbxrLib.Runtime
 
 		internal void SetUserData(string userId = null, Dictionary<string, string> additionalUserData = null) =>
 			_authService.SetUserData(userId, additionalUserData);
-
-		/// <summary>Returns the session userId (read-only, set by backend). Do not document for now.</summary>
-		internal string GetAnonymizedUserId() => _authService?.ResponseData?.UserId?.ToString();
 
 		/// <summary>Returns the full auth response from the last successful authentication (Token, UserData, AppId, Modules, PackageName, etc.). Null if not authenticated.</summary>
 		internal AuthResponse GetAuthResponse() => _authService?.ResponseData;

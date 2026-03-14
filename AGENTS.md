@@ -80,8 +80,11 @@ AIDL → ArborInsightsClient (separate APK)
 ## Session userId and userData
 
 - **Session userId** is **read-only** on the client; only lib-backend sets or creates it (e.g. as an anonymized one-way hash of `userData.id`).
-- **userData.id** is the **primary user identification** value; clients only write to the **userData** dictionary via **SetUserData**.
-- **SetUserData(id, additionalUserData)** updates only userData (sets `userData.id` when `id` is provided); it does not set session userId. Re-auth sends userData to the backend, which may return updated userId and userData; the SDK adopts both.
+- **GetAnonymizedUserId()** returns the session userId from the last auth response. It is **not** always set: only when the backend includes `userId` in the response (e.g. after device auth or user auth). If the app never completes auth or the backend omits userId, it can be null.
+- **GetUserId()** returns a single user identifier: `userData.id` when the backend returned it, otherwise **GetAnonymizedUserId()**, or **null** when neither is set. Use this when you need one display/reference id regardless of PII or whether the backend echoes userData.
+- **SetUserId(id)** updates the primary user id (userData.id) and syncs to the API via SetUserData(id, null).
+- **userData.id** is the **primary user identification** value; clients write via **SetUserId** (id only) or **SetUserData** (id plus additional fields).
+- **SetUserData(id, additionalUserData)** updates only userData (sets `userData.id` when `id` is provided); it does not set session userId. Re-auth sends userData to the backend, which may return updated userId and userData; the SDK adopts both. **Protection:** If the app passes `id` that equals the current **GetAnonymizedUserId()**, the SDK does **not** send that `id` in the re-auth payload (to avoid the server hashing an already-hashed value).
 - **GetUserData()** returns a copy of the auth response’s userData only (no session userId key). Use **GetAnonymizedUserId()** for the session userId (read-only; not for public documentation yet).
 - Auth handoff includes **UserData** in the payload so the receiving app gets both userId and userData.
 
