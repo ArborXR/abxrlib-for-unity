@@ -67,7 +67,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, bool> onComplete)
         {
             string url = new Uri(_baseUri, AuthPath).ToString();
             string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
@@ -81,6 +81,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
             // Always pass response body when present so auth service gets the same error payload as service transport (ExtractAuthErrorMessage, OnFailed message).
             string response = request.downloadHandler?.text;
+            long responseCode = request.responseCode;
 
             // Same success rule as service transport (AuthResponse.IsValidSuccess) so auth service sees consistent behavior.
             bool success = false;
@@ -93,13 +94,15 @@ namespace AbxrLib.Runtime.Services.Transport
                 }
                 catch { /* treat as failure */ }
             }
+            // Transport decides: API rejected credentials (do not retry) when HTTP 401 or 403.
+            bool isAuthRejectedByApi = !success && (responseCode == 401 || responseCode == 403);
             // Normalize empty failure body so auth service logs the same message for both transports.
             string responseBody = response ?? "";
             if (string.IsNullOrEmpty(responseBody) && !success)
                 responseBody = "No response body.";
             if (!success)
                 Logcat.Warning($"AuthRequest failed: {responseBody}");
-            onComplete?.Invoke(success, responseBody);
+            onComplete?.Invoke(success, responseBody, isAuthRejectedByApi);
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)

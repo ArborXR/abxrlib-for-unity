@@ -115,6 +115,13 @@ namespace AbxrLib.Runtime.Services.Platform
 				return "{\"result\":0}";
 			}
 		}
+		/// <summary>Returns true when the device client (AAR) reported that the last auth request was rejected by the API. When the AAR does not expose getLastAuthRejected yet, returns false.</summary>
+		public static bool GetLastAuthRejected()
+		{
+			if (_client == null) return false;
+			try { return _client.Call<bool>("getLastAuthRejected"); }
+			catch { return false; }
+		}
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => _client.Call<int>("authenticate", szAppId, szOrgId, szDeviceId, szAuthSecret, ePartner);
 		public static int FinalAuthenticate() => _client.Call<int>("finalAuthenticate");
@@ -416,6 +423,8 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static void AbxrLibInitEnd() => ArborInsightsClientBridge.AbxrLibInitEnd();
 		// ---
 		public static string AuthRequest(String szUserId, String dictAdditionalUserData) => ArborInsightsClientBridge.AuthRequest(szUserId ?? "", dictAdditionalUserData ?? "");
+		/// <summary>True when the device client (AAR/service) last auth request was rejected by the API (e.g. 401/403). Used by transport to set isAuthRejectedByApi; when the AAR does not expose this yet, returns false.</summary>
+		public static bool GetLastAuthRejected() => ArborInsightsClientBridge.GetLastAuthRejected();
 		// ---
 		public static int Authenticate(String szAppId, String szOrgId, String szDeviceId, String szAuthSecret, int ePartner) => ArborInsightsClientBridge.Authenticate(szAppId ?? "", szOrgId ?? "", szDeviceId ?? "", szAuthSecret ?? "", ePartner);
 		public static int FinalAuthenticate() => ArborInsightsClientBridge.FinalAuthenticate();

@@ -51,6 +51,8 @@ namespace AbxrLib.Runtime.Services.Auth
         private DateTime _tokenExpiry = DateTime.MinValue;
         private int _failedAuthAttempts;
         private bool _inputRequestPending;
+        /// <summary>True when the API rejected our credentials (401/403 or explicit error). No further auth attempts this session; Authenticate() will no-op and report failure.</summary>
+        private bool _credentialsRejectedByApi;
 
         /// <summary>True when OnInputRequested was invoked and we are waiting for the app to call SubmitInput (OnInputSubmitted). Used so clients can show/hide QR-for-auth UI via IsQRScanForAuthAvailable() without tracking state themselves.</summary>
         internal bool IsInputRequestPending => _inputRequestPending;
@@ -142,6 +144,12 @@ namespace AbxrLib.Runtime.Services.Auth
         public void Authenticate(bool clearStateFirst = true)
         {
             if (_stopping || _attemptActive) return;
+            if (_credentialsRejectedByApi)
+            {
+                Logcat.Warning("Authentication was rejected by the API. No further auth attempts will be made this session; app will run without data collection.");
+                OnFailed?.Invoke("Authentication was rejected by the API. No further attempts will be made.");
+                return;
+            }
             _attemptActive = true;
             StopReAuthPolling();
             if (clearStateFirst)
@@ -279,8 +287,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                 {
                     _lastInputError = !string.IsNullOrEmpty(errorMessage) ? errorMessage : "Authentication failed";
-                    OnFailed?.Invoke(_lastInputError);
-                    // Re-invoke OnInputRequested with the error so the built-in keyboard (or custom handler) can show the message and let the user try again.
+                    // Do not fire OnFailed here; we are re-prompting so auth is not yet complete. Re-invoke OnInputRequested so the user can try again.
                     string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism.type);
                     string displayError = ShortenPinErrorForDisplay(normalizedType, _lastInputError);
                     OnInputRequested?.Invoke(normalizedType, originalPrompt, _authMechanism.domain ?? "", displayError);
@@ -384,6 +391,7 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             public bool Success;
             public string Response;
+            public bool IsAuthRejectedByApi;
         }
 
         /// <summary>Extract a user-facing error string from auth failure JSON. Same keys for REST and service so behavior is identical.</summary>
@@ -466,10 +474,11 @@ namespace AbxrLib.Runtime.Services.Auth
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
                 var holder = new AuthRequestResultHolder();
-                yield return transport.AuthRequestCoroutine(_payload, (ok, json) =>
+                yield return transport.AuthRequestCoroutine(_payload, (ok, json, isAuthRejectedByApi) =>
                 {
                     holder.Success = ok;
                     holder.Response = json;
+                    holder.IsAuthRejectedByApi = isAuthRejectedByApi;
                 });
 
                 if (ApplyAuthResponse(holder.Response, stageLabel))
@@ -488,13 +497,17 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield break;
                 }
 
-                // First auth (withRetry): explicit backend error (e.g. "Invalid assessment pin or the assessment is already active.") — do not retry; fail so OnFailed runs and tests don't hang.
+                // First auth (withRetry): do not retry when the transport reported auth rejected or response body contains an explicit error.
+                // Retrying would keep hitting the same rejection; treat as permanent failure and no-op for the rest of the session.
                 string explicitError = ExtractAuthErrorMessage(holder.Response);
-                if (!string.IsNullOrEmpty(holder.Response) && !string.IsNullOrEmpty(explicitError))
+                bool isAuthRejected = holder.IsAuthRejectedByApi || !string.IsNullOrEmpty(explicitError);
+                if (isAuthRejected)
                 {
+                    _credentialsRejectedByApi = true;
                     _payload.buildType = savedBuildType;
-                    Logcat.Warning($"AuthRequest failed: {explicitError}");
-                    onComplete(false, explicitError);
+                    string message = !string.IsNullOrEmpty(explicitError) ? explicitError : "Authentication was rejected by the API (credentials invalid or denied).";
+                    Logcat.Warning($"AuthRequest failed: {message} No further auth attempts will be made this session.");
+                    onComplete(false, message);
                     yield break;
                 }
 
@@ -811,6 +824,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _inputRequestPending = false;
             _lastInputError = null;
             _userData = null;
+            _credentialsRejectedByApi = false;
         }
 
         /// <summary>
