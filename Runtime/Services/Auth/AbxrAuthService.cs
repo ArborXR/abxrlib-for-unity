@@ -287,7 +287,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                 {
                     _lastInputError = !string.IsNullOrEmpty(errorMessage) ? errorMessage : "Authentication failed";
-                    // Do not fire OnFailed here; we are re-prompting so auth is not yet complete. Re-invoke OnInputRequested so the user can try again.
+                    // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.
+                    OnFailed?.Invoke(_lastInputError);
                     string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism.type);
                     string displayError = ShortenPinErrorForDisplay(normalizedType, _lastInputError);
                     OnInputRequested?.Invoke(normalizedType, originalPrompt, _authMechanism.domain ?? "", displayError);
