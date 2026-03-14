@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode tests using simulated auth only (no API calls): auth state, override setters, module list, session management.
-// First-stage auth (config, validation, handoff) is in AuthenticationFirstStageTests.
+// Device auth (config, validation, handoff) is in AuthenticationDeviceTests.
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;

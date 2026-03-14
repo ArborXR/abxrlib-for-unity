@@ -1,7 +1,7 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
-// PlayMode tests for authentication first-stage: config + validation outcome (succeed/fail).
+// PlayMode tests for device authentication: config + validation outcome (succeed/fail).
 // Uses RuntimeAuthConfig via SetRuntimeAuth so Configuration is not modified.
-// All tests set authMechanism type to "none" so no second-stage PIN/input is requested.
+// All tests set authMechanism type to "none" so no user authentication (PIN/input) is requested.
 // When a value is "set" (not empty/invalid), use the Configuration asset so tests run with project credentials.
 //
 // Environment: A = Unity TestRunner play mode (no ArborMdmClient). B = Android headset without MDM. C = Headset with ArborMdmClient.
@@ -18,7 +18,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 
 [TestFixture]
-public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
+public class AuthenticationDeviceTests : AbxrPlayModeTestBase
 {
     /// <summary>Auth values from Configuration; use when the test scenario expects the field to be set (not empty/invalid).</summary>
     internal static string ConfigAppId => Configuration.Instance?.appID ?? "";
@@ -39,7 +39,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     internal const string AuthFailureOrgUnavailable = "Authentication failure: Organization identification unavailable.";
     internal const string AuthFailureInitialRequestFailed = "Authentication failure: Initial authentication request failed";
 
-    /// <summary>Auth mechanism "none" so first-stage tests skip second-stage PIN/input.</summary>
+    /// <summary>Auth mechanism "none" so device auth tests skip user authentication (PIN/input).</summary>
     private static AuthMechanism AuthMechanismNone => new AuthMechanism { type = "none", prompt = "", domain = "" };
 
     /// <summary>Auth mechanism assessmentPin for handoff tests (launcher/receiver flow may request PIN).</summary>
@@ -47,7 +47,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
 
     protected override void CreateSubsystemIfNeeded()
     {
-        // First-stage tests set runtime auth then call CreateSubsystem() in each test.
+        // Device auth tests set runtime auth then call CreateSubsystem() in each test.
     }
 
     /// <summary>Package name for handoff tests: from GetAuthResponse().PackageName when set, otherwise "com.example.app2". Logs when using response value.</summary>
@@ -86,7 +86,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Dev_NoIds_Fails()
+    public IEnumerator AuthDevice_Legacy_Dev_NoIds_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = "", orgId = "", authSecret = "" });
@@ -97,7 +97,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Dev_AppIdOnly()
+    public IEnumerator AuthDevice_Legacy_Dev_AppIdOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = "", authSecret = "" });
@@ -114,7 +114,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Dev_AppIdOrgId()
+    public IEnumerator AuthDevice_Legacy_Dev_AppIdOrgId()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
@@ -131,7 +131,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Dev_FullConfig_Succeeds()
+    public IEnumerator AuthDevice_Legacy_Dev_FullConfig_Succeeds()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
@@ -141,7 +141,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Prod_NoIds_Fails()
+    public IEnumerator AuthDevice_Legacy_Prod_NoIds_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = "", orgId = "", authSecret = "" });
@@ -152,7 +152,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOnly()
+    public IEnumerator AuthDevice_Legacy_Prod_AppIdOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = "", authSecret = "" });
@@ -169,7 +169,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOrgId()
+    public IEnumerator AuthDevice_Legacy_Prod_AppIdOrgId()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
@@ -186,7 +186,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Prod_FullConfig()
+    public IEnumerator AuthDevice_Legacy_Prod_FullConfig()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
@@ -203,7 +203,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_ProdCustom_AppIdOnly_Fails()
+    public IEnumerator AuthDevice_Legacy_ProdCustom_AppIdOnly_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = "", authSecret = "" });
@@ -220,7 +220,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_ProdCustom_AppIdOrgId_Fails()
+    public IEnumerator AuthDevice_Legacy_ProdCustom_AppIdOrgId_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = "" });
@@ -237,7 +237,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_ProdCustom_FullConfig_Succeeds()
+    public IEnumerator AuthDevice_Legacy_ProdCustom_FullConfig_Succeeds()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production_custom", appId = ConfigAppId, orgId = ConfigOrgId, authSecret = ConfigAuthSecret });
@@ -247,7 +247,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Dev_NoAppToken_Fails()
+    public IEnumerator AuthDevice_AppTokens_Dev_NoAppToken_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = "", orgToken = "" });
@@ -258,7 +258,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Dev_AppTokenOnly()
+    public IEnumerator AuthDevice_AppTokens_Dev_AppTokenOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = "" });
@@ -275,7 +275,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Dev_BothTokens_Succeeds()
+    public IEnumerator AuthDevice_AppTokens_Dev_BothTokens_Succeeds()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
@@ -285,7 +285,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_NoAppToken_Fails()
+    public IEnumerator AuthDevice_AppTokens_Prod_NoAppToken_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "", orgToken = ConfigOrgToken });
@@ -296,7 +296,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_OrgTokenOnly_Fails()
+    public IEnumerator AuthDevice_AppTokens_Prod_OrgTokenOnly_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "", orgToken = ConfigOrgToken });
@@ -307,7 +307,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_AppTokenOnly()
+    public IEnumerator AuthDevice_AppTokens_Prod_AppTokenOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
@@ -324,7 +324,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_BothTokens()
+    public IEnumerator AuthDevice_AppTokens_Prod_BothTokens()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
@@ -341,7 +341,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_ProdCustom_AppTokenOnly()
+    public IEnumerator AuthDevice_AppTokens_ProdCustom_AppTokenOnly()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = "" });
@@ -358,7 +358,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_ProdCustom_BothTokens_Succeeds()
+    public IEnumerator AuthDevice_AppTokens_ProdCustom_BothTokens_Succeeds()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production_custom", appToken = ConfigAppToken, orgToken = ConfigOrgToken });
@@ -368,7 +368,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Prod_AppIdOnly_WithOverrides_Succeeds()
+    public IEnumerator AuthDevice_Legacy_Prod_AppIdOnly_WithOverrides_Succeeds()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "production", appId = ConfigAppId, orgId = "", authSecret = "" });
@@ -380,7 +380,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_AppTokenOnly_WithOverrides()
+    public IEnumerator AuthDevice_AppTokens_Prod_AppTokenOnly_WithOverrides()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = ConfigAppToken, orgToken = "" });
@@ -417,7 +417,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_AppTokens_Prod_InvalidAppTokenFormat_Fails()
+    public IEnumerator AuthDevice_AppTokens_Prod_InvalidAppTokenFormat_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "production", appToken = "not-a-jwt", orgToken = ConfigOrgToken });
@@ -428,7 +428,7 @@ public class AuthenticationFirstStageTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthFirstStage_Legacy_Dev_InvalidAppIdFormat_Fails()
+    public IEnumerator AuthDevice_Legacy_Dev_InvalidAppIdFormat_Fails()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = false, buildType = "development", appId = "not-a-valid-uuid", orgId = ConfigOrgId, authSecret = ConfigAuthSecret });

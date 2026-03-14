@@ -209,7 +209,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
 
-            // Use runtime auth mechanism for the first auth request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
+            // Use runtime auth mechanism for the device authentication request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
             _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
             if (!string.IsNullOrEmpty(_authMechanism.type) && string.IsNullOrEmpty(_authMechanism.prompt))
             {
@@ -429,7 +429,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
             var authMech = CreateAuthMechanismDict();
-            // First auth (withRetry): never send auth_mechanism; backend returns token or second-stage required. When withRetry is false (keyboard submit or SetUserData re-auth), send authMech so we send type=custom + userData for SetUserData or type+prompt for second-stage.
+            // Device authentication (withRetry): never send auth_mechanism; backend returns token or user authentication required. When withRetry is false (keyboard submit or SetUserData re-auth), send authMech so we send type=custom + userData for SetUserData or type+prompt for user authentication.
             if (withRetry)
                 _payload.authMechanism = null;
             else
@@ -462,9 +462,9 @@ namespace AbxrLib.Runtime.Services.Auth
                     _payload.orgToken = null;
                 }
 
-                // Log what we send (same for REST and ArborInsightsClient) so both transports show the request. Tag with stage so response logs pair clearly.
-                bool isFirstStage = _payload.authMechanism == null;
-                string stageLabel = isFirstStage ? "device-auth" : "user-auth";
+                // Log what we send (same for REST and ArborInsightsClient) so both transports show the request. Tag with auth kind so response logs pair clearly.
+                bool isDeviceAuth = _payload.authMechanism == null;
+                string stageLabel = isDeviceAuth ? "device-auth" : "user-auth";
                 if (_payload.authMechanism != null)
                 {
                     var authMechLog = string.Join(", ", _payload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
@@ -497,7 +497,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield break;
                 }
 
-                // First auth (withRetry): do not retry when the transport reported auth rejected or response body contains an explicit error.
+                // Device authentication (withRetry): do not retry when the transport reported auth rejected or response body contains an explicit error.
                 // Retrying would keep hitting the same rejection; treat as permanent failure and no-op for the rest of the session.
                 string explicitError = ExtractAuthErrorMessage(holder.Response);
                 bool isAuthRejected = holder.IsAuthRejectedByApi || !string.IsNullOrEmpty(explicitError);
@@ -523,8 +523,8 @@ namespace AbxrLib.Runtime.Services.Auth
             yield return AuthRequestCoroutineWithError((ok, _) => onComplete(ok), withRetry);
         }
 
-        /// <summary>Parses auth response and applies it. Uses the same success rule as both transports (AuthResponse.IsValidSuccess): token or modules or appId-only (second-stage required). When token is present (REST), validates JWT and sets expiry; service responses have token stripped so we skip that. Single place for ResponseData, UserData, Modules.</summary>
-        /// <param name="stageLabel">Optional label for logging, e.g. "first-stage" or "second-stage", so logs clearly pair request and response.</param>
+        /// <summary>Parses auth response and applies it. Uses the same success rule as both transports (AuthResponse.IsValidSuccess): token or modules or appId-only (user authentication required). When token is present (REST), validates JWT and sets expiry; service responses have token stripped so we skip that. Single place for ResponseData, UserData, Modules.</summary>
+        /// <param name="stageLabel">Optional label for logging, e.g. "device-auth" or "user-auth", so logs clearly pair request and response.</param>
         private bool ApplyAuthResponse(string responseText, string stageLabel = null)
         {
             if (string.IsNullOrEmpty(responseText)) return false;
@@ -562,7 +562,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
 
                 ResponseData = postResponse;
-                // Debug: log full auth response after deserialization. Include stage so first-stage vs second-stage responses are unambiguous.
+                // Debug: log full auth response after deserialization. Include stage so device-auth vs user-auth responses are unambiguous.
                 var userDataLog = ResponseData.UserData == null ? "(null)" : string.Join(", ", ResponseData.UserData.Select(kvp => kvp.Key + "=" + kvp.Value));
                 string stagePrefix = !string.IsNullOrEmpty(stageLabel) ? $" ({stageLabel})" : "";
                 Logcat.Debug($"Auth response{stagePrefix}: userId={ResponseData.UserId ?? "(null)"}, userData=[{userDataLog}], token={(!string.IsNullOrEmpty(ResponseData.Token) ? "present" : "(null)")}, appId={ResponseData.AppId ?? "(null)"}, modules={ResponseData.Modules?.Count ?? 0}");
@@ -1015,7 +1015,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }, withRetry: false);
         }
         
-        /// <summary>True when the dict has a non-empty "type" (second-stage or custom). Without type, we omit authMechanism so first-stage sends no auth_mechanism (prompt/inputSource alone are not meaningful).</summary>
+        /// <summary>True when the dict has a non-empty "type" (user authentication or custom). Without type, we omit authMechanism so device authentication sends no auth_mechanism (prompt/inputSource alone are not meaningful).</summary>
         private static bool IsAuthMechanismMeaningful(Dictionary<string, string> dict)
         {
             if (dict == null || dict.Count == 0) return false;

@@ -57,12 +57,12 @@ public class AbxrPlayModeTestBase
         // Apply enableAutoStartAuthentication = false via RuntimeAuthConfig when the subsystem is created, so we never modify the Configuration asset (avoids leaving the user's config file changed if TearDown doesn't run).
         AbxrSubsystem.NextRuntimeAuthConfigForTesting = new RuntimeAuthConfig { enableAutoStartAuthentication = false };
 
-        // Subsystem creation can be deferred by derived fixtures (e.g. first-stage auth tests set config then create).
+        // Subsystem creation can be deferred by derived fixtures (e.g. device authentication tests set config then create).
         CreateSubsystemIfNeeded();
 
         // In PlayMode tests, when Unit Test Credentials are enabled we auto-respond to auth input using configured values.
         // Set handler here so the subsystem created in SetUp gets it. For fixtures that create the subsystem in the test
-        // (e.g. AuthenticationFirstStageTests), we set it again in PerformAuth so the current subsystem receives it.
+        // (e.g. AuthenticationDeviceTests), we set it again in PerformAuth so the current subsystem receives it.
         Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
     }
 
@@ -113,21 +113,21 @@ public class AbxrPlayModeTestBase
         ModifyConfig(Configuration.Instance, fieldName, newValue);
     }
 
-    /// <summary>Sets the runtime auth config used by the next Authenticate() call. Call after CreateSubsystem(). Avoids mutating Configuration; use for auth first-stage and similar tests.</summary>
+    /// <summary>Sets the runtime auth config used by the next Authenticate() call. Call after CreateSubsystem(). Avoids mutating Configuration; use for device authentication and similar tests.</summary>
     protected void SetRuntimeAuth(RuntimeAuthConfig config)
     {
         if (config == null || AbxrSubsystem.Instance == null) return;
         AbxrSubsystem.Instance.AuthServiceForTesting.SetRuntimeAuthForTesting(config);
     }
 
-    /// <summary>Creates the test subsystem GameObject and AbxrSubsystem. Called from SetUp by default; first-stage tests call after setting config.</summary>
+    /// <summary>Creates the test subsystem GameObject and AbxrSubsystem. Called from SetUp by default; device authentication tests call after setting config.</summary>
     protected void CreateSubsystem()
     {
         SubsystemGO = new GameObject("[Test] AbxrSubsystem");
         SubsystemGO.AddComponent<AbxrSubsystem>();
     }
 
-    /// <summary>Override to skip subsystem creation in SetUp (e.g. first-stage tests create after altering config).</summary>
+    /// <summary>Override to skip subsystem creation in SetUp (e.g. device authentication tests create after altering config).</summary>
     protected virtual void CreateSubsystemIfNeeded()
     {
         CreateSubsystem();
@@ -300,7 +300,7 @@ public class AbxrPlayModeTestBase
             prevHandler?.Invoke(success, errorMsg);
         };
 
-        // Ensure current subsystem has the unit-test input handler (critical when subsystem was created in the test, e.g. AuthenticationFirstStageTests).
+        // Ensure current subsystem has the unit-test input handler (critical when subsystem was created in the test, e.g. AuthenticationDeviceTests).
         Abxr.OnInputRequested = GetUnitTestInputRequestedHandler();
         Abxr.StartAuthentication();
 
@@ -324,7 +324,7 @@ public class AbxrPlayModeTestBase
     }
 
     /// <summary>
-    /// Same as PerformAuth but onComplete receives (success, errorMessage). Use for second-stage tests that assert on API error messages.
+    /// Same as PerformAuth but onComplete receives (success, errorMessage). Use for user authentication tests that assert on API error messages.
     /// When maxSecondStageSubmissions is set (e.g. 1), the input handler submits at most that many times; on the next request it calls Abxr.EndSession() so the test completes without looping.
     /// When customOnInputRequested is non-null, it is used instead of the unit-test credentials handler (e.g. for empty-then-valid flow tests).
     /// </summary>
