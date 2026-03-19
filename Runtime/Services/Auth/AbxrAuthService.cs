@@ -49,7 +49,6 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>Working copy of _runtimeAuth.authMechanism for this session; prompt is temporarily set to user input in KeyboardAuthenticate. All code uses this.</summary>
         private AuthMechanism _authMechanism;
         private DateTime _tokenExpiry = DateTime.MinValue;
-        private int _failedAuthAttempts;
         private bool _inputRequestPending;
         /// <summary>True when the API rejected our credentials (401/403 or explicit error). No further auth attempts this session; Authenticate() will no-op and report failure.</summary>
         private bool _credentialsRejectedByApi;
@@ -291,6 +290,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     OnFailed?.Invoke(_lastInputError);
                     string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism.type);
                     string displayError = ShortenPinErrorForDisplay(normalizedType, _lastInputError);
+                    _inputRequestPending = true;
                     OnInputRequested?.Invoke(normalizedType, originalPrompt, _authMechanism.domain ?? "", displayError);
                 }
             }, withRetry: false));
@@ -782,7 +782,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
             _inputRequestPending = true;
             OnInputRequested?.Invoke(type, prompt, domain, error);
-            _failedAuthAttempts++;
         }
 
         private void AuthSucceeded()
@@ -818,7 +817,6 @@ namespace AbxrLib.Runtime.Services.Auth
             // Preserve test-injected authMechanism so GetConfigurationCoroutine does not overwrite with server config.
             if (!_useInjectedRuntimeAuthForTesting)
                 _runtimeAuth.authMechanism = null;
-            _failedAuthAttempts = 0;
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
             _returnToPackage = null;
