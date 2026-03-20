@@ -30,6 +30,7 @@ namespace AbxrLib.Runtime
             _assessmentStarted = false;
             _nextRuntimeAuthConfigForTesting = null;
             _simulateQuitInExitAfterAssessmentComplete = false;
+            Abxr.ResetQuitClosingEventDefaultsForTesting();
         }
 
         /// <summary>For testing only. When true, ExitAfterAssessmentComplete() does not call EditorApplication.isPlaying = false / Application.Quit(); it logs and ends the coroutine so PlayMode tests can complete.</summary>
@@ -1533,8 +1534,8 @@ internal void StartNewSession()
 		}
 		
 		/// <summary>
-        /// Automatically complete all running Assessments, Objectives, and Interactions
-        /// Uses Incomplete status to indicate the events were terminated due to application quit
+        /// Automatically complete all running Assessments, Objectives, and Interactions.
+        /// Score/status come from <see cref="Abxr.OnQuitAssessmentStatus"/> (and related Abxr.OnQuit* statics).
         /// Processing order: Interactions → Objectives → Assessments (hierarchical order)
         /// </summary>
         private void CloseRunningEvents()
@@ -1552,12 +1553,15 @@ internal void StartNewSession()
                 var interactionNames = new List<string>(runningInteractionTimes.Keys);
                 foreach (string interactionName in interactionNames)
                 {
-                    Abxr.EventInteractionComplete(interactionName, Abxr.InteractionType.Null, Abxr.InteractionResult.Neutral, "",
-                        new Dictionary<string, string> 
-                        { 
-                            ["quit_reason"] = "application_quit",
-                            ["auto_closed"] = "true"
-                        });
+                    var interactionMeta = new Dictionary<string, string>
+                    {
+                        ["quit_reason"] = "application_quit",
+                        ["auto_closed"] = "true"
+                    };
+                    if (Abxr.OnQuitInteractionScore.HasValue)
+                        interactionMeta["score"] = Abxr.OnQuitInteractionScore.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    Abxr.EventInteractionComplete(interactionName, Abxr.OnQuitInteractionType, Abxr.OnQuitInteractionResult,
+                        Abxr.OnQuitInteractionResponse ?? "", interactionMeta);
                     totalClosed++;
                 }
             }
@@ -1568,7 +1572,7 @@ internal void StartNewSession()
                 var objectiveNames = new List<string>(runningObjectiveTimes.Keys);
                 foreach (string objectiveName in objectiveNames)
                 {
-                    Abxr.EventObjectiveComplete(objectiveName, 0, Abxr.EventStatus.Incomplete,
+                    Abxr.EventObjectiveComplete(objectiveName, Abxr.OnQuitObjectiveScore, Abxr.OnQuitObjectiveStatus,
                         new Dictionary<string, string> 
                         { 
                             ["quit_reason"] = "application_quit",
@@ -1584,7 +1588,7 @@ internal void StartNewSession()
                 var assessmentNames = new List<string>(runningAssessmentTimes.Keys);
                 foreach (string assessmentName in assessmentNames)
                 {
-                    Abxr.EventAssessmentComplete(assessmentName, 0, Abxr.EventStatus.Fail, 
+                    Abxr.EventAssessmentComplete(assessmentName, Abxr.OnQuitAssessmentScore, Abxr.OnQuitAssessmentStatus, 
                         new Dictionary<string, string> 
                         { 
                             ["quit_reason"] = "application_quit",

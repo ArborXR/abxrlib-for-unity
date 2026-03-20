@@ -117,6 +117,22 @@ public static partial class Abxr
 		Device,
 		User
 	}
+
+	// ── Application quit / EndSession: auto-complete open assessment tree ─────────────────────────
+	/// <summary>
+	/// When the app quits or <see cref="EndSession"/> runs, the SDK completes any assessment, objective, or interaction
+	/// that was started but not finished. These statics control the score/status (and interaction fields) used for that flush.
+	/// Events still include meta <c>quit_reason</c>=<c>application_quit</c> and <c>auto_closed</c>=<c>true</c>.
+	/// </summary>
+	public static EventStatus OnQuitAssessmentStatus = EventStatus.Fail;
+	public static int OnQuitAssessmentScore = 0;
+	public static EventStatus OnQuitObjectiveStatus = EventStatus.Incomplete;
+	public static int OnQuitObjectiveScore = 0;
+	public static InteractionType OnQuitInteractionType = InteractionType.Null;
+	public static InteractionResult OnQuitInteractionResult = InteractionResult.Neutral;
+	public static string OnQuitInteractionResponse = "";
+	/// <summary>If non-null, added as <c>score</c> in interaction metadata on quit (interactions have no first-class score field).</summary>
+	public static int? OnQuitInteractionScore = null;
 	
 	// Data structures for result options and event status
 	public static EventStatus ToEventStatus(this ResultOptions options) => options switch // Only here for backwards compatibility
@@ -801,6 +817,19 @@ public static partial class Abxr
 	public static string GetFingerprint() => X?.GetFingerprint();
 	
 	// ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+	/// <summary>For testing only. Restores <see cref="OnQuitAssessmentStatus"/> and related quit-closing defaults.</summary>
+	internal static void ResetQuitClosingEventDefaultsForTesting()
+	{
+		OnQuitAssessmentStatus = EventStatus.Fail;
+		OnQuitAssessmentScore = 0;
+		OnQuitObjectiveStatus = EventStatus.Incomplete;
+		OnQuitObjectiveScore = 0;
+		OnQuitInteractionType = InteractionType.Null;
+		OnQuitInteractionResult = InteractionResult.Neutral;
+		OnQuitInteractionResponse = "";
+		OnQuitInteractionScore = null;
+	}
 	
 	private static AbxrSubsystem X
 	{
