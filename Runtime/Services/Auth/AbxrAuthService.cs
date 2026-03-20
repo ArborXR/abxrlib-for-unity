@@ -77,6 +77,8 @@ namespace AbxrLib.Runtime.Services.Auth
         // Auth handoff for external launcher apps
         private bool _sessionUsedAuthHandoff;
         private string _returnToPackage;
+        /// <summary>True when a valid auth_handoff was parsed; AuthenticateCoroutine skips device AuthRequestCoroutine and completes after GET config (same as normal flow).</summary>
+        private bool _deviceAuthDeferredByHandoff;
 
         /// <summary>
         /// True only when we completed authentication via ArborInsightsClient this session.
@@ -201,12 +203,8 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             _runtimeAuth.CopyAuthFieldsTo(_payload);
 
-            // Check auth handoff (command-line / intent)
-            if (CheckAuthHandoff())
-            {
-                _attemptActive = false;
-                return;
-            }
+            // Auth handoff (intent / CLI / test inject): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
+            CheckAuthHandoff();
 
             // Use runtime auth mechanism for the device authentication request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
             _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
@@ -267,7 +265,7 @@ namespace AbxrLib.Runtime.Services.Auth
             else
                 _authMechanism.prompt = input;
 
-            _runner.StartCoroutine(AuthRequestCoroutineWithError((success, errorMessage) =>
+            _runner.StartCoroutine(AuthRequestCoroutine((success, errorMessage) =>
             {
                 // Store the entered value only for email and text so we can add it to UserData. PIN is never stored in UserData—only used as auth prompt.
                 if (_authMechanism.type == "email" || _authMechanism.type == "text")
@@ -343,30 +341,50 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private IEnumerator AuthenticateCoroutine()
         {
-            bool authOk = false;
-            yield return _runner.StartCoroutine(AuthRequestCoroutine(ok => authOk = ok));
-            if (!authOk)
+            bool authOk;
+            string authError = null;
+            if (_deviceAuthDeferredByHandoff)
             {
-                _attemptActive = false;
-                OnFailed?.Invoke("Initial authentication request failed");
-                yield break;
+                _deviceAuthDeferredByHandoff = false;
+                authOk = true;
+            }
+            else
+            {
+                authOk = false;
+                yield return _runner.StartCoroutine(AuthRequestCoroutine((ok, err) =>
+                {
+                    authOk = ok;
+                    authError = err;
+                }, withRetry: true));
+                if (!authOk)
+                {
+                    _attemptActive = false;
+                    string message = !string.IsNullOrEmpty(authError)
+                        ? authError
+                        : "Initial authentication request failed";
+                    OnFailed?.Invoke(message);
+                    yield break;
+                }
             }
 
             // Start re-auth polling
             StartReAuthPolling();
 
-            // Fetch config (which may contain an auth mechanism / pin prompt)
+            // Fetch config (non-auth fields + optional authMechanism). Handoff and config-failure paths treat user auth as not required.
             bool configOk = false;
             string configFailureDetail = null;
             yield return _runner.StartCoroutine(GetConfigurationCoroutine((ok, detail) => { configOk = ok; configFailureDetail = detail; }));
             if (!configOk)
             {
-                _attemptActive = false;
-                string message = string.IsNullOrEmpty(configFailureDetail)
-                    ? "Config request failed"
-                    : $"Config request failed: {configFailureDetail}";
-                OnFailed?.Invoke(message);
-                yield break;
+                Logcat.Warning(string.IsNullOrEmpty(configFailureDetail)
+                    ? "GET config failed; continuing with Configuration defaults and no user auth prompt (auth_mechanism treated as none)."
+                    : $"GET config failed ({configFailureDetail}); continuing with Configuration defaults and no user auth prompt (auth_mechanism treated as none).");
+                ApplyNoneUserAuthMechanismForSession();
+            }
+            else if (_sessionUsedAuthHandoff)
+            {
+                // Session identity came from the launcher; do not require a second PIN/email step from GET config.
+                ApplyNoneUserAuthMechanismForSession();
             }
 
             if (_stopping || !_attemptActive)
@@ -422,8 +440,8 @@ namespace AbxrLib.Runtime.Services.Auth
             return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
         }
 
-        /// <summary>Attempts auth via current transport. When withRetry is true, retries until success. When false (e.g. keyboard auth), one attempt only.</summary>
-        private IEnumerator AuthRequestCoroutineWithError(Action<bool, string> onComplete, bool withRetry = true)
+        /// <summary>Attempts auth via current transport. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure; when false (e.g. keyboard submit), one attempt only.</summary>
+        private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
@@ -516,12 +534,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
-        }
-
-        /// <summary>Attempts auth via service (when available) or REST. When withRetry is true, retries the same path until success (parity with main). When false (e.g. keyboard auth), one attempt only.</summary>
-        private IEnumerator AuthRequestCoroutine(Action<bool> onComplete, bool withRetry = true)
-        {
-            yield return AuthRequestCoroutineWithError((ok, _) => onComplete(ok), withRetry);
         }
 
         /// <summary>Parses auth response and applies it. Uses the same success rule as both transports (AuthResponse.IsValidSuccess): token or modules or appId-only (user authentication required). When token is present (REST), validates JWT and sets expiry; service responses have token stripped so we skip that. Single place for ResponseData, UserData, Modules.</summary>
@@ -788,8 +800,21 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _attemptActive = false;
             Authenticated = true;
+            if (ResponseData != null)
+            {
+                ResponseData.UserData ??= new Dictionary<string, string>();
+                _userData = new Dictionary<string, string>(ResponseData.UserData);
+            }
             OnSucceeded?.Invoke();
             Logcat.Info("Authenticated successfully");
+        }
+
+        /// <summary>For handoff receivers and GET-config failure: no keyboard/PIN; keep Configuration asset defaults for other fields.</summary>
+        private void ApplyNoneUserAuthMechanismForSession()
+        {
+            _authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
+            if (!_useInjectedRuntimeAuthForTesting)
+                _runtimeAuth.authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
         }
 
         /// <summary>For testing only. Applies the given auth response and invokes OnSucceeded so subsystem and Abxr.OnAuthCompleted behave as after a real auth.</summary>
@@ -825,6 +850,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _lastInputError = null;
             _userData = null;
             _credentialsRejectedByApi = false;
+            _deviceAuthDeferredByHandoff = false;
         }
 
         /// <summary>
@@ -841,8 +867,9 @@ namespace AbxrLib.Runtime.Services.Auth
         /// Check for authentication handoff from external launcher apps
         /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params.
         /// For TestRunner: tests can inject payload via SetAuthHandoffForTesting so the flow can be asserted without a real intent.
+        /// Invalid payload: logs and returns (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
         /// </summary>
-        private bool CheckAuthHandoff()
+        private void CheckAuthHandoff()
         {
             string handoffPayload = null;
             if (!string.IsNullOrEmpty(_authHandoffForTesting))
@@ -860,11 +887,16 @@ namespace AbxrLib.Runtime.Services.Auth
                 handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
 #endif
             }
-            if (string.IsNullOrEmpty(handoffPayload)) return false;
+            if (string.IsNullOrEmpty(handoffPayload)) return;
             string normalized = NormalizeHandoffPayload(handoffPayload);
-            if (string.IsNullOrEmpty(normalized)) return false;
+            if (string.IsNullOrEmpty(normalized))
+            {
+                Logcat.Warning("auth_handoff was present but could not be normalized to JSON; continuing with device authentication.");
+                return;
+            }
             Logcat.Info("Processing authentication handoff from external launcher");
-            return ParseAuthResponse(normalized, true);
+            if (!ParseAuthResponse(normalized, true))
+                Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
         }
 
         /// <summary>
@@ -1009,7 +1041,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator CoSetUserDataReAuth()
         {
             _setUserDataReAuthActive = true;
-            yield return AuthRequestCoroutineWithError((success, errorMsg) =>
+            yield return AuthRequestCoroutine((success, errorMsg) =>
             {
                 _setUserDataReAuthActive = false;
                 _attemptActive = false;
@@ -1274,9 +1306,11 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 // Set token expiry to far in the future since we're trusting the handoff
                 _tokenExpiry = DateTime.UtcNow.AddHours(24);
-                Logcat.Info($"Auth handoff successful. Modules: {ResponseData.Modules?.Count ?? 0}");
+                Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
                 _sessionUsedAuthHandoff = true;
                 _returnToPackage = ResponseData?.ReturnToPackage;
+                ResponseData.UserData ??= new Dictionary<string, string>();
+                _userData = new Dictionary<string, string>(ResponseData.UserData);
 
                 // For the ArborInsightsClient transport: the normal AuthRequestCoroutine is bypassed by handoff,
                 // so the service has no knowledge of this session. Pass the full auth response JSON so the
@@ -1296,8 +1330,8 @@ namespace AbxrLib.Runtime.Services.Auth
                     _usedArborInsightsClientForSession = true;
                 }
 
-                StartReAuthPolling();
-                AuthSucceeded();
+                _deviceAuthDeferredByHandoff = true;
+                // AuthenticateCoroutine runs GET config next, then AuthSucceeded (user auth not re-required after handoff).
                 return true;
             }
             

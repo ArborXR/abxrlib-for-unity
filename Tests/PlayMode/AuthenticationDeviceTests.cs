@@ -441,7 +441,7 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
     // ── Auth handoff (App 1 → App 2 → return to App 1) ─────────────────────
     // The only bridge between the two emulated apps/APKs is the auth_handoff intent payload (the JSON).
     // We use full teardown + full base setup so each "app" is otherwise isolated.
-    // Handoff tests use authMechanism = AuthMechanismAssessmentPin so the PIN flow runs where needed (unit test handler submits configured PIN).
+    // App 1 may use assessmentPin; App 2 adopts via handoff then GET config — receiver does not re-prompt PIN (identity from launcher).
 
     /// <summary>
     /// Simulates auth_handoff flow: App 1 authenticates, gets PackageName from response, stores handoff JSON,

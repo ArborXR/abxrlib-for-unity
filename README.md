@@ -74,6 +74,7 @@ To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org 
 
 #### App token and org token (recommended)
 
+#### Configure Unity Project
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
 2. Enable **Use App Tokens**.
 3. Set **App Token** (required): JWT for your app, from your distribution channel or ArborXR portal.
