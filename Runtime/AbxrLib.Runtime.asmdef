@@ -2,6 +2,7 @@
     "name": "AbxrLib.Runtime",
     "rootNamespace": "AbxrLib.Runtime",
     "references": [
+        "Newtonsoft.Json",
         "Unity.TextMeshPro",
         "Unity.InputSystem",
         "Unity.XR.Interaction.Toolkit",

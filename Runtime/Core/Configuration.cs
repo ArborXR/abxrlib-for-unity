@@ -15,6 +15,7 @@
  */
 
 using System;
+using System.Globalization;
 using AbxrLib.Runtime.Types;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -119,7 +120,15 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
             
-            // Clamp numeric ranges: empty/invalid (e.g. 0 from cleared Inspector) becomes default; out-of-range becomes min/max
+            ClampNumericSettings();
+
+            _lastValidationErrorMessage = null;
+            return true;
+        }
+
+        /// <summary>Clamps numeric Configuration fields to valid ranges (same rules as <see cref="IsValid"/>).</summary>
+        public void ClampNumericSettings()
+        {
             ClampInt(nameof(sendRetriesOnFailure), ref sendRetriesOnFailure, 0, 10, 3);
             ClampInt(nameof(sendRetryIntervalSeconds), ref sendRetryIntervalSeconds, 1, 300, 3);
             ClampInt(nameof(sendNextBatchWaitSeconds), ref sendNextBatchWaitSeconds, 1, 3600, 30);
@@ -136,9 +145,6 @@ namespace AbxrLib.Runtime.Core
             ClampFloat(nameof(telemetryTrackingPeriodSeconds), ref telemetryTrackingPeriodSeconds, 1f, 300f, 10f);
             ClampFloat(nameof(authenticationStartDelay), ref authenticationStartDelay, 0f, 60f, 0f);
             ClampFloat(nameof(defaultMaxDistanceLimit), ref defaultMaxDistanceLimit, 0f, 10000f, 50f);
-
-            _lastValidationErrorMessage = null;
-            return true;
         }
 
         private static void ClampInt(string fieldName, ref int value, int min, int max, int defaultValue)
@@ -165,25 +171,48 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
+        /// <summary>Merges GET /v1/storage/config into this instance. Credentials, token mode, build type, module auto-start, auth UI layout, AbxrTarget defaults, learner launcher, and unit test fields stay developer-controlled (see <see cref="ConfigPayload"/>).</summary>
         public void ApplyConfigPayload(ConfigPayload payload)
         {
+            if (payload == null) return;
+
             if (!string.IsNullOrEmpty(payload.restUrl)) restUrl = payload.restUrl;
-            if (!string.IsNullOrEmpty(payload.sendRetriesOnFailure)) sendRetriesOnFailure = Convert.ToInt32(payload.sendRetriesOnFailure);
-            if (!string.IsNullOrEmpty(payload.sendRetryInterval)) sendRetryIntervalSeconds = Convert.ToInt32(payload.sendRetryInterval);
-            if (!string.IsNullOrEmpty(payload.sendNextBatchWait)) sendNextBatchWaitSeconds = Convert.ToInt32(payload.sendNextBatchWait);
-            if (!string.IsNullOrEmpty(payload.stragglerTimeout)) stragglerTimeoutSeconds = Convert.ToInt32(payload.stragglerTimeout);
-            if (!string.IsNullOrEmpty(payload.dataEntriesPerSendAttempt)) dataEntriesPerSendAttempt = Convert.ToInt32(payload.dataEntriesPerSendAttempt);
-            if (!string.IsNullOrEmpty(payload.storageEntriesPerSendAttempt)) storageEntriesPerSendAttempt = Convert.ToInt32(payload.storageEntriesPerSendAttempt);
-            if (!string.IsNullOrEmpty(payload.pruneSentItemsOlderThan)) pruneSentItemsOlderThanHours = Convert.ToInt32(payload.pruneSentItemsOlderThan);
-            if (!string.IsNullOrEmpty(payload.maximumCachedItems)) maximumCachedItems = Convert.ToInt32(payload.maximumCachedItems);
-            if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent);
+            if (!string.IsNullOrEmpty(payload.sendRetriesOnFailure)) sendRetriesOnFailure = Convert.ToInt32(payload.sendRetriesOnFailure, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.sendRetryInterval)) sendRetryIntervalSeconds = Convert.ToInt32(payload.sendRetryInterval, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.sendNextBatchWait)) sendNextBatchWaitSeconds = Convert.ToInt32(payload.sendNextBatchWait, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.stragglerTimeout)) stragglerTimeoutSeconds = Convert.ToInt32(payload.stragglerTimeout, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.requestTimeoutSeconds)) requestTimeoutSeconds = Convert.ToInt32(payload.requestTimeoutSeconds, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.maxCallFrequencySeconds) && float.TryParse(payload.maxCallFrequencySeconds, NumberStyles.Float, CultureInfo.InvariantCulture, out float maxCallFreq))
+                maxCallFrequencySeconds = maxCallFreq;
+            if (!string.IsNullOrEmpty(payload.dataEntriesPerSendAttempt)) dataEntriesPerSendAttempt = Convert.ToInt32(payload.dataEntriesPerSendAttempt, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.storageEntriesPerSendAttempt)) storageEntriesPerSendAttempt = Convert.ToInt32(payload.storageEntriesPerSendAttempt, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.pruneSentItemsOlderThan)) pruneSentItemsOlderThanHours = Convert.ToInt32(payload.pruneSentItemsOlderThan, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.maximumCachedItems)) maximumCachedItems = Convert.ToInt32(payload.maximumCachedItems, CultureInfo.InvariantCulture);
+            if (!string.IsNullOrEmpty(payload.retainLocalAfterSent)) retainLocalAfterSent = Convert.ToBoolean(payload.retainLocalAfterSent, CultureInfo.InvariantCulture);
+
+            if (!string.IsNullOrEmpty(payload.launcherAppID)) launcherAppID = payload.launcherAppID;
+
+            if (payload.headsetTracking.HasValue) headsetTracking = payload.headsetTracking.Value;
+            if (payload.enableReturnTo.HasValue) enableReturnTo = payload.enableReturnTo.Value;
+            if (payload.enablePinPadGuestAccess.HasValue) enablePinPadGuestAccess = payload.enablePinPadGuestAccess.Value;
+            else if (payload.authMechanism != null && payload.authMechanism.allowGuest.HasValue)
+                enablePinPadGuestAccess = payload.authMechanism.allowGuest.Value;
+
+            if (payload.enableArborInsightsClient.HasValue) enableArborInsightsClient = payload.enableArborInsightsClient.Value;
+            if (payload.enableArborMdmClient.HasValue) enableArborMdmClient = payload.enableArborMdmClient.Value;
+            if (payload.enableAutomaticTelemetry.HasValue) enableAutomaticTelemetry = payload.enableAutomaticTelemetry.Value;
+            if (payload.enableSceneEvents.HasValue) enableSceneEvents = payload.enableSceneEvents.Value;
+            if (!string.IsNullOrEmpty(payload.maxDictionarySize)) maxDictionarySize = Convert.ToInt32(payload.maxDictionarySize, CultureInfo.InvariantCulture);
+
             // Performance / tracking periods (backend may send as numeric strings, e.g. "1", "0.5", "10")
-            if (!string.IsNullOrEmpty(payload.positionCapturePeriod) && float.TryParse(payload.positionCapturePeriod, out float positionPeriod))
-                positionTrackingPeriodSeconds = Mathf.Clamp(positionPeriod, 0.1f, 60f);
-            if (!string.IsNullOrEmpty(payload.frameRateCapturePeriod) && float.TryParse(payload.frameRateCapturePeriod, out float frameRatePeriod))
-                frameRateTrackingPeriodSeconds = Mathf.Clamp(frameRatePeriod, 0.1f, 60f);
-            if (!string.IsNullOrEmpty(payload.telemetryCapturePeriod) && float.TryParse(payload.telemetryCapturePeriod, out float telemetryPeriod))
-                telemetryTrackingPeriodSeconds = Mathf.Clamp(telemetryPeriod, 1f, 300f);
+            if (!string.IsNullOrEmpty(payload.positionCapturePeriod) && float.TryParse(payload.positionCapturePeriod, NumberStyles.Float, CultureInfo.InvariantCulture, out float positionPeriod))
+                positionTrackingPeriodSeconds = positionPeriod;
+            if (!string.IsNullOrEmpty(payload.frameRateCapturePeriod) && float.TryParse(payload.frameRateCapturePeriod, NumberStyles.Float, CultureInfo.InvariantCulture, out float frameRatePeriod))
+                frameRateTrackingPeriodSeconds = frameRatePeriod;
+            if (!string.IsNullOrEmpty(payload.telemetryCapturePeriod) && float.TryParse(payload.telemetryCapturePeriod, NumberStyles.Float, CultureInfo.InvariantCulture, out float telemetryPeriod))
+                telemetryTrackingPeriodSeconds = telemetryPeriod;
+
+            ClampNumericSettings();
         }
 
         [Header("Service Provider")]
@@ -225,6 +254,9 @@ namespace AbxrLib.Runtime.Core
         
         [Tooltip("Allow returnTo Launcher. When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff.")]
         public bool enableReturnTo = true;
+
+        [Tooltip("When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, KeyboardManager.skipButton is hidden at runtime. Custom PIN prefabs should assign skipButton like the default.")]
+        public bool enablePinPadGuestAccess = true;
 
         [Header("Authentication Prefabs")]
         public GameObject KeyboardPrefab;
