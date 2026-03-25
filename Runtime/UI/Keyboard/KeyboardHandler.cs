@@ -4,6 +4,7 @@ using System.Collections;
 using AbxrLib.Runtime.Core;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace AbxrLib.Runtime.UI.Keyboard
 {
@@ -157,6 +158,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     
                 _prompt = _keyboardInstance.GetComponentsInChildren<TextMeshProUGUI>()
                     .FirstOrDefault(t => t.name == "DynamicMessage");
+                // PanelCanvas is a sibling of KeyboardCanvas, placed in front in local Z; its Images and
+                // DynamicMessage TMP (raycastTarget on) otherwise win XR ray hits before the key canvas.
+                DisableRaycastOnKeyboardPanelChrome(_keyboardInstance);
                 LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_keyboardInstance);
             }
         
@@ -168,6 +172,23 @@ namespace AbxrLib.Runtime.UI.Keyboard
     
       
     
+        /// <summary>
+        /// AbxrKeyboard root has two world-space canvases: PanelCanvas (branding, DynamicMessage prompt)
+        /// and KeyboardCanvas (keys). PanelCanvas is offset in local Z in front of the key canvas; decorative
+        /// Graphics there must not raycast or controller rays hit chrome instead of keys (often the top row).
+        /// </summary>
+        private static void DisableRaycastOnKeyboardPanelChrome(GameObject keyboardRoot)
+        {
+            if (keyboardRoot == null) return;
+            var panel = keyboardRoot.transform.Find("PanelCanvas");
+            if (panel == null) return;
+            foreach (var g in panel.GetComponentsInChildren<Graphic>(true))
+            {
+                if (g == null || !g.raycastTarget) continue;
+                g.raycastTarget = false;
+            }
+        }
+
         public static IEnumerator ProcessingVisual()
         {
             _processingSubmit = true;
