@@ -137,6 +137,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
                 _prompt = _pinPadInstance.GetComponentsInChildren<TextMeshProUGUI>()
                     .FirstOrDefault(t => t.name == "DynamicMessage");
+                ApplyPinPadGuestAccessSetting(_pinPadInstance);
                 LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_pinPadInstance);
             }
             else if (keyboardType == KeyboardType.FullKeyboard)
@@ -172,6 +173,20 @@ namespace AbxrLib.Runtime.UI.Keyboard
     
       
     
+        /// <summary>
+        /// Hides Guest Access when <see cref="Configuration.enablePinPadGuestAccess"/> is false.
+        /// Works for default and custom PIN prefabs that assign <see cref="KeyboardManager.skipButton"/>.
+        /// </summary>
+        private static void ApplyPinPadGuestAccessSetting(GameObject pinPadRoot)
+        {
+            if (pinPadRoot == null) return;
+            var config = Configuration.Instance;
+            if (config == null || config.enablePinPadGuestAccess) return;
+            var manager = pinPadRoot.GetComponentInChildren<KeyboardManager>(true);
+            if (manager == null || manager.skipButton == null) return;
+            manager.skipButton.gameObject.SetActive(false);
+        }
+
         /// <summary>
         /// AbxrKeyboard root has two world-space canvases: PanelCanvas (branding, DynamicMessage prompt)
         /// and KeyboardCanvas (keys). PanelCanvas is offset in local Z in front of the key canvas; decorative

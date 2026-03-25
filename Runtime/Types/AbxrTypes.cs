@@ -12,6 +12,7 @@ namespace AbxrLib.Runtime.Types
         public string prompt;
         public string domain;
         public string inputSource = "user";
+        public bool? allowGuest;
     }
 
     /// <summary>
@@ -234,23 +235,76 @@ namespace AbxrLib.Runtime.Types
 
     // ── Config payload received from /v1/storage/config ──────────────
 
+    /// <summary>
+    /// GET /v1/storage/config response shape. The API may include any keys; Newtonsoft ignores JSON properties that do not map to members.
+    /// <see cref="AbxrLib.Runtime.Core.Configuration.ApplyConfigPayload"/> merges only a subset; credentials, token mode, build type, module timing/sequence, auth UI, AbxrTarget defaults, learner launcher, and unit-test fields are deserialized but not applied.
+    /// </summary>
     [Serializable]
     public class ConfigPayload
     {
         public AuthMechanism authMechanism;
-        public string frameRateCapturePeriod;
-        public string telemetryCapturePeriod;
+
+        // Network / batching (values are often string-encoded in merged portal config)
         public string restUrl;
         public string sendRetriesOnFailure;
         public string sendRetryInterval;
         public string sendNextBatchWait;
         public string stragglerTimeout;
+        public string requestTimeoutSeconds;
+        public string maxCallFrequencySeconds;
         public string dataEntriesPerSendAttempt;
         public string storageEntriesPerSendAttempt;
         public string pruneSentItemsOlderThan;
         public string maximumCachedItems;
         public string retainLocalAfterSent;
+
         public string positionCapturePeriod;
+        public string frameRateCapturePeriod;
+        public string telemetryCapturePeriod;
+
+        // Identity
+        public string launcherAppID;
+
+        // UI / tracking
+        public bool? headsetTracking;
+
+        // Auth flow / modules
+        public bool? enableReturnTo;
+        public bool? enablePinPadGuestAccess;
+
+        // Platform / feature flags
+        public bool? enableArborInsightsClient;
+        public bool? enableArborMdmClient;
+        public bool? enableAutomaticTelemetry;
+        public bool? enableSceneEvents;
+        public string maxDictionarySize;
+
+        // ── Also accepted in GET /v1/storage/config JSON; deserialized but NOT merged into Configuration (developer-controlled in Unity) ──
+        public bool? useAppTokens;
+        public string buildType;
+        public string authenticationStartDelay;
+        public bool? enableAutoStartModules;
+        public bool? enableAutoAdvanceModules;
+        public string appID;
+        public string orgID;
+        public string authSecret;
+        public string appToken;
+        public string orgToken;
+        public bool? authUIFollowCamera;
+        public bool? enableDirectTouchInteraction;
+        public string authUIDistanceFromCamera;
+        public string defaultMaxDistanceLimit;
+        public bool? defaultAutoCreateTriggerCollider;
+        public bool? enableAutoStartAuthentication;
+        public bool? enableLearnerLauncherMode;
+        public bool? unitTestConfigEnabled;
+        public string unitTestAuthPin;
+        public string unitTestAuthBadPin;
+        public string unitTestAuthText;
+        public string unitTestAuthEmail;
+        public string unitTestAuthEmailDomain;
+        public string unitTestDeviceId;
+        public string unitTestFingerprint;
     }
 
     // ── Data payloads for /v1/collect/data ────────────────────────────

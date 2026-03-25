@@ -59,6 +59,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private string _lastInputError;
         private bool _stopping;
         private bool _attemptActive;
+        internal bool IsAuthenticationAttemptActive => _attemptActive;
         private Coroutine _reAuthCoroutine;
         private Coroutine _retryCoroutine;
         private Dictionary<string, string> _userData;
