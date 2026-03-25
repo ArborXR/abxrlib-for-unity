@@ -315,6 +315,7 @@ namespace AbxrLib.Runtime
 	        PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
 	        PlayerPrefs.Save();
 	        _assessmentStarted = false;
+	        _currentModuleIndex = 0;
 	        AIProxyApi.ClearPastMessages();
 	        _authService.ClearSessionAndPrepareForNew();
         }
@@ -652,6 +653,7 @@ internal void StartNewSession()
 			if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
 			if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 			_assessmentStarted = false;
+			_currentModuleIndex = 0;
 			AIProxyApi.ClearPastMessages();
 
 #if UNITY_ANDROID && !UNITY_EDITOR
