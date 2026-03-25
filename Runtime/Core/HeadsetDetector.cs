@@ -202,7 +202,11 @@ namespace AbxrLib.Runtime.Core
         {
             // Don't bother asking if they aren't acting on this event
             if (Abxr.OnHeadsetPutOnNewSession == null) return;
-        
+            // Require a completed session auth first; avoid prompting or calling Authenticate before any successful auth.
+            if (_authService == null || !_authService.Authenticated) return;
+            // Do not stack on an in-flight Authenticate (e.g. duplicate StartAuthentication, keyboard phase, SetUserData re-auth).
+            if (_authService.IsAuthenticationAttemptActive) return;
+
             Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
                 ExitPollHandler.PollType.MultipleChoice,
                 new List<string>{ContinueSessionString, NewSessionString},
@@ -215,7 +219,9 @@ namespace AbxrLib.Runtime.Core
             {
                 try
                 {
-                    _authService?.Authenticate();
+                    if (_authService == null || !_authService.Authenticated || _authService.IsAuthenticationAttemptActive)
+                        return;
+                    _authService.Authenticate();
                     Abxr.OnHeadsetPutOnNewSession?.Invoke();
                 }
                 catch (System.Exception ex)
