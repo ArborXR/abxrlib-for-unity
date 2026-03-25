@@ -370,7 +370,7 @@ namespace AbxrLib.Runtime
             _authService.SubmitInput(input);
         }
 
-        /// <summary>True when QR scanning is available on this device and the SDK is currently waiting for auth input (OnInputRequested was invoked). Use this to show/hide the "Scan QR" option; when true, OnInputSubmitted will be accepted after a scan.</summary>
+        /// <summary>True when QR scanning is available on this device and the SDK is currently waiting for auth input (OnInputRequested was invoked). Pico: allowlisted Enterprise product + PXR_Enterprise bind OK. Meta/other: QRCodeReader.IsQRScanningAvailable().</summary>
         internal bool IsQRScanForAuthAvailable()
         {
             if (_authService == null || !_authService.IsInputRequestPending) return false;

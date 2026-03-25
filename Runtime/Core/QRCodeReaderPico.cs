@@ -8,11 +8,11 @@
  *
  * Only activates when:
  * - PICO_ENTERPRISE_SDK_3 is defined and PXR_Enterprise is available
- * - Running on a PICO Enterprise device (product name contains "enterprise").
+ * - PXR_System.GetProductName() matches SupportedPicoEnterpriseQrProductNameMarkers (enterprise + verified SKU markers, like Meta's device allowlist)
+ * - BindEnterpriseService reports success (same idea as QRCodeReader.IsQRScanningAvailable() gating the UI)
  *
- * QR is known to work on PICO 4 Enterprise Ultra (4EU). On PICO 4 Enterprise (non-Ultra) the SDK
- * may fail (bind or ScanQRCode); we allow the attempt and on first failure mark the reader as
- * unsupported and persist that in PlayerPrefs so we do not offer QR on future app launches.
+ * QR via PXR_Enterprise is verified on PICO 4 Enterprise Ultra (4EU); plain PICO 4 Enterprise is not offered
+ * (SDK bind/scan often fails). On any bind/scan failure we still mark unsupported and persist in PlayerPrefs.
  *
  * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
  */
@@ -28,8 +28,8 @@ using Unity.XR.PXR;
 namespace AbxrLib.Runtime.Core
 {
     /// <summary>
-    /// QR code reader for PICO Enterprise devices using PXR_Enterprise SDK. Known to work on PICO 4 Enterprise Ultra (4EU);
-    /// we also allow PICO 4 Enterprise and mark as unsupported on first bind/scan failure.
+    /// QR code reader for PICO Enterprise devices using PXR_Enterprise SDK. Offered only on product names that pass
+    /// SupportedPicoEnterpriseQrProductNameMarkers and after enterprise service bind succeeds (parallels QRCodeReader device checks).
     /// </summary>
     public class QRCodeReaderPico : MonoBehaviour
     {
@@ -39,14 +39,26 @@ namespace AbxrLib.Runtime.Core
         private const string PicoQrUnsupportedKey = "abxrlib_pico_qr_unsupported";
 
         /// <summary>
+        /// Substrings that must appear in PXR_System.GetProductName() (case-insensitive) for ScanQRCode to be offered,
+        /// in addition to "enterprise". Matches PICO 4 Enterprise Ultra-class SKUs; extend if PICO documents more models.
+        /// </summary>
+        private static readonly string[] SupportedPicoEnterpriseQrProductNameMarkers =
+        {
+            "ultra",
+        };
+
+        /// <summary>
         /// True once we have seen a failure (bind or ScanQRCode), this session or a previous one (PlayerPrefs).
         /// </summary>
         private static bool _qrUnsupportedThisSession;
 
+        private bool _enterpriseServiceBindSucceeded;
+
         /// <summary>
-        /// True if the PICO QR reader is available (Instance exists and we have not marked it unsupported this device).
+        /// True if the PICO QR reader can be used: supported product, bind succeeded, not marked unsupported.
         /// </summary>
-        public static bool IsAvailable => Instance != null && !_qrUnsupportedThisSession;
+        public static bool IsAvailable =>
+            Instance != null && !_qrUnsupportedThisSession && Instance._enterpriseServiceBindSucceeded;
 
         private Action<string> _scanResultCallback;
 
@@ -67,12 +79,38 @@ namespace AbxrLib.Runtime.Core
             return productName.ToLower().Contains("enterprise");
         }
 
+        /// <summary>
+        /// True when product name indicates a headset we support for PXR_Enterprise ScanQRCode (enterprise + allowlist markers).
+        /// </summary>
+        private static bool IsPicoProductSupportedForQr(string productName)
+        {
+            if (!IsPicoEnterprise(productName)) return false;
+            string p = productName.ToLowerInvariant();
+            foreach (string marker in SupportedPicoEnterpriseQrProductNameMarkers)
+            {
+                if (string.IsNullOrEmpty(marker)) continue;
+                if (p.Contains(marker.ToLowerInvariant()))
+                    return true;
+            }
+
+            Logcat.Warning(
+                "Disabling PICO QR Code Scanner. Product is Enterprise but not in the supported list for PXR_Enterprise ScanQRCode. Product: "
+                + productName);
+            return false;
+        }
+
+        /// <summary>
+        /// Same gating as <see cref="IsAvailable"/> for custom UI; mirrors <see cref="QRCodeReader.IsQRScanningAvailable"/>.
+        /// </summary>
+        public bool IsQRScanningAvailable() => IsAvailable;
+
         private void Awake()
         {
             string productName = Unity.XR.PXR.PXR_System.GetProductName();
-            if (!IsPicoEnterprise(productName))
+            if (!IsPicoProductSupportedForQr(productName))
             {
-                Logcat.Warning("Disabling PICO QR Code Scanner. Must be run on a PICO Enterprise device. Product: " + productName);
+                if (!IsPicoEnterprise(productName))
+                    Logcat.Warning("Disabling PICO QR Code Scanner. Must be run on a PICO Enterprise device. Product: " + productName);
                 return;
             }
 
@@ -80,7 +118,7 @@ namespace AbxrLib.Runtime.Core
             {
                 _qrUnsupportedThisSession = GetPicoQrUnsupportedFromPrefs();
                 Instance = this;
-                Logcat.Info("QRCodeReaderPico Instance activated successfully.");
+                Logcat.Info("QRCodeReaderPico Instance activated successfully (product supported for QR).");
             }
             else
             {
@@ -91,6 +129,8 @@ namespace AbxrLib.Runtime.Core
 
         private void Start()
         {
+            if (Instance != this)
+                return;
             PXR_Enterprise.InitEnterpriseService();
             PXR_Enterprise.BindEnterpriseService(OnServiceBound);
         }
@@ -103,11 +143,19 @@ namespace AbxrLib.Runtime.Core
 
         private void OnServiceBound(bool success)
         {
-            if (!success && Instance == this)
+            if (Instance != this)
+                return;
+            if (success)
+            {
+                _enterpriseServiceBindSucceeded = true;
+                Logcat.Info("PICO QR Code Scanner: Enterprise service bound; QR scan is available.");
+            }
+            else
             {
                 _qrUnsupportedThisSession = true;
                 SetPicoQrUnsupportedInPrefs();
-                Logcat.Warning("PICO QR Code Scanner: Enterprise service bind failed. QR scan disabled for this device (saved in preferences; device may be PICO 4 Enterprise rather than 4EU).");
+                Logcat.Warning(
+                    "PICO QR Code Scanner: Enterprise service bind failed. QR scan disabled for this device (saved in preferences).");
             }
         }
 
@@ -134,6 +182,18 @@ namespace AbxrLib.Runtime.Core
 
         public void ScanQRCode()
         {
+            if (!IsAvailable)
+            {
+                Logcat.Warning("PICO QR Code Scanner: ScanQRCode ignored (not available — product, bind, or prior failure).");
+                if (_scanResultCallback != null)
+                {
+                    var cb = _scanResultCallback;
+                    _scanResultCallback = null;
+                    cb.Invoke(null);
+                }
+                return;
+            }
+
             try
             {
                 PXR_Enterprise.ScanQRCode(OnQRCodeScanned);

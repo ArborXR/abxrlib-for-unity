@@ -294,7 +294,8 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Returns true if QR scanning for auth input is available. Use to show/hide a "Scan QR" option in custom auth UI.
-	/// On Pico the platform shows its own scanner UI. On non-Pico (e.g. Meta Quest) you choose where to display the camera feed via GetQRScanCameraTexture().
+	/// On Pico this requires a supported Enterprise product name (allowlist) and a successful PXR_Enterprise service bind, analogous to Meta device checks in QRCodeReader.IsQRScanningAvailable().
+	/// On Pico the OS shows the scanner UI; on non-Pico you can embed the feed via GetQRScanCameraTexture().
 	/// </summary>
 	public static bool IsQRScanForAuthAvailable() => X != null && X.IsQRScanForAuthAvailable();
 

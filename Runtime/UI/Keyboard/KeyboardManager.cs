@@ -85,7 +85,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
 #if UNITY_ANDROID && !UNITY_EDITOR
             bool hasPico = false;
 #if PICO_ENTERPRISE_SDK_3
-            hasPico = QRCodeReaderPico.Instance != null;
+            hasPico = QRCodeReaderPico.IsAvailable;
 #endif
             bool hasGeneral = QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
             bool isAvailable = hasPico || hasGeneral;
@@ -189,7 +189,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.Instance != null)
+            if (QRCodeReaderPico.IsAvailable)
             {
                 QRCodeReaderPico.Instance.ScanQRCode();
                 inputField.text = "";
@@ -236,7 +236,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             bool permissionsDenied = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.Instance != null)
+            if (QRCodeReaderPico.IsAvailable)
             {
                 // PICO SDK does not expose IsScanning/IsInitializing; button text stays default
             }
