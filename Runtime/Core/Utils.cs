@@ -18,11 +18,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Mail;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using AbxrLib.Runtime.Types;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -333,6 +335,60 @@ namespace AbxrLib.Runtime.Core
             {
                 Logcat.Error($"JWT decoding error: {ex.Message}");
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Decodes a JWT payload without logging. Use when the string may not be a JWT (e.g. MDM SSO access token probe).
+        /// </summary>
+        public static Dictionary<string, object> TryDecodeJwtPayload(string token)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(token)) return null;
+                string[] parts = token.Split('.');
+                if (parts.Length != 3) return null;
+                string payload = parts[1];
+                if (string.IsNullOrEmpty(payload)) return null;
+                payload = PadBase64(payload);
+                byte[] bytes = Convert.FromBase64String(Base64UrlDecode(payload));
+                string json = Encoding.UTF8.GetString(bytes);
+                if (string.IsNullOrEmpty(json)) return null;
+                return JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Stringifies a JWT payload claim for storage in UserData (nested objects/arrays as JSON).</summary>
+        public static string JwtPayloadValueToString(object value)
+        {
+            if (value == null) return "";
+            if (value is string s) return s;
+            if (value is JToken jt)
+                return jt.Type == JTokenType.String ? jt.Value<string>() ?? "" : jt.ToString(Formatting.None);
+            return JsonConvert.SerializeObject(value);
+        }
+
+        /// <summary>
+        /// Returns true when <paramref name="address"/> parses as a well-formed email (via <see cref="MailAddress"/>); outputs normalized address (e.g. casing per parser).
+        /// </summary>
+        public static bool TryNormalizePlausibleEmail(string address, out string normalizedEmail)
+        {
+            normalizedEmail = null;
+            if (string.IsNullOrWhiteSpace(address)) return false;
+            try
+            {
+                var m = new MailAddress(address.Trim());
+                if (string.IsNullOrEmpty(m.Address) || m.Address.IndexOf('@') < 0) return false;
+                normalizedEmail = m.Address;
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 

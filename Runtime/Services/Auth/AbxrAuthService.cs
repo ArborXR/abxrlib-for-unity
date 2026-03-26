@@ -537,6 +537,80 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
+        /// <summary>JWT claim names that may carry an email (OIDC, Azure AD, Google-style). First match wins when copying into <c>email</c>.</summary>
+        private static readonly string[] SsoJwtEmailClaimKeys =
+        {
+            "email",                // OIDC / Google ID token
+            "email_address",
+            "user_email",
+            "mail",                 // AD / Graph
+            "preferred_username",   // Azure AD (often UPN / email)
+            "upn",
+            "unique_name",
+        };
+
+        /// <summary>
+        /// When XRDM MDM reports SSO authenticated and the access token is a decodable JWT, merges payload claims into <paramref name="userData"/>.
+        /// Called only when the full auth sequence has finished (see <see cref="AuthSucceeded"/>), after server userData and any keyboard/email step—not after device-only HTTP success.
+        /// Conflicting claim keys are stored as <c>sso_</c>… (with numeric suffix if needed).
+        /// If <c>email</c> is still empty, copies from the first non-empty value among <see cref="SsoJwtEmailClaimKeys"/> in the JWT payload.
+        /// </summary>
+        /// <returns>True if any key was added or updated in <paramref name="userData"/>.</returns>
+        private static bool MergeSsoAccessTokenIntoUserData(Dictionary<string, string> userData)
+        {
+            if (userData == null || !Abxr.GetIsAuthenticated()) return false;
+            string token = Abxr.GetAccessToken();
+            if (string.IsNullOrWhiteSpace(token)) return false;
+            var payload = Utils.TryDecodeJwtPayload(token);
+            if (payload == null || payload.Count == 0) return false;
+            bool changed = false;
+            foreach (var kvp in payload)
+            {
+                string valueStr = Utils.JwtPayloadValueToString(kvp.Value);
+                if (string.IsNullOrEmpty(valueStr)) continue;
+                string key = kvp.Key;
+                if (!userData.ContainsKey(key))
+                {
+                    userData[key] = valueStr;
+                    changed = true;
+                }
+                else
+                {
+                    string prefixed = "sso_" + key;
+                    int suffix = 0;
+                    while (userData.ContainsKey(prefixed))
+                    {
+                        suffix++;
+                        prefixed = "sso_" + key + "_" + suffix;
+                    }
+                    userData[prefixed] = valueStr;
+                    changed = true;
+                }
+            }
+            if (EnsureEmailFromSsoJwtClaims(userData, payload))
+                changed = true;
+            return changed;
+        }
+
+        /// <summary>Sets <c>userData["email"]</c> from JWT when missing/blank, using <see cref="SsoJwtEmailClaimKeys"/> order; only when the claim value parses as an email.</summary>
+        /// <returns>True if <c>email</c> was set.</returns>
+        private static bool EnsureEmailFromSsoJwtClaims(Dictionary<string, string> userData, Dictionary<string, object> payload)
+        {
+            if (userData == null || payload == null) return false;
+            if (userData.TryGetValue("email", out var existing) && !string.IsNullOrWhiteSpace(existing))
+                return false;
+            foreach (var claimKey in SsoJwtEmailClaimKeys)
+            {
+                if (!payload.TryGetValue(claimKey, out var raw) || raw == null) continue;
+                string s = Utils.JwtPayloadValueToString(raw);
+                if (string.IsNullOrWhiteSpace(s)) continue;
+                if (!Utils.TryNormalizePlausibleEmail(s, out var normalized)) continue;
+                userData["email"] = normalized;
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>Parses auth response and applies it. Uses the same success rule as both transports (AuthResponse.IsValidSuccess): token or modules or appId-only (user authentication required). When token is present (REST), validates JWT and sets expiry; service responses have token stripped so we skip that. Single place for ResponseData, UserData, Modules.</summary>
         /// <param name="stageLabel">Optional label for logging, e.g. "device-auth" or "user-auth", so logs clearly pair request and response.</param>
         private bool ApplyAuthResponse(string responseText, string stageLabel = null)
@@ -576,22 +650,21 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
 
                 ResponseData = postResponse;
-                // Debug: log full auth response after deserialization. Include stage so device-auth vs user-auth responses are unambiguous.
-                var userDataLog = ResponseData.UserData == null ? "(null)" : string.Join(", ", ResponseData.UserData.Select(kvp => kvp.Key + "=" + kvp.Value));
-                string stagePrefix = !string.IsNullOrEmpty(stageLabel) ? $" ({stageLabel})" : "";
-                Logcat.Debug($"Auth response{stagePrefix}: userId={ResponseData.UserId ?? "(null)"}, userData=[{userDataLog}], token={(!string.IsNullOrEmpty(ResponseData.Token) ? "present" : "(null)")}, appId={ResponseData.AppId ?? "(null)"}, modules={ResponseData.Modules?.Count ?? 0}");
                 if (ResponseData.Modules?.Count > 1)
                     ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
                 // Keep ResponseData.UserId for read-only use (GetAnonymizedUserId). Sync UserData into _userData.
                 ResponseData.UserData ??= new Dictionary<string, string>();
-                if (ResponseData.UserData != null)
-                    _userData = new Dictionary<string, string>(ResponseData.UserData);
                 if (!string.IsNullOrEmpty(_enteredAuthValue))
                 {
                     ResponseData.UserData ??= new Dictionary<string, string>();
                     var keyName = _authMechanism?.type == "email" ? "email" : "text";
                     ResponseData.UserData[keyName] = _enteredAuthValue;
                 }
+                _userData = new Dictionary<string, string>(ResponseData.UserData);
+                // Debug: server userData and keyboard merge only; MDM SSO JWT merge runs in AuthSucceeded when the session auth sequence is complete.
+                var userDataLog = ResponseData.UserData == null ? "(null)" : string.Join(", ", ResponseData.UserData.Select(kvp => kvp.Key + "=" + kvp.Value));
+                string stagePrefix = !string.IsNullOrEmpty(stageLabel) ? $" ({stageLabel})" : "";
+                Logcat.Debug($"Auth response{stagePrefix}: userId={ResponseData.UserId ?? "(null)"}, userData=[{userDataLog}], token={(!string.IsNullOrEmpty(ResponseData.Token) ? "present" : "(null)")}, appId={ResponseData.AppId ?? "(null)"}, modules={ResponseData.Modules?.Count ?? 0}");
                 return true;
             }
             catch (Exception ex)
@@ -801,13 +874,18 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _attemptActive = false;
             Authenticated = true;
+            bool ssoUserDataChanged = false;
             if (ResponseData != null)
             {
                 ResponseData.UserData ??= new Dictionary<string, string>();
+                ssoUserDataChanged = MergeSsoAccessTokenIntoUserData(ResponseData.UserData);
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
             }
             OnSucceeded?.Invoke();
             Logcat.Info("Authenticated successfully");
+            // Push merged MDM SSO claims to the API via the same transport as SetUserData (custom re-auth); completion is OnUserDataSyncCompleted only.
+            if (ssoUserDataChanged)
+                SetUserData(null, null);
         }
 
         /// <summary>For handoff receivers and GET-config failure: no keyboard/PIN; keep Configuration asset defaults for other fields.</summary>
@@ -822,15 +900,18 @@ namespace AbxrLib.Runtime.Services.Auth
         internal void SimulateAuthSuccess(AuthResponse response)
         {
             if (response == null) return;
+            Authenticated = true;
             ResponseData = response;
             if (ResponseData.Modules?.Count > 1)
                 ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
             // Keep ResponseData.UserId for read-only use (GetAnonymizedUserId). Sync UserData into _userData.
             ResponseData.UserData ??= new Dictionary<string, string>();
+            bool ssoUserDataChanged = MergeSsoAccessTokenIntoUserData(ResponseData.UserData);
             if (ResponseData.UserData != null)
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
-            Authenticated = true;
             OnSucceeded?.Invoke();
+            if (ssoUserDataChanged)
+                SetUserData(null, null);
         }
 
         private void ClearAuthenticationState()
