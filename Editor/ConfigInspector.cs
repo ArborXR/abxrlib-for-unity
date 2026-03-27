@@ -288,6 +288,9 @@ namespace AbxrLib.Editor
             {
                 // Create a temporary instance to get the default values
                 var defaultConfig = CreateInstance<AppConfig>();
+
+                // Does not modify: build type, app/org identity (appID, orgID, authSecret, appToken, orgToken, useAppTokens),
+                // launcherAppID, or Unit Test Credentials — same as credentials / environment-specific values.
                 
                 // Service Provider
                 config.restUrl = defaultConfig.restUrl;
@@ -310,6 +313,8 @@ namespace AbxrLib.Editor
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
                 config.enableReturnTo = defaultConfig.enableReturnTo;
                 config.enablePinPadGuestAccess = defaultConfig.enablePinPadGuestAccess;
+                config.enableAutoStartModules = defaultConfig.enableAutoStartModules;
+                config.enableAutoAdvanceModules = defaultConfig.enableAutoAdvanceModules;
                 
                 // Authentication Prefabs
                 config.KeyboardPrefab = defaultConfig.KeyboardPrefab;
@@ -329,6 +334,7 @@ namespace AbxrLib.Editor
                 config.pruneSentItemsOlderThanHours = defaultConfig.pruneSentItemsOlderThanHours;
                 config.maximumCachedItems = defaultConfig.maximumCachedItems;
                 config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
+                config.maxDictionarySize = defaultConfig.maxDictionarySize;
                 config.enableArborInsightsClient = defaultConfig.enableArborInsightsClient;
                 config.enableArborMdmClient = defaultConfig.enableArborMdmClient;
                 config.enableLearnerLauncherMode = defaultConfig.enableLearnerLauncherMode;
