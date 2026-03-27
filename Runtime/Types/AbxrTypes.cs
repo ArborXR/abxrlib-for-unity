@@ -237,7 +237,7 @@ namespace AbxrLib.Runtime.Types
 
     /// <summary>
     /// GET /v1/storage/config response shape. The API may include any keys; Newtonsoft ignores JSON properties that do not map to members.
-    /// <see cref="AbxrLib.Runtime.Core.Configuration.ApplyConfigPayload"/> merges only a subset; credentials, token mode, build type, module timing/sequence, auth UI, AbxrTarget defaults, learner launcher, and unit-test fields are deserialized but not applied.
+    /// <see cref="AbxrLib.Runtime.Core.Configuration.ApplyConfigPayload"/> merges only a subset; credentials, token mode, build type, module timing/sequence, auth UI, AbxrTarget defaults, learner launcher, ArborInsightsClient/ArborMdmClient (build-time from Unity asset), and unit-test fields are deserialized but not applied.
     /// </summary>
     [Serializable]
     public class ConfigPayload
@@ -273,13 +273,13 @@ namespace AbxrLib.Runtime.Types
         public bool? enablePinPadGuestAccess;
 
         // Platform / feature flags
-        public bool? enableArborInsightsClient;
-        public bool? enableArborMdmClient;
         public bool? enableAutomaticTelemetry;
         public bool? enableSceneEvents;
         public string maxDictionarySize;
 
         // ── Also accepted in GET /v1/storage/config JSON; deserialized but NOT merged into Configuration (developer-controlled in Unity) ──
+        public bool? enableArborInsightsClient;
+        public bool? enableArborMdmClient;
         public bool? useAppTokens;
         public string buildType;
         public string authenticationStartDelay;
