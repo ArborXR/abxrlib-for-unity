@@ -82,7 +82,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _deviceAuthDeferredByHandoff;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
-        /// <summary>WebGL query string: pre-filled assessment PIN (e.g. SCORM non-VR link). When set, GET config can be overridden to assessmentPin and the first user-auth attempt auto-submits this value.</summary>
+        /// <summary>WebGL: pre-filled assessment PIN from org token JWT claim <c>pin</c> (preferred) or from <c>assessment_pin</c>/<c>assessmentPin</c> URL query. When set, GET config can be overridden to assessmentPin and the first user-auth attempt auto-submits this value.</summary>
         private string _webglQueryAssessmentPin;
         /// <summary>After one auto-submit from <see cref="_webglQueryAssessmentPin"/>, further attempts use the normal PIN prompt (retry flow).</summary>
         private bool _webglUrlPinAutoSubmitAttempted;
@@ -419,7 +419,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (!_webglUrlPinAutoSubmitAttempted && !string.IsNullOrEmpty(_webglQueryAssessmentPin))
                 {
                     _webglUrlPinAutoSubmitAttempted = true;
-                    Logcat.Info("User authentication: submitting assessment PIN from URL query (first attempt).");
+                    Logcat.Info("User authentication: submitting pre-filled assessment PIN (org token JWT or URL query, first attempt).");
                     KeyboardAuthenticate(_webglQueryAssessmentPin);
                 }
                 else
@@ -925,7 +925,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         /// <summary>
-        /// WebGL: when <c>assessment_pin</c> or <c>assessmentPin</c> is present in the page URL, force user authentication to type <c>assessmentPin</c> after GET config succeeds (non-handoff).
+        /// WebGL: when a pre-filled PIN was resolved (org token JWT <c>pin</c> claim, or <c>assessment_pin</c>/<c>assessmentPin</c> in the page URL), force user authentication to type <c>assessmentPin</c> after GET config succeeds (non-handoff).
         /// Matches <see cref="GetQueryData"/> for org_token (skipped for production_custom).</summary>
         private void ApplyAssessmentPinFromUrlQueryIfPresent()
         {
@@ -953,7 +953,19 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             _webglUrlPinAutoSubmitAttempted = false;
-            Logcat.Debug("User authentication: URL query includes assessment PIN; mechanism set to assessmentPin (auto-submit on first attempt).");
+            Logcat.Debug("User authentication: pre-filled assessment PIN available; mechanism set to assessmentPin (auto-submit on first attempt).");
+        }
+
+        /// <summary>Returns the <c>pin</c> string from a JWT org token payload, or null if missing or not a JWT.</summary>
+        private static string TryGetAssessmentPinFromOrgTokenPayload(string orgToken)
+        {
+            if (string.IsNullOrEmpty(orgToken)) return null;
+            var payload = Utils.TryDecodeJwtPayload(orgToken);
+            if (payload == null || !payload.TryGetValue("pin", out var pinObj) || pinObj == null)
+                return null;
+            string s = Utils.JwtPayloadValueToString(pinObj);
+            if (string.IsNullOrWhiteSpace(s)) return null;
+            return s.Trim();
         }
 #endif
 
@@ -1364,6 +1376,13 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             _webglQueryAssessmentPin = null;
+            string pinFromOrgJwt = TryGetAssessmentPinFromOrgTokenPayload(_runtimeAuth.orgToken);
+            if (!string.IsNullOrEmpty(pinFromOrgJwt))
+            {
+                _webglQueryAssessmentPin = pinFromOrgJwt;
+                return;
+            }
+
             string pinQuery = Utils.GetQueryParam("assessment_pin", Application.absoluteURL);
             if (string.IsNullOrEmpty(pinQuery))
                 pinQuery = Utils.GetQueryParam("assessmentPin", Application.absoluteURL);
