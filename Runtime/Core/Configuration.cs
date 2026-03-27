@@ -1,17 +1,8 @@
 /*
  * Copyright (c) 2024 ArborXR. All rights reserved.
- * 
- * AbxrLib for Unity - Configuration Management
- * 
- * This file contains the Configuration ScriptableObject that manages all AbxrLib settings:
- * - Application and organization identifiers
- * - Network configuration (REST URLs, retry settings)
- * - Telemetry and tracking settings
- * - Data batching and caching parameters
- * - UI prefab references for authentication
- * 
- * Configuration is loaded from Resources/AbxrLib.asset and can be modified
- * through the Unity Inspector or programmatically at runtime.
+ *
+ * Runtime configuration: a plain object populated from <see cref="AppConfig"/> on first access.
+ * GET /v1/storage/config merges into this instance only; the serialized asset is not modified at runtime.
  */
 
 using System;
@@ -22,153 +13,255 @@ using UnityEngine;
 namespace AbxrLib.Runtime.Core
 {
     /// <summary>
-    /// Configuration ScriptableObject for AbxrLib settings and parameters
-    /// 
-    /// This class manages all configurable aspects of AbxrLib, including network settings,
-    /// telemetry parameters, data batching configuration, and UI component references.
-    /// Configuration is automatically loaded from Resources/AbxrLib.asset at runtime.
+    /// Runtime AbxrLib settings. <see cref="Instance"/> is populated from Resources/AbxrLib.asset (<see cref="AppConfig"/>).
     /// </summary>
-    public class Configuration : ScriptableObject
+    public sealed class Configuration
     {
         private static Configuration _instance;
+        private static AppConfig _authoringAsset;
         private static bool _validatedOnce;
         private const string CONFIG_NAME = "AbxrLib";
 
-        /// <summary>
-        /// When true, validation logs warnings instead of errors for missing app/org token (e.g. during Editor build when config may be incomplete).
-        /// Set by Editor build scripts only.
-        /// </summary>
         internal static bool PreferValidationWarnings { get; set; }
 
-        /// <summary>
-        /// Last validation error message from <see cref="IsValid"/>. Set when IsValid returns false; cleared when it returns true. Callers use the return value of IsValid() plus this message to log as appropriate.
-        /// </summary>
         private static string _lastValidationErrorMessage;
-
-        /// <summary>
-        /// Validation error message when <see cref="IsValid"/> last returned false. Null when valid. Callers use this with IsValid() return value to decide how to log.
-        /// </summary>
         internal static string LastValidationErrorMessage => _lastValidationErrorMessage;
 
         public static Configuration Instance
         {
             get
             {
-                if (_instance) return _instance;
-
-                _instance = Resources.Load<Configuration>(CONFIG_NAME);
-                if (!_instance)
-                {
-                    _instance = CreateInstance<Configuration>();
-                }
-
-                // Run validation once on first load so numeric ranges are clamped early; return value is ignored here.
-                if (!_validatedOnce)
-                {
-                    _instance.IsValid();
-                    _validatedOnce = true;
-                }
+                EnsureLoaded();
                 return _instance;
             }
         }
-    
-        [Header("Build Type")]
-        [Tooltip("Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution). Development: OrgID and AuthSecret will be included in builds (for custom APKs only). Production (Custom APK): like Production for the API but requires and includes Organization Token for single-customer builds.")]
-        public string buildType = "production";
-        
-        [Header("Application Identity")]
-        [Tooltip("Required")] public string appID;
-        [Tooltip("Optional - Only used when Build Type is Development")] public string orgID;
-        [Tooltip("Optional - Only used when Build Type is Development")] public string authSecret;
-        [HideInInspector]
-        [Tooltip("Optional")] public string launcherAppID;
-        
-        [Header("App Tokens")]
-        [Tooltip("When enabled, use App Tokens instead of appID/orgID/authSecret. Defaults to false so existing config assets without this field use legacy auth.")] public bool useAppTokens = false;
-        [Tooltip("App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on.")] public string appToken;
-        [Tooltip("Optional. Organization Token (JWT) from ArborXR Portal. Leave empty for shared production builds; set for single-org or dev builds.")] public string orgToken;
-        
-        /// <summary>
-        /// Validates configuration: required auth fields and restUrl can cause return false; numeric settings are clamped to valid range (no log).
-        /// When useAppTokens: requires appToken (non-empty, JWT shape). orgToken may be empty (can come from runtime); if set, validates JWT shape.
-        /// When not useAppTokens: requires appID (non-empty, UUID). orgID and authSecret may be empty; if set, validates format.
-        /// restUrl must be set and valid (return false otherwise). Numeric values are clamped to range; validation still returns true after clamping.
-        /// Does not write to the debug log; callers use the return value and <see cref="LastValidationErrorMessage"/> to log as appropriate.
-        /// </summary>
-        /// <returns>True if configuration is valid, false otherwise</returns>
-        public bool IsValid()
+
+        private static void EnsureLoaded()
         {
+            if (_instance != null) return;
+
+            var asset = Resources.Load<AppConfig>(CONFIG_NAME);
+            if (!asset)
+                asset = ScriptableObject.CreateInstance<AppConfig>();
+
+            _authoringAsset = asset;
+            _instance = CopyFromAppConfig(asset);
+
+            if (!_validatedOnce)
+            {
+                _instance.IsValid();
+                _validatedOnce = true;
+            }
+        }
+
+        /// <summary>Used by <see cref="AppConfig.IsValid"/> (EditMode tests / Inspector).</summary>
+        internal static bool ValidateAppConfig(AppConfig a)
+        {
+            if (a == null) return false;
+            if (!TryValidateAuthAndUrl(a.useAppTokens, a.buildType, a.appID, a.orgID, a.authSecret, a.appToken, a.orgToken, a.restUrl, out _))
+                return false;
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+                a.ClampNumericSettings();
+#endif
+            return true;
+        }
+
+        private static bool TryValidateAuthAndUrl(bool useAppTokens, string buildType, string appID, string orgID, string authSecret, string appToken, string orgToken, string restUrl, out string lastError)
+        {
+            lastError = null;
             var authError = RuntimeAuthConfig.ValidateAuthFields(useAppTokens, buildType, appID, orgID, authSecret, appToken, orgToken);
             if (authError != null)
             {
-                _lastValidationErrorMessage = "Authentication error: " + authError;
+                lastError = "Authentication error: " + authError;
                 return false;
             }
 
             if (string.IsNullOrEmpty(restUrl))
             {
-                _lastValidationErrorMessage = "Configuration validation failed - restUrl is required but not set";
+                lastError = "Configuration validation failed - restUrl is required but not set";
                 return false;
             }
 
             if (!Utils.IsValidUrl(restUrl))
             {
-                _lastValidationErrorMessage = $"Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL";
+                lastError = $"Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL";
                 return false;
             }
-            
-            ClampNumericSettings();
 
+            return true;
+        }
+
+        public string buildType = "production";
+        public string appID;
+        public string orgID;
+        public string authSecret;
+        public string launcherAppID;
+        public bool useAppTokens = false;
+        public string appToken;
+        public string orgToken;
+        public string restUrl = "https://lib-backend.xrdm.app/";
+        public bool authUIFollowCamera = true;
+        public bool enableDirectTouchInteraction = true;
+        public float authUIDistanceFromCamera = 1.0f;
+        public bool headsetTracking = true;
+        public float positionTrackingPeriodSeconds = 1f;
+        public float defaultMaxDistanceLimit = 50f;
+        public bool defaultAutoCreateTriggerCollider = true;
+        public bool enableAutoStartAuthentication = true;
+        public float authenticationStartDelay = 0f;
+        public bool enableAutoStartModules = true;
+        public bool enableAutoAdvanceModules = true;
+        public bool enableReturnTo = true;
+        public bool enablePinPadGuestAccess = true;
+        public GameObject KeyboardPrefab;
+        public GameObject PinPrefab;
+        public float telemetryTrackingPeriodSeconds = 10f;
+        public float frameRateTrackingPeriodSeconds = 0.5f;
+        public int sendRetriesOnFailure = 3;
+        public int sendRetryIntervalSeconds = 3;
+        public int sendNextBatchWaitSeconds = 30;
+        public int requestTimeoutSeconds = 30;
+        public int stragglerTimeoutSeconds = 15;
+        public float maxCallFrequencySeconds = 1f;
+        public int dataEntriesPerSendAttempt = 32;
+        public int storageEntriesPerSendAttempt = 16;
+        public int pruneSentItemsOlderThanHours = 12;
+        public int maximumCachedItems = 1024;
+        public bool retainLocalAfterSent;
+        public bool enableArborInsightsClient = true;
+        public bool enableArborMdmClient = true;
+        public bool enableLearnerLauncherMode = false;
+        public bool enableAutomaticTelemetry = true;
+        public bool enableSceneEvents = true;
+        public int maxDictionarySize = 50;
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        public bool unitTestConfigEnabled = false;
+        public string unitTestAuthPin = "";
+        public string unitTestAuthBadPin = "";
+        public string unitTestAuthText = "";
+        public string unitTestAuthEmail = "";
+        public string unitTestAuthEmailDomain = "";
+        public string unitTestDeviceId = "";
+        public string unitTestFingerprint = "";
+#endif
+
+        /// <summary>Validates runtime settings (auth + URL + numeric clamp).</summary>
+        public bool IsValid()
+        {
+            if (!TryValidateAuthAndUrl(useAppTokens, buildType, appID, orgID, authSecret, appToken, orgToken, restUrl, out var err))
+            {
+                _lastValidationErrorMessage = err;
+                return false;
+            }
+
+            ClampNumericSettingsCore();
             _lastValidationErrorMessage = null;
             return true;
         }
 
-        /// <summary>Clamps numeric Configuration fields to valid ranges (same rules as <see cref="IsValid"/>).</summary>
-        public void ClampNumericSettings()
+        /// <summary>Clamps numeric fields on this runtime instance.</summary>
+        public void ClampNumericSettings() => ClampNumericSettingsCore();
+
+        private void ClampNumericSettingsCore()
         {
-            ClampInt(nameof(sendRetriesOnFailure), ref sendRetriesOnFailure, 0, 10, 3);
-            ClampInt(nameof(sendRetryIntervalSeconds), ref sendRetryIntervalSeconds, 1, 300, 3);
-            ClampInt(nameof(sendNextBatchWaitSeconds), ref sendNextBatchWaitSeconds, 1, 3600, 30);
-            ClampInt(nameof(requestTimeoutSeconds), ref requestTimeoutSeconds, 5, 300, 30);
-            ClampInt(nameof(stragglerTimeoutSeconds), ref stragglerTimeoutSeconds, 0, 3600, 15);
-            ClampFloat(nameof(maxCallFrequencySeconds), ref maxCallFrequencySeconds, 0.1f, 60f, 1f);
-            ClampInt(nameof(dataEntriesPerSendAttempt), ref dataEntriesPerSendAttempt, 1, 1000, 32);
-            ClampInt(nameof(storageEntriesPerSendAttempt), ref storageEntriesPerSendAttempt, 1, 1000, 16);
-            ClampInt(nameof(pruneSentItemsOlderThanHours), ref pruneSentItemsOlderThanHours, 0, 8760, 12);
-            ClampInt(nameof(maximumCachedItems), ref maximumCachedItems, 10, 10000, 1024);
-            ClampInt(nameof(maxDictionarySize), ref maxDictionarySize, 5, 1000, 50);
-            ClampFloat(nameof(positionTrackingPeriodSeconds), ref positionTrackingPeriodSeconds, 0.1f, 60f, 1f);
-            ClampFloat(nameof(frameRateTrackingPeriodSeconds), ref frameRateTrackingPeriodSeconds, 0.1f, 60f, 0.5f);
-            ClampFloat(nameof(telemetryTrackingPeriodSeconds), ref telemetryTrackingPeriodSeconds, 1f, 300f, 10f);
-            ClampFloat(nameof(authenticationStartDelay), ref authenticationStartDelay, 0f, 60f, 0f);
-            ClampFloat(nameof(defaultMaxDistanceLimit), ref defaultMaxDistanceLimit, 0f, 10000f, 50f);
+            ClampInt(ref sendRetriesOnFailure, 0, 10, 3);
+            ClampInt(ref sendRetryIntervalSeconds, 1, 300, 3);
+            ClampInt(ref sendNextBatchWaitSeconds, 1, 3600, 30);
+            ClampInt(ref requestTimeoutSeconds, 5, 300, 30);
+            ClampInt(ref stragglerTimeoutSeconds, 0, 3600, 15);
+            ClampFloat(ref maxCallFrequencySeconds, 0.1f, 60f, 1f);
+            ClampInt(ref dataEntriesPerSendAttempt, 1, 1000, 32);
+            ClampInt(ref storageEntriesPerSendAttempt, 1, 1000, 16);
+            ClampInt(ref pruneSentItemsOlderThanHours, 0, 8760, 12);
+            ClampInt(ref maximumCachedItems, 10, 10000, 1024);
+            ClampInt(ref maxDictionarySize, 5, 1000, 50);
+            ClampFloat(ref positionTrackingPeriodSeconds, 0.1f, 60f, 1f);
+            ClampFloat(ref frameRateTrackingPeriodSeconds, 0.1f, 60f, 0.5f);
+            ClampFloat(ref telemetryTrackingPeriodSeconds, 1f, 300f, 10f);
+            ClampFloat(ref authenticationStartDelay, 0f, 60f, 0f);
+            ClampFloat(ref defaultMaxDistanceLimit, 0f, 10000f, 50f);
         }
 
-        private static void ClampInt(string fieldName, ref int value, int min, int max, int defaultValue)
+        private static void ClampInt(ref int value, int min, int max, int defaultValue)
         {
-            if (value < min)
-            {
-                value = Mathf.Clamp(defaultValue, min, max);
-            }
-            else if (value > max)
-            {
-                value = max;
-            }
+            if (value < min) value = Mathf.Clamp(defaultValue, min, max);
+            else if (value > max) value = max;
         }
 
-        private static void ClampFloat(string fieldName, ref float value, float min, float max, float defaultValue)
+        private static void ClampFloat(ref float value, float min, float max, float defaultValue)
         {
-            if (value < min)
-            {
-                value = Mathf.Clamp(defaultValue, min, max);
-            }
-            else if (value > max)
-            {
-                value = max;
-            }
+            if (value < min) value = Mathf.Clamp(defaultValue, min, max);
+            else if (value > max) value = max;
         }
 
-        /// <summary>Merges GET /v1/storage/config into this instance. Credentials, token mode, build type, module auto-start, auth UI layout, AbxrTarget defaults, learner launcher, and unit test fields stay developer-controlled (see <see cref="ConfigPayload"/>).</summary>
+        private static Configuration CopyFromAppConfig(AppConfig a)
+        {
+            var c = new Configuration();
+            CopyFromAppConfigInto(c, a);
+            c.ClampNumericSettingsCore();
+            return c;
+        }
+
+        private static void CopyFromAppConfigInto(Configuration c, AppConfig a)
+        {
+            c.buildType = a.buildType;
+            c.appID = a.appID;
+            c.orgID = a.orgID;
+            c.authSecret = a.authSecret;
+            c.launcherAppID = a.launcherAppID;
+            c.useAppTokens = a.useAppTokens;
+            c.appToken = a.appToken;
+            c.orgToken = a.orgToken;
+            c.restUrl = a.restUrl;
+            c.authUIFollowCamera = a.authUIFollowCamera;
+            c.enableDirectTouchInteraction = a.enableDirectTouchInteraction;
+            c.authUIDistanceFromCamera = a.authUIDistanceFromCamera;
+            c.headsetTracking = a.headsetTracking;
+            c.positionTrackingPeriodSeconds = a.positionTrackingPeriodSeconds;
+            c.defaultMaxDistanceLimit = a.defaultMaxDistanceLimit;
+            c.defaultAutoCreateTriggerCollider = a.defaultAutoCreateTriggerCollider;
+            c.enableAutoStartAuthentication = a.enableAutoStartAuthentication;
+            c.authenticationStartDelay = a.authenticationStartDelay;
+            c.enableAutoStartModules = a.enableAutoStartModules;
+            c.enableAutoAdvanceModules = a.enableAutoAdvanceModules;
+            c.enableReturnTo = a.enableReturnTo;
+            c.enablePinPadGuestAccess = a.enablePinPadGuestAccess;
+            c.KeyboardPrefab = a.KeyboardPrefab;
+            c.PinPrefab = a.PinPrefab;
+            c.telemetryTrackingPeriodSeconds = a.telemetryTrackingPeriodSeconds;
+            c.frameRateTrackingPeriodSeconds = a.frameRateTrackingPeriodSeconds;
+            c.sendRetriesOnFailure = a.sendRetriesOnFailure;
+            c.sendRetryIntervalSeconds = a.sendRetryIntervalSeconds;
+            c.sendNextBatchWaitSeconds = a.sendNextBatchWaitSeconds;
+            c.requestTimeoutSeconds = a.requestTimeoutSeconds;
+            c.stragglerTimeoutSeconds = a.stragglerTimeoutSeconds;
+            c.maxCallFrequencySeconds = a.maxCallFrequencySeconds;
+            c.dataEntriesPerSendAttempt = a.dataEntriesPerSendAttempt;
+            c.storageEntriesPerSendAttempt = a.storageEntriesPerSendAttempt;
+            c.pruneSentItemsOlderThanHours = a.pruneSentItemsOlderThanHours;
+            c.maximumCachedItems = a.maximumCachedItems;
+            c.retainLocalAfterSent = a.retainLocalAfterSent;
+            c.enableArborInsightsClient = a.enableArborInsightsClient;
+            c.enableArborMdmClient = a.enableArborMdmClient;
+            c.enableLearnerLauncherMode = a.enableLearnerLauncherMode;
+            c.enableAutomaticTelemetry = a.enableAutomaticTelemetry;
+            c.enableSceneEvents = a.enableSceneEvents;
+            c.maxDictionarySize = a.maxDictionarySize;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            c.unitTestConfigEnabled = a.unitTestConfigEnabled;
+            c.unitTestAuthPin = a.unitTestAuthPin;
+            c.unitTestAuthBadPin = a.unitTestAuthBadPin;
+            c.unitTestAuthText = a.unitTestAuthText;
+            c.unitTestAuthEmail = a.unitTestAuthEmail;
+            c.unitTestAuthEmailDomain = a.unitTestAuthEmailDomain;
+            c.unitTestDeviceId = a.unitTestDeviceId;
+            c.unitTestFingerprint = a.unitTestFingerprint;
+#endif
+        }
+
+        /// <summary>Merges GET /v1/storage/config into the runtime instance only.</summary>
         public void ApplyConfigPayload(ConfigPayload payload)
         {
             if (payload == null) return;
@@ -201,7 +294,6 @@ namespace AbxrLib.Runtime.Core
             if (payload.enableSceneEvents.HasValue) enableSceneEvents = payload.enableSceneEvents.Value;
             if (!string.IsNullOrEmpty(payload.maxDictionarySize)) maxDictionarySize = Convert.ToInt32(payload.maxDictionarySize, CultureInfo.InvariantCulture);
 
-            // Performance / tracking periods (backend may send as numeric strings, e.g. "1", "0.5", "10")
             if (!string.IsNullOrEmpty(payload.positionCapturePeriod) && float.TryParse(payload.positionCapturePeriod, NumberStyles.Float, CultureInfo.InvariantCulture, out float positionPeriod))
                 positionTrackingPeriodSeconds = positionPeriod;
             if (!string.IsNullOrEmpty(payload.frameRateCapturePeriod) && float.TryParse(payload.frameRateCapturePeriod, NumberStyles.Float, CultureInfo.InvariantCulture, out float frameRatePeriod))
@@ -209,102 +301,22 @@ namespace AbxrLib.Runtime.Core
             if (!string.IsNullOrEmpty(payload.telemetryCapturePeriod) && float.TryParse(payload.telemetryCapturePeriod, NumberStyles.Float, CultureInfo.InvariantCulture, out float telemetryPeriod))
                 telemetryTrackingPeriodSeconds = telemetryPeriod;
 
-            ClampNumericSettings();
+            ClampNumericSettingsCore();
         }
 
-        [Header("Service Provider")]
-        public string restUrl = "https://lib-backend.xrdm.app/";
+        internal static void ClearRuntimeConfig()
+        {
+            if (_authoringAsset != null && _instance != null)
+            {
+                CopyFromAppConfigInto(_instance, _authoringAsset);
+                _instance.ClampNumericSettingsCore();
+            }
+        }
 
-        [Header("UI Behavior Control")]
-        [Tooltip("When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions.")]
-        public bool authUIFollowCamera = true;
-        
-        [Tooltip("When enabled, direct touch interaction will be used for UI elements instead of ray casting.")]
-        public bool enableDirectTouchInteraction = true;
-        
-        [Tooltip("How far in front of the camera the UI panel should float (in meters).")]
-        public float authUIDistanceFromCamera = 1.0f;
-
-        [Header("Player Tracking")]
-        public bool headsetTracking = true;
-        public float positionTrackingPeriodSeconds = 1f;
-
-        [Header("Target Gaze Tracking")]
-        [Tooltip("Global default maximum distance for AbxrTarget occlusion checks (meters). 0 = unlimited. Individual AbxrTarget components can override.")]
-        public float defaultMaxDistanceLimit = 50f;
-        [Tooltip("Global default for auto-creating trigger colliders on AbxrTarget. Individual AbxrTarget components can override.")]
-        public bool defaultAutoCreateTriggerCollider = true;
-
-        [Header("Authentication Control")]
-        [Tooltip("When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()")]
-        public bool enableAutoStartAuthentication = true;
-
-        [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
-        public float authenticationStartDelay = 0f;
-        
-        [Tooltip("When enabled, the first module will start automatically on successful authentication")]
-        public bool enableAutoStartModules = true;
-        
-        [Tooltip("When enabled, the next module in the sequence will automatically start after completion of a module")]
-        public bool enableAutoAdvanceModules = true;
-        
-        [Tooltip("Allow returnTo Launcher. When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff.")]
-        public bool enableReturnTo = true;
-
-        [Tooltip("When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, KeyboardManager.skipButton is hidden at runtime. Custom PIN prefabs should assign skipButton like the default.")]
-        public bool enablePinPadGuestAccess = true;
-
-        [Header("Authentication Prefabs")]
-        public GameObject KeyboardPrefab;
-        public GameObject PinPrefab;
-
-        [Header("Data Sending Rules")]
-        public float telemetryTrackingPeriodSeconds = 10f;
-        public float frameRateTrackingPeriodSeconds = 0.5f;
-        public int sendRetriesOnFailure = 3;
-        public int sendRetryIntervalSeconds = 3;
-        public int sendNextBatchWaitSeconds = 30;
-        public int requestTimeoutSeconds = 30;
-        public int stragglerTimeoutSeconds = 15;
-        public float maxCallFrequencySeconds = 1f;
-        public int dataEntriesPerSendAttempt = 32;
-        public int storageEntriesPerSendAttempt = 16;
-        public int pruneSentItemsOlderThanHours = 12;
-        public int maximumCachedItems = 1024;
-        public bool retainLocalAfterSent;
-
-        [Tooltip("When enabled, the app will use the ArborInsightsClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used.")]
-        public bool enableArborInsightsClient = true;
-
-        [Tooltip("When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only. Default true.")]
-        public bool enableArborMdmClient = true;
-
-        [Tooltip("When enabled (Auth Handoff Launcher flow), the auth mechanism from config is overridden: if type is not already assessmentPin, it is set to assessmentPin with prompt \"Enter your 6-digit PIN\". Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false.")]
-        public bool enableLearnerLauncherMode = false;
-
-        public bool enableAutomaticTelemetry = true;
-
-        public bool enableSceneEvents = true;
-
-        [HideInInspector]
-        public int maxDictionarySize = 50;
-
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        // Unit test credentials: excluded from production builds; available in Editor and in Development Builds (e.g. TestRunner on device). ConfigInspector draws these when "Unit Test Credentials" is enabled.
-        [HideInInspector] public bool unitTestConfigEnabled = false;
-        [HideInInspector] public string unitTestAuthPin = "";
-        [HideInInspector] public string unitTestAuthBadPin = "";
-        [HideInInspector] public string unitTestAuthText = "";
-        [HideInInspector] public string unitTestAuthEmail = "";
-        [HideInInspector] public string unitTestAuthEmailDomain = "";
-        [HideInInspector] public string unitTestDeviceId = "";
-        [HideInInspector] public string unitTestFingerprint = "";
-#endif
-
-        /// <summary>For testing only. Clears the singleton and validation state so the next access creates a fresh instance.</summary>
         internal static void ResetForTesting()
         {
             _instance = null;
+            _authoringAsset = null;
             _validatedOnce = false;
             _lastValidationErrorMessage = null;
         }

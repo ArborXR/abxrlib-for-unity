@@ -284,6 +284,7 @@ namespace AbxrLib.Runtime
             PlayerPrefs.Save();
 
             if (Instance == this) Instance = null;
+            Configuration.ClearRuntimeConfig();
         }
         
         private void OnApplicationFocus(bool hasFocus)
@@ -642,6 +643,7 @@ namespace AbxrLib.Runtime
 		/// </summary>
 internal void StartNewSession()
         {
+			Configuration.ClearRuntimeConfig();
 			// Clear in-memory batchers so no previous-session events/telemetry/logs/storage are sent with the new session.
 			_transport?.ClearAllPending();
 

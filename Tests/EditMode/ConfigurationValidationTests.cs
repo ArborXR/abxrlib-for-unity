@@ -1,5 +1,5 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
-// EditMode unit tests for Configuration.IsValid() — covers all validation branches.
+// EditMode unit tests for AppConfig.IsValid() — covers all validation branches.
 using AbxrLib.Runtime.Core;
 using NUnit.Framework;
 using UnityEngine;
@@ -7,13 +7,13 @@ using UnityEngine;
 [TestFixture]
 public class ConfigurationValidationTests
 {
-    private Configuration _config;
+    private AppConfig _config;
 
     [SetUp]
     public void SetUp()
     {
         Configuration.ResetForTesting();
-        _config = ScriptableObject.CreateInstance<Configuration>();
+        _config = ScriptableObject.CreateInstance<AppConfig>();
         _config.restUrl = "https://test.example.com/";
     }
 
