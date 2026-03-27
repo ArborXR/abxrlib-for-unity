@@ -34,12 +34,19 @@ namespace AbxrLib.Editor
             {
                 try
                 {
-                    var config = Configuration.Instance;
-                    _cachedConfigData = Utils.ExtractConfigData(config);
+                    // During Gradle post-process, Resources.Load can return null even when AbxrLib.asset exists.
+                    // Fall back to AssetDatabase (same path as Editor/Core.GetConfig) so manifest insights_id is populated.
+                    AppConfig appCfg = Resources.Load<AppConfig>("AbxrLib");
+                    if (appCfg == null)
+                        appCfg = AssetDatabase.LoadAssetAtPath<AppConfig>("Assets/Resources/AbxrLib.asset");
+
+                    if (appCfg != null)
+                        _cachedConfigData = Utils.ExtractConfigData(appCfg);
+                    else
+                        _cachedConfigData = Utils.ExtractConfigData(Configuration.Instance);
                 }
                 catch
                 {
-                    // If Configuration is not accessible, return invalid result
                     _cachedConfigData = new Utils.AuthConfigData { isValid = false };
                 }
             }

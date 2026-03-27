@@ -451,52 +451,82 @@ namespace AbxrLib.Runtime.Core
         /// <returns>AuthConfigData containing extracted values and validation status</returns>
         internal static AuthConfigData ExtractConfigData(Configuration config)
         {
-            var result = new AuthConfigData { isValid = false };
-
             if (config == null)
             {
-                result.errorMessage = "Configuration instance is null";
-                return result;
+                return new AuthConfigData { isValid = false, errorMessage = "Configuration instance is null" };
             }
 
-            // Get buildType from config (no longer taken from token)
-            result.buildType = !string.IsNullOrEmpty(config.buildType) ? config.buildType : "production";
+            return ExtractAuthConfigData(
+                config.useAppTokens,
+                config.buildType,
+                config.appID,
+                config.orgID,
+                config.authSecret,
+                config.appToken,
+                config.orgToken);
+        }
 
-            // Check if using App Tokens
-            result.useAppTokens = config.useAppTokens;
-            if (config.useAppTokens)
+        /// <summary>
+        /// Same as <see cref="ExtractConfigData(Configuration)"/> but reads the serialized asset (e.g. when Editor must load AbxrLib without going through <see cref="Configuration.Instance"/>).
+        /// </summary>
+        internal static AuthConfigData ExtractConfigData(AppConfig config)
+        {
+            if (config == null)
             {
-                // Single appToken (App Token) required
-                if (string.IsNullOrEmpty(config.appToken))
+                return new AuthConfigData { isValid = false, errorMessage = "AppConfig asset is null" };
+            }
+
+            return ExtractAuthConfigData(
+                config.useAppTokens,
+                config.buildType,
+                config.appID,
+                config.orgID,
+                config.authSecret,
+                config.appToken,
+                config.orgToken);
+        }
+
+        private static AuthConfigData ExtractAuthConfigData(
+            bool useAppTokens,
+            string buildType,
+            string appID,
+            string orgID,
+            string authSecret,
+            string appToken,
+            string orgToken)
+        {
+            var result = new AuthConfigData { isValid = false };
+
+            result.buildType = !string.IsNullOrEmpty(buildType) ? buildType : "production";
+            result.useAppTokens = useAppTokens;
+            if (useAppTokens)
+            {
+                if (string.IsNullOrEmpty(appToken))
                 {
                     result.errorMessage = "App identification not set.";
                     return result;
                 }
-                result.appToken = config.appToken;
-                // Production: do not include orgToken in build. Development and Production (Custom APK): include from config.
-                if (config.buildType == "production")
+
+                result.appToken = appToken;
+                if (result.buildType == "production")
                     result.orgToken = null;
                 else
-                    result.orgToken = config.orgToken;
-                // buildType stays from config above; appId/orgId/authSecret left default (unused when using tokens)
+                    result.orgToken = orgToken;
             }
-            else // legacy AppID/OrgID/AuthSecret approach
+            else
             {
-                // Single appId required
-                if (string.IsNullOrEmpty(config.appID))
+                if (string.IsNullOrEmpty(appID))
                 {
                     result.errorMessage = "App identification not set.";
                     return result;
                 }
 
-                // Use traditional appID/orgID/authSecret approach
-                result.appId = config.appID;
+                result.appId = appID;
 
-                // Only include orgID and authSecret if buildType is development or production_custom (custom APK)
-                if (config.buildType == "development" || config.buildType == "production_custom")
+                if (result.buildType == "development" || result.buildType == "production_custom")
                 {
-                    result.orgId = config.orgID;
-                    result.authSecret = config.authSecret;
+                    result.orgId = orgID;
+                    result.authSecret = authSecret;
                 }
                 else
                 {
