@@ -51,7 +51,7 @@ public class AbxrPlayModeTestBase
         // Create a fresh Configuration singleton for this test.
         Configuration.ResetForTesting();
 
-        // Configuration.Instance creates a default instance and runs MigrateIfNeeded() (needed for other settings).
+        // Configuration.Instance creates a default instance and runs validation (clamp numerics) on first access.
         _ = Configuration.Instance;
 
         // Apply enableAutoStartAuthentication = false via RuntimeAuthConfig when the subsystem is created, so we never modify the Configuration asset (avoids leaving the user's config file changed if TearDown doesn't run).

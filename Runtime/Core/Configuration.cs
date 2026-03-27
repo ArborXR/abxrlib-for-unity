@@ -18,7 +18,6 @@ using System;
 using System.Globalization;
 using AbxrLib.Runtime.Types;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace AbxrLib.Runtime.Core
 {
@@ -62,8 +61,6 @@ namespace AbxrLib.Runtime.Core
                 {
                     _instance = CreateInstance<Configuration>();
                 }
-
-                _instance.MigrateIfNeeded();
 
                 // Run validation once on first load so numeric ranges are clamped early; return value is ignored here.
                 if (!_validatedOnce)
@@ -240,7 +237,6 @@ namespace AbxrLib.Runtime.Core
 
         [Header("Authentication Control")]
         [Tooltip("When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()")]
-        [FormerlySerializedAs("disableAutoStartAuthentication")]
         public bool enableAutoStartAuthentication = true;
 
         [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
@@ -281,21 +277,14 @@ namespace AbxrLib.Runtime.Core
         public bool enableArborInsightsClient = true;
 
         [Tooltip("When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only. Default true.")]
-        [FormerlySerializedAs("enableAuthCredentialsFromConfigOrSetters")]
-        [FormerlySerializedAs("skipArborMdmClientForAuth")]
         public bool enableArborMdmClient = true;
 
         [Tooltip("When enabled (Auth Handoff Launcher flow), the auth mechanism from config is overridden: if type is not already assessmentPin, it is set to assessmentPin with prompt \"Enter your 6-digit PIN\". Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false.")]
         public bool enableLearnerLauncherMode = false;
 
-        [FormerlySerializedAs("disableAutomaticTelemetry")]
         public bool enableAutomaticTelemetry = true;
 
-        [FormerlySerializedAs("disableSceneEvents")]
         public bool enableSceneEvents = true;
-
-        [SerializeField, HideInInspector]
-        private int _configSerializedVersion = 0;
 
         [HideInInspector]
         public int maxDictionarySize = 50;
@@ -318,19 +307,6 @@ namespace AbxrLib.Runtime.Core
             _instance = null;
             _validatedOnce = false;
             _lastValidationErrorMessage = null;
-        }
-
-        private void MigrateIfNeeded()
-        {
-            if (_configSerializedVersion >= 1) return;
-
-            enableAutoStartAuthentication = !enableAutoStartAuthentication;
-            enableAutomaticTelemetry = !enableAutomaticTelemetry;
-            enableSceneEvents = !enableSceneEvents;
-            _configSerializedVersion = 1;
-#if UNITY_EDITOR
-            UnityEditor.EditorUtility.SetDirty(this);
-#endif
         }
     }
 }

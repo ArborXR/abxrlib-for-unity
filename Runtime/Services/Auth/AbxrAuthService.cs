@@ -81,6 +81,13 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>True when a valid auth_handoff was parsed; AuthenticateCoroutine skips device AuthRequestCoroutine and completes after GET config (same as normal flow).</summary>
         private bool _deviceAuthDeferredByHandoff;
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        /// <summary>WebGL query string: pre-filled assessment PIN (e.g. SCORM non-VR link). When set, GET config can be overridden to assessmentPin and the first user-auth attempt auto-submits this value.</summary>
+        private string _webglQueryAssessmentPin;
+        /// <summary>After one auto-submit from <see cref="_webglQueryAssessmentPin"/>, further attempts use the normal PIN prompt (retry flow).</summary>
+        private bool _webglUrlPinAutoSubmitAttempted;
+#endif
+
         /// <summary>
         /// True only when we completed authentication via ArborInsightsClient this session.
         /// Set once when auth succeeds through the service transport. Used only to skip re-auth polling
@@ -279,6 +286,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 _authMechanism.prompt = originalPrompt;
                 if (success)
                 {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                    _webglQueryAssessmentPin = null;
+#endif
                     KeyboardHandler.Destroy();
                     AuthSucceeded();
                 }
@@ -387,6 +397,12 @@ namespace AbxrLib.Runtime.Services.Auth
                 // Session identity came from the launcher; do not require a second PIN/email step from GET config.
                 ApplyNoneUserAuthMechanismForSession();
             }
+#if UNITY_WEBGL && !UNITY_EDITOR
+            else
+            {
+                ApplyAssessmentPinFromUrlQueryIfPresent();
+            }
+#endif
 
             if (_stopping || !_attemptActive)
             {
@@ -399,7 +415,18 @@ namespace AbxrLib.Runtime.Services.Auth
             bool needsInput = _authMechanism != null && RequiresUserInputType(_authMechanism.type);
             if (needsInput)
             {
-                RequestKeyboardInput();
+#if UNITY_WEBGL && !UNITY_EDITOR
+                if (!_webglUrlPinAutoSubmitAttempted && !string.IsNullOrEmpty(_webglQueryAssessmentPin))
+                {
+                    _webglUrlPinAutoSubmitAttempted = true;
+                    Logcat.Info("User authentication: submitting assessment PIN from URL query (first attempt).");
+                    KeyboardAuthenticate(_webglQueryAssessmentPin);
+                }
+                else
+#endif
+                {
+                    RequestKeyboardInput();
+                }
             }
             else
             {
@@ -818,6 +845,40 @@ namespace AbxrLib.Runtime.Services.Auth
                 _runtimeAuth.authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
         }
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        /// <summary>
+        /// WebGL: when <c>assessment_pin</c> or <c>assessmentPin</c> is present in the page URL, force user authentication to type <c>assessmentPin</c> after GET config succeeds (non-handoff).
+        /// Matches <see cref="GetQueryData"/> for org_token (skipped for production_custom).</summary>
+        private void ApplyAssessmentPinFromUrlQueryIfPresent()
+        {
+            if (string.IsNullOrEmpty(_webglQueryAssessmentPin))
+                return;
+
+            if (_runtimeAuth.authMechanism == null)
+                _runtimeAuth.authMechanism = new AuthMechanism();
+            _runtimeAuth.authMechanism.type = "assessmentPin";
+            if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.inputSource))
+                _runtimeAuth.authMechanism.inputSource = "user";
+            if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.prompt))
+            {
+                string def = GetDefaultPromptForAuthMechanismType("assessmentPin");
+                if (!string.IsNullOrEmpty(def))
+                    _runtimeAuth.authMechanism.prompt = def;
+            }
+
+            _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
+            if (!string.IsNullOrEmpty(_authMechanism.type) && string.IsNullOrEmpty(_authMechanism.prompt))
+            {
+                string defaultPrompt = GetDefaultPromptForAuthMechanismType(_authMechanism.type);
+                if (!string.IsNullOrEmpty(defaultPrompt))
+                    _authMechanism.prompt = defaultPrompt;
+            }
+
+            _webglUrlPinAutoSubmitAttempted = false;
+            Logcat.Debug("User authentication: URL query includes assessment PIN; mechanism set to assessmentPin (auto-submit on first attempt).");
+        }
+#endif
+
         /// <summary>For testing only. Applies the given auth response and invokes OnSucceeded so subsystem and Abxr.OnAuthCompleted behave as after a real auth.</summary>
         internal void SimulateAuthSuccess(AuthResponse response)
         {
@@ -852,6 +913,9 @@ namespace AbxrLib.Runtime.Services.Auth
             _userData = null;
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            _webglUrlPinAutoSubmitAttempted = false;
+#endif
         }
 
         /// <summary>
@@ -1217,6 +1281,13 @@ namespace AbxrLib.Runtime.Services.Auth
                 _runtimeAuth.orgToken = orgTokenQuery;
                 _runtimeAuth.CopyAuthFieldsTo(_payload);
             }
+
+            _webglQueryAssessmentPin = null;
+            string pinQuery = Utils.GetQueryParam("assessment_pin", Application.absoluteURL);
+            if (string.IsNullOrEmpty(pinQuery))
+                pinQuery = Utils.GetQueryParam("assessmentPin", Application.absoluteURL);
+            if (!string.IsNullOrWhiteSpace(pinQuery))
+                _webglQueryAssessmentPin = pinQuery.Trim();
         }
 
         private static string GetOrCreateDeviceId()
