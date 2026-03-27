@@ -8,7 +8,7 @@ namespace AbxrLib.Editor
     [InitializeOnLoad]
     internal class Core
     {
-        private static Configuration _config;
+        private static AppConfig _config;
         private const string NEW_CONFIG_NAME = "AbxrLib";
         private const string OLD_CONFIG_NAME = "ArborXR";
     
@@ -20,18 +20,18 @@ namespace AbxrLib.Editor
         /// <summary>
         /// Gets the configuration or a new default configuration
         /// </summary>
-        public static Configuration GetConfig()
+        public static AppConfig GetConfig()
         {
             if (_config) return _config;
         
             // First try to load the new config name using Resources.Load
-            _config = Resources.Load<Configuration>(NEW_CONFIG_NAME);
+            _config = Resources.Load<AppConfig>(NEW_CONFIG_NAME);
             if (_config) return _config;
         
             // If Resources.Load failed, try direct AssetDatabase load as fallback
             // This prevents false negatives during Unity startup/compilation
             const string newConfigPath = "Assets/Resources/" + NEW_CONFIG_NAME + ".asset";
-            _config = AssetDatabase.LoadAssetAtPath<Configuration>(newConfigPath);
+            _config = AssetDatabase.LoadAssetAtPath<AppConfig>(newConfigPath);
             if (_config) 
             {
                 Logcat.Debug($"Loaded existing config via AssetDatabase fallback - {newConfigPath}");
@@ -39,7 +39,7 @@ namespace AbxrLib.Editor
             }
         
             // If new config doesn't exist, try the old config name
-            _config = Resources.Load<Configuration>(OLD_CONFIG_NAME);
+            _config = Resources.Load<AppConfig>(OLD_CONFIG_NAME);
             if (_config)
             {
                 // If old config exists but new one doesn't, migrate it
@@ -49,7 +49,7 @@ namespace AbxrLib.Editor
         
             // Try old config via AssetDatabase as well
             const string oldConfigPath = "Assets/Resources/" + OLD_CONFIG_NAME + ".asset";
-            _config = AssetDatabase.LoadAssetAtPath<Configuration>(oldConfigPath);
+            _config = AssetDatabase.LoadAssetAtPath<AppConfig>(oldConfigPath);
             if (_config)
             {
                 // If old config exists but new one doesn't, migrate it
@@ -59,7 +59,7 @@ namespace AbxrLib.Editor
         
             // Only create new config if file genuinely doesn't exist
             Logcat.Debug("No existing configuration found, creating new default configuration");
-            _config = ScriptableObject.CreateInstance<Configuration>();
+            _config = ScriptableObject.CreateInstance<AppConfig>();
             const string filepath = "Assets/Resources";
             if (!AssetDatabase.IsValidFolder(filepath))
             {
@@ -80,8 +80,8 @@ namespace AbxrLib.Editor
             string newPath = filepath + "/" + NEW_CONFIG_NAME + ".asset";
         
             // Check if old config exists AND new config doesn't exist
-            if (AssetDatabase.LoadAssetAtPath<Configuration>(oldPath) && 
-                !AssetDatabase.LoadAssetAtPath<Configuration>(newPath))
+            if (AssetDatabase.LoadAssetAtPath<AppConfig>(oldPath) && 
+                !AssetDatabase.LoadAssetAtPath<AppConfig>(newPath))
             {
                 // Rename the asset
                 AssetDatabase.RenameAsset(oldPath, NEW_CONFIG_NAME);
@@ -90,7 +90,7 @@ namespace AbxrLib.Editor
             
                 Logcat.Debug($"ArborXR configuration has been migrated to {NEW_CONFIG_NAME}");
             }
-            else if (AssetDatabase.LoadAssetAtPath<Configuration>(oldPath))
+            else if (AssetDatabase.LoadAssetAtPath<AppConfig>(oldPath))
             {
                 Logcat.Warning($"Migration skipped - {NEW_CONFIG_NAME} already exists alongside {OLD_CONFIG_NAME}");
             }

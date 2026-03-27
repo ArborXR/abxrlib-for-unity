@@ -4,12 +4,12 @@ using UnityEngine;
 
 namespace AbxrLib.Editor
 {
-    [CustomEditor(typeof(Configuration))]
+    [CustomEditor(typeof(AppConfig))]
     public class ConfigInspector : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {
-            var config = (Configuration)target;
+            var config = (AppConfig)target;
             EditorGUILayout.LabelField("Application Identity", EditorStyles.boldLabel);
             
             string[] buildTypeValues = { "production", "development", "production_custom" };
@@ -287,7 +287,10 @@ namespace AbxrLib.Editor
             if (GUILayout.Button("Reset To Sending Rule Defaults"))
             {
                 // Create a temporary instance to get the default values
-                var defaultConfig = CreateInstance<Configuration>();
+                var defaultConfig = CreateInstance<AppConfig>();
+
+                // Does not modify: build type, app/org identity (appID, orgID, authSecret, appToken, orgToken, useAppTokens),
+                // launcherAppID, or Unit Test Credentials — same as credentials / environment-specific values.
                 
                 // Service Provider
                 config.restUrl = defaultConfig.restUrl;
@@ -310,6 +313,8 @@ namespace AbxrLib.Editor
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
                 config.enableReturnTo = defaultConfig.enableReturnTo;
                 config.enablePinPadGuestAccess = defaultConfig.enablePinPadGuestAccess;
+                config.enableAutoStartModules = defaultConfig.enableAutoStartModules;
+                config.enableAutoAdvanceModules = defaultConfig.enableAutoAdvanceModules;
                 
                 // Authentication Prefabs
                 config.KeyboardPrefab = defaultConfig.KeyboardPrefab;
@@ -329,6 +334,7 @@ namespace AbxrLib.Editor
                 config.pruneSentItemsOlderThanHours = defaultConfig.pruneSentItemsOlderThanHours;
                 config.maximumCachedItems = defaultConfig.maximumCachedItems;
                 config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
+                config.maxDictionarySize = defaultConfig.maxDictionarySize;
                 config.enableArborInsightsClient = defaultConfig.enableArborInsightsClient;
                 config.enableArborMdmClient = defaultConfig.enableArborMdmClient;
                 config.enableLearnerLauncherMode = defaultConfig.enableLearnerLauncherMode;
