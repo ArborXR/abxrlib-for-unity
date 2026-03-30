@@ -15,6 +15,8 @@ public class ConfigurationValidationTests
         Configuration.ResetForTesting();
         _config = ScriptableObject.CreateInstance<AppConfig>();
         _config.restUrl = "https://test.example.com/";
+        // Legacy tests below expect appID/orgID/authSecret validation; token tests set useAppTokens true explicitly.
+        _config.useAppTokens = false;
     }
 
     [TearDown]

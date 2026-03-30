@@ -98,7 +98,7 @@ namespace AbxrLib.Runtime.Core
         public string orgID;
         public string authSecret;
         public string launcherAppID;
-        public bool useAppTokens = false;
+        public bool useAppTokens = true;
         public string appToken;
         public string orgToken;
         public string restUrl = "https://lib-backend.xrdm.app/";

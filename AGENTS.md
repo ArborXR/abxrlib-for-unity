@@ -72,7 +72,7 @@ AIDL → ArborInsightsClient (separate APK)
 ## Configuration and Data Sources
 
 - **Configuration.Instance** – ScriptableObject from `Resources/AbxrLib.asset`. Holds appID, orgID, authSecret, buildType (production/development/production_custom), useAppTokens, appToken, orgToken, REST URLs, telemetry/batching options, UI prefab references.
-- **Auth modes:** When **Use App Tokens** is on: single appToken (required) and optional orgToken; buildType production_custom requires orgToken for single-customer builds; API receives appToken + orgToken. When off (legacy): appID, orgID, authSecret; GetArborData() can override with ArborXR SDK when connected.
+- **Auth modes:** **Use App Tokens** defaults to on in `AppConfig`; when on: appToken (required) and optional orgToken; buildType production_custom requires orgToken for single-customer builds; API receives appToken + orgToken. When off (legacy): appID, orgID, authSecret; GetArborData() can override with ArborXR SDK when connected.
 - **GetConfigData()** (in AbxrAuthService) – Uses `Utils.ExtractConfigData()` to populate payload (appToken/orgToken/buildType or appID/orgID/authSecret).
 - **GetArborData()** – When useAppTokens and not production_custom: builds dynamic org token via `Utils.BuildOrgTokenDynamic(GetOrgId(), GetFingerprint())`. Legacy: overrides orgID, authSecret from ArborXR SDK. deviceId/deviceTags from ArborXR when available.
 - **Production (Custom APK):** buildType production_custom; requires org token (or legacy orgID+authSecret); API receives buildType "production"; Android manifest injects build_type "production".

@@ -70,15 +70,15 @@ Developers can implement their own backend services by following the ABXR protoc
 
 ### Using with ArborXR Insights
 
-To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org token** (recommended).
+To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org token** (recommended). The same model applies to the [Unreal](https://github.com/ArborXR/abxrlib-for-unreal#configuration) and [WebXR](https://github.com/ArborXR/abxrlib-for-webxr#configuration) SDKs.
 
 #### App token and org token (recommended)
 
 #### Configure Unity Project
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
-2. Enable **Use App Tokens**.
-3. Set **App Token** (required): JWT for your app, from your distribution channel or ArborXR portal.
-4. **Org Token:** Leave empty to use the **dynamic org token** (derived from device/org context when available). For single-customer builds (e.g. production_custom), set the org token as required.
+2. **Use App Tokens** is on by default for new configuration; keep it enabled for JWT authentication.
+3. Set **App Token** (required): JWT for your app, from your distribution channel or ArborXR portal (**Content Library** → **Managed** app → **Insights Hub**).
+4. **Org Token:** Leave empty to use the **dynamic org token** (derived from device/org context when available). For single-customer builds (e.g. production_custom), set the org token as required. For local testing in the Editor, you can paste your **App Token** into the **Org Token** field when you need both fields populated.
 
 **Development / testing:** Set App Token; on ArborXR-managed devices, org context can be supplied at runtime (dynamic org token).
 
@@ -88,7 +88,7 @@ To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org 
 
 #### Legacy (App ID / Org ID / Auth Secret)
 
-If your project still uses the legacy scheme: in Configuration, leave **Use App Tokens** off and set App ID, Org ID, and Auth Secret (from Insights **View Data** for the app). On ArborXR-managed devices, only App ID may be required; Org ID and Auth Secret can auto-fill. New integrations should use app token and org token.
+If your project still uses the legacy scheme: in Configuration, leave **Use App Tokens** off and set App ID, Org ID, and Auth Secret from the app’s credential or details views in the portal where your organization still exposes them. On ArborXR-managed devices, only App ID may be required; Org ID and Auth Secret can auto-fill. New integrations should use app token and org token.
 
 ### Using with Other Backend Services
 For information on implementing your own backend service or using other compatible services, please refer to the ABXR protocol specification.
@@ -158,7 +158,7 @@ The full documentation includes:
 ### FAQ
 
 #### How do I get my App Token and Org Token?
-Use **App Token** and **Org Token** (recommended). Obtain the app token from your distribution channel or ArborXR portal for the app you are configuring. Leave **Org Token** empty to use the dynamic org token when the device or runtime provides org context. For legacy setups, Application ID and Authorization Secret can be found in the Web Dashboard under the application details and Settings > Organization Codes.
+Use **App Token** and **Org Token** (recommended). Copy them from **Content Library** → **Managed** app → **Insights Hub** in the portal, or use values from your distribution channel. Leave **Org Token** empty to use the dynamic org token when the device or runtime provides org context; for Editor testing you can paste **App Token** into **Org Token** if needed. For legacy setups, Application ID and Authorization Secret are still available under application details and Settings > Organization Codes.
 
 #### How do I enable object tracking?
 Object tracking can be enabled by adding the Track Object component to any GameObject in your scene via the Unity Inspector.
