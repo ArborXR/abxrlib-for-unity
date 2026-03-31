@@ -42,6 +42,15 @@ namespace AbxrLib.Runtime.UI.Keyboard
             AddPointerDownHandler(skipButton, Skip);
         }
 
+        private void OnEnable()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // PIN/keyboard prefab may enable after PICO enterprise bind completes; clear cache so we do not keep a stale "hidden" state.
+            _lastQRButtonState = null;
+            CheckAndEnableQRButton();
+#endif
+        }
+
         private void Start()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -79,6 +88,18 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
         }
         
+        /// <summary>
+        /// Call when PICO enterprise bind (or other QR availability) changes after keyboard UI already ran its initial check.
+        /// </summary>
+        public static void RefreshQrButtonAvailability()
+        {
+            if (Instance == null) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Instance._lastQRButtonState = null;
+            Instance.CheckAndEnableQRButton();
+#endif
+        }
+
         private void CheckAndEnableQRButton()
         {
             if (qrCodeButton == null) return;
