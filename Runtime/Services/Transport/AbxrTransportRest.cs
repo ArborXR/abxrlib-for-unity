@@ -23,9 +23,6 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private readonly AbxrAuthService _authService;
         private readonly MonoBehaviour _runner;
-        private readonly Uri _baseUri;
-        private readonly Uri _dataUri;
-        private readonly Uri _storageUri;
 
         private readonly List<EventPayload> _eventPayloads = new();
         private readonly List<TelemetryPayload> _telemetryPayloads = new();
@@ -42,6 +39,8 @@ namespace AbxrLib.Runtime.Services.Transport
 
         public bool IsServiceTransport => false;
 
+        private static Uri RestUri(string path) => new Uri(new Uri(Configuration.Instance.restUrl), path);
+
         /// <summary>Stops the tick coroutine so this transport can be released when replaced (e.g. by ArborInsights transport). Prevents leak and ongoing CPU use.</summary>
         internal void Stop()
         {
@@ -57,9 +56,6 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
             _runner = runner ?? throw new ArgumentNullException(nameof(runner));
-            _baseUri = new Uri(Configuration.Instance.restUrl);
-            _dataUri = new Uri(_baseUri, DataPath);
-            _storageUri = new Uri(_baseUri, StoragePath);
             _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
             _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
             _tickCoroutine = _runner.StartCoroutine(TickCoroutine());
@@ -69,7 +65,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, bool> onComplete)
         {
-            string url = new Uri(_baseUri, AuthPath).ToString();
+            string url = RestUri(AuthPath).ToString();
             string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
             using var request = new UnityWebRequest(url, "POST");
             byte[] body = Encoding.UTF8.GetBytes(json);
@@ -107,7 +103,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
         {
-            string url = new Uri(_baseUri, ConfigPath).ToString();
+            string url = RestUri(ConfigPath).ToString();
             UnityWebRequest request = null;
             try
             {
@@ -217,7 +213,7 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             if (!_authService.Authenticated) { onComplete?.Invoke(null); yield break; }
             var queryParams = new Dictionary<string, string> { { "name", name }, { "scope", Utils.PascalToCamelCase(scope.ToString()) } };
-            string url = Utils.BuildUrlWithParams(_storageUri.ToString(), queryParams);
+            string url = Utils.BuildUrlWithParams(RestUri(StoragePath).ToString(), queryParams);
             using var request = UnityWebRequest.Get(url);
             request.SetRequestHeader("Accept", "application/json");
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
@@ -251,7 +247,7 @@ namespace AbxrLib.Runtime.Services.Transport
             if (!_authService.Authenticated) { onComplete?.Invoke(false); yield break; }
             var queryParams = new Dictionary<string, string> { { "scope", Utils.PascalToCamelCase(scope.ToString()) } };
             if (!string.IsNullOrEmpty(name)) queryParams.Add("name", name);
-            string url = Utils.BuildUrlWithParams(_storageUri.ToString(), queryParams);
+            string url = Utils.BuildUrlWithParams(RestUri(StoragePath).ToString(), queryParams);
             using var request = UnityWebRequest.Delete(url);
             request.SetRequestHeader("Accept", "application/json");
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
@@ -294,7 +290,7 @@ namespace AbxrLib.Runtime.Services.Transport
             {
                 var wrapper = new DataPayloadWrapper { @event = events, telemetry = telemetries, basicLog = logs };
                 string json = JsonConvert.SerializeObject(wrapper);
-                request = new UnityWebRequest(_dataUri, "POST");
+                request = new UnityWebRequest(RestUri(DataPath), "POST");
                 Utils.BuildRequest(request, json);
                 _authService.SetAuthHeaders(request, json);
                 request.timeout = Configuration.Instance.requestTimeoutSeconds;
@@ -330,7 +326,7 @@ namespace AbxrLib.Runtime.Services.Transport
             {
                 var wrapper = new StoragePayloadWrapper { data = toSend };
                 string json = JsonConvert.SerializeObject(wrapper);
-                request = new UnityWebRequest(_storageUri, "POST");
+                request = new UnityWebRequest(RestUri(StoragePath), "POST");
                 Utils.BuildRequest(request, json);
                 _authService.SetAuthHeaders(request, json);
                 request.timeout = Configuration.Instance.requestTimeoutSeconds;
@@ -439,7 +435,7 @@ namespace AbxrLib.Runtime.Services.Transport
                 bool dataRetryBreak = false;
                 try
                 {
-                    request = new UnityWebRequest(_dataUri, "POST");
+                    request = new UnityWebRequest(RestUri(DataPath), "POST");
                     Utils.BuildRequest(request, json);
                     _authService.SetAuthHeaders(request, json);
                     request.timeout = Configuration.Instance.requestTimeoutSeconds;
@@ -516,7 +512,7 @@ namespace AbxrLib.Runtime.Services.Transport
                 bool storageRetryBreak = false;
                 try
                 {
-                    request = new UnityWebRequest(_storageUri, "POST");
+                    request = new UnityWebRequest(RestUri(StoragePath), "POST");
                     Utils.BuildRequest(request, json);
                     _authService.SetAuthHeaders(request, json);
                     request.timeout = Configuration.Instance.requestTimeoutSeconds;

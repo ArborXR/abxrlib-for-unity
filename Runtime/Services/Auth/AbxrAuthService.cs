@@ -60,6 +60,11 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _stopping;
         private bool _attemptActive;
         internal bool IsAuthenticationAttemptActive => _attemptActive;
+        private bool _isAuthStarted;
+        /// <summary>True after <see cref="Authenticate"/> has scheduled <c>AuthenticateCoroutine</c> at least once this process; never cleared in production. Use to gate one-time configuration before auth.</summary>
+        internal bool HasAuthenticationStarted => _isAuthStarted;
+        /// <summary>Testing only. Clears <see cref="HasAuthenticationStarted"/> so tests can run multiple auth scenarios in one session.</summary>
+        internal void ResetAuthStartedForTesting() => _isAuthStarted = false;
         private Coroutine _reAuthCoroutine;
         private Coroutine _retryCoroutine;
         private Dictionary<string, string> _userData;
@@ -223,6 +228,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     _authMechanism.prompt = defaultPrompt;
             }
 
+            _isAuthStarted = true;
             _runner.StartCoroutine(AuthenticateCoroutine());
         }
         

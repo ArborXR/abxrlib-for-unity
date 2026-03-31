@@ -30,6 +30,7 @@ namespace AbxrLib.Runtime
             _assessmentStarted = false;
             _nextRuntimeAuthConfigForTesting = null;
             _simulateQuitInExitAfterAssessmentComplete = false;
+            if (Instance != null) Instance._authService.ResetAuthStartedForTesting();
             Abxr.ResetQuitClosingEventDefaultsForTesting();
         }
 
@@ -130,6 +131,8 @@ namespace AbxrLib.Runtime
 
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
+
+        internal bool HasAuthenticationStarted => _authService.HasAuthenticationStarted;
 
         private void Awake()
         {
@@ -278,7 +281,6 @@ namespace AbxrLib.Runtime
 	            StopCoroutine(_exitAfterAssessmentCoroutine);
 	            _exitAfterAssessmentCoroutine = null;
             }
-
             _superMetaData.Clear();
             PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
             PlayerPrefs.Save();
@@ -1121,6 +1123,25 @@ internal void StartNewSession()
 			_overrideAuthSecret = authSecret;
 			_authService?.SetRuntimeAuthAuthSecret(authSecret);
 		}
+
+		/// <summary>After <see cref="Configuration.Instance"/>.restUrl changes: sync the device client JNI session when bound. REST transport and LLM proxy read <c>restUrl</c> when building each request.</summary>
+		internal void NotifyRestUrlChanged()
+		{
+#if UNITY_ANDROID && !UNITY_EDITOR
+			if (ArborInsightsClient.IsInitialized())
+			{
+				try
+				{
+					ArborInsightsClient.set_RestUrl(Configuration.Instance.restUrl ?? "");
+				}
+				catch (Exception ex)
+				{
+					Logcat.Warning($"Could not sync restUrl to ArborInsightsClient: {ex.Message}");
+				}
+			}
+#endif
+		}
+
 		internal void SetDeviceId(string deviceId)
 		{
 			_overrideDeviceId = deviceId;

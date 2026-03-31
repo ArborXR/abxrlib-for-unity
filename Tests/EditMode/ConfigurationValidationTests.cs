@@ -87,6 +87,27 @@ public class ConfigurationValidationTests
     }
 
     [Test]
+    public void TryValidateRestUrl_ValidHttps_ReturnsTrue()
+    {
+        Assert.IsTrue(Configuration.TryValidateRestUrl("https://lib-backend.example.com/", out var err));
+        Assert.IsNull(err);
+    }
+
+    [Test]
+    public void TryValidateRestUrl_Empty_ReturnsFalse()
+    {
+        Assert.IsFalse(Configuration.TryValidateRestUrl("", out var err));
+        Assert.IsNotNull(err);
+    }
+
+    [Test]
+    public void TryValidateRestUrl_Invalid_ReturnsFalse()
+    {
+        Assert.IsFalse(Configuration.TryValidateRestUrl("not-a-url", out var err));
+        Assert.IsNotNull(err);
+    }
+
+    [Test]
     public void LegacyMode_ProductionCustom_WithoutOrgId_ReturnsFalse()
     {
         _config.appID = "12345678-1234-1234-1234-123456789012";

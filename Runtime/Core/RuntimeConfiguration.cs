@@ -78,15 +78,25 @@ namespace AbxrLib.Runtime.Core
                 return false;
             }
 
+            if (!TryValidateRestUrl(restUrl, out lastError))
+                return false;
+
+            return true;
+        }
+
+        /// <summary>Validates a REST base URL for <see cref="restUrl"/> (same rules as full config validation).</summary>
+        internal static bool TryValidateRestUrl(string restUrl, out string errorMessage)
+        {
+            errorMessage = null;
             if (string.IsNullOrEmpty(restUrl))
             {
-                lastError = "Configuration validation failed - restUrl is required but not set";
+                errorMessage = "Configuration validation failed - restUrl is required but not set.";
                 return false;
             }
 
             if (!Utils.IsValidUrl(restUrl))
             {
-                lastError = $"Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL";
+                errorMessage = $"Configuration validation failed - restUrl '{restUrl}' is not a valid HTTP/HTTPS URL";
                 return false;
             }
 

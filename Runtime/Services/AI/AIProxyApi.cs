@@ -15,7 +15,8 @@ namespace AbxrLib.Runtime.Services.AI
     {
         private const string UrlPath = "/v1/services/llm";
         private static readonly List<string> PastMessages = new();
-        private static Uri _uri;
+
+        private static Uri _uri => new Uri(new Uri(Configuration.Instance.restUrl), UrlPath);
 
         /// <summary>Clears the static conversation history so a new session does not see the previous session's messages.</summary>
         internal static void ClearPastMessages()
@@ -26,7 +27,6 @@ namespace AbxrLib.Runtime.Services.AI
 
         public AIProxyApi(AbxrAuthService authService)
         {
-            _uri = new Uri(new Uri(Configuration.Instance.restUrl), UrlPath);
             _authService = authService;
         }
     
