@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -10,6 +11,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
     internal sealed class AbxrTelemetryService
     {
         private readonly MonoBehaviour _runner;
+        private readonly Func<bool> _authStartedForTelemetry;
         private List<Coroutine> _coroutines;
         
         private const string HmdName = "Head";
@@ -34,13 +36,21 @@ namespace AbxrLib.Runtime.Services.Telemetry
         private readonly Dictionary<string, string> _rotationData = new Dictionary<string, string>(4);
         private readonly Dictionary<string, string> _triggerData = new Dictionary<string, string>(1);
 
-        public AbxrTelemetryService(MonoBehaviour runner)
+        public AbxrTelemetryService(MonoBehaviour runner, Func<bool> authStartedForTelemetry)
         {
             _runner = runner;
+            _authStartedForTelemetry = authStartedForTelemetry ?? throw new ArgumentNullException(nameof(authStartedForTelemetry));
         }
 
         public void Start()
         {
+            _coroutines = new List<Coroutine>();
+            _coroutines.Add(_runner.StartCoroutine(StartWhenAuthBegins()));
+        }
+
+        private IEnumerator StartWhenAuthBegins()
+        {
+            yield return new WaitUntil(() => _authStartedForTelemetry());
             try
             {
                 _leftController  = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
@@ -55,7 +65,6 @@ namespace AbxrLib.Runtime.Services.Telemetry
 
             var sysInfoWait = new WaitForSeconds(Configuration.Instance.telemetryTrackingPeriodSeconds);
             var locationWait = new WaitForSeconds(Configuration.Instance.positionTrackingPeriodSeconds);
-            _coroutines = new List<Coroutine>();
             _coroutines.Add(_runner.StartCoroutine(SystemInfoLoop(sysInfoWait)));
             if (Configuration.Instance.headsetTracking)
             {
@@ -113,6 +122,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
         
         public void RecordSystemInfo()
         {
+            if (!_authStartedForTelemetry()) return;
             _batteryData.Clear();
             _batteryData["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%";
             _batteryData["Status"] = SystemInfo.batteryStatus.ToString();
@@ -148,6 +158,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
         
         public void RecordLocationData()
         {
+            if (!_authStartedForTelemetry()) return;
             RecordLocationData(_rightController);
             RecordLocationData(_leftController);
             RecordLocationData(_hmd);
@@ -180,6 +191,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
 
         private void CheckTriggers()
         {
+            if (!_authStartedForTelemetry()) return;
             CheckTriggers(CommonUsages.primaryButton);
             CheckTriggers(CommonUsages.secondaryButton);
             CheckTriggers(CommonUsages.triggerButton);

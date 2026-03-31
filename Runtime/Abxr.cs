@@ -793,7 +793,7 @@ public static partial class Abxr
 	{
 		if (!Configuration.TryValidateRestUrl(restUrl, out errorMessage))
 			return false;
-		if (AbxrSubsystem.Instance != null && AbxrSubsystem.Instance.HasAuthenticationStarted)
+		if (AbxrSubsystem.Instance != null && AbxrSubsystem.Instance.HasAuthenticationEverStarted)
 		{
 			errorMessage = "restUrl cannot be changed after authentication has started. Call before the first StartAuthentication() (or equivalent) in this app run.";
 			return false;

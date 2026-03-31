@@ -133,6 +133,7 @@ namespace AbxrLib.Runtime
         private Coroutine _exitAfterAssessmentCoroutine;
 
         internal bool HasAuthenticationStarted => _authService.HasAuthenticationStarted;
+        internal bool HasAuthenticationEverStarted => _authService.HasAuthenticationEverStarted;
 
         private void Awake()
         {
@@ -158,15 +159,11 @@ namespace AbxrLib.Runtime
             // Create services
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (Configuration.Instance.enableArborMdmClient)
-            {
                 _arborMdmClient = new ArborMdmClient();
-                // Start bind early so it can complete while the scene loads; auth will wait for ready in a coroutine.
-                _arborMdmClient.Initialize();
-            }
             if (Configuration.Instance.enableArborInsightsClient)
                 _arborInsightsClient = new ArborInsightsClient();
-            if (_arborInsightsClient != null)
-                _arborInsightsClient.Start();
+            // MDM Initialize() and ArborInsights Start() run next frame in DeferredAndroidClientInitAndTransportSelectionCoroutine
+            // so Awake stays light; auth still waits on _transportSelectionComplete (transport + deferred platform init).
 #endif
             _authService = new AbxrAuthService(this, _arborMdmClient);
             if (_nextRuntimeAuthConfigForTesting != null)
@@ -177,14 +174,16 @@ namespace AbxrLib.Runtime
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
             _dataService = new AbxrDataService(this, () => _transport);
-            _telemetryService = new AbxrTelemetryService(this);
+            _telemetryService = new AbxrTelemetryService(this, () => _authService.HasAuthenticationStarted);
             _aiProxyApi = new AIProxyApi(_authService);
             _storageService = new AbxrStorageService(_authService, this, () => _transport);
 
             _transportSelectionComplete = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (Configuration.Instance.enableArborInsightsClient && _arborInsightsClient != null)
-                _transportSelectionCoroutine = StartCoroutine(WaitForTransportSelectionCoroutine());
+            bool needsDeferredAndroidInit = Configuration.Instance.enableArborMdmClient
+                || Configuration.Instance.enableArborInsightsClient;
+            if (needsDeferredAndroidInit)
+                _transportSelectionCoroutine = StartCoroutine(DeferredAndroidClientInitAndTransportSelectionCoroutine());
             else
 #endif
                 _transportSelectionComplete = true;
@@ -207,7 +206,7 @@ namespace AbxrLib.Runtime
             PlayerPrefs.Save();
             LoadSuperMetaData();
             
-            _sceneChangeDetector = new SceneChangeDetector();
+            _sceneChangeDetector = new SceneChangeDetector(() => _authService.HasAuthenticationStarted);
             _sceneChangeDetector.Start();
             
             _headsetDetector = new HeadsetDetector(_authService, this);
@@ -324,6 +323,32 @@ namespace AbxrLib.Runtime
         }
         
         internal void DoAuthenticate() => _authService.Authenticate();
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        /// <summary>
+        /// Runs after the first frame: MDM <see cref="ArborMdmClient.Initialize"/>, ArborInsights <see cref="ArborInsightsClient.Start"/>,
+        /// then transport selection when Insights is enabled. Keeps synchronous JNI out of <see cref="Awake"/>.
+        /// Auth waits on <see cref="_transportSelectionComplete"/> (including MDM-only: init finishes before flag is set).
+        /// </summary>
+        private IEnumerator DeferredAndroidClientInitAndTransportSelectionCoroutine()
+        {
+            yield return null;
+
+            if (_arborMdmClient != null)
+                _arborMdmClient.Initialize();
+            if (_arborInsightsClient != null)
+                _arborInsightsClient.Start();
+
+            if (Configuration.Instance.enableArborInsightsClient && _arborInsightsClient != null)
+            {
+                IEnumerator transportWait = WaitForTransportSelectionCoroutine();
+                while (transportWait.MoveNext())
+                    yield return transportWait.Current;
+            }
+            else
+                _transportSelectionComplete = true;
+        }
+#endif
 
         private IEnumerator WaitForTransportSelectionCoroutine()
         {
