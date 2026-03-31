@@ -267,12 +267,30 @@ public static partial class Abxr
 	}
 	
 	/// <summary>
+	/// Completes deferred startup when <c>enableAutoInitialize</c> is off and <c>enableAutoStartAuthentication</c> is off (keyboard, exit poll, QR, subsystem). Idempotent.
+	/// Optional if you only use <see cref="StartAuthentication"/>, which calls this first.
+	/// </summary>
+	public static void Initialize() => AbxrLib.Runtime.Core.Initialize.CreateRuntimeIfNeeded();
+
+	/// <summary>Alias for <see cref="Initialize"/>.</summary>
+	public static void Init() => Initialize();
+
+	/// <summary>
 	/// Manually start the authentication process
 	/// Use this when Enable Auto Start Authentication is off in configuration
 	/// or when you want to trigger authentication at a specific time in your app
 	/// </summary>
-	public static void StartAuthentication() => X?.StartAuthentication();
-	public static void ReAuthenticate() => X?.StartAuthentication();
+	public static void StartAuthentication()
+	{
+		Initialize();
+		X?.StartAuthentication();
+	}
+
+	public static void ReAuthenticate()
+	{
+		Initialize();
+		X?.StartAuthentication();
+	}
 
 	/// <summary>
 	/// Assign your handler to collect auth input (e.g. PIN, email) instead of the default keyboard/PIN UI.
@@ -330,7 +348,11 @@ public static partial class Abxr
 	/// Generates a new session ID and performs fresh authentication
 	/// Useful for starting new training experiences or resetting user context
 	/// </summary>
-	public static void StartNewSession() => X?.StartNewSession();
+	public static void StartNewSession()
+	{
+		Initialize();
+		X?.StartNewSession();
+	}
 
 	/// <summary>
 	/// Ends the current session: sends all data (including closing any running assessment/objective/interaction),

@@ -58,6 +58,9 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()")]
         public bool enableAutoStartAuthentication = true;
 
+        [Tooltip("When enabled (default), AbxrLib creates the subsystem and UI handlers at startup. When disabled, only configuration loads until Abxr.Initialize() or Abxr.StartAuthentication(). In the custom inspector this appears only when Enable Auto Start Authentication is off; when auto-start auth is on, full startup is always used.")]
+        public bool enableAutoInitialize = true;
+
         [Tooltip("Delay in seconds before starting authentication (only applies when auto-start is enabled)")]
         public float authenticationStartDelay = 0f;
 

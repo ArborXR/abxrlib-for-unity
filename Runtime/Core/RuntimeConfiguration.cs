@@ -37,6 +37,9 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
+        /// <summary>Loads <c>Resources/AbxrLib</c> into <see cref="Instance"/> without creating the subsystem or UI. Runs automatically on first <see cref="Instance"/> access; safe to call early when deferred startup is configured.</summary>
+        public static void EnsureConfigurationLoaded() => EnsureLoaded();
+
         private static void EnsureLoaded()
         {
             if (_instance != null) return;
@@ -120,6 +123,7 @@ namespace AbxrLib.Runtime.Core
         public float defaultMaxDistanceLimit = 50f;
         public bool defaultAutoCreateTriggerCollider = true;
         public bool enableAutoStartAuthentication = true;
+        public bool enableAutoInitialize = true;
         public float authenticationStartDelay = 0f;
         public bool enableAutoStartModules = true;
         public bool enableAutoAdvanceModules = true;
@@ -234,6 +238,7 @@ namespace AbxrLib.Runtime.Core
             c.defaultMaxDistanceLimit = a.defaultMaxDistanceLimit;
             c.defaultAutoCreateTriggerCollider = a.defaultAutoCreateTriggerCollider;
             c.enableAutoStartAuthentication = a.enableAutoStartAuthentication;
+            c.enableAutoInitialize = a.enableAutoInitialize;
             c.authenticationStartDelay = a.authenticationStartDelay;
             c.enableAutoStartModules = a.enableAutoStartModules;
             c.enableAutoAdvanceModules = a.enableAutoAdvanceModules;
@@ -270,6 +275,8 @@ namespace AbxrLib.Runtime.Core
             c.unitTestDeviceId = a.unitTestDeviceId;
             c.unitTestFingerprint = a.unitTestFingerprint;
 #endif
+            if (c.enableAutoStartAuthentication)
+                c.enableAutoInitialize = true;
         }
 
         /// <summary>Merges GET /v1/storage/config into the runtime instance only. Not applied: credentials, token mode, build type, module timing, auth UI, prefabs, ArborInsightsClient/ArborMdmClient (build-time from AppConfig only).</summary>
@@ -328,6 +335,7 @@ namespace AbxrLib.Runtime.Core
             _authoringAsset = null;
             _validatedOnce = false;
             _lastValidationErrorMessage = null;
+            Initialize.ResetForTesting();
         }
     }
 }

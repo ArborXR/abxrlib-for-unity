@@ -160,6 +160,22 @@ namespace AbxrLib.Editor
             config.enableAutoStartAuthentication = EditorGUILayout.Toggle(new GUIContent(
                 "Enable Auto Start Authentication", "When enabled, authentication will start automatically on app launch. When disabled, you must manually call Abxr.StartAuthentication()"), config.enableAutoStartAuthentication);
 
+            if (config.enableAutoStartAuthentication)
+            {
+                if (!config.enableAutoInitialize)
+                {
+                    config.enableAutoInitialize = true;
+                    EditorUtility.SetDirty(config);
+                }
+            }
+            else
+            {
+                config.enableAutoInitialize = EditorGUILayout.Toggle(new GUIContent(
+                    "Enable Auto Initialize",
+                    "When enabled (default), AbxrLib creates the subsystem and UI handlers at startup. When disabled, only configuration loads until Abxr.Initialize() or Abxr.StartAuthentication()."),
+                    config.enableAutoInitialize);
+            }
+
             EditorGUI.BeginDisabledGroup(!config.enableAutoStartAuthentication);
                 config.authenticationStartDelay = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
                     "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay), 0f, 60f);
@@ -310,6 +326,7 @@ namespace AbxrLib.Editor
                 
                 // Authentication Control
                 config.enableAutoStartAuthentication = defaultConfig.enableAutoStartAuthentication;
+                config.enableAutoInitialize = defaultConfig.enableAutoInitialize;
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
                 config.enableReturnTo = defaultConfig.enableReturnTo;
                 config.enablePinPadGuestAccess = defaultConfig.enablePinPadGuestAccess;
