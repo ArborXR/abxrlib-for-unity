@@ -2,6 +2,15 @@ using System.Collections.Generic;
 using UnityEngine;
 using AbxrLib.Runtime.Core;
 
+#if XR_TOOLKIT_AVAILABLE
+#if XR_TOOLKIT_3_OR_NEWER
+using XRRayInteractor = UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor;
+#else
+using XRRayInteractor = UnityEngine.XR.Interaction.Toolkit.XRRayInteractor;
+#endif
+#endif
+
+
 namespace AbxrLib.Runtime.UI.Keyboard
 {
 #if XR_TOOLKIT_AVAILABLE && UNITY_2022_3_OR_NEWER
@@ -16,11 +25,11 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private static bool _isManagingLaserPointers = false;
         private static int _cleanupCounter = 0;
         private const int CLEANUP_FREQUENCY = 100; // Clean up every 100 operations
-        
+
         // Cache for ray interactors to avoid expensive FindObjectsOfType calls
-        private static UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor[] _cachedRayInteractors = null;
+        private static XRRayInteractor[] _cachedRayInteractors = null;
         private static bool _cacheValid = false; // Cache is valid until explicitly invalidated
-        
+
         /// <summary>
         /// Cleans up any null references from destroyed objects to prevent memory leaks.
         /// This should be called periodically or when objects might be destroyed.
@@ -28,9 +37,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public static void CleanupDestroyedReferences()
         {
             if (_originalStates.Count == 0) return;
-            
+
             var keysToRemove = new List<object>();
-            
+
             // Find all null keys (destroyed objects)
             foreach (var kvp in _originalStates)
             {
@@ -39,7 +48,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                     keysToRemove.Add(kvp.Key);
                 }
             }
-            
+
             // Remove null keys from dictionary - we need to handle this carefully
             // since Dictionary.Remove(null) doesn't work as expected
             if (keysToRemove.Count > 0)
@@ -53,10 +62,11 @@ namespace AbxrLib.Runtime.UI.Keyboard
                         newDictionary[kvp.Key] = kvp.Value;
                     }
                 }
+
                 _originalStates = newDictionary;
             }
         }
-        
+
         /// <summary>
         /// Forces cleanup of all managed states. Use this when you want to reset the manager completely.
         /// </summary>
@@ -67,7 +77,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             _cachedRayInteractors = null; // Clear cache
             _cacheValid = false; // Invalidate cache
         }
-        
+
         /// <summary>
         /// Called when scenes change to ensure proper cleanup of destroyed objects.
         /// This prevents memory leaks when ray interactors are destroyed during scene transitions.
@@ -84,7 +94,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 CleanupDestroyedReferences();
             }
         }
-        
+
         /// <summary>
         /// Checks if XR Interaction Toolkit is available and properly configured.
         /// </summary>
@@ -99,13 +109,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// Ray interactors are cached for the lifetime of the app since they rarely change
         /// </summary>
         /// <returns>Array of XRRayInteractor components</returns>
-        private static UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor[] GetRayInteractors()
+        private static XRRayInteractor[] GetRayInteractors()
         {
             // Check if cache is valid
             if (_cacheValid && _cachedRayInteractors != null)
             {
                 // Filter out any null references from destroyed objects
-                var validInteractors = new List<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+                var validInteractors = new List<XRRayInteractor>();
                 foreach (var interactor in _cachedRayInteractors)
                 {
                     if (interactor != null)
@@ -113,18 +123,18 @@ namespace AbxrLib.Runtime.UI.Keyboard
                         validInteractors.Add(interactor);
                     }
                 }
-                
+
                 // Update cache with valid interactors only if some were destroyed
                 if (validInteractors.Count != _cachedRayInteractors.Length)
                     _cachedRayInteractors = validInteractors.ToArray();
-                
+
                 return _cachedRayInteractors;
             }
-            
+
             // Cache is invalid or null, find new ray interactors
-            _cachedRayInteractors = UnityEngine.Object.FindObjectsOfType<UnityEngine.XR.Interaction.Toolkit.Interactors.XRRayInteractor>();
+            _cachedRayInteractors = UnityEngine.Object.FindObjectsOfType<XRRayInteractor>();
             _cacheValid = true;
-            
+
             return _cachedRayInteractors;
         }
 
@@ -140,8 +150,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 _cleanupCounter = 0;
                 CleanupDestroyedReferences();
             }
-            
-            if (_isManagingLaserPointers) 
+
+            if (_isManagingLaserPointers)
             {
                 // Clean up any destroyed references before continuing
                 CleanupDestroyedReferences();
@@ -171,12 +181,15 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
                 else if (_originalStates.Count >= Configuration.Instance.maxDictionarySize)
                 {
-                    Logcat.Warning($"LaserPointerManager - Maximum dictionary size ({Configuration.Instance.maxDictionarySize}) reached, skipping additional ray interactors");
+                    Logcat.Warning(
+                        $"LaserPointerManager - Maximum dictionary size ({Configuration.Instance.maxDictionarySize}) reached, skipping additional ray interactors");
                     break;
                 }
             }
+
             if (anyEnabled)
-                Logcat.Debug("LaserPointerManager - Enabled laser pointer(s) for keyboard interaction (were previously disabled).");
+                Logcat.Debug(
+                    "LaserPointerManager - Enabled laser pointer(s) for keyboard interaction (were previously disabled).");
         }
 
         /// <summary>
@@ -210,7 +223,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
             var keysToRemove = new List<object>();
             bool anyRestored = false;
-            
+
             foreach (var kvp in _originalStates)
             {
                 object rayInteractor = kvp.Key;
@@ -225,6 +238,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                         comp.gameObject.SetActive(originalState);
                         anyRestored = true;
                     }
+
                     keysToRemove.Add(rayInteractor); // Mark for removal after processing
                 }
                 else
@@ -246,6 +260,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                         newDictionary[kvp.Key] = kvp.Value;
                     }
                 }
+
                 _originalStates = newDictionary;
             }
 
