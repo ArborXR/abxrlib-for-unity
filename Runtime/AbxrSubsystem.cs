@@ -235,12 +235,24 @@ namespace AbxrLib.Runtime
             else
                 Logcat.Info($"Version {AbxrLibVersion.Version} Initialized.");
 
-            // Auto-start auth (gated on transport selection so first auth uses correct backend). Do not start when config validation failed.
+            // Auto-start auth (gated on transport selection so first auth uses correct backend).
+            //
+            // Invalid AbxrLib asset (missing/invalid credentials or rest URL): always use this coroutine path — do not
+            // call HandleAuthCompleted from Awake. AbxrSubsystem.Awake runs during BeforeSceneLoad, before the scene
+            // exists, so synchronous OnAuthCompleted would run with no subscribers.
+            //
+            // When credentials cannot be sent, AbxrAuthService.Authenticate() fails at IsValidToSend() (before
+            // AuthenticateCoroutine / device auth / HTTP). That invokes OnFailed → HandleAuthCompleted(false, …) →
+            // Abxr.OnAuthCompleted(false, error). Same pipeline as API/network terminal failure: Authenticated stays false,
+            // no session; apps that continue without analytics should handle success == false (as for any failed auth).
+            // This is not success == true (unlike a completed session with authMechanism none from the backend).
+            //
+            // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass; the transport may fail
+            // on first request. MDM/query overrides after LoadRuntimeAuthFromConfig may fix credentials; do not gate on
+            // Configuration.LastValidationErrorMessage alone inside Authenticate() (it can be stale after overrides).
             bool enableAutoStart = _authService.GetEnableAutoStartAuthentication();
-            if (enableAutoStart && !configInvalid)
+            if (enableAutoStart)
                 StartCoroutine(AuthStartAfterTransportSelectionCoroutine(settings.authenticationStartDelay));
-            else if (enableAutoStart && configInvalid)
-                HandleAuthCompleted(false);
             else
                 Logcat.Info("Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
 
