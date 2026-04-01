@@ -21,11 +21,18 @@
     "versionDefines": [
         {
             "name": "com.unity.xr.interaction.toolkit",
+            "expression": "",
             "define": "XR_TOOLKIT_AVAILABLE"
         },
         {
             "name": "com.meta.xr.sdk.core",
+            "expression": "",
             "define": "META_SDK_AVAILABLE"
+        },
+        {
+            "name": "com.unity.xr.interaction.toolkit",
+            "expression": "3.0.0",
+            "define": "XR_TOOLKIT_3_OR_NEWER"
         }
     ],
     "noEngineReferences": false
