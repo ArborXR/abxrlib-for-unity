@@ -156,6 +156,7 @@ namespace AbxrLib.Runtime.Core
         public string unitTestAuthEmailDomain = "";
         public string unitTestDeviceId = "";
         public string unitTestFingerprint = "";
+        public string unitTestSsoAccessToken = "";
 #endif
 
         /// <summary>Validates runtime settings (auth + URL + numeric clamp).</summary>
@@ -269,6 +270,7 @@ namespace AbxrLib.Runtime.Core
             c.unitTestAuthEmailDomain = a.unitTestAuthEmailDomain;
             c.unitTestDeviceId = a.unitTestDeviceId;
             c.unitTestFingerprint = a.unitTestFingerprint;
+            c.unitTestSsoAccessToken = a.unitTestSsoAccessToken;
 #endif
         }
 

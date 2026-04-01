@@ -262,6 +262,8 @@ namespace AbxrLib.Editor
                     "Device ID", "Used by unit tests via Abxr.SetDeviceId when a known device ID is needed (e.g. dynamic org token / device-scoped auth)."), config.unitTestDeviceId);
                 config.unitTestFingerprint = EditorGUILayout.TextField(new GUIContent(
                     "Device fingerprint", "Used by unit tests as auth secret (e.g. Abxr.SetAuthSecret) to sign the dynamic org token when a known fingerprint is needed."), config.unitTestFingerprint);
+                config.unitTestSsoAccessToken = EditorGUILayout.TextField(new GUIContent(
+                    "SSO access token (JWT)", "When set with Unit Test Credentials enabled, simulates ArborXR MDM SSO: GetIsAuthenticated() is true and GetAccessToken() returns this JWT so PlayMode tests can exercise the MDM user-identity path without a device."), config.unitTestSsoAccessToken);
                 EditorGUI.indentLevel--;
             }
 

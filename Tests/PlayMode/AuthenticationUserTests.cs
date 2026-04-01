@@ -2,6 +2,7 @@
 // PlayMode tests for user authentication (API may request user identification after device authentication). Tests force authMechanism by type: assessmentPin (PIN), email (with domain from unitTestAuthEmailDomain), or text. OnInputRequested is auto-answered from Unit Test Credentials (unitTestAuthPin, unitTestAuthEmail, unitTestAuthText). Only AuthUser_NoAuthMechanism_* uses type=none.
 // Failed-PIN tests (e.g. InvalidPin): the keyboard auth path uses a single attempt (withRetry: false), so one wrong PIN yields OnFailed and "Authentication failure". Empty input is rejected locally (no transport call); OnInputRequested is re-invoked with an error so the user can try again.
 // Requires backend (lib-backend) and project config: useAppTokens=true, buildType=production_custom, appToken and orgToken from Configuration; Unit Test Credentials enabled and PIN/email/text/domain set as needed.
+// MDM SSO skip test: unitTestSsoAccessToken (or embedded sample from UnitTestSsoJwtBuilder) + unitTestConfigEnabled simulates GetIsAuthenticated/GetAccessToken for the MDM user-identity path.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -23,12 +24,14 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
     internal static string ConfigUnitTestAuthEmail => Configuration.Instance?.unitTestAuthEmail ?? "";
     internal static string ConfigUnitTestAuthEmailDomain => Configuration.Instance?.unitTestAuthEmailDomain ?? "";
     internal static string ConfigUnitTestAuthText => Configuration.Instance?.unitTestAuthText ?? "";
+    internal static string ConfigUnitTestSsoAccessToken => Configuration.Instance?.unitTestSsoAccessToken ?? "";
 #else
     internal static string ConfigUnitTestAuthPin => "";
     internal static string ConfigUnitTestAuthBadPin => "";
     internal static string ConfigUnitTestAuthEmail => "";
     internal static string ConfigUnitTestAuthEmailDomain => "";
     internal static string ConfigUnitTestAuthText => "";
+    internal static string ConfigUnitTestSsoAccessToken => "";
 #endif
     /// <summary>Standard runtime auth for user authentication tests: app tokens, production_custom, tokens from config.</summary>
     private static RuntimeAuthConfig UserRuntimeAuth()
@@ -555,4 +558,61 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
         if (userData.Count > 0 && userData.ContainsKey("id"))
             Assert.AreEqual("minimal-id@test.com", userData["id"], "When backend echoes userData.id it should match what we sent.");
     }
+
+    /// <summary>
+    /// Runtime auth forces assessmentPin (would prompt for PIN). With Unit Test Credentials enabled and a fake SSO JWT,
+    /// AbxrSubsystem simulates MDM (<see cref="Abxr.GetIsAuthenticated"/> / <see cref="Abxr.GetAccessToken"/>); the SDK skips the
+    /// auth-mechanism prompt and merges JWT claims into user data. Set <c>unitTestSsoAccessToken</c> in AbxrLib config, or leave
+    /// empty to use <see cref="UnitTestSsoJwtBuilder.MinimalIdentityJwt"/>.
+    /// </summary>
+    [UnityTest]
+    public IEnumerator AuthUser_MdmSsoIdentity_SkipsAssessmentPinPrompt_Succeeds()
+    {
+        if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
+        {
+            Assert.Ignore("App token and org token required. Set in AbxrLib config (production_custom).");
+            yield break;
+        }
+#if !UNITY_EDITOR && !DEVELOPMENT_BUILD
+        Assert.Ignore("Unit test SSO token override is Editor/Development builds only.");
+        yield break;
+#else
+        CreateSubsystem();
+
+        string initialFromAsset = ConfigUnitTestSsoAccessToken;
+        string jwt = !string.IsNullOrWhiteSpace(initialFromAsset)
+            ? initialFromAsset.Trim()
+            : UnitTestSsoJwtBuilder.MinimalIdentityJwt();
+        ModifyConfig("unitTestConfigEnabled", true);
+        ModifyConfig("unitTestSsoAccessToken", jwt);
+
+        SetRuntimeAuth(UserRuntimeAuthWithAssessmentPin());
+
+        bool inputInvoked = false;
+        bool success = false;
+        string error = null;
+        yield return PerformAuthWithError(
+            (s, e) => { success = s; error = e; },
+            timeoutSeconds: 45f,
+            customOnInputRequested: (type, prompt, domain, err) => { inputInvoked = true; });
+
+        Assert.IsFalse(inputInvoked, "OnInputRequested should not run when unit test SSO JWT supplies MDM identity.");
+        Assert.IsTrue(success, $"Auth should succeed without PIN when MDM SSO is simulated. Error: {error}");
+
+        var userData = Abxr.GetUserData();
+        Assert.IsNotNull(userData, "GetUserData() should not be null after auth.");
+        if (string.IsNullOrWhiteSpace(initialFromAsset))
+        {
+            Assert.IsTrue(userData.TryGetValue("sub", out var sub) && sub == "abxrlib-unit-test-sso",
+                "Embedded sample JWT should merge sub into userData.");
+            Assert.IsTrue(userData.TryGetValue("email", out var em) && em == "abxr-sso-unit-test@example.com",
+                "Embedded sample JWT should merge email into userData.");
+        }
+        else
+        {
+            Assert.IsTrue(userData.Count > 0, "Custom unitTestSsoAccessToken JWT should merge at least one claim into userData.");
+        }
+#endif
+    }
 }
+

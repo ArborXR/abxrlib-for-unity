@@ -783,26 +783,6 @@ public static partial class Abxr
 	/// </summary>
 	public static void SetAuthSecret(string authSecret) => X?.SetAuthSecret(authSecret);
 
-	/// <summary>
-	/// Sets the Insights REST base URL at runtime (e.g. staging vs production). Allowed only before authentication has been started for the first time this run
-	/// (call before <see cref="StartAuthentication"/> or any path that calls into auth). After the first auth flow starts, the URL cannot be changed until the app restarts.
-	/// Updates <see cref="Configuration.Instance"/>; also refreshes the LLM proxy URL and syncs ArborInsightsClient when the JNI bridge is initialized (Android).
-	/// </summary>
-	/// <returns>True if the URL was applied; false if validation failed or authentication has already started (<paramref name="errorMessage"/> explains why).</returns>
-	public static bool TrySetRestUrl(string restUrl, out string errorMessage)
-	{
-		if (!Configuration.TryValidateRestUrl(restUrl, out errorMessage))
-			return false;
-		if (AbxrSubsystem.Instance != null && AbxrSubsystem.Instance.HasAuthenticationStarted)
-		{
-			errorMessage = "restUrl cannot be changed after authentication has started. Call before the first StartAuthentication() (or equivalent) in this app run.";
-			return false;
-		}
-		Configuration.Instance.restUrl = restUrl;
-		AbxrSubsystem.Instance?.NotifyRestUrlChanged();
-		return true;
-	}
-
 	/// <summary>Gets the name assigned to organization by admin through the ArborXR Web Portal.</summary>
 	public static string GetOrgTitle() => X?.GetOrgTitle();
 
@@ -838,6 +818,26 @@ public static partial class Abxr
 	public static string GetFingerprint() => X?.GetFingerprint();
 	
 	// ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Sets the Insights REST base URL at runtime (e.g. staging vs production). Allowed only before authentication has been started for the first time this run
+	/// (call before <see cref="StartAuthentication"/> or any path that calls into auth). After the first auth flow starts, the URL cannot be changed until the app restarts.
+	/// Updates <see cref="Configuration.Instance"/>; also refreshes the LLM proxy URL and syncs ArborInsightsClient when the JNI bridge is initialized (Android).
+	/// </summary>
+	/// <returns>True if the URL was applied; false if validation failed or authentication has already started (<paramref name="errorMessage"/> explains why).</returns>
+	public static bool TrySetRestUrl(string restUrl, out string errorMessage)
+	{
+		if (!Configuration.TryValidateRestUrl(restUrl, out errorMessage))
+			return false;
+		if (AbxrSubsystem.Instance != null && AbxrSubsystem.Instance.HasAuthenticationStarted)
+		{
+			errorMessage = "restUrl cannot be changed after authentication has started. Call before the first StartAuthentication() (or equivalent) in this app run.";
+			return false;
+		}
+		Configuration.Instance.restUrl = restUrl;
+		AbxrSubsystem.Instance?.NotifyRestUrlChanged();
+		return true;
+	}
 
 	/// <summary>For testing only. Restores <see cref="OnQuitAssessmentStatus"/> and related quit-closing defaults.</summary>
 	internal static void ResetQuitClosingEventDefaultsForTesting()

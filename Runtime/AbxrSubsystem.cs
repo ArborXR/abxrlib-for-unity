@@ -1163,11 +1163,25 @@ internal void StartNewSession()
 		internal string GetMacAddressRandom() =>
 			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetMacAddressRandom() : "";
 		
-		internal bool GetIsAuthenticated() =>
-			_arborMdmClient != null && _arborMdmClient.IsConnected() && _arborMdmClient.ServiceWrapper != null && _arborMdmClient.ServiceWrapper.GetIsAuthenticated();
-		
-		internal string GetAccessToken() =>
-			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetAccessToken() : "";
+		internal bool GetIsAuthenticated()
+		{
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+			var cfg = Configuration.Instance;
+			if (cfg != null && cfg.unitTestConfigEnabled && !string.IsNullOrWhiteSpace(cfg.unitTestSsoAccessToken))
+				return true;
+#endif
+			return _arborMdmClient != null && _arborMdmClient.IsConnected() && _arborMdmClient.ServiceWrapper != null && _arborMdmClient.ServiceWrapper.GetIsAuthenticated();
+		}
+
+		internal string GetAccessToken()
+		{
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+			var cfg = Configuration.Instance;
+			if (cfg != null && cfg.unitTestConfigEnabled && !string.IsNullOrWhiteSpace(cfg.unitTestSsoAccessToken))
+				return cfg.unitTestSsoAccessToken;
+#endif
+			return _arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetAccessToken() : "";
+		}
 		
 		internal string GetRefreshToken() =>
 			_arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetRefreshToken() : "";

@@ -71,6 +71,9 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>True while the auth request is from SetUserData re-auth; ensures we send type=custom with userData instead of current _authMechanism (e.g. email).</summary>
         private bool _setUserDataReAuthActive;
 
+        /// <summary>Set when user auth was satisfied by MDM SSO + access token JWT before <see cref="AuthSucceeded"/> so JWT is not merged twice.</summary>
+        private bool _ssoUserDataMergedBeforeAuthSucceeded;
+
         private readonly MonoBehaviour _runner;
         private readonly ArborMdmClient _ArborMdmClient;
         private Func<IAbxrTransport> _getTransport;
@@ -431,7 +434,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
 #endif
                 {
-                    RequestKeyboardInput();
+                    if (TryCompleteUserAuthUsingMdmSsoIdentity())
+                        AuthSucceeded();
+                    else
+                        RequestKeyboardInput();
                 }
             }
             else
@@ -582,9 +588,56 @@ namespace AbxrLib.Runtime.Services.Auth
             "unique_name",
         };
 
+        /// <summary>Returns true when the JWT payload has at least one identity-oriented claim (subject, OID, email, UPN, etc.) suitable for skipping the configured auth mechanism.</summary>
+        private static bool JwtPayloadHasUsableIdentity(Dictionary<string, object> payload)
+        {
+            if (payload == null || payload.Count == 0) return false;
+            string[] identityKeys = { "sub", "oid", "preferred_username", "upn", "unique_name" };
+            foreach (var k in identityKeys)
+            {
+                if (!payload.TryGetValue(k, out var v) || v == null) continue;
+                string s = Utils.JwtPayloadValueToString(v);
+                if (!string.IsNullOrWhiteSpace(s)) return true;
+            }
+            foreach (var claimKey in SsoJwtEmailClaimKeys)
+            {
+                if (!payload.TryGetValue(claimKey, out var raw) || raw == null) continue;
+                string s = Utils.JwtPayloadValueToString(raw);
+                if (!string.IsNullOrWhiteSpace(s)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// When <see cref="Abxr.GetIsAuthenticated"/> is true and <see cref="Abxr.GetAccessToken"/> is a JWT with usable identity claims,
+        /// merges SSO claims into <see cref="ResponseData"/>, treats auth mechanism as none for this step, and returns true so the caller can call <see cref="AuthSucceeded"/> without prompting.
+        /// </summary>
+        private bool TryCompleteUserAuthUsingMdmSsoIdentity()
+        {
+            if (!Abxr.GetIsAuthenticated()) return false;
+            string token = Abxr.GetAccessToken();
+            if (string.IsNullOrWhiteSpace(token)) return false;
+            var payload = Utils.TryDecodeJwtPayload(token);
+            if (payload == null || payload.Count == 0) return false;
+            if (!JwtPayloadHasUsableIdentity(payload)) return false;
+
+            if (ResponseData == null) return false;
+            ResponseData.UserData ??= new Dictionary<string, string>();
+            if (!MergeSsoAccessTokenIntoUserData(ResponseData.UserData))
+            {
+                Logcat.Warning("MDM SSO: access token did not merge into userData; continuing with auth mechanism prompt.");
+                return false;
+            }
+
+            ApplyNoneUserAuthMechanismForSession();
+            _ssoUserDataMergedBeforeAuthSucceeded = true;
+            Logcat.Info("MDM SSO user identity applied; skipping auth mechanism prompt (GET config authMechanism ignored for this session).");
+            return true;
+        }
+
         /// <summary>
         /// When XRDM MDM reports SSO authenticated and the access token is a decodable JWT, merges payload claims into <paramref name="userData"/>.
-        /// Called only when the full auth sequence has finished (see <see cref="AuthSucceeded"/>), after server userData and any keyboard/email step—not after device-only HTTP success.
+        /// Normally called from <see cref="AuthSucceeded"/> after optional keyboard/email step. When MDM SSO supplies identity, <see cref="TryCompleteUserAuthUsingMdmSsoIdentity"/> merges first and <see cref="AuthSucceeded"/> skips a second merge.
         /// Conflicting claim keys are stored as <c>sso_</c>… (with numeric suffix if needed).
         /// If <c>email</c> is still empty, copies from the first non-empty value among <see cref="SsoJwtEmailClaimKeys"/> in the JWT payload.
         /// </summary>
@@ -911,7 +964,13 @@ namespace AbxrLib.Runtime.Services.Auth
             if (ResponseData != null)
             {
                 ResponseData.UserData ??= new Dictionary<string, string>();
-                ssoUserDataChanged = MergeSsoAccessTokenIntoUserData(ResponseData.UserData);
+                if (_ssoUserDataMergedBeforeAuthSucceeded)
+                {
+                    _ssoUserDataMergedBeforeAuthSucceeded = false;
+                    ssoUserDataChanged = true;
+                }
+                else
+                    ssoUserDataChanged = MergeSsoAccessTokenIntoUserData(ResponseData.UserData);
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
             }
             OnSucceeded?.Invoke();
@@ -1012,6 +1071,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _userData = null;
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;
+            _ssoUserDataMergedBeforeAuthSucceeded = false;
 #if UNITY_WEBGL && !UNITY_EDITOR
             _webglUrlPinAutoSubmitAttempted = false;
 #endif

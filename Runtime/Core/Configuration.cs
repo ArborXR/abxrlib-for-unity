@@ -119,6 +119,8 @@ namespace AbxrLib.Runtime.Core
         [HideInInspector] public string unitTestAuthEmailDomain = "";
         [HideInInspector] public string unitTestDeviceId = "";
         [HideInInspector] public string unitTestFingerprint = "";
+        /// <summary>Fake MDM SSO access token (JWT) for PlayMode tests of the MDM identity skip path. Requires <see cref="unitTestConfigEnabled"/>.</summary>
+        [HideInInspector] public string unitTestSsoAccessToken = "";
 #endif
 
         /// <summary>Edit-mode and unit tests: validates this asset in memory (Inspector / EditMode tests).</summary>
