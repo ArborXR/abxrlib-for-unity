@@ -48,6 +48,9 @@ public class AbxrPlayModeTestBase
         // Reset static fields on AbxrSubsystem that survive MonoBehaviour destruction.
         AbxrSubsystem.ResetStaticStateForTesting();
 
+        // unitTestSsoAccessToken on the config asset must only simulate MDM SSO during Test Runner PlayMode tests, not when running a scene from the Editor or a development player outside tests.
+        AbxrSubsystem.UnitTestSsoSimulationFromConfigAllowed = true;
+
         // Create a fresh Configuration singleton for this test.
         Configuration.ResetForTesting();
 

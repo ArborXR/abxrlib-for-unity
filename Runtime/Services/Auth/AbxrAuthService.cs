@@ -611,9 +611,12 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>
         /// When <see cref="Abxr.GetIsAuthenticated"/> is true and <see cref="Abxr.GetAccessToken"/> is a JWT with usable identity claims,
         /// merges SSO claims into <see cref="ResponseData"/>, treats auth mechanism as none for this step, and returns true so the caller can call <see cref="AuthSucceeded"/> without prompting.
+        /// Skipped when <see cref="Configuration.enableLearnerLauncherMode"/> is on so assessment PIN / <see cref="Abxr.OnInputSubmitted"/> is not bypassed.
         /// </summary>
         private bool TryCompleteUserAuthUsingMdmSsoIdentity()
         {
+            if (Configuration.Instance != null && Configuration.Instance.enableLearnerLauncherMode)
+                return false;
             if (!Abxr.GetIsAuthenticated()) return false;
             string token = Abxr.GetAccessToken();
             if (string.IsNullOrWhiteSpace(token)) return false;

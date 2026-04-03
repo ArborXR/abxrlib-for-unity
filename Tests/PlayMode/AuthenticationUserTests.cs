@@ -2,7 +2,7 @@
 // PlayMode tests for user authentication (API may request user identification after device authentication). Tests force authMechanism by type: assessmentPin (PIN), email (with domain from unitTestAuthEmailDomain), or text. OnInputRequested is auto-answered from Unit Test Credentials (unitTestAuthPin, unitTestAuthEmail, unitTestAuthText). Only AuthUser_NoAuthMechanism_* uses type=none.
 // Failed-PIN tests (e.g. InvalidPin): the keyboard auth path uses a single attempt (withRetry: false), so one wrong PIN yields OnFailed and "Authentication failure". Empty input is rejected locally (no transport call); OnInputRequested is re-invoked with an error so the user can try again.
 // Requires backend (lib-backend) and project config: useAppTokens=true, buildType=production_custom, appToken and orgToken from Configuration; Unit Test Credentials enabled and PIN/email/text/domain set as needed.
-// MDM SSO skip test: unitTestSsoAccessToken (or embedded sample from UnitTestSsoJwtBuilder) + unitTestConfigEnabled simulates GetIsAuthenticated/GetAccessToken for the MDM user-identity path.
+// MDM SSO skip test: unitTestSsoAccessToken (or embedded sample from UnitTestSsoJwtBuilder) + unitTestConfigEnabled simulates GetIsAuthenticated/GetAccessToken only when AbxrPlayModeTestBase sets UnitTestSsoSimulationFromConfigAllowed (Test Runner PlayMode), not in normal Editor Play.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -612,6 +612,62 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
         {
             Assert.IsTrue(userData.Count > 0, "Custom unitTestSsoAccessToken JWT should merge at least one claim into userData.");
         }
+#endif
+    }
+
+    /// <summary>
+    /// When <see cref="Configuration.enableLearnerLauncherMode"/> is on, MDM SSO simulation must not skip the assessment PIN step
+    /// (regression: learner launcher exists to force PIN / <see cref="Abxr.OnInputSubmitted"/> flow).
+    /// </summary>
+    [UnityTest]
+    public IEnumerator AuthUser_LearnerLauncherMode_DoesNotSkipPinWhenMdmSsoSimulated()
+    {
+        if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
+        {
+            Assert.Ignore("App token and org token required. Set in AbxrLib config (production_custom).");
+            yield break;
+        }
+#if !UNITY_EDITOR && !DEVELOPMENT_BUILD
+        Assert.Ignore("Unit test SSO token override is Editor/Development builds only.");
+        yield break;
+#else
+        CreateSubsystem();
+
+        string jwt = !string.IsNullOrWhiteSpace(ConfigUnitTestSsoAccessToken)
+            ? ConfigUnitTestSsoAccessToken.Trim()
+            : UnitTestSsoJwtBuilder.MinimalIdentityJwt();
+        ModifyConfig("unitTestConfigEnabled", true);
+        ModifyConfig("unitTestSsoAccessToken", jwt);
+        ModifyConfig("enableLearnerLauncherMode", true);
+
+        SetRuntimeAuth(UserRuntimeAuthWithAssessmentPin());
+
+        bool inputInvoked = false;
+        bool success = false;
+        string error = null;
+        yield return PerformAuthWithError(
+            (s, e) => { success = s; error = e; },
+            timeoutSeconds: 45f,
+            customOnInputRequested: (type, prompt, domain, err) =>
+            {
+                inputInvoked = true;
+                var c = Configuration.Instance;
+                if (c == null || !c.unitTestConfigEnabled)
+                {
+                    Assert.Fail("Unit Test Credentials should be enabled for this test.");
+                    return;
+                }
+                string value = type switch
+                {
+                    "email" => c.unitTestAuthEmail ?? "",
+                    "pin" or "assessmentPin" => c.unitTestAuthPin ?? "",
+                    _ => c.unitTestAuthText ?? ""
+                };
+                Abxr.OnInputSubmitted(value);
+            });
+
+        Assert.IsTrue(inputInvoked, "OnInputRequested should run when learner launcher mode overrides MDM SSO skip.");
+        Assert.IsTrue(success, $"Auth should succeed after PIN when learner launcher mode is on. Error: {error}");
 #endif
     }
 }

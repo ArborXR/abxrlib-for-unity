@@ -30,6 +30,7 @@ namespace AbxrLib.Runtime
             _assessmentStarted = false;
             _nextRuntimeAuthConfigForTesting = null;
             _simulateQuitInExitAfterAssessmentComplete = false;
+            _unitTestSsoSimulationFromConfigAllowed = false;
             if (Instance != null) Instance._authService.ResetAuthStartedForTesting();
             Abxr.ResetQuitClosingEventDefaultsForTesting();
         }
@@ -41,6 +42,14 @@ namespace AbxrLib.Runtime
             set => _simulateQuitInExitAfterAssessmentComplete = value;
         }
         private static bool _simulateQuitInExitAfterAssessmentComplete;
+
+        /// <summary>For testing only. When true (set by PlayMode test base), <see cref="Configuration.unitTestSsoAccessToken"/> may simulate MDM <see cref="GetIsAuthenticated"/>/<see cref="GetAccessToken"/> in Editor/Development builds. Remains false during normal Editor Play Mode and dev players so AbxrLib test-only fields on the config asset do not affect apps.</summary>
+        internal static bool UnitTestSsoSimulationFromConfigAllowed
+        {
+            get => _unitTestSsoSimulationFromConfigAllowed;
+            set => _unitTestSsoSimulationFromConfigAllowed = value;
+        }
+        private static bool _unitTestSsoSimulationFromConfigAllowed;
 
         /// <summary>For testing only. When set before CreateSubsystem(), applied as overrides when the auth service is created (e.g. enableAutoStartAuthentication = false) so the Configuration asset is not modified.</summary>
         internal static RuntimeAuthConfig NextRuntimeAuthConfigForTesting
@@ -1179,7 +1188,7 @@ internal void StartNewSession()
 		{
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
 			var cfg = Configuration.Instance;
-			if (cfg != null && cfg.unitTestConfigEnabled && !string.IsNullOrWhiteSpace(cfg.unitTestSsoAccessToken))
+			if (cfg != null && cfg.unitTestConfigEnabled && !string.IsNullOrWhiteSpace(cfg.unitTestSsoAccessToken) && _unitTestSsoSimulationFromConfigAllowed)
 				return true;
 #endif
 			return _arborMdmClient != null && _arborMdmClient.IsConnected() && _arborMdmClient.ServiceWrapper != null && _arborMdmClient.ServiceWrapper.GetIsAuthenticated();
@@ -1189,7 +1198,7 @@ internal void StartNewSession()
 		{
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
 			var cfg = Configuration.Instance;
-			if (cfg != null && cfg.unitTestConfigEnabled && !string.IsNullOrWhiteSpace(cfg.unitTestSsoAccessToken))
+			if (cfg != null && cfg.unitTestConfigEnabled && !string.IsNullOrWhiteSpace(cfg.unitTestSsoAccessToken) && _unitTestSsoSimulationFromConfigAllowed)
 				return cfg.unitTestSsoAccessToken;
 #endif
 			return _arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetAccessToken() : "";
