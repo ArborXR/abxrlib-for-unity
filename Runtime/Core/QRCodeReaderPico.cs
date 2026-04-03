@@ -8,10 +8,10 @@
  *
  * Only activates when:
  * - PICO_ENTERPRISE_SDK_3 is defined and PXR_Enterprise is available
- * - PXR_System.GetProductName() matches SupportedPicoEnterpriseQrProductNameMarkers (enterprise + verified SKU markers, like Meta's device allowlist)
+ * - PXR_System.GetProductName() matches SupportedPicoEnterpriseQrProductNameMarkers (Pico 4 Ultra, Enterprise Ultra, or SKU a9210; plain Enterprise excluded)
  * - BindEnterpriseService reports success (same idea as QRCodeReader.IsQRScanningAvailable() gating the UI)
  *
- * QR via PXR_Enterprise is verified on PICO 4 Enterprise Ultra (4EU); plain PICO 4 Enterprise is not offered
+ * QR via PXR_Enterprise is verified on Pico 4 Ultra and Pico 4 Enterprise Ultra; plain PICO 4 Enterprise is not offered
  * (SDK bind/scan often fails). On any bind/scan failure we still mark unsupported and persist in PlayerPrefs.
  *
  * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
@@ -31,8 +31,8 @@ using Unity.XR.PXR;
 namespace AbxrLib.Runtime.Core
 {
     /// <summary>
-    /// QR code reader for PICO Enterprise devices using PXR_Enterprise SDK. Offered only on product names that pass
-    /// SupportedPicoEnterpriseQrProductNameMarkers and after enterprise service bind succeeds (parallels QRCodeReader device checks).
+    /// QR code reader for PICO devices using PXR_Enterprise SDK. Offered on product names that match
+    /// <see cref="SupportedPicoEnterpriseQrProductNameMarkers"/> and after enterprise service bind succeeds (parallels QRCodeReader device checks).
     /// </summary>
     public class QRCodeReaderPico : MonoBehaviour
     {
@@ -41,10 +41,13 @@ namespace AbxrLib.Runtime.Core
 
         private const string PicoQrUnsupportedKey = "abxrlib_pico_qr_unsupported";
 
+        /// <summary>Build / product string SKU marker (e.g. Pico 4 Enterprise Ultra); may appear without the word "ultra".</summary>
+        private const string PicoProductNameSkuA9210 = "a9210";
+
         /// <summary>
-        /// Substrings that must appear in the resolved product string (case-insensitive) for ScanQRCode to be offered,
-        /// in addition to <see cref="IsPicoEnterpriseClassDevice"/>. PXR_System.GetProductName() is often empty on OpenXR;
-        /// we fall back to android.os.Build + SystemInfo — marketing names may include "ultra", firmware may expose "a9210".
+        /// Substrings that must appear in the resolved product string (case-insensitive) for ScanQRCode to be offered:
+        /// Pico 4 Ultra and Pico 4 Enterprise Ultra (marketing "ultra"), or SKU-only firmware (a9210). Plain PICO 4 Enterprise
+        /// (no ultra, no a9210) is excluded. PXR_System.GetProductName() is often empty on OpenXR; we fall back to android.os.Build + SystemInfo.
         /// </summary>
         private static readonly string[] SupportedPicoEnterpriseQrProductNameMarkers =
         {
@@ -84,24 +87,11 @@ namespace AbxrLib.Runtime.Core
         }
 
         /// <summary>
-        /// Enterprise-class PICO device for PXR_Enterprise QR. OpenXR builds often leave PXR_System.GetProductName() empty;
-        /// android.os.Build may use SKU (e.g. a9210) without the word "enterprise".
-        /// </summary>
-        private static bool IsPicoEnterpriseClassDevice(string productName)
-        {
-            if (string.IsNullOrEmpty(productName)) return false;
-            string p = productName.ToLowerInvariant();
-            if (p.Contains("enterprise")) return true;
-            if (p.Contains("a9210")) return true;
-            return false;
-        }
-
-        /// <summary>
-        /// True when product name indicates a headset we support for PXR_Enterprise ScanQRCode (enterprise + allowlist markers).
+        /// True when product name indicates Pico 4 Ultra, Pico 4 Enterprise Ultra, or SKU a9210 (plain Enterprise excluded).
         /// </summary>
         private static bool IsPicoProductSupportedForQr(string productName)
         {
-            if (!IsPicoEnterpriseClassDevice(productName)) return false;
+            if (string.IsNullOrEmpty(productName)) return false;
             string p = productName.ToLowerInvariant();
             foreach (string marker in SupportedPicoEnterpriseQrProductNameMarkers)
             {
@@ -110,9 +100,6 @@ namespace AbxrLib.Runtime.Core
                     return true;
             }
 
-            Logcat.Warning(
-                "Disabling PICO QR Code Scanner. Product is Enterprise-class but not in the supported list for PXR_Enterprise ScanQRCode. Product: "
-                + productName);
             return false;
         }
 
@@ -198,8 +185,9 @@ namespace AbxrLib.Runtime.Core
 
             if (!IsPicoProductSupportedForQr(productName))
             {
-                if (!IsPicoEnterpriseClassDevice(productName))
-                    Logcat.Warning("Disabling PICO QR Code Scanner. Not a supported PICO Enterprise-class device. Product: " + productName);
+                Logcat.Warning(
+                    "Disabling PICO QR Code Scanner. Supported: Pico 4 Ultra / Pico 4 Enterprise Ultra (name contains 'ultra') or SKU 'a9210'."
+                    + "Plain PICO 4 Enterprise is not offered. Product: " + productName);
                 yield break;
             }
 
