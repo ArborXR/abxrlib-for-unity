@@ -214,6 +214,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 QRCodeReaderPico.Instance.ScanQRCode();
                 inputField.text = "";
+                UpdateQRButtonTextImmediate();
                 return;
             }
 #endif
@@ -257,11 +258,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
             bool permissionsDenied = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
 #if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.IsAvailable)
-            {
-                // PICO SDK does not expose IsScanning/IsInitializing; button text stays default
-            }
-            else
 #endif
             if (QRCodeReader.Instance != null)
             {

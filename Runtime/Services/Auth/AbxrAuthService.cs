@@ -291,6 +291,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
                 else
                 {
+                    KeyboardHandler.StopProcessing();
+                    KeyboardHandler.ShowPinPad();
+                    SetInputSource("user");  // In case it was changed by QR Scanner
+
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.
                     OnFailed?.Invoke("Authentication failed");
                     _inputRequestPending = true;

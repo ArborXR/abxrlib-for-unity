@@ -105,6 +105,29 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
         }
 
+        public static bool IsPinPadVisible()
+        {
+            return _pinPadInstance != null && _pinPadInstance.activeSelf;
+        }
+
+        public static void HidePinPad()
+        {
+            if (_pinPadInstance != null)
+            {
+                _pinPadInstance.SetActive(false);
+            }
+        }
+
+        public static void ShowPinPad()
+        {
+            if (_pinPadInstance != null)
+            {
+                _pinPadInstance.SetActive(true);
+                LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_pinPadInstance);
+                LaserPointerManager.EnableLaserPointersForInteraction();
+            }
+        }
+
         /// <summary>Stops the Processing animation so the prompt can show an error or new message (e.g. after auth failure).</summary>
         public static void StopProcessing()
         {

@@ -1,147 +1,54 @@
 /*
  * Copyright (c) 2025 ArborXR. All rights reserved.
  *
- * AbxrLib for Unity - PICO QR Code Reader (SDK)
+ * AbxrLib for Unity - PICO QR Code Reader (Camera Image path)
  *
- * Uses PICO's PXR_Enterprise SDK for QR scanning on PICO headsets. Camera access is handled
- * by the platform; use this on PICO instead of the general QRCodeReader when the SDK is available.
- *
- * Only activates when:
- * - PICO_ENTERPRISE_SDK_3 is defined and PXR_Enterprise is available
- * - PXR_System.GetProductName() matches SupportedPicoEnterpriseQrProductNameMarkers (Pico 4 Ultra, Enterprise Ultra, or SKU a9210; plain Enterprise excluded)
- * - BindEnterpriseService reports success (same idea as QRCodeReader.IsQRScanningAvailable() gating the UI)
- *
- * QR via PXR_Enterprise is verified on Pico 4 Ultra and Pico 4 Enterprise Ultra; plain PICO 4 Enterprise is not offered
- * (SDK bind/scan often fails). On any bind/scan failure we still mark unsupported and persist in PlayerPrefs.
- *
- * QR codes should be in the format "ABXR:123456" where 123456 is the 6-digit PIN.
+ * Uses the PICO Unity SDK 3.4 PXR_CameraImage API to acquire RGBA frames in Unity,
+ * shows a small world-space preview panel, and decodes QR codes with ZXing.
  */
 #if UNITY_ANDROID && !UNITY_EDITOR && PICO_ENTERPRISE_SDK_3
-
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.UI.Keyboard;
-using UnityEngine;
-using Unity.XR.PICO.TOBSupport;
 using Unity.XR.PXR;
+using UnityEngine;
+using ZXing;
 
 namespace AbxrLib.Runtime.Core
 {
-    /// <summary>
-    /// QR code reader for PICO devices using PXR_Enterprise SDK. Offered on product names that match
-    /// <see cref="SupportedPicoEnterpriseQrProductNameMarkers"/> and after enterprise service bind succeeds (parallels QRCodeReader device checks).
-    /// </summary>
     public class QRCodeReaderPico : MonoBehaviour
     {
         public static QRCodeReaderPico Instance;
         public static AbxrAuthService AuthService;
 
-        private const string PicoQrUnsupportedKey = "abxrlib_pico_qr_unsupported";
+        private const float DecodeIntervalSeconds = 0.5f;
+        private const float StartupTimeoutSeconds = 8f;
 
-        /// <summary>Build / product string SKU marker (e.g. Pico 4 Enterprise Ultra); may appear without the word "ultra".</summary>
-        private const string PicoProductNameSkuA9210 = "a9210";
-
-        /// <summary>
-        /// Substrings that must appear in the resolved product string (case-insensitive) for ScanQRCode to be offered:
-        /// Pico 4 Ultra and Pico 4 Enterprise Ultra (marketing "ultra"), or SKU-only firmware (a9210). Plain PICO 4 Enterprise
-        /// (no ultra, no a9210) is excluded. PXR_System.GetProductName() is often empty on OpenXR; we fall back to android.os.Build + SystemInfo.
-        /// </summary>
-        private static readonly string[] SupportedPicoEnterpriseQrProductNameMarkers =
-        {
-            "ultra",
-            "a9210",
-        };
-
-        /// <summary>
-        /// True once we have seen a failure (bind or ScanQRCode), this session or a previous one (PlayerPrefs).
-        /// </summary>
-        private static bool _qrUnsupportedThisSession;
-
-        private bool _enterpriseServiceBindSucceeded;
-
-        /// <summary>
-        /// True if the PICO QR reader can be used: supported product, bind succeeded, not marked unsupported.
-        /// </summary>
-        public static bool IsAvailable =>
-            Instance != null && !_qrUnsupportedThisSession && Instance._enterpriseServiceBindSucceeded;
+        private bool _isOfferedOnThisDevice;
+        private bool _isScanning;
+        private bool _isAwaitingPermission;
 
         private Action<string> _scanResultCallback;
+        private Coroutine _scanCoroutine;
+        private Texture2D _latestPreviewTexture;
 
-        /// <summary>PXR_Enterprise invokes the scan callback on a non-Unity thread; we deliver to main thread in <see cref="Update"/>.</summary>
-        private readonly Queue<string> _pendingScanResults = new Queue<string>();
+        private PicoEnterpriseCameraFrameProvider _cameraProvider;
+        private PicoQrScanPanel _panel;
+        private BarcodeReader _barcodeReader;
+        private bool _restorePinPadOnCancel;
 
-        private readonly object _pendingScanLock = new object();
-
-        private static bool GetPicoQrUnsupportedFromPrefs()
-        {
-            return PlayerPrefs.GetInt(PicoQrUnsupportedKey, 0) != 0;
-        }
-
-        private static void SetPicoQrUnsupportedInPrefs()
-        {
-            PlayerPrefs.SetInt(PicoQrUnsupportedKey, 1);
-            PlayerPrefs.Save();
-        }
-
-        /// <summary>
-        /// True when product name indicates Pico 4 Ultra, Pico 4 Enterprise Ultra, or SKU a9210 (plain Enterprise excluded).
-        /// </summary>
-        private static bool IsPicoProductSupportedForQr(string productName)
-        {
-            if (string.IsNullOrEmpty(productName)) return false;
-            string p = productName.ToLowerInvariant();
-            foreach (string marker in SupportedPicoEnterpriseQrProductNameMarkers)
-            {
-                if (string.IsNullOrEmpty(marker)) continue;
-                if (p.Contains(marker.ToLowerInvariant()))
-                    return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Same gating as <see cref="IsAvailable"/> for custom UI; mirrors <see cref="QRCodeReader.IsQRScanningAvailable"/>.
-        /// </summary>
-        public bool IsQRScanningAvailable() => IsAvailable;
+        public static bool IsAvailable => Instance != null && Instance._isOfferedOnThisDevice;
+        
+        public Texture GetCameraTexture() => _latestPreviewTexture;
 
         private void Awake()
         {
-            // PXR_System may throw or return empty if called from BeforeSceneLoad before the XR/PICO runtime is ready.
-            // Start() runs before a coroutine's first yield, so we must not bind in Start() when Instance is set asynchronously.
             StartCoroutine(InitWhenPxrReady());
         }
 
-        /// <summary>
-        /// android.os.Build composite when PXR_System.GetProductName() is empty (typical with OpenXR).
-        /// </summary>
-        private static string TryGetAndroidBuildCompositeString()
-        {
-            try
-            {
-                using (AndroidJavaClass build = new AndroidJavaClass("android.os.Build"))
-                {
-                    string manufacturer = build.GetStatic<string>("MANUFACTURER") ?? "";
-                    string model = build.GetStatic<string>("MODEL") ?? "";
-                    string device = build.GetStatic<string>("DEVICE") ?? "";
-                    string product = build.GetStatic<string>("PRODUCT") ?? "";
-                    string combined = ($"{manufacturer} {model} {device} {product}").Trim();
-                    return string.IsNullOrEmpty(combined) ? null : combined;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logcat.Warning("PICO QR: android.os.Build lookup failed: " + ex.Message);
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Retries GetProductName across frames, then falls back to Build / SystemInfo when PXR returns empty (OpenXR).
-        /// </summary>
         private IEnumerator InitWhenPxrReady()
         {
             const int maxAttempts = 120;
@@ -159,35 +66,28 @@ namespace AbxrLib.Runtime.Core
                     pxrName = null;
                 }
 
-                if (!string.IsNullOrEmpty(pxrName))
-                    break;
+                if (!string.IsNullOrEmpty(pxrName)) break;
                 yield return null;
             }
 
             string productName = pxrName;
-            if (string.IsNullOrEmpty(productName))
-                productName = TryGetAndroidBuildCompositeString();
+            if (string.IsNullOrEmpty(productName)) productName = TryGetAndroidBuildCompositeString();
 
             if (string.IsNullOrEmpty(productName))
             {
-                string sys = ($"{SystemInfo.deviceModel} {SystemInfo.deviceName}").Trim();
-                if (!string.IsNullOrEmpty(sys))
-                    productName = sys;
+                string sys = (SystemInfo.deviceModel + " " + SystemInfo.deviceName).Trim();
+                if (!string.IsNullOrEmpty(sys)) productName = sys;
             }
 
             if (string.IsNullOrEmpty(productName))
             {
-                Logcat.Warning(
-                    "PICO QR: Could not resolve any product string (PXR empty after " + maxAttempts
-                    + " frames, Build/SystemInfo empty). PICO QR scanner disabled for this session.");
+                Logcat.Warning("PICO QR: Could not resolve a product string; QR scanner disabled for this session.");
                 yield break;
             }
 
             if (!IsPicoProductSupportedForQr(productName))
             {
-                Logcat.Warning(
-                    "Disabling PICO QR Code Scanner. Supported: Pico 4 Ultra / Pico 4 Enterprise Ultra (name contains 'ultra') or SKU 'a9210'."
-                    + "Plain PICO 4 Enterprise is not offered. Product: " + productName);
+                Logcat.Warning("Disabling PICO QR Code Scanner on unsupported product: " + productName);
                 yield break;
             }
 
@@ -198,217 +98,318 @@ namespace AbxrLib.Runtime.Core
                 yield break;
             }
 
-            _qrUnsupportedThisSession = GetPicoQrUnsupportedFromPrefs();
             Instance = this;
-            Logcat.Info("QRCodeReaderPico Instance activated successfully (product supported for QR).");
-
-            PXR_Enterprise.InitEnterpriseService();
-            PXR_Enterprise.BindEnterpriseService(OnServiceBound);
+            _isOfferedOnThisDevice = true;
+            EnsureRuntimeObjects();
+            KeyboardManager.RefreshQrButtonAvailability();
         }
 
         private void OnDestroy()
         {
-            if (Instance == this)
-                Instance = null;
+            if (Instance == this) Instance = null;
+
+            _isAwaitingPermission = false;
+            StopScanningInternal(false);
         }
 
-        private void OnServiceBound(bool success)
-        {
-            if (Instance != this)
-                return;
-            if (success)
-            {
-                _enterpriseServiceBindSucceeded = true;
-                Logcat.Info("PICO QR Code Scanner: Enterprise service bound; QR scan is available.");
-            }
-            else
-            {
-                _qrUnsupportedThisSession = true;
-                SetPicoQrUnsupportedInPrefs();
-                Logcat.Warning(
-                    "PICO QR Code Scanner: Enterprise service bind failed. QR scan disabled for this device (saved in preferences).");
-            }
-            // Keyboard may not exist yet (PIN UI spawns later); refresh now and again over the next frames / seconds.
-            KeyboardManager.RefreshQrButtonAvailability();
-            StartCoroutine(DeferredRefreshKeyboardAfterBind());
-        }
-
-        /// <summary>
-        /// Bind often completes before KeyboardManager exists. Refresh until the PIN pad has a chance to enable the QR button.
-        /// </summary>
-        private IEnumerator DeferredRefreshKeyboardAfterBind()
-        {
-            for (int i = 0; i < 10; i++)
-            {
-                yield return null;
-                KeyboardManager.RefreshQrButtonAvailability();
-            }
-            yield return new WaitForSeconds(0.35f);
-            KeyboardManager.RefreshQrButtonAvailability();
-            yield return new WaitForSeconds(1f);
-            KeyboardManager.RefreshQrButtonAvailability();
-        }
-
-        /// <summary>
-        /// Set the one-shot callback for developer API (StartQRScanForAuthInput). When set, OnQRCodeScanned invokes this instead of KeyboardAuthenticate.
-        /// </summary>
         public void SetScanResultCallback(Action<string> callback)
         {
             _scanResultCallback = callback;
         }
 
-        /// <summary>
-        /// Cancel an in-progress scan started with a callback; invokes the callback with null so the handler can close UI.
-        /// </summary>
         public void CancelScanForAuthInput()
         {
-            if (_scanResultCallback != null)
+            if (_isAwaitingPermission)
             {
-                var cb = _scanResultCallback;
-                _scanResultCallback = null;
-                cb?.Invoke(null);
+                _isAwaitingPermission = false;
+                InvokeAndClearCallback(null);
+                return;
             }
+
+            StopScanningInternal(true);
         }
 
         public void ScanQRCode()
         {
             if (!IsAvailable)
             {
-                Logcat.Warning("PICO QR Code Scanner: ScanQRCode ignored (not available — product, bind, or prior failure).");
-                if (_scanResultCallback != null)
-                {
-                    var cb = _scanResultCallback;
-                    _scanResultCallback = null;
-                    cb.Invoke(null);
-                }
+                Logcat.Warning("PICO QR Code Scanner: ScanQRCode ignored (not available).");
+                InvokeAndClearCallback(null);
                 return;
             }
 
-            // Defer one frame so OpenXR/session focus and the compositor are settled before the platform ToB scanner UI appears.
-            StartCoroutine(ScanQRCodeCoroutine());
+            if (_isScanning || _isAwaitingPermission)
+            {
+                Logcat.Warning("PICO QR Code Scanner: scan already in progress.");
+                return;
+            }
+
+            EnsureRuntimeObjects();
+            if (_cameraProvider == null || _panel == null || _barcodeReader == null)
+            {
+                Logcat.Error("PICO QR Code Scanner: runtime objects could not be created.");
+                InvokeAndClearCallback(null);
+                return;
+            }
+
+            StartCoroutine(RequestPermissionThenScanCoroutine());
         }
 
-        private IEnumerator ScanQRCodeCoroutine()
+        private IEnumerator RequestPermissionThenScanCoroutine()
         {
-            yield return null;
-            if (Instance != this || !IsAvailable)
+            _isAwaitingPermission = true;
+            if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
             {
-                if (_scanResultCallback != null)
+                bool? permissionGranted = null;
+                var callbacks = new UnityEngine.Android.PermissionCallbacks();
+
+                callbacks.PermissionGranted += _ => permissionGranted = true;
+                callbacks.PermissionDenied += _ => permissionGranted = false;
+
+                UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Camera, callbacks);
+
+                while (!permissionGranted.HasValue)
                 {
-                    var cb = _scanResultCallback;
-                    _scanResultCallback = null;
-                    cb.Invoke(null);
+                    if (!_isAwaitingPermission) yield break;
+
+                    yield return null;
                 }
-                yield break;
+
+                if (!permissionGranted.Value)
+                {
+                    Logcat.Warning("PICO QR camera permission denied.");
+                    _isAwaitingPermission = false;
+                    InvokeAndClearCallback(null);
+                    yield break;
+                }
             }
+
+            _isAwaitingPermission = false;
+
+            _restorePinPadOnCancel = KeyboardHandler.IsPinPadVisible();
+            if (_restorePinPadOnCancel) KeyboardHandler.HidePinPad();
+
+            _scanCoroutine = StartCoroutine(ScanLoopCoroutine());
+        }
+
+        private IEnumerator ScanLoopCoroutine()
+        {
+            _isScanning = true;
+            _latestPreviewTexture = null;
+
+            _panel.Show();
+            _panel.SetStatus("Starting camera...");
+            _cameraProvider.StartCamera();
+
+            float startupDeadline = Time.unscaledTime + StartupTimeoutSeconds;
+            while (_isScanning)
+            {
+                if (_cameraProvider.IsCapturing) break;
+
+                if (!_cameraProvider.IsStarting)
+                {
+                    if (!string.IsNullOrEmpty(_cameraProvider.LastError))
+                    {
+                        Logcat.Warning("PICO QR camera failed to start: " + _cameraProvider.LastError);
+                        StopScanningInternal(true);
+                        yield break;
+                    }
+
+                    if (Time.unscaledTime > startupDeadline)
+                    {
+                        Logcat.Warning("PICO QR camera did not start before timeout.");
+                        StopScanningInternal(true);
+                        yield break;
+                    }
+                }
+
+                yield return null;
+            }
+
+            if (!_isScanning) yield break;
+            
+            _panel.SetStatus("Look at QR Code");
+
+            float nextDecodeTime = 0f;
+
+            while (_isScanning)
+            {
+                if (_cameraProvider.TryGetLatestFrame(out CameraFrame frame))
+                {
+                    _latestPreviewTexture = frame.Texture;
+                    _panel.SetPreviewTexture(frame.Texture);
+
+                    if (Time.unscaledTime >= nextDecodeTime)
+                    {
+                        nextDecodeTime = Time.unscaledTime + DecodeIntervalSeconds;
+
+                        string scanResult = TryDecodeMatchingAbxrQr(frame);
+                        if (!string.IsNullOrEmpty(scanResult))
+                        {
+                            StopScanningInternal(false);
+                            ProcessQrScanResult(scanResult);
+                            yield break;
+                        }
+                    }
+                }
+
+                yield return null;
+            }
+        }
+
+        private string TryDecodeMatchingAbxrQr(CameraFrame frame)
+        {
+            if (frame.Pixels == null || frame.Pixels.Length == 0 || frame.Width <= 0 || frame.Height <= 0) return null;
 
             try
             {
-                PXR_Enterprise.ScanQRCode(OnQRCodeScannedFromSdk);
+                Result[] results = _barcodeReader.DecodeMultiple(frame.Pixels, frame.Width, frame.Height);
+                if (results == null || results.Length == 0) return null;
+
+                foreach (Result result in results)
+                {
+                    string text = result?.Text?.Trim();
+                    if (string.IsNullOrEmpty(text)) continue;
+
+                    if (text.StartsWith("ABXR:", StringComparison.OrdinalIgnoreCase)) return text;
+                }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                if (Instance == this)
-                {
-                    _qrUnsupportedThisSession = true;
-                    SetPicoQrUnsupportedInPrefs();
-                    Logcat.Warning("PICO QR Code Scanner: ScanQRCode failed. QR scan disabled for this device (saved in preferences). " + e.Message);
-                }
-                if (_scanResultCallback != null)
-                {
-                    var cb = _scanResultCallback;
-                    _scanResultCallback = null;
-                    cb.Invoke(null);
-                }
+                Logcat.Warning("PICO QR decode error: " + ex.Message);
             }
+
+            return null;
         }
 
-        /// <summary>Called from PICO SDK (often not the Unity main thread). Do not touch Unity APIs here.</summary>
-        private void OnQRCodeScannedFromSdk(string scanResult)
+        private void StopScanningInternal(bool invokeCallbackWithNull)
         {
-            lock (_pendingScanLock)
+            if (_scanCoroutine != null)
             {
-                _pendingScanResults.Enqueue(scanResult ?? "");
+                StopCoroutine(_scanCoroutine);
+                _scanCoroutine = null;
             }
+
+            _isScanning = false;
+            _cameraProvider?.StopCamera();
+            _panel?.Hide();
+
+            if (invokeCallbackWithNull && _restorePinPadOnCancel) KeyboardHandler.ShowPinPad();
+
+            _restorePinPadOnCancel = false;
+
+            if (invokeCallbackWithNull) InvokeAndClearCallback(null);
         }
 
-        private void Update()
+        private void EnsureRuntimeObjects()
         {
-            if (Instance != this) return;
-            while (true)
+            _barcodeReader ??= new BarcodeReader
             {
-                string raw;
-                lock (_pendingScanLock)
+                AutoRotate = true,
+                Options =
                 {
-                    if (_pendingScanResults.Count == 0) break;
-                    raw = _pendingScanResults.Dequeue();
+                    PossibleFormats = new List<BarcodeFormat> { BarcodeFormat.QR_CODE },
+                    TryHarder = true
                 }
+            };
 
-                ProcessQrScanResultOnMainThread(raw);
+            if (_cameraProvider == null)
+            {
+                _cameraProvider = GetComponent<PicoEnterpriseCameraFrameProvider>();
+                if (_cameraProvider == null) _cameraProvider = gameObject.AddComponent<PicoEnterpriseCameraFrameProvider>();
+            }
+
+            if (_panel == null)
+            {
+                _panel = GetComponentInChildren<PicoQrScanPanel>(true);
+                if (_panel == null) _panel = PicoQrScanPanel.CreateRuntimePanel(transform, CancelScanForAuthInput);
             }
         }
 
-        /// <summary>Same rules as <see cref="QRCodeReader"/>: ABXR: digits (case-insensitive) or a bare 6-digit code.</summary>
         private static bool TryExtractPinFromQrPayload(string scanResult, out string pin)
         {
             pin = null;
             if (string.IsNullOrEmpty(scanResult)) return false;
+
             string s = scanResult.Trim();
-            Match m = Regex.Match(s, @"(?i)(?<=ABXR:)\d+");
-            if (m.Success)
+            Match match = Regex.Match(s, @"(?i)(?<=ABXR:)\d+");
+            if (match.Success)
             {
-                pin = m.Value;
+                pin = match.Value;
                 return true;
             }
 
-            m = Regex.Match(s, @"^\d{6}$");
-            if (m.Success)
+            match = Regex.Match(s, @"^\d{6}$");
+            if (match.Success)
             {
-                pin = m.Value;
+                pin = match.Value;
                 return true;
             }
 
             return false;
         }
 
-        private void ProcessQrScanResultOnMainThread(string scanResult)
+        private void ProcessQrScanResult(string scanResult)
         {
             if (_scanResultCallback != null)
             {
                 string callbackPin = null;
                 if (!string.IsNullOrEmpty(scanResult))
                 {
-                    if (TryExtractPinFromQrPayload(scanResult, out callbackPin))
-                        Logcat.Info("Extracted PIN from QR code: " + callbackPin);
-                    else
+                    if (!TryExtractPinFromQrPayload(scanResult, out callbackPin))
+                    {
                         Logcat.Warning("Invalid QR code format (expected ABXR:XXXXXX or 6 digits): " + scanResult);
+                    }
                 }
 
-                var cb = _scanResultCallback;
-                _scanResultCallback = null;
-                cb?.Invoke(callbackPin);
+                InvokeAndClearCallback(callbackPin);
                 return;
             }
 
-            if (AuthService == null)
-            {
-                Logcat.Error("PICO QR: AuthService is null; cannot submit PIN. Ensure AbxrSubsystem initialized before scanning.");
-                return;
-            }
-
-            if (string.IsNullOrEmpty(scanResult))
-                return;
+            if (string.IsNullOrEmpty(scanResult)) return;
 
             AuthService.SetInputSource("QRlms");
-            if (TryExtractPinFromQrPayload(scanResult, out string pin))
-            {
-                Logcat.Info("Extracted PIN from QR code: " + pin);
-                AuthService.KeyboardAuthenticate(pin);
-            }
-            else
+            if (!TryExtractPinFromQrPayload(scanResult, out string pin))
             {
                 Logcat.Warning("Invalid QR code format (expected ABXR:XXXXXX or 6 digits): " + scanResult);
-                AuthService.KeyboardAuthenticate(null);
+            }
+            
+            AuthService.KeyboardAuthenticate(pin);
+        }
+
+        private void InvokeAndClearCallback(string value)
+        {
+            if (_scanResultCallback == null) return;
+
+            Action<string> cb = _scanResultCallback;
+            _scanResultCallback = null;
+            cb?.Invoke(value);
+        }
+
+        private static bool IsPicoProductSupportedForQr(string productName)
+        {
+            if (string.IsNullOrEmpty(productName)) return false;
+
+            string p = productName.ToLowerInvariant();
+            return p.Contains("pico");
+        }
+
+        private static string TryGetAndroidBuildCompositeString()
+        {
+            try
+            {
+                using var build = new AndroidJavaClass("android.os.Build");
+                string manufacturer = build.GetStatic<string>("MANUFACTURER") ?? "";
+                string model = build.GetStatic<string>("MODEL") ?? "";
+                string device = build.GetStatic<string>("DEVICE") ?? "";
+                string product = build.GetStatic<string>("PRODUCT") ?? "";
+                string combined = (manufacturer + " " + model + " " + device + " " + product).Trim();
+                return string.IsNullOrEmpty(combined) ? null : combined;
+            }
+            catch (Exception ex)
+            {
+                Logcat.Warning("PICO QR: android.os.Build lookup failed: " + ex.Message);
+                return null;
             }
         }
     }
