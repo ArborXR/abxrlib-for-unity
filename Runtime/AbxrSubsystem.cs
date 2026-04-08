@@ -1526,27 +1526,27 @@ internal void StartNewSession()
 		private void PresentKeyboard(string type, string prompt, string domain, string error)
 		{
 			// When showing an error (e.g. invalid PIN), stop the Processing animation so the message is visible.
-			if (!string.IsNullOrEmpty(error))
-				KeyboardHandler.StopProcessing();
-			string displayPrompt = string.IsNullOrEmpty(error) ? (prompt ?? "") : $"{error}\n{prompt ?? ""}";
+			if (!string.IsNullOrEmpty(error)) KeyboardHandler.StopProcessing();
+
+			string displayPrompt = "";
 			if (type is "text" or null or "")
 			{
 				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
-				KeyboardHandler.SetPrompt(!string.IsNullOrEmpty(displayPrompt) ? displayPrompt : "Enter Your Login");
+				displayPrompt = string.IsNullOrEmpty(prompt) ? "Enter Your Login" : $"Enter Your {prompt}";
 			}
-			else if (type == "pin")
+			else if (type == "assessmentPin")
 			{
 				KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
-				KeyboardHandler.SetPrompt(!string.IsNullOrEmpty(displayPrompt) ? displayPrompt : "Enter your 6-digit PIN");
+				displayPrompt = string.IsNullOrEmpty(prompt) ? "Enter Your 6-digit PIN" : $"Enter Your {prompt} PIN";
 			}
 			else if (type == "email")
 			{
 				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
-				string emailPrompt = !string.IsNullOrEmpty(prompt)
-					? $"{displayPrompt} \n(<u>username</u>@{domain ?? ""})"
-					: $"Enter your email username\n(<u>username</u>@{domain ?? ""})";
-				KeyboardHandler.SetPrompt(emailPrompt);
+				displayPrompt = $"Enter your email username\n(<u>username</u>@{domain})";
 			}
+
+			if (!string.IsNullOrEmpty(error)) displayPrompt = $"{error}\n{displayPrompt}";
+			KeyboardHandler.SetPrompt(displayPrompt);
 		}
 		
 		/// <summary>

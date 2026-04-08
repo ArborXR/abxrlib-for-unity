@@ -55,8 +55,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>True when OnInputRequested was invoked and we are waiting for the app to call SubmitInput (OnInputSubmitted). Used so clients can show/hide QR-for-auth UI via IsQRScanForAuthAvailable() without tracking state themselves.</summary>
         internal bool IsInputRequestPending => _inputRequestPending;
-
-        private string _lastInputError;
+        
         private bool _stopping;
         private bool _attemptActive;
         internal bool IsAuthenticationAttemptActive => _attemptActive;
@@ -224,12 +223,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
             // Use runtime auth mechanism for the device authentication request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
             _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
-            if (!string.IsNullOrEmpty(_authMechanism.type) && string.IsNullOrEmpty(_authMechanism.prompt))
-            {
-                string defaultPrompt = GetDefaultPromptForAuthMechanismType(_authMechanism.type);
-                if (!string.IsNullOrEmpty(defaultPrompt))
-                    _authMechanism.prompt = defaultPrompt;
-            }
 
             _isAuthStarted = true;
             _runner.StartCoroutine(AuthenticateCoroutine());
@@ -257,20 +250,15 @@ namespace AbxrLib.Runtime.Services.Auth
                 AuthSucceeded();
                 return;
             }
-
-            if (string.IsNullOrWhiteSpace(input))
-            {
-                string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
-                string prompt = _authMechanism?.prompt ?? "";
-                string domain = _authMechanism?.domain ?? "";
-                string displayError = GetEmptyInputErrorMessage(normalizedType);
-                Logcat.Info($"Auth input rejected (empty): type={normalizedType}, re-prompting with: {displayError}");
-                OnInputRequested?.Invoke(normalizedType, prompt, domain, displayError);
-                return;
-            }
-
+            
             _inputRequestPending = false;
             KeyboardAuthenticate(input);
+        }
+        
+        private void RequestKeyboardInput(bool firstAttempt = true)
+        {
+            _inputRequestPending = true;
+            OnInputRequested?.Invoke(_authMechanism.type, _authMechanism.prompt, _authMechanism.domain, firstAttempt ? "" : "Authentication Failed");
         }
         
         public void KeyboardAuthenticate(string input)
@@ -303,13 +291,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
                 else
                 {
-                    _lastInputError = !string.IsNullOrEmpty(errorMessage) ? errorMessage : "Authentication failed";
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.
-                    OnFailed?.Invoke(_lastInputError);
-                    string normalizedType = NormalizeAuthMechanismTypeForInput(_authMechanism.type);
-                    string displayError = ShortenPinErrorForDisplay(normalizedType, _lastInputError);
+                    OnFailed?.Invoke("Authentication failed");
                     _inputRequestPending = true;
-                    OnInputRequested?.Invoke(normalizedType, originalPrompt, _authMechanism.domain ?? "", displayError);
+                    OnInputRequested?.Invoke(_authMechanism.type, originalPrompt, _authMechanism.domain, "Authentication Failed");
                 }
             }, withRetry: false));
         }
@@ -419,10 +404,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 OnFailed?.Invoke("Auth stopped or attempt inactive");
                 yield break;
             }
-
-            // If no auth mechanism or its type does not require user input → no keyboard. Otherwise show keyboard (prompt/domain may be empty).
-            bool needsInput = _authMechanism != null && RequiresUserInputType(_authMechanism.type);
-            if (needsInput)
+            
+            if (!string.IsNullOrEmpty(_authMechanism?.type))  // Need user input
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
                 if (!_webglUrlPinAutoSubmitAttempted && !string.IsNullOrEmpty(_webglQueryAssessmentPin))
@@ -795,21 +778,14 @@ namespace AbxrLib.Runtime.Services.Auth
                             if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_runtimeAuth.authMechanism.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
                             {
                                 _runtimeAuth.authMechanism.type = "assessmentPin";
-                                _runtimeAuth.authMechanism.prompt = "Enter your 6-digit PIN";
                             }
                         }
+                        
                         _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
-                        if (!string.IsNullOrEmpty(_authMechanism.type) && string.IsNullOrEmpty(_authMechanism.prompt))
-                        {
-                            string defaultPrompt = GetDefaultPromptForAuthMechanismType(_authMechanism.type);
-                            _authMechanism.prompt = defaultPrompt;
-                            if (_runtimeAuth.authMechanism != null)
-                                _runtimeAuth.authMechanism.prompt = defaultPrompt;
-                        }
                         string authType = _authMechanism?.type ?? "";
                         if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
                         {
-                            Logcat.Info($"User Authentication Required.");
+                            Logcat.Info("User Authentication Required.");
                             Logcat.Debug($" - Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
                         }
                         else
@@ -881,52 +857,6 @@ namespace AbxrLib.Runtime.Services.Auth
             _runtimeAuth.tags = null;
         }
 
-        /// <summary>Normalize backend auth mechanism type to "text" | "pin" | "email" for OnInputRequested, or "" if no input required (e.g. "none", empty). Single source of truth for pin variants (assessmentPin, assessment_pin → "pin").</summary>
-        private static string NormalizeAuthMechanismTypeForInput(string type)
-        {
-            if (string.IsNullOrEmpty(type)) return "";
-            var t = type.Trim().ToLowerInvariant();
-            if (t == "none") return "";
-            if (t == "email") return "email";
-            if (t == "pin" || t == "assessmentpin" || t == "assessment_pin") return "pin";
-            return "text";
-        }
-
-        /// <summary>For PIN/pinpad display, shorten long backend error messages to "Invalid PIN" so they fit on the pinpad.</summary>
-        private static string ShortenPinErrorForDisplay(string normalizedInputType, string errorMessage)
-        {
-            if (normalizedInputType != "pin" || string.IsNullOrEmpty(errorMessage)) return errorMessage;
-            if (errorMessage.IndexOf("assessment pin", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                errorMessage.IndexOf("assessment is already active", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                errorMessage.Length > 40)
-                return "Invalid PIN";
-            return errorMessage;
-        }
-
-        /// <summary>Default prompt when auth mechanism type is set (e.g. by tests or enableLearnerLauncherMode). Used for consistent prompts.</summary>
-        private static string GetDefaultPromptForAuthMechanismType(string type)
-        {
-            if (string.IsNullOrEmpty(type)) return "";
-            var t = type.Trim();
-            if (string.Equals(t, "assessmentPin", StringComparison.OrdinalIgnoreCase) || string.Equals(t, "pin", StringComparison.OrdinalIgnoreCase))
-                return "Enter your 6-digit PIN";
-            if (string.Equals(t, "email", StringComparison.OrdinalIgnoreCase))
-                return "Enter your email address";
-            if (string.Equals(t, "text", StringComparison.OrdinalIgnoreCase))
-                return "Enter your Employee ID";
-            if (string.Equals(t, "none", StringComparison.OrdinalIgnoreCase))
-                return "";
-            return "";
-        }
-
-        /// <summary>Display message when user submits empty/whitespace input; used to re-invoke OnInputRequested without calling the transport.</summary>
-        private static string GetEmptyInputErrorMessage(string normalizedType)
-        {
-            if (normalizedType == "pin") return "Please enter your PIN.";
-            if (normalizedType == "email") return "Please enter your email address.";
-            return "Please enter a value.";
-        }
-
         /// <summary>Returns a mutable copy of the given auth mechanism so we can set prompt to user input without mutating _runtimeAuth.</summary>
         private static AuthMechanism CopyAuthMechanism(AuthMechanism source)
         {
@@ -938,25 +868,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 domain = source.domain ?? "",
                 inputSource = !string.IsNullOrEmpty(source.inputSource) ? source.inputSource : "user"
             };
-        }
-
-        /// <summary>True if auth mechanism type indicates the user must enter text/PIN/email (so we should show keyboard). Uses normalized type so pin variants are one place.</summary>
-        private static bool RequiresUserInputType(string type)
-        {
-            return !string.IsNullOrEmpty(NormalizeAuthMechanismTypeForInput(type));
-        }
-
-        private void RequestKeyboardInput()
-        {
-            string error = _lastInputError ?? "";
-            _lastInputError = null;
-            string type = NormalizeAuthMechanismTypeForInput(_authMechanism?.type);
-            if (string.IsNullOrEmpty(type)) type = "text"; // defensive; we should only be here when input is required
-            string prompt = _authMechanism?.prompt ?? "";
-            string domain = _authMechanism?.domain ?? "";
-
-            _inputRequestPending = true;
-            OnInputRequested?.Invoke(type, prompt, domain, error);
         }
 
         private void AuthSucceeded()
@@ -1005,20 +916,8 @@ namespace AbxrLib.Runtime.Services.Auth
             _runtimeAuth.authMechanism.type = "assessmentPin";
             if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.inputSource))
                 _runtimeAuth.authMechanism.inputSource = "user";
-            if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.prompt))
-            {
-                string def = GetDefaultPromptForAuthMechanismType("assessmentPin");
-                if (!string.IsNullOrEmpty(def))
-                    _runtimeAuth.authMechanism.prompt = def;
-            }
 
             _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
-            if (!string.IsNullOrEmpty(_authMechanism.type) && string.IsNullOrEmpty(_authMechanism.prompt))
-            {
-                string defaultPrompt = GetDefaultPromptForAuthMechanismType(_authMechanism.type);
-                if (!string.IsNullOrEmpty(defaultPrompt))
-                    _authMechanism.prompt = defaultPrompt;
-            }
 
             _webglUrlPinAutoSubmitAttempted = false;
             Logcat.Debug("User authentication: pre-filled assessment PIN available; mechanism set to assessmentPin (auto-submit on first attempt).");
@@ -1070,7 +969,6 @@ namespace AbxrLib.Runtime.Services.Auth
             _returnToPackage = null;
             _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
-            _lastInputError = null;
             _userData = null;
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;
