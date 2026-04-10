@@ -28,6 +28,20 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private static bool _processingSubmit;
 
         private static TextMeshProUGUI _prompt;
+        
+        // Blocks all pointer-down input for a short window after the UI appears,
+        // preventing accidental button presses caused by the same gesture that opened the panel.
+        private const float InputGuardDuration = 0.5f;
+        private static float _inputUnlockTime;
+
+        /// <summary>Returns true when pointer-down input is currently blocked by the opening guard.</summary>
+        public static bool IsInputGuarded => Time.unscaledTime < _inputUnlockTime;
+
+        /// <summary>Starts the half-second input guard. Call immediately after showing any UI panel.</summary>
+        public static void StartInputGuard()
+        {
+            _inputUnlockTime = Time.unscaledTime + InputGuardDuration;
+        }
        
         private void Start()
         {
@@ -43,8 +57,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
             var config = Configuration.Instance;
             
             // Try to use configuration prefabs first, fall back to Resources.Load
-            _keyboardPrefab = config != null ? config.KeyboardPrefab : null;
-            _pinPadPrefab = config != null ? config.PinPrefab : null;
+            _keyboardPrefab = config?.KeyboardPrefab;
+            _pinPadPrefab = config?.PinPrefab;
             
             if (!_keyboardPrefab)
             {
@@ -72,15 +86,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
     
         public static void Destroy()
         {
-            if (_keyboardInstance)
-            {
-                Destroy(_keyboardInstance);
-            }
-
-            if (_pinPadInstance)
-            {
-                Destroy(_pinPadInstance);
-            }
+            if (_keyboardInstance) Destroy(_keyboardInstance);
+            if (_pinPadInstance) Destroy(_pinPadInstance);
             
             // Restore laser pointer states to their original configuration
             LaserPointerManager.RestoreLaserPointerStates();
@@ -99,23 +106,14 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         public static void SetPrompt(string prompt)
         {
-            if (_prompt != null)
-            {
-                _prompt.text = prompt;
-            }
+            if (_prompt != null) _prompt.text = prompt;
         }
 
-        public static bool IsPinPadVisible()
-        {
-            return _pinPadInstance != null && _pinPadInstance.activeSelf;
-        }
+        public static bool IsPinPadVisible() => _pinPadInstance != null && _pinPadInstance.activeSelf;
 
         public static void HidePinPad()
         {
-            if (_pinPadInstance != null)
-            {
-                _pinPadInstance.SetActive(false);
-            }
+            if (_pinPadInstance != null) _pinPadInstance.SetActive(false);
         }
 
         public static void ShowPinPad()
@@ -125,22 +123,19 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 _pinPadInstance.SetActive(true);
                 LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_pinPadInstance);
                 LaserPointerManager.EnableLaserPointersForInteraction();
+                StartInputGuard();  // Guard against accidental input
             }
         }
 
         /// <summary>Stops the Processing animation so the prompt can show an error or new message (e.g. after auth failure).</summary>
-        public static void StopProcessing()
-        {
-            _processingSubmit = false;
-        }
+        public static void StopProcessing() => _processingSubmit = false;
 
         public static void Create(KeyboardType keyboardType)
         {
             _processingSubmit = false;
 
             // Ensure prefabs are loaded (handles Create() being called before KeyboardHandler.Start())
-            if (_keyboardPrefab == null || _pinPadPrefab == null)
-                LoadPrefabs();
+            if (_keyboardPrefab == null || _pinPadPrefab == null) LoadPrefabs();
             
             if (keyboardType == KeyboardType.PinPad)
             {
@@ -154,10 +149,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 
                 // Ensure PIN pad FaceCamera uses configuration values
                 var pinPadFaceCamera = _pinPadInstance.GetComponent<FaceCamera>();
-                if (pinPadFaceCamera != null)
-                {
-                    pinPadFaceCamera.useConfigurationValues = true;
-                }
+                if (pinPadFaceCamera != null) pinPadFaceCamera.useConfigurationValues = true;
                 _prompt = _pinPadInstance.GetComponentsInChildren<TextMeshProUGUI>()
                     .FirstOrDefault(t => t.name == "DynamicMessage");
                 ApplyPinPadGuestAccessSetting(_pinPadInstance);
@@ -175,13 +167,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 
                 // Ensure FaceCamera uses configuration values
                 var faceCamera = _keyboardInstance.GetComponent<FaceCamera>();
-                if (faceCamera != null)
-                {
-                    faceCamera.useConfigurationValues = true;
-                }
+                if (faceCamera != null) faceCamera.useConfigurationValues = true;
                     
-                _prompt = _keyboardInstance.GetComponentsInChildren<TextMeshProUGUI>()
-                    .FirstOrDefault(t => t.name == "DynamicMessage");
+                _prompt = _keyboardInstance.GetComponentsInChildren<TextMeshProUGUI>().FirstOrDefault(t => t.name == "DynamicMessage");
                 // PanelCanvas is a sibling of KeyboardCanvas, placed in front in local Z; its Images and
                 // DynamicMessage TMP (raycastTarget on) otherwise win XR ray hits before the key canvas.
                 DisableRaycastOnKeyboardPanelChrome(_keyboardInstance);
@@ -190,6 +178,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
         
             // Enable laser pointers for keyboard/PIN pad interaction
             LaserPointerManager.EnableLaserPointersForInteraction();
+
+            // Block input briefly so the same gesture that opened the UI can't accidentally activate a button the moment it appears
+            StartInputGuard();
             
             OnKeyboardCreated?.Invoke();
         }
@@ -238,6 +229,5 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 yield return new WaitForSeconds(0.5f); // Wait before running again
             }
         }
-
     }
 }

@@ -4,22 +4,23 @@
  * AbxrLib for Unity - PICO QR Code Reader (Camera Image path)
  *
  * Uses the PICO Unity SDK 3.4 PXR_CameraImage API to acquire RGBA frames in Unity,
- * shows a small world-space preview panel, and decodes QR codes with ZXing.
+ * and now shares the same scan-session UX as Quest:
+ * - shared world-space scan panel
+ * - shared cancel / restore PIN pad behavior
+ * - shared QR payload parsing
+ * - shared button state model
  */
 #if UNITY_ANDROID && !UNITY_EDITOR && PICO_ENTERPRISE_SDK_3
 using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.UI.Keyboard;
 using Unity.XR.PXR;
 using UnityEngine;
-using ZXing;
 
 namespace AbxrLib.Runtime.Core
 {
-    public class QRCodeReaderPico : MonoBehaviour
+    public class QRCodeReaderPico : MonoBehaviour, IQrScanner
     {
         public static QRCodeReaderPico Instance;
         public static AbxrAuthService AuthService;
@@ -29,25 +30,30 @@ namespace AbxrLib.Runtime.Core
 
         private bool _isOfferedOnThisDevice;
         private bool _isScanning;
-        private bool _isAwaitingPermission;
+        private bool _isInitializing;
+        private bool _cameraPermissionRequested;
 
         private Action<string> _scanResultCallback;
         private Coroutine _scanCoroutine;
         private Texture2D _latestPreviewTexture;
 
         private PicoEnterpriseCameraFrameProvider _cameraProvider;
-        private PicoQrScanPanel _panel;
-        private BarcodeReader _barcodeReader;
+        private QrScanPanel _panel;
+        private ZXing.BarcodeReader _barcodeReader;
         private bool _restorePinPadOnCancel;
 
         public static bool IsAvailable => Instance != null && Instance._isOfferedOnThisDevice;
-        
+
+        bool IQrScanner.IsAvailable => _isOfferedOnThisDevice;
+        bool IQrScanner.IsScanning => _isScanning;
+        bool IQrScanner.IsInitializing => _isInitializing;
+        bool IQrScanner.ArePermissionsDenied => _cameraPermissionRequested && !UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera);
+        Texture IQrScanner.GetCameraTexture() => GetCameraTexture();
+        void IQrScanner.CancelScan() => CancelScanForAuthInput();
+
         public Texture GetCameraTexture() => _latestPreviewTexture;
 
-        private void Awake()
-        {
-            StartCoroutine(InitWhenPxrReady());
-        }
+        private void Awake() => StartCoroutine(InitWhenPxrReady());
 
         private IEnumerator InitWhenPxrReady()
         {
@@ -66,7 +72,9 @@ namespace AbxrLib.Runtime.Core
                     pxrName = null;
                 }
 
-                if (!string.IsNullOrEmpty(pxrName)) break;
+                if (!string.IsNullOrEmpty(pxrName))
+                    break;
+
                 yield return null;
             }
 
@@ -107,27 +115,12 @@ namespace AbxrLib.Runtime.Core
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
-
-            _isAwaitingPermission = false;
             StopScanningInternal(false);
         }
 
-        public void SetScanResultCallback(Action<string> callback)
-        {
-            _scanResultCallback = callback;
-        }
+        public void SetScanResultCallback(Action<string> callback) => _scanResultCallback = callback;
 
-        public void CancelScanForAuthInput()
-        {
-            if (_isAwaitingPermission)
-            {
-                _isAwaitingPermission = false;
-                InvokeAndClearCallback(null);
-                return;
-            }
-
-            StopScanningInternal(true);
-        }
+        public void CancelScanForAuthInput() => StopScanningInternal(true);
 
         public void ScanQRCode()
         {
@@ -138,9 +131,9 @@ namespace AbxrLib.Runtime.Core
                 return;
             }
 
-            if (_isScanning || _isAwaitingPermission)
+            if (_isScanning || _isInitializing)
             {
-                Logcat.Warning("PICO QR Code Scanner: scan already in progress.");
+                Logcat.Info("PICO QR Code Scanner: scan already in progress.");
                 return;
             }
 
@@ -157,9 +150,11 @@ namespace AbxrLib.Runtime.Core
 
         private IEnumerator RequestPermissionThenScanCoroutine()
         {
-            _isAwaitingPermission = true;
+            _isInitializing = true;
+
             if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Camera))
             {
+                _cameraPermissionRequested = true;
                 bool? permissionGranted = null;
                 var callbacks = new UnityEngine.Android.PermissionCallbacks();
 
@@ -170,21 +165,18 @@ namespace AbxrLib.Runtime.Core
 
                 while (!permissionGranted.HasValue)
                 {
-                    if (!_isAwaitingPermission) yield break;
-
+                    if (!_isInitializing) yield break;
                     yield return null;
                 }
 
                 if (!permissionGranted.Value)
                 {
                     Logcat.Warning("PICO QR camera permission denied.");
-                    _isAwaitingPermission = false;
+                    _isInitializing = false;
                     InvokeAndClearCallback(null);
                     yield break;
                 }
             }
-
-            _isAwaitingPermission = false;
 
             _restorePinPadOnCancel = KeyboardHandler.IsPinPadVisible();
             if (_restorePinPadOnCancel) KeyboardHandler.HidePinPad();
@@ -194,15 +186,15 @@ namespace AbxrLib.Runtime.Core
 
         private IEnumerator ScanLoopCoroutine()
         {
-            _isScanning = true;
             _latestPreviewTexture = null;
 
             _panel.Show();
             _panel.SetStatus("Starting camera...");
+            _panel.SetPreviewUvRect(new Rect(0f, 0f, 1f, 1f));
             _cameraProvider.StartCamera();
 
             float startupDeadline = Time.unscaledTime + StartupTimeoutSeconds;
-            while (_isScanning)
+            while (_isInitializing)
             {
                 if (_cameraProvider.IsCapturing) break;
 
@@ -226,8 +218,10 @@ namespace AbxrLib.Runtime.Core
                 yield return null;
             }
 
-            if (!_isScanning) yield break;
-            
+            if (!_isInitializing) yield break;
+
+            _isInitializing = false;
+            _isScanning = true;
             _panel.SetStatus("Look at QR Code");
 
             float nextDecodeTime = 0f;
@@ -243,7 +237,7 @@ namespace AbxrLib.Runtime.Core
                     {
                         nextDecodeTime = Time.unscaledTime + DecodeIntervalSeconds;
 
-                        string scanResult = TryDecodeMatchingAbxrQr(frame);
+                        string scanResult = QrCodeScanCommon.TryDecodeMatchingAbxrQr(_barcodeReader, frame.Pixels, frame.Width, frame.Height);
                         if (!string.IsNullOrEmpty(scanResult))
                         {
                             StopScanningInternal(false);
@@ -257,31 +251,6 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
-        private string TryDecodeMatchingAbxrQr(CameraFrame frame)
-        {
-            if (frame.Pixels == null || frame.Pixels.Length == 0 || frame.Width <= 0 || frame.Height <= 0) return null;
-
-            try
-            {
-                Result[] results = _barcodeReader.DecodeMultiple(frame.Pixels, frame.Width, frame.Height);
-                if (results == null || results.Length == 0) return null;
-
-                foreach (Result result in results)
-                {
-                    string text = result?.Text?.Trim();
-                    if (string.IsNullOrEmpty(text)) continue;
-
-                    if (text.StartsWith("ABXR:", StringComparison.OrdinalIgnoreCase)) return text;
-                }
-            }
-            catch (Exception ex)
-            {
-                Logcat.Warning("PICO QR decode error: " + ex.Message);
-            }
-
-            return null;
-        }
-
         private void StopScanningInternal(bool invokeCallbackWithNull)
         {
             if (_scanCoroutine != null)
@@ -291,6 +260,7 @@ namespace AbxrLib.Runtime.Core
             }
 
             _isScanning = false;
+            _isInitializing = false;
             _cameraProvider?.StopCamera();
             _panel?.Hide();
 
@@ -303,15 +273,7 @@ namespace AbxrLib.Runtime.Core
 
         private void EnsureRuntimeObjects()
         {
-            _barcodeReader ??= new BarcodeReader
-            {
-                AutoRotate = true,
-                Options =
-                {
-                    PossibleFormats = new List<BarcodeFormat> { BarcodeFormat.QR_CODE },
-                    TryHarder = true
-                }
-            };
+            _barcodeReader ??= QrCodeScanCommon.CreateBarcodeReader();
 
             if (_cameraProvider == null)
             {
@@ -321,32 +283,9 @@ namespace AbxrLib.Runtime.Core
 
             if (_panel == null)
             {
-                _panel = GetComponentInChildren<PicoQrScanPanel>(true);
-                if (_panel == null) _panel = PicoQrScanPanel.CreateRuntimePanel(transform, CancelScanForAuthInput);
+                _panel = GetComponentInChildren<QrScanPanel>(true);
+                if (_panel == null) _panel = QrScanPanel.CreateRuntimePanel(transform, CancelScanForAuthInput);
             }
-        }
-
-        private static bool TryExtractPinFromQrPayload(string scanResult, out string pin)
-        {
-            pin = null;
-            if (string.IsNullOrEmpty(scanResult)) return false;
-
-            string s = scanResult.Trim();
-            Match match = Regex.Match(s, @"(?i)(?<=ABXR:)\d+");
-            if (match.Success)
-            {
-                pin = match.Value;
-                return true;
-            }
-
-            match = Regex.Match(s, @"^\d{6}$");
-            if (match.Success)
-            {
-                pin = match.Value;
-                return true;
-            }
-
-            return false;
         }
 
         private void ProcessQrScanResult(string scanResult)
@@ -354,12 +293,9 @@ namespace AbxrLib.Runtime.Core
             if (_scanResultCallback != null)
             {
                 string callbackPin = null;
-                if (!string.IsNullOrEmpty(scanResult))
+                if (!string.IsNullOrEmpty(scanResult) && !QrCodeScanCommon.TryExtractPinFromQrPayload(scanResult, out callbackPin))
                 {
-                    if (!TryExtractPinFromQrPayload(scanResult, out callbackPin))
-                    {
-                        Logcat.Warning("Invalid QR code format (expected ABXR:XXXXXX or 6 digits): " + scanResult);
-                    }
+                    Logcat.Warning("Invalid QR code format (expected ABXR:XXXXXX or 6 digits): " + scanResult);
                 }
 
                 InvokeAndClearCallback(callbackPin);
@@ -369,11 +305,11 @@ namespace AbxrLib.Runtime.Core
             if (string.IsNullOrEmpty(scanResult)) return;
 
             AuthService.SetInputSource("QRlms");
-            if (!TryExtractPinFromQrPayload(scanResult, out string pin))
+            if (!QrCodeScanCommon.TryExtractPinFromQrPayload(scanResult, out string pin))
             {
                 Logcat.Warning("Invalid QR code format (expected ABXR:XXXXXX or 6 digits): " + scanResult);
             }
-            
+
             AuthService.KeyboardAuthenticate(pin);
         }
 

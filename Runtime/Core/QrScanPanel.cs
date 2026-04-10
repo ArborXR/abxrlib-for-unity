@@ -1,21 +1,22 @@
-#if UNITY_ANDROID && !UNITY_EDITOR && PICO_ENTERPRISE_SDK_3
+#if UNITY_ANDROID && !UNITY_EDITOR
 using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using AbxrLib.Runtime.UI.Keyboard;
 
 namespace AbxrLib.Runtime.Core
 {
     /// <summary>
-    /// Small world-space scan panel that stays in front of the user while QR scanning is active.
+    /// Shared world-space scan panel used by both Quest and PICO QR scanners.
     /// Built entirely in code so no prefab setup is required.
     /// </summary>
-    public class PicoQrScanPanel : MonoBehaviour
+    public class QrScanPanel : MonoBehaviour
     {
-        private const float DistanceFromCamera = 1.0f;
+        private const float DistanceFromCamera = 0.9f;
         private const float HorizontalOffset = 0.0f;
-        private const float VerticalOffset = 0.1f;
+        private const float VerticalOffset = 0.0f;
 
         private GameObject _root;
         private RawImage _previewImage;
@@ -26,11 +27,11 @@ namespace AbxrLib.Runtime.Core
         private Camera _mainCamera;
         private Canvas _canvas;
 
-        public static PicoQrScanPanel CreateRuntimePanel(Transform parent, Action onCancel)
+        public static QrScanPanel CreateRuntimePanel(Transform parent, Action onCancel)
         {
-            var go = new GameObject("PicoQrScanPanel");
+            var go = new GameObject("QrScanPanel");
             go.transform.SetParent(parent, false);
-            PicoQrScanPanel panel = go.AddComponent<PicoQrScanPanel>();
+            QrScanPanel panel = go.AddComponent<QrScanPanel>();
             panel.Build(onCancel);
             panel.Hide();
             return panel;
@@ -45,12 +46,17 @@ namespace AbxrLib.Runtime.Core
             if (_cancelButton != null) _cancelButton.interactable = true;
 
             if (_root != null) _root.SetActive(true);
+
+            // Bounce the XR ray interactors for one frame so XRI clears its hover state and re-fires OnPointerEnter.
+            // Without this, if the laser is already pointing at the cancel button when the panel appears, the hover highlight never shows.
+            StartCoroutine(LaserPointerManager.RefreshInteractorHover());
+
+            // Block input briefly so the same gesture that opened the scanner can't immediately trigger the Cancel button
+            KeyboardHandler.StartInputGuard();
         }
 
         public void Hide()
         {
-            if (_cancelButton != null) _cancelButton.interactable = false;
-
             if (_root != null) _root.SetActive(false);
         }
 
@@ -62,6 +68,11 @@ namespace AbxrLib.Runtime.Core
         public void SetPreviewTexture(Texture texture)
         {
             if (_previewImage != null) _previewImage.texture = texture;
+        }
+
+        public void SetPreviewUvRect(Rect uvRect)
+        {
+            if (_previewImage != null) _previewImage.uvRect = uvRect;
         }
 
         private void Build(Action onCancel)
@@ -119,10 +130,7 @@ namespace AbxrLib.Runtime.Core
         {
             if (_canvas != null) _canvas.worldCamera = Camera.main;
 
-            if (_canvas != null && _canvas.GetComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>() == null)
-            {
-                _canvas.gameObject.AddComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>();
-            }
+            if (_canvas != null) LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_canvas.gameObject);
         }
 
         private void LateUpdate()
@@ -143,7 +151,6 @@ namespace AbxrLib.Runtime.Core
         private void HandleCancelPressed()
         {
             if (_cancelButton == null || !_cancelButton.interactable) return;
-
             _onCancel?.Invoke();
         }
 
@@ -230,8 +237,8 @@ namespace AbxrLib.Runtime.Core
 
             public void OnPointerDown(PointerEventData eventData)
             {
+                if (KeyboardHandler.IsInputGuarded) return;
                 if (TargetButton == null || !TargetButton.IsActive() || !TargetButton.IsInteractable()) return;
-
                 OnPressed?.Invoke();
             }
         }

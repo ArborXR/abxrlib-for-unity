@@ -34,6 +34,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         public void OnPointerDown(PointerEventData eventData)
         {
+            // Ignore input during the opening guard window to prevent accidental presses.
+            if (KeyboardHandler.IsInputGuarded) return;
+
             // Trigger on press instead of release
             if (_thisKey != null && _thisKey.interactable)
             {

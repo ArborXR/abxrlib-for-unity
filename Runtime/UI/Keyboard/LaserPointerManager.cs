@@ -21,7 +21,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
     /// </summary>
     public static class LaserPointerManager
     {
-        private static Dictionary<object, bool> _originalStates = new Dictionary<object, bool>();
+        private static Dictionary<object, bool> _originalStates = new();
         private static bool _isManagingLaserPointers = false;
         private static int _cleanupCounter = 0;
         private const int CLEANUP_FREQUENCY = 100; // Clean up every 100 operations
@@ -43,10 +43,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             // Find all null keys (destroyed objects)
             foreach (var kvp in _originalStates)
             {
-                if (kvp.Key == null)
-                {
-                    keysToRemove.Add(kvp.Key);
-                }
+                if (kvp.Key == null) keysToRemove.Add(kvp.Key);
             }
 
             // Remove null keys from dictionary - we need to handle this carefully
@@ -57,10 +54,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 var newDictionary = new Dictionary<object, bool>();
                 foreach (var kvp in _originalStates)
                 {
-                    if (kvp.Key != null)
-                    {
-                        newDictionary[kvp.Key] = kvp.Value;
-                    }
+                    if (kvp.Key != null) newDictionary[kvp.Key] = kvp.Value;
                 }
 
                 _originalStates = newDictionary;
@@ -99,10 +93,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// Checks if XR Interaction Toolkit is available and properly configured.
         /// </summary>
         /// <returns>True if XR Interaction Toolkit is available, false otherwise</returns>
-        public static bool IsXRInteractionToolkitAvailable()
-        {
-            return true; // Always true since we're inside the XR_TOOLKIT_AVAILABLE block
-        }
+        public static bool IsXRInteractionToolkitAvailable() => true; // Always true since we're inside the XR_TOOLKIT_AVAILABLE block
 
         /// <summary>
         /// Gets cached ray interactors or finds them if cache is invalid
@@ -118,21 +109,16 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 var validInteractors = new List<XRRayInteractor>();
                 foreach (var interactor in _cachedRayInteractors)
                 {
-                    if (interactor != null)
-                    {
-                        validInteractors.Add(interactor);
-                    }
+                    if (interactor != null) validInteractors.Add(interactor);
                 }
 
                 // Update cache with valid interactors only if some were destroyed
-                if (validInteractors.Count != _cachedRayInteractors.Length)
-                    _cachedRayInteractors = validInteractors.ToArray();
-
+                if (validInteractors.Count != _cachedRayInteractors.Length) _cachedRayInteractors = validInteractors.ToArray();
                 return _cachedRayInteractors;
             }
 
             // Cache is invalid or null, find new ray interactors
-            _cachedRayInteractors = UnityEngine.Object.FindObjectsOfType<XRRayInteractor>();
+            _cachedRayInteractors = Object.FindObjectsOfType<XRRayInteractor>();
             _cacheValid = true;
 
             return _cachedRayInteractors;
@@ -193,6 +179,30 @@ namespace AbxrLib.Runtime.UI.Keyboard
         }
 
         /// <summary>
+        /// Bounces all active XRRayInteractors off for one frame so XRI clears its internal
+        /// hover state and re-fires OnPointerEnter for whatever is under the ray.
+        /// Call this (via a coroutine) after showing a UI panel that may appear under the pointer.
+        /// </summary>
+        public static System.Collections.IEnumerator RefreshInteractorHover()
+        {
+            var rayInteractors = GetRayInteractors();
+            var wasActive = new List<XRRayInteractor>();
+            foreach (var interactor in rayInteractors)
+            {
+                if (interactor != null && interactor.gameObject.activeInHierarchy)
+                {
+                    interactor.gameObject.SetActive(false);
+                    wasActive.Add(interactor);
+                }
+            }
+            yield return null; // one frame — XRI fires OnPointerExit, clears hover state
+            foreach (var interactor in wasActive)
+            {
+                if (interactor != null) interactor.gameObject.SetActive(true);
+            }
+        }
+
+        /// <summary>
         /// Ensures all World Space canvases under the given root have a TrackedDeviceGraphicRaycaster
         /// so that XR controller rays hit UI elements (otherwise the laser passes through).
         /// Call this after instantiating the keyboard or PIN pad prefab.
@@ -203,10 +213,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
             var canvases = root.GetComponentsInChildren<Canvas>(true);
             foreach (var canvas in canvases)
             {
-                if (canvas.renderMode != RenderMode.WorldSpace)
-                    continue;
-                if (canvas.GetComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>() != null)
-                    continue;
+                if (canvas.renderMode != RenderMode.WorldSpace) continue;
+                if (canvas.GetComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>() != null) continue;
                 canvas.gameObject.AddComponent<UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster>();
             }
         }
@@ -255,10 +263,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 var newDictionary = new Dictionary<object, bool>();
                 foreach (var kvp in _originalStates)
                 {
-                    if (!keysToRemove.Contains(kvp.Key))
-                    {
-                        newDictionary[kvp.Key] = kvp.Value;
-                    }
+                    if (!keysToRemove.Contains(kvp.Key)) newDictionary[kvp.Key] = kvp.Value;
                 }
 
                 _originalStates = newDictionary;
@@ -284,10 +289,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// <summary>
         /// Disposes of all managed resources and clears state.
         /// </summary>
-        public static void Dispose()
-        {
-            ForceCleanup();
-        }
+        public static void Dispose() => ForceCleanup();
     }
 #else
     /// <summary>

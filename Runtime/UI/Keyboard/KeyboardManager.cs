@@ -57,17 +57,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
             // On VR, the controller ray often hits the input field's rect before the keys.
             // Disable the input field as a raycast target so pointer events reach KeyboardKey
             // components (same input path as the PIN pad, which has no large input field).
-            if (inputField != null && inputField.targetGraphic != null)
-                inputField.targetGraphic.raycastTarget = false;
+            if (inputField != null && inputField.targetGraphic != null) inputField.targetGraphic.raycastTarget = false;
 #endif
             // Check for QR reader instances immediately
             CheckAndEnableQRButton();
             
             // Also check after a short delay in case initialization hasn't completed yet
             StartCoroutine(DelayedQRButtonCheck());
-            
-            // Start coroutine to update button text based on scanning state
-            StartCoroutine(UpdateQRButtonText());
         }
         
         private System.Collections.IEnumerator DelayedQRButtonCheck()
@@ -104,26 +100,14 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (qrCodeButton == null) return;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            bool hasPico = false;
-#if PICO_ENTERPRISE_SDK_3
-            hasPico = QRCodeReaderPico.IsAvailable;
-#endif
-            bool hasGeneral = QRCodeReader.Instance != null && QRCodeReader.Instance.IsQRScanningAvailable();
-            bool isAvailable = hasPico || hasGeneral;
+            bool isAvailable = QrScannerCoordinator.GetActiveScanner() != null;
             if (_lastQRButtonState != isAvailable)
             {
                 qrCodeButton.gameObject.SetActive(isAvailable);
                 if (isAvailable)
-                {
-#if PICO_ENTERPRISE_SDK_3
-                    if (hasPico)
-                        Logcat.Info("QR Code button enabled for PICO (SDK 3+)");
-                    else
-#endif
-                        Logcat.Info("QR Code button enabled (device supported, permissions granted)");
-                }
+                    Logcat.Info("QR Code button enabled.");
                 else
-                    Logcat.Warning("QR Code button hidden - QR scanning not available. Check device support and camera permissions.");
+                    Logcat.Warning("QR Code button hidden - no supported QR scanner is active for this device.");
                 _lastQRButtonState = isAvailable;
             }
 #endif
@@ -141,39 +125,38 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
             
             // Create entry for pointer down event
-            var downEntry = new EventTrigger.Entry();
-            downEntry.eventID = EventTriggerType.PointerDown;
-            downEntry.callback.AddListener(_ => { action(); });
+            var downEntry = new EventTrigger.Entry
+            {
+                eventID = EventTriggerType.PointerDown
+            };
+            downEntry.callback.AddListener(_ => {
+                // Ignore input during the opening guard window to prevent accidental presses
+                if (KeyboardHandler.IsInputGuarded) return;
+                action();
+            });
             trigger.triggers.Add(downEntry);
             
             // Add pointer up handler to reset button state
             var upEntry = new EventTrigger.Entry();
             upEntry.eventID = EventTriggerType.PointerUp;
             upEntry.callback.AddListener(_ => { 
-                if (EventSystem.current != null)
-                {
-                    EventSystem.current.SetSelectedGameObject(null);
-                }
+                if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
             });
             trigger.triggers.Add(upEntry);
             
             // Add pointer exit handler to reset button state when cursor leaves
-            var exitEntry = new EventTrigger.Entry();
-            exitEntry.eventID = EventTriggerType.PointerExit;
+            var exitEntry = new EventTrigger.Entry
+            {
+                eventID = EventTriggerType.PointerExit
+            };
             exitEntry.callback.AddListener(_ => { 
-                if (EventSystem.current != null)
-                {
-                    EventSystem.current.SetSelectedGameObject(null);
-                }
+                if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
             });
             trigger.triggers.Add(exitEntry);
         }
 
-        private void Space()
-        {
-            inputField.text += " ";
-        }
-    
+        private void Space() => inputField.text += " ";
+
         private void Delete()
         {
             if (inputField.text.Length > 0)
@@ -201,88 +184,21 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
         }
         
-        private static void Skip()
-        {
-            AbxrSubsystem.Instance.SubmitInput("**skip**");
-        }
-        
+        private static void Skip() => AbxrSubsystem.Instance.SubmitInput("**skip**");
+
         private void QRCode()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-            if (QRCodeReaderPico.IsAvailable)
+            IQrScanner scanner = QrScannerCoordinator.GetActiveScanner();
+            if (scanner != null)
             {
-                QRCodeReaderPico.Instance.ScanQRCode();
-                inputField.text = "";
-                UpdateQRButtonTextImmediate();
-                return;
-            }
-#endif
-            if (QRCodeReader.Instance != null)
-            {
-                if (QRCodeReader.Instance.IsScanning())
-                    QRCodeReader.Instance.CancelScanning();
+                if (scanner.IsScanning || scanner.IsInitializing)
+                    scanner.CancelScan();
                 else
-                    QRCodeReader.Instance.ScanQRCode();
-                UpdateQRButtonTextImmediate();
+                    scanner.ScanQRCode();
             }
 #endif
             inputField.text = "";
-        }
-        
-        /// <summary>
-        /// Coroutine to periodically update QR button text based on scanning state
-        /// </summary>
-        private System.Collections.IEnumerator UpdateQRButtonText()
-        {
-            while (true)
-            {
-                yield return new WaitForSeconds(0.2f); // Check every 0.2 seconds
-                UpdateQRButtonTextImmediate();
-            }
-        }
-        
-        /// <summary>
-        /// Update QR button text based on current scanning state
-        /// </summary>
-        private void UpdateQRButtonTextImmediate()
-        {
-            if (qrCodeButton == null) return;
-            
-            // Find TextMeshProUGUI component in button's children
-            TextMeshProUGUI buttonText = qrCodeButton.GetComponentInChildren<TextMeshProUGUI>();
-            if (buttonText == null) return;
-            
-            bool isScanning = false;
-            bool isInitializing = false;
-            bool permissionsDenied = false;
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
-#endif
-            if (QRCodeReader.Instance != null)
-            {
-                isScanning = QRCodeReader.Instance.IsScanning();
-                isInitializing = QRCodeReader.Instance.IsInitializing();
-                permissionsDenied = QRCodeReader.AreCameraPermissionsDenied();
-            }
-#endif
-            // Update text based on state (priority: permissions denied > scanning > initializing > idle)
-            if (permissionsDenied)
-            {
-                buttonText.text = "Not Available";
-            }
-            else if (isScanning)
-            {
-                buttonText.text = "Stop Scanning";
-            }
-            else if (isInitializing)
-            {
-                buttonText.text = "Initializing...";
-            }
-            else
-            {
-                buttonText.text = "Scan QR Code";
-            }
         }
 
         private void HandleShift()
