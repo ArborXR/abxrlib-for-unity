@@ -13,7 +13,6 @@ namespace AbxrLib.Runtime.Core
             if (QRCodeReader.Instance is IQrScanner questScanner && questScanner.IsAvailable)
                 return questScanner;
 #endif
-
             return null;
         }
     }
