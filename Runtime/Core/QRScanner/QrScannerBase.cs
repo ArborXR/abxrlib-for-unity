@@ -236,7 +236,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
         {
             BarcodeReader ??= QrCodeScanCommon.CreateBarcodeReader();
 
-            if (Panel == null)
+            if (Panel == null && !Configuration.Instance.enableLearnerLauncherMode)
             {
                 Panel = GetComponentInChildren<QrScanPanel>(true);
                 if (Panel == null) Panel = QrScanPanel.CreateRuntimePanel(transform, CancelScanning);

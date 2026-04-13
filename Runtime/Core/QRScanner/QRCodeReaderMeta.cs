@@ -96,8 +96,8 @@ namespace AbxrLib.Runtime.Core.QRScanner
                 EnsureRuntimeObjects();
                 bool pinPadWasVisible = KeyboardHandler.IsPinPadVisible();
                 if (pinPadWasVisible) KeyboardHandler.HidePinPad();
-                Panel.Show();
-                Panel.SetStatus("Headset Cameras permission required");
+                Panel?.Show();
+                Panel?.SetStatus("Headset Cameras permission required");
                 yield return new WaitForSecondsRealtime(3.0f);
                 IsInitializing = false;
                 Panel?.Hide();
@@ -112,9 +112,9 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
         protected override IEnumerator ScanLoopCoroutine()
         {
-            Panel.Show();
-            Panel.SetStatus("Starting camera...");
-            Panel.SetPreviewUvRect(new Rect(0f, 0f, 1f, 1f));
+            Panel?.Show();
+            Panel?.SetStatus("Starting camera...");
+            Panel?.SetPreviewUvRect(new Rect(0f, 0f, 1f, 1f));
 
             _cameraStartupSucceeded = false;
             yield return StartCoroutine(StartCameraCoroutine());
@@ -128,7 +128,8 @@ namespace AbxrLib.Runtime.Core.QRScanner
             IsInitializing = false;
             IsScanning = true;
             RefreshPreviewTexture();
-            Panel.SetStatus("Look at QR Code");
+
+            Panel?.SetStatus("Look at QR Code");
 
             float nextDecodeTime = 0f;
             while (IsScanning)
@@ -413,7 +414,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
             Texture preview = GetPreferredPreviewTexture();
             if (preview == null) return;
             _latestPreviewTexture = preview;
-            Panel.SetPreviewTexture(preview);
+            Panel?.SetPreviewTexture(preview);
         }
 
         private Texture GetPreferredPreviewTexture()

@@ -39,9 +39,10 @@ namespace AbxrLib.Runtime.Core.QRScanner
         {
             _latestPreviewTexture = null;
 
-            Panel.Show();
-            Panel.SetStatus("Starting camera...");
-            Panel.SetPreviewUvRect(new Rect(0f, 0f, 1f, 1f));
+            Panel?.Show();
+            Panel?.SetStatus("Starting camera...");
+            Panel?.SetPreviewUvRect(new Rect(0f, 0f, 1f, 1f));
+
             _cameraProvider.StartCamera();
 
             float startupDeadline = Time.unscaledTime + StartupTimeoutSeconds;
@@ -73,7 +74,8 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
             IsInitializing = false;
             IsScanning = true;
-            Panel.SetStatus("Look at QR Code");
+
+            Panel?.SetStatus("Look at QR Code");
 
             float nextDecodeTime = 0f;
             while (IsScanning)
@@ -81,7 +83,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
                 if (_cameraProvider.TryGetLatestFrame(out CameraFrame frame))
                 {
                     _latestPreviewTexture = frame.Texture;
-                    Panel.SetPreviewTexture(frame.Texture);
+                    Panel?.SetPreviewTexture(frame.Texture);
 
                     if (Time.unscaledTime >= nextDecodeTime)
                     {
