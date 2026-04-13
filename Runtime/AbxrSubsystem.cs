@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.QRScanner;
 using AbxrLib.Runtime.Services.AI;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.Services.Data;

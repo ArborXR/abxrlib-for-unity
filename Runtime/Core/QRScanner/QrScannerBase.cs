@@ -15,7 +15,7 @@ using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
     public abstract class QrScannerBase : MonoBehaviour, IQrScanner
     {

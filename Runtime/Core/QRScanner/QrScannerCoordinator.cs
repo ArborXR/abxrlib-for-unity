@@ -1,4 +1,4 @@
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
     internal static class QrScannerCoordinator
     {
@@ -10,7 +10,7 @@ namespace AbxrLib.Runtime.Core
 #endif
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-            if (QRCodeReader.Instance is IQrScanner questScanner && questScanner.IsAvailable)
+            if (QRCodeReaderMeta.Instance is IQrScanner questScanner && questScanner.IsAvailable)
                 return questScanner;
 #endif
             return null;

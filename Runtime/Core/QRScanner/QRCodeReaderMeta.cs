@@ -13,11 +13,11 @@ using System.Threading.Tasks;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
-    public class QRCodeReader : QrScannerBase
+    public class QRCodeReaderMeta : QrScannerBase
     {
-        public static QRCodeReader Instance;
+        public static QRCodeReaderMeta Instance;
 
         private const float StartupTimeoutSeconds = 8f;
         private const float FirstPermissionWarmupSeconds = 1.5f;

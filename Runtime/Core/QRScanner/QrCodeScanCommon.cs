@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using UnityEngine;
 using ZXing;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
     internal static class QrCodeScanCommon
     {

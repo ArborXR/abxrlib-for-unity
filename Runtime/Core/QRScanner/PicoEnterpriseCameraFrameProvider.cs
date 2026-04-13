@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Unity.XR.PXR;
 using UnityEngine;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
     /// <summary>
     /// Thin adapter over the PICO 3.4 PXR_CameraImage API.

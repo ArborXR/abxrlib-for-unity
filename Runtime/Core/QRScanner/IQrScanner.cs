@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
     internal interface IQrScanner
     {

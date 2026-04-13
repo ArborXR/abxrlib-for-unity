@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
     public struct CameraFrame
     {

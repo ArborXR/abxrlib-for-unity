@@ -1,5 +1,6 @@
 using TMPro;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.QRScanner;
 using AbxrLib.Runtime.Services.Auth;
 using UnityEngine;
 using UnityEngine.EventSystems;

@@ -8,10 +8,10 @@
 using System;
 using System.Collections;
 using Unity.XR.PXR;
-using UnityEngine;
 using AbxrLib.Runtime.UI.Keyboard;
+using UnityEngine;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
     public class QRCodeReaderPico : QrScannerBase
     {

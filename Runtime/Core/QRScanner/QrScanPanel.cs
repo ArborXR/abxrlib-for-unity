@@ -1,12 +1,12 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
+using AbxrLib.Runtime.UI.Keyboard;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using AbxrLib.Runtime.UI.Keyboard;
 
-namespace AbxrLib.Runtime.Core
+namespace AbxrLib.Runtime.Core.QRScanner
 {
     /// <summary>
     /// Shared world-space scan panel used by both Quest and PICO QR scanners.

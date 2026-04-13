@@ -1,5 +1,6 @@
 using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
+using AbxrLib.Runtime.Core.QRScanner;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Core
@@ -21,7 +22,7 @@ namespace AbxrLib.Runtime.Core
 #if PICO_ENTERPRISE_SDK_3
             ObjectAttacher.Attach<QRCodeReaderPico>("QRCodeReaderPico");
 #else
-            ObjectAttacher.Attach<QRCodeReader>("QRCodeReader");
+            ObjectAttacher.Attach<QRCodeReaderMeta>("QRCodeReaderMeta");
 #endif
 #endif
             bool skip = SkipCreatingSubsystemInInitialize || AbxrSubsystem.Instance != null;
