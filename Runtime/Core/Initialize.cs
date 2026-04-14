@@ -19,7 +19,7 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
 #if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_ENTERPRISE_SDK_3
+#if PICO_SDK_3_4_OR_NEWER
             ObjectAttacher.Attach<QRCodeReaderPico>("QRCodeReaderPico");
 #else
             ObjectAttacher.Attach<QRCodeReaderMeta>("QRCodeReaderMeta");

@@ -4,7 +4,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
     {
         public static IQrScanner GetActiveScanner()
         {
-#if UNITY_ANDROID && !UNITY_EDITOR && PICO_ENTERPRISE_SDK_3
+#if UNITY_ANDROID && !UNITY_EDITOR && PICO_SDK_3_4_OR_NEWER
             if (QRCodeReaderPico.Instance is IQrScanner picoScanner && picoScanner.IsAvailable)
                 return picoScanner;
 #endif

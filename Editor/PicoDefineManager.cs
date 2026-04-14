@@ -62,7 +62,7 @@ namespace AbxrLib.Editor
             var requiredSdkVersion = new Version("3.4.0");
             if (GetSDKVersion() >= requiredSdkVersion)
             {
-                AddDefine("PICO_ENTERPRISE_SDK_3");
+                AddDefine("PICO_SDK_3_4_OR_NEWER");
             }
         }
 

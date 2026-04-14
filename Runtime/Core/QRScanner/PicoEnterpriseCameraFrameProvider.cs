@@ -1,4 +1,4 @@
-#if UNITY_ANDROID && !UNITY_EDITOR && PICO_ENTERPRISE_SDK_3
+#if UNITY_ANDROID && !UNITY_EDITOR && PICO_SDK_3_4_OR_NEWER
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
