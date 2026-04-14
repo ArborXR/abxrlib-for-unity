@@ -49,8 +49,10 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
             // Bounce the XR ray interactors for one frame so XRI clears its hover state and re-fires OnPointerEnter.
             // Without this, if the laser is already pointing at the cancel button when the panel appears, the hover highlight never shows.
+            
+#if !BUILD_DEVICE_VIVE && !BUILD_DEVICE_OCULUSLEGACY
             StartCoroutine(LaserPointerManager.RefreshInteractorHover());
-
+#endif
             // Block input briefly so the same gesture that opened the scanner can't immediately trigger the Cancel button
             KeyboardHandler.StartInputGuard();
         }
