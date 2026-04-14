@@ -59,7 +59,7 @@ namespace AbxrLib.Editor
                 AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == "Unity.XR.PICO");
             if (!hasPicoIntegrationSDK) return;
             
-            var requiredSdkVersion = new Version("3.0.0");
+            var requiredSdkVersion = new Version("3.4.0");
             if (GetSDKVersion() >= requiredSdkVersion)
             {
                 AddDefine("PICO_ENTERPRISE_SDK_3");
