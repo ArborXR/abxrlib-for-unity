@@ -125,6 +125,7 @@ namespace AbxrLib.Runtime.Core
         public bool enableAutoAdvanceModules = true;
         public bool enableReturnTo = true;
         public bool enablePinPadGuestAccess = true;
+        public bool recordIpAddress = false;
         public GameObject KeyboardPrefab;
         public GameObject PinPrefab;
         public float telemetryTrackingPeriodSeconds = 10f;
@@ -240,6 +241,7 @@ namespace AbxrLib.Runtime.Core
             c.enableAutoAdvanceModules = a.enableAutoAdvanceModules;
             c.enableReturnTo = a.enableReturnTo;
             c.enablePinPadGuestAccess = a.enablePinPadGuestAccess;
+            c.recordIpAddress = a.recordIpAddress;
             c.KeyboardPrefab = a.KeyboardPrefab;
             c.PinPrefab = a.PinPrefab;
             c.telemetryTrackingPeriodSeconds = a.telemetryTrackingPeriodSeconds;
@@ -297,6 +299,7 @@ namespace AbxrLib.Runtime.Core
 
             if (payload.headsetTracking.HasValue) headsetTracking = payload.headsetTracking.Value;
             if (payload.enableReturnTo.HasValue) enableReturnTo = payload.enableReturnTo.Value;
+            if (payload.recordIpAddress.HasValue) recordIpAddress = payload.recordIpAddress.Value;
             if (payload.enablePinPadGuestAccess.HasValue) enablePinPadGuestAccess = payload.enablePinPadGuestAccess.Value;
             else if (payload.authMechanism != null && payload.authMechanism.allowGuest.HasValue)
                 enablePinPadGuestAccess = payload.authMechanism.allowGuest.Value;

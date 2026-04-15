@@ -72,6 +72,9 @@ namespace AbxrLib.Runtime.Core
 
         [Tooltip("When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, KeyboardManager.skipButton is hidden at runtime. Custom PIN prefabs should assign skipButton like the default.")]
         public bool enablePinPadGuestAccess = true;
+        
+        [Tooltip("When enabled, the user's IP Address will be sent during authentication.")]
+        public bool recordIpAddress = false;
 
         [Header("Authentication Prefabs")]
         public GameObject KeyboardPrefab;

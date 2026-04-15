@@ -1395,7 +1395,7 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _payload.deviceModel = DeviceModel.deviceModel;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            _payload.ipAddress = Utils.GetIPAddress();
+            if (Configuration.Instance.recordIpAddress) _payload.ipAddress = Utils.GetIPAddress();
             
             // Read build_fingerprint from Android manifest
             _payload.buildFingerprint = Utils.GetAndroidManifestMetadata("com.arborxr.abxrlib.build_fingerprint");

@@ -271,6 +271,7 @@ namespace AbxrLib.Runtime.Types
         // Auth flow / modules
         public bool? enableReturnTo;
         public bool? enablePinPadGuestAccess;
+        public bool? recordIpAddress;
 
         // Platform / feature flags
         public bool? enableAutomaticTelemetry;

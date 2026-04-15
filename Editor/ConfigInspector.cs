@@ -169,6 +169,9 @@ namespace AbxrLib.Editor
 
             config.enablePinPadGuestAccess = EditorGUILayout.Toggle(new GUIContent(
                 "Enable PIN Pad Guest Access", "When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, that button is hidden at runtime. Requires KeyboardManager.skipButton on the PIN prefab (default AbxrPinPad does)."), config.enablePinPadGuestAccess);
+            
+            config.recordIpAddress = EditorGUILayout.Toggle(new GUIContent(
+                "Record IP Address", "When enabled, the user's IP Address will be sent during authentication."), config.recordIpAddress);
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Authentication Prefabs", EditorStyles.boldLabel);
@@ -315,6 +318,7 @@ namespace AbxrLib.Editor
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
                 config.enableReturnTo = defaultConfig.enableReturnTo;
                 config.enablePinPadGuestAccess = defaultConfig.enablePinPadGuestAccess;
+                config.recordIpAddress = defaultConfig.recordIpAddress;
                 config.enableAutoStartModules = defaultConfig.enableAutoStartModules;
                 config.enableAutoAdvanceModules = defaultConfig.enableAutoAdvanceModules;
                 
