@@ -40,10 +40,10 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
     internal const string AuthFailureInitialRequestFailed = "Authentication failure: Initial authentication request failed";
 
     /// <summary>Auth mechanism "none" so device auth tests skip user authentication (PIN/input).</summary>
-    private static AuthMechanism AuthMechanismNone => new AuthMechanism { type = "none", prompt = "", domain = "" };
+    private static AuthMechanism AuthMechanismNone => new();
 
     /// <summary>Auth mechanism assessmentPin for handoff tests (launcher/receiver flow may request PIN).</summary>
-    private static AuthMechanism AuthMechanismAssessmentPin => new AuthMechanism { type = "assessmentPin", prompt = "Enter your 6-digit PIN", domain = "" };
+    private static AuthMechanism AuthMechanismAssessmentPin => new() { type = "assessmentPin", prompt = "Enter your 6-digit PIN" };
 
     protected override void CreateSubsystemIfNeeded()
     {

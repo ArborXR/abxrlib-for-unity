@@ -116,7 +116,6 @@ namespace AbxrLib.Runtime.Core
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         [HideInInspector] public bool unitTestConfigEnabled = false;
         [HideInInspector] public string unitTestAuthPin = "";
-        [HideInInspector] public string unitTestAuthBadPin = "";
         [HideInInspector] public string unitTestAuthText = "";
         [HideInInspector] public string unitTestAuthEmail = "";
         [HideInInspector] public string unitTestAuthEmailDomain = "";

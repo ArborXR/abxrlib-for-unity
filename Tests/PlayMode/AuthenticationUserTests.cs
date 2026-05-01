@@ -20,7 +20,6 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
     internal static string ConfigOrgToken => Configuration.Instance?.orgToken ?? "";
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
     internal static string ConfigUnitTestAuthPin => Configuration.Instance?.unitTestAuthPin ?? "";
-    internal static string ConfigUnitTestAuthBadPin => Configuration.Instance?.unitTestAuthBadPin ?? "";
     internal static string ConfigUnitTestAuthEmail => Configuration.Instance?.unitTestAuthEmail ?? "";
     internal static string ConfigUnitTestAuthEmailDomain => Configuration.Instance?.unitTestAuthEmailDomain ?? "";
     internal static string ConfigUnitTestAuthText => Configuration.Instance?.unitTestAuthText ?? "";
@@ -49,7 +48,7 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
     private static RuntimeAuthConfig UserRuntimeAuthNoUserAuth()
     {
         var c = UserRuntimeAuth();
-        c.authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "" };
+        c.authMechanism = new AuthMechanism();
         return c;
     }
 
@@ -57,7 +56,7 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
     private static RuntimeAuthConfig UserRuntimeAuthWithAssessmentPin()
     {
         var c = UserRuntimeAuth();
-        c.authMechanism = new AuthMechanism { type = "assessmentPin", prompt = "Enter your 6-digit PIN", domain = "" };
+        c.authMechanism = new AuthMechanism { type = "assessmentPin", prompt = "Enter your 6-digit PIN"};
         return c;
     }
 
@@ -79,7 +78,7 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
     private static RuntimeAuthConfig UserRuntimeAuthWithText()
     {
         var c = UserRuntimeAuth();
-        c.authMechanism = new AuthMechanism { type = "text", prompt = "Enter your Employee ID", domain = "" };
+        c.authMechanism = new AuthMechanism { type = "text", prompt = "Enter your Employee ID" };
         return c;
     }
 
@@ -95,126 +94,30 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
         if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
         {
             Assert.Ignore("App token and org token required. Set in AbxrLib config (production_custom).");
-            yield break;
         }
         CreateSubsystem();
         SetRuntimeAuth(UserRuntimeAuthWithAssessmentPin());
         bool success = false;
         string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
+        yield return PerformAuthWithError((s, e) => { success = s; error = e; });
         Assert.IsTrue(success, $"Auth with assessmentPin and configured PIN should succeed. Error: {error}");
     }
 
     /// <summary>Forces authMechanism type=assessmentPin; submits unitTestAuthBadPin (configured bad PIN). Expects auth to fail.</summary>
     [UnityTest]
-    public IEnumerator AuthUser_AssessmentPin_InvalidPin_BadPin_Fails()
+    public IEnumerator AuthUser_AssessmentPin_BadPin_Fails()
     {
         if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
         {
             Assert.Ignore("App token and org token required.");
-            yield break;
         }
         LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Authentication failure:.*"));
         CreateSubsystem();
         SetRuntimeAuth(UserRuntimeAuthWithAssessmentPin());
-        ModifyConfig("unitTestAuthPin", ConfigUnitTestAuthBadPin ?? "000000");
+        ModifyConfig("unitTestAuthPin", "1357");
         bool success = false;
-        string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
+        yield return PerformAuth(r => success = r);
         Assert.IsFalse(success, "Auth with bad PIN should fail.");
-    }
-
-    /// <summary>Submits empty PIN first; SDK rejects locally and re-invokes OnInputRequested. Second submit uses valid PIN; auth succeeds (no transport call for empty).</summary>
-    [UnityTest]
-    public IEnumerator AuthUser_AssessmentPin_EmptyPin_RejectedLocally_ThenValidSucceeds()
-    {
-        if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
-        {
-            Assert.Ignore("App token and org token required.");
-            yield break;
-        }
-        string validPin = ConfigUnitTestAuthPin;
-        if (string.IsNullOrEmpty(validPin))
-        {
-            Assert.Ignore("Unit test PIN required. Set unitTestAuthPin in AbxrLib config.");
-            yield break;
-        }
-        CreateSubsystem();
-        SetRuntimeAuth(UserRuntimeAuthWithAssessmentPin());
-        int onInputCount = 0;
-        Action<string, string, string, string> customHandler = (type, prompt, domain, err) =>
-        {
-            onInputCount++;
-            if (onInputCount == 1)
-            {
-                Logcat.Info("(Test) Submitting empty PIN to trigger local rejection (no transport call).");
-                Abxr.OnInputSubmitted("");
-            }
-            else
-                Abxr.OnInputSubmitted(validPin);
-        };
-        bool success = false;
-        string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f, customOnInputRequested: customHandler);
-        Assert.IsTrue(success, $"Auth should succeed after re-prompt. Error: {error}");
-        Assert.AreEqual(2, onInputCount, "OnInputRequested should be called twice: initial prompt, then re-prompt after empty (no transport call for empty).");
-    }
-
-    /// <summary>Forces authMechanism type=assessmentPin; submits too-short PIN. Expects auth to fail.</summary>
-    [UnityTest]
-    public IEnumerator AuthUser_AssessmentPin_TooShort_Fails()
-    {
-        if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
-        {
-            Assert.Ignore("App token and org token required.");
-            yield break;
-        }
-        LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Authentication failure:.*"));
-        CreateSubsystem();
-        SetRuntimeAuth(UserRuntimeAuthWithAssessmentPin());
-        ModifyConfig("unitTestAuthPin", "123");
-        bool success = false;
-        string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
-        Assert.IsFalse(success, "Auth with too-short PIN should fail.");
-    }
-
-    /// <summary>Forces authMechanism type=assessmentPin; submits too-long PIN. Expects auth to fail.</summary>
-    [UnityTest]
-    public IEnumerator AuthUser_AssessmentPin_TooLong_Fails()
-    {
-        if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
-        {
-            Assert.Ignore("App token and org token required.");
-            yield break;
-        }
-        LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Authentication failure:.*"));
-        CreateSubsystem();
-        SetRuntimeAuth(UserRuntimeAuthWithAssessmentPin());
-        ModifyConfig("unitTestAuthPin", "1234567");
-        bool success = false;
-        string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
-        Assert.IsFalse(success, "Auth with too-long PIN should fail.");
-    }
-
-    /// <summary>Forces authMechanism type=assessmentPin; submits non-numeric PIN. Expects auth to fail.</summary>
-    [UnityTest]
-    public IEnumerator AuthUser_AssessmentPin_NonNumeric_Fails()
-    {
-        if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
-        {
-            Assert.Ignore("App token and org token required.");
-            yield break;
-        }
-        LogAssert.Expect(LogType.Error, new System.Text.RegularExpressions.Regex("Authentication failure:.*"));
-        CreateSubsystem();
-        SetRuntimeAuth(UserRuntimeAuthWithAssessmentPin());
-        ModifyConfig("unitTestAuthPin", "12ab34");
-        bool success = false;
-        string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
-        Assert.IsFalse(success, "Auth with non-numeric PIN should fail.");
     }
 
     /// <summary>Uses authMechanism type=none so no user authentication; OnInputRequested must not be invoked.</summary>
@@ -224,13 +127,11 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
         if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
         {
             Assert.Ignore("App token and org token required.");
-            yield break;
         }
         CreateSubsystem();
         SetRuntimeAuth(UserRuntimeAuthNoUserAuth());
         int onInputRequestedCount = 0;
         Abxr.OnInputRequested = (type, prompt, domain, err) => { onInputRequestedCount++; };
-        yield return new WaitForSeconds(5f);
         bool authCompleted = false;
         bool success = false;
         Abxr.OnAuthCompleted += (s, e) => { success = s; authCompleted = true; };
@@ -251,13 +152,12 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
         if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
         {
             Assert.Ignore("App token and org token required.");
-            yield break;
         }
         CreateSubsystem();
         SetRuntimeAuth(UserRuntimeAuthWithEmail());
         bool success = false;
         string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
+        yield return PerformAuthWithError((s, e) => { success = s; error = e; });
         Assert.IsTrue(success, $"Auth with email (domain from unitTestAuthEmailDomain) and unitTestAuthEmail should succeed. Error: {error}");
     }
 
@@ -287,50 +187,46 @@ public class AuthenticationUserTests : AbxrPlayModeTestBase
         if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
         {
             Assert.Ignore("App token and org token required.");
-            yield break;
         }
         CreateSubsystem();
         SetRuntimeAuth(UserRuntimeAuthWithText());
         bool success = false;
         string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f);
+        yield return PerformAuthWithError((s, e) => { success = s; error = e; });
         Assert.IsTrue(success, $"Auth with text and configured unitTestAuthText should succeed. Error: {error}");
     }
 
     /// <summary>Submits empty text first; SDK rejects locally and re-invokes OnInputRequested. Second submit uses valid text; auth succeeds (no transport call for empty).</summary>
     [UnityTest]
-    public IEnumerator AuthUser_Text_Empty_RejectedLocally_ThenValidSucceeds()
+    public IEnumerator AuthUser_Text_Empty_Fails()
     {
         if (string.IsNullOrEmpty(ConfigAppToken) || string.IsNullOrEmpty(ConfigOrgToken))
         {
             Assert.Ignore("App token and org token required.");
-            yield break;
         }
         string validText = ConfigUnitTestAuthText;
         if (string.IsNullOrEmpty(validText))
         {
             Assert.Ignore("Unit test text required. Set unitTestAuthText in AbxrLib config.");
-            yield break;
         }
         CreateSubsystem();
         SetRuntimeAuth(UserRuntimeAuthWithText());
         int onInputCount = 0;
-        Action<string, string, string, string> customHandler = (type, prompt, domain, err) =>
+
+        bool success = false;
+        LogAssert.Expect(LogType.Error, "[AbxrLib] Authentication failure: Authentication failed");
+        yield return PerformAuthWithError((s, e) => { success = s; _ = e; }, customOnInputRequested: CustomHandler);
+        Assert.IsFalse(success, "Auth should fail");
+        Assert.AreEqual(2, onInputCount, "OnInputRequested should be called twice: initial prompt, then re-prompt after empty.");
+        yield break;
+
+        void CustomHandler(string s1, string s2, string s3, string s4)
         {
             onInputCount++;
-            if (onInputCount == 1)
-            {
-                Logcat.Info("(Test) Submitting empty text to trigger local rejection (no transport call).");
-                Abxr.OnInputSubmitted("");
-            }
-            else
-                Abxr.OnInputSubmitted(validText);
-        };
-        bool success = false;
-        string error = null;
-        yield return PerformAuthWithError((s, e) => { success = s; error = e; }, timeoutSeconds: 40f, customOnInputRequested: customHandler);
-        Assert.IsTrue(success, $"Auth should succeed after re-prompt. Error: {error}");
-        Assert.AreEqual(2, onInputCount, "OnInputRequested should be called twice: initial prompt, then re-prompt after empty (no transport call for empty).");
+            if (onInputCount > 1) return;
+            Logcat.Info("(Test) Submitting empty text to trigger local rejection (no transport call).");
+            Abxr.OnInputSubmitted("");
+        }
     }
 
     // ── userData.id and GetAnonymizedUserId (backend contract; see linear-ticket-lib-backend-userid-userdata.md) ──

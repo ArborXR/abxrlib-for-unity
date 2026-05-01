@@ -151,7 +151,6 @@ namespace AbxrLib.Runtime.Core
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         public bool unitTestConfigEnabled = false;
         public string unitTestAuthPin = "";
-        public string unitTestAuthBadPin = "";
         public string unitTestAuthText = "";
         public string unitTestAuthEmail = "";
         public string unitTestAuthEmailDomain = "";
@@ -266,7 +265,6 @@ namespace AbxrLib.Runtime.Core
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             c.unitTestConfigEnabled = a.unitTestConfigEnabled;
             c.unitTestAuthPin = a.unitTestAuthPin;
-            c.unitTestAuthBadPin = a.unitTestAuthBadPin;
             c.unitTestAuthText = a.unitTestAuthText;
             c.unitTestAuthEmail = a.unitTestAuthEmail;
             c.unitTestAuthEmailDomain = a.unitTestAuthEmailDomain;

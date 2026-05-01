@@ -221,7 +221,7 @@ namespace AbxrLib.Runtime.Services.Auth
             // Auth handoff (intent / CLI / test inject): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
             CheckAuthHandoff();
 
-            // Use runtime auth mechanism for the device authentication request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
+            // Use runtime auth mechanism for the device authentication request (e.g. test-injected empty type so backend gets auth_mechanism and does not require PIN).
             _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
 
             _isAuthStarted = true;
@@ -269,17 +269,17 @@ namespace AbxrLib.Runtime.Services.Auth
                 _authMechanism.prompt = input + "@" + _authMechanism.domain;
             else
                 _authMechanism.prompt = input;
-
-            _runner.StartCoroutine(AuthRequestCoroutine((success, errorMessage) =>
+            
+            // Store the entered value only for email and text so we can add it to UserData. PIN is never stored in UserData—only used as auth prompt.
+            if (_authMechanism.type == "email" || _authMechanism.type == "text")
             {
-                // Store the entered value only for email and text so we can add it to UserData. PIN is never stored in UserData—only used as auth prompt.
-                if (_authMechanism.type == "email" || _authMechanism.type == "text")
-                {
-                    _enteredAuthValue = input;
-                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
-                        _enteredAuthValue += "@" + _authMechanism.domain;
-                }
-
+                _enteredAuthValue = input;
+                if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
+                    _enteredAuthValue += "@" + _authMechanism.domain;
+            }
+            
+            _runner.StartCoroutine(AuthRequestCoroutine((success, _) =>
+            {
                 _authMechanism.prompt = originalPrompt;
                 if (success)
                 {
@@ -787,10 +787,10 @@ namespace AbxrLib.Runtime.Services.Auth
                         
                         _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
                         string authType = _authMechanism?.type ?? "";
-                        if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
+                        if (!string.IsNullOrEmpty(authType))
                         {
                             Logcat.Info("User Authentication Required.");
-                            Logcat.Debug($" - Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
+                            Logcat.Debug($" - Type: {authType} & Prompt: {_authMechanism?.prompt ?? ""}");
                         }
                         else
                             Logcat.Info("User authentication not required. Using anonymous session.");
@@ -901,9 +901,8 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>For handoff receivers and GET-config failure: no keyboard/PIN; keep Configuration asset defaults for other fields.</summary>
         private void ApplyNoneUserAuthMechanismForSession()
         {
-            _authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
-            if (!_useInjectedRuntimeAuthForTesting)
-                _runtimeAuth.authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
+            _authMechanism = new AuthMechanism();
+            if (!_useInjectedRuntimeAuthForTesting) _runtimeAuth.authMechanism = new AuthMechanism();
         }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -1202,8 +1201,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 return dict;
             }
 
-            // When we have an explicit auth mechanism (assessmentPin, email, text), use it so second-stage auth sends the correct type and prompt. Exclude "none" so that after anonymous session we still send type=custom when _userData is set (SetUserData re-auth).
-            bool useExplicitMechanism = _authMechanism != null && !string.IsNullOrEmpty(_authMechanism.type) && _authMechanism.type != "custom" && !string.Equals(_authMechanism.type, "none", StringComparison.OrdinalIgnoreCase);
+            // When we have an explicit auth mechanism (assessmentPin, email, text), use it so second-stage auth sends the correct type and prompt
+            bool useExplicitMechanism = _authMechanism != null && !string.IsNullOrEmpty(_authMechanism.type) && _authMechanism.type != "custom";
             if (useExplicitMechanism)
             {
                 if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;

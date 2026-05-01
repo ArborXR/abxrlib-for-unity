@@ -252,8 +252,6 @@ namespace AbxrLib.Editor
                 EditorGUILayout.EndVertical();
                 config.unitTestAuthPin = EditorGUILayout.TextField(new GUIContent(
                     "PIN / assessment PIN", "Used when auth requests type \"pin\" or \"assessmentPin\"."), config.unitTestAuthPin);
-                config.unitTestAuthBadPin = EditorGUILayout.TextField(new GUIContent(
-                    "Bad PIN (always fail)", "PIN that backend must always reject. Set when running invalid-PIN tests; empty = those tests will ignore."), config.unitTestAuthBadPin);
                 config.unitTestAuthText = EditorGUILayout.TextField(new GUIContent(
                     "Text / default", "Used when auth type is text or unknown."), config.unitTestAuthText);
                 config.unitTestAuthEmail = EditorGUILayout.TextField(new GUIContent(
