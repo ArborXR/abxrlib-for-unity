@@ -651,17 +651,64 @@ namespace AbxrLib.Runtime.Core
             return builder.ToString();
         }
     
-        public static string GetQueryParam(string key, string url)
+        public static string GetQueryParam(string key)
         {
+            string url = Application.absoluteURL;
             var questionMarkIndex = url.IndexOf('?');
             if (questionMarkIndex < 0) return "";
+
             var queryString = url.Substring(questionMarkIndex + 1);
+            var fragmentIndex = queryString.IndexOf('#');
+            if (fragmentIndex >= 0) queryString = queryString.Substring(0, fragmentIndex);
+
             foreach (var keyValuePair in queryString.Split('&'))
             {
-                var keyValueArray = keyValuePair.Split('=');
-                if (keyValueArray.Length == 2 && Uri.UnescapeDataString(keyValueArray[0]) == key)
+                if (string.IsNullOrEmpty(keyValuePair)) continue;
+
+                int equalsIndex = keyValuePair.IndexOf('=');
+                string encodedKey = equalsIndex >= 0 ? keyValuePair.Substring(0, equalsIndex) : keyValuePair;
+                string encodedValue = equalsIndex >= 0 ? keyValuePair.Substring(equalsIndex + 1) : "";
+
+                if (Uri.UnescapeDataString(encodedKey) == key)
                 {
-                    return Uri.UnescapeDataString(keyValueArray[1]);
+                    return Uri.UnescapeDataString(encodedValue);
+                }
+            }
+
+            return "";
+        }
+        
+        public static string GetUrlFragment(string key)
+        {
+            string url = Application.absoluteURL;
+            if (string.IsNullOrEmpty(url)) return "";
+
+            // Try fragment first.
+            int fragmentIndex = url.IndexOf('#');
+            if (fragmentIndex >= 0 && fragmentIndex + 1 < url.Length)
+            {
+                string fragment = url.Substring(fragmentIndex + 1);
+                string fromFragment = FindEncodedValue(fragment, key);
+                if (!string.IsNullOrEmpty(fromFragment)) return fromFragment;
+            }
+
+            return "";
+        }
+
+        private static string FindEncodedValue(string keyValueList, string key)
+        {
+            if (string.IsNullOrEmpty(keyValueList)) return "";
+            foreach (var keyValuePair in keyValueList.Split('&'))
+            {
+                if (string.IsNullOrEmpty(keyValuePair)) continue;
+
+                int equalsIndex = keyValuePair.IndexOf('=');
+                string encodedKey = equalsIndex >= 0 ? keyValuePair.Substring(0, equalsIndex) : keyValuePair;
+                string encodedValue = equalsIndex >= 0 ? keyValuePair.Substring(equalsIndex + 1) : "";
+
+                if (Uri.UnescapeDataString(encodedKey) == key)
+                {
+                    return Uri.UnescapeDataString(encodedValue);
                 }
             }
             return "";
@@ -748,6 +795,24 @@ namespace AbxrLib.Runtime.Core
             return "";
         }
 #endif
+#if UNITY_ANDROID && !UNITY_EDITOR
+        public static string GetCurrentAndroidActivityClassName()
+        {
+            try
+            {
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                if (activity == null) return "";
+
+                using var activityClass = activity.Call<AndroidJavaObject>("getClass");
+                return activityClass?.Call<string>("getName") ?? "";
+            }
+            catch (Exception ex)
+            {
+                Logcat.Warning($"Failed to determine current Android Activity class for return-to handoff: {ex.Message}");
+                return "";
+            }
+        }
 
         /// <summary>
         /// Get Android intent parameter value by key
@@ -757,7 +822,6 @@ namespace AbxrLib.Runtime.Core
         /// <returns>The intent parameter value if found, empty string otherwise</returns>
         public static string GetAndroidIntentParam(string key)
         {
-    #if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
                 using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
@@ -771,17 +835,16 @@ namespace AbxrLib.Runtime.Core
                     return intent.Call<string>("getStringExtra", key);
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 // Log warning with consistent format and include Android context
                 Logcat.Warning($"Failed to get Android intent parameter '{key}': {ex.Message}\n" +
                                 $"Exception Type: {ex.GetType().Name}\n" +
                                 $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
             }
-    #endif
             return "";
         }
-
+#endif
         /// <summary>
         /// Get Android manifest metadata value by key
         /// Reads metadata from AndroidManifest.xml using ApplicationInfo

@@ -68,7 +68,7 @@ namespace AbxrLib.Runtime.Core
         public bool enableAutoAdvanceModules = true;
 
         [Tooltip("Allow returnTo Launcher. When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff.")]
-        public bool enableReturnTo = true;
+        public bool enableReturnTo = false;
 
         [Tooltip("When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, KeyboardManager.skipButton is hidden at runtime. Custom PIN prefabs should assign skipButton like the default.")]
         public bool enablePinPadGuestAccess = true;

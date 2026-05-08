@@ -219,8 +219,12 @@ namespace AbxrLib.Runtime.Types
         public object UserId;
         public string AppId;
         public string PackageName;
-        /// <summary>When set in auth_handoff payload, the app that receives it should call LaunchAppWithAuthHandoff(this value) when assessment completes (return-to-launcher flow). Cleared after use.</summary>
+        
+        // When set, the app should call LaunchAppWithAuthHandoff(this value) when assessment completes
         public string ReturnToPackage;
+        public string ReturnToActivityClassName; // optional
+        public string ReturnToUrl; // WebGL/Standalone
+        
         public List<ModuleData> Modules;
 
         /// <summary>Single rule for both REST and service transports: response is a valid auth success (full success or second-stage required). Full success = Token or Modules present. Second-stage required = AppId present but no token/modules (proceed to config and PIN prompt). Error payloads (e.g. {"message":"..."}) have no AppId/Token/Modules.</summary>

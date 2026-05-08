@@ -85,10 +85,15 @@ namespace AbxrLib.Runtime.Services.Auth
         // Auth handoff for external launcher apps
         private bool _sessionUsedAuthHandoff;
         private string _returnToPackage;
+        private string _returnToActivityClassName;
+        private string _returnToUrl;
         /// <summary>True when a valid auth_handoff was parsed; AuthenticateCoroutine skips device AuthRequestCoroutine and completes after GET config (same as normal flow).</summary>
         private bool _deviceAuthDeferredByHandoff;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        private static extern void AbxrStripHandoffFromUrl();
+
         /// <summary>WebGL: pre-filled assessment PIN from org token JWT claim <c>pin</c> (preferred) or from <c>assessment_pin</c>/<c>assessmentPin</c> URL query. When set, GET config can be overridden to assessmentPin and the first user-auth attempt auto-submits this value.</summary>
         private string _webglQueryAssessmentPin;
         /// <summary>After one auto-submit from <see cref="_webglQueryAssessmentPin"/>, further attempts use the normal PIN prompt (retry flow).</summary>
@@ -970,6 +975,8 @@ namespace AbxrLib.Runtime.Services.Auth
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
             _returnToPackage = null;
+            _returnToActivityClassName = null;
+            _returnToUrl = null;
             _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
             _userData = null;
@@ -1005,16 +1012,13 @@ namespace AbxrLib.Runtime.Services.Auth
                 handoffPayload = _authHandoffForTesting;
                 _authHandoffForTesting = null;
             }
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetCommandLineArg("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-            {
-#if UNITY_WEBGL && !UNITY_EDITOR
-                handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (string.IsNullOrEmpty(handoffPayload)) handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
 #endif
-            }
+            if (string.IsNullOrEmpty(handoffPayload)) handoffPayload = Utils.GetCommandLineArg("auth_handoff");
+#if UNITY_WEBGL && !UNITY_EDITOR
+            if (string.IsNullOrEmpty(handoffPayload)) handoffPayload = Utils.GetUrlFragment("auth_handoff");
+#endif
             if (string.IsNullOrEmpty(handoffPayload)) return;
             string normalized = NormalizeHandoffPayload(handoffPayload);
             if (string.IsNullOrEmpty(normalized))
@@ -1022,6 +1026,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 Logcat.Warning("auth_handoff was present but could not be normalized to JSON; continuing with device authentication.");
                 return;
             }
+#if UNITY_WEBGL && !UNITY_EDITOR
+            try { AbxrStripHandoffFromUrl(); } catch {}
+#endif
             Logcat.Info("Processing authentication handoff from external launcher");
             if (!ParseAuthResponse(normalized, true))
                 Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
@@ -1081,12 +1088,16 @@ namespace AbxrLib.Runtime.Services.Auth
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
 
         /// <summary>
-        /// Builds the JSON payload passed via the auth_handoff Android intent extra.
+        /// Builds the JSON payload passed via auth_handoff.
         /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
         /// so the receiving app and its ArborInsightsClient service can fully adopt the session.
-        /// When includeReturnToPackage is true, adds ReturnToPackage (current app's identifier) so the receiving app can return the session when assessment completes.
+        /// When includeReturn is true, preserves an existing return target from the inbound handoff;
+        /// otherwise it uses the current app as the return target. Android uses ReturnToPackage and
+        /// ReturnToActivityClassName (the Activity name lets the return launch skip the &lt;queries&gt;
+        /// manifest requirement); WebGL/browser launches use ReturnToUrl. Standalone does not include
+        /// a return target.
         /// </summary>
-        internal string GetHandoffJson(bool includeReturnToPackage = false)
+        internal string GetHandoffJson(bool includeReturn = false)
         {
             if (ResponseData == null || !Authenticated) return null;
 
@@ -1108,19 +1119,52 @@ namespace AbxrLib.Runtime.Services.Auth
                 ["OrgId"]             = _payload?.orgId ?? "",
                 ["TokenExpirationMs"] = expiryMs,
             };
-            if (includeReturnToPackage)
-                handoff["ReturnToPackage"] = Application.identifier ?? "";
+
+            if (includeReturn)
+            {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                string returnToPackage = !string.IsNullOrEmpty(_returnToPackage)
+                    ? _returnToPackage
+                    : Application.identifier ?? "";
+                if (!string.IsNullOrEmpty(returnToPackage))
+                    handoff["ReturnToPackage"] = returnToPackage;
+
+                string returnToActivityClassName = !string.IsNullOrEmpty(_returnToActivityClassName)
+                    ? _returnToActivityClassName
+                    : Utils.GetCurrentAndroidActivityClassName();
+                if (!string.IsNullOrEmpty(returnToActivityClassName))
+                    handoff["ReturnToActivityClassName"] = returnToActivityClassName;
+#elif UNITY_WEBGL && !UNITY_EDITOR
+                string returnToUrl = !string.IsNullOrEmpty(_returnToUrl)
+                    ? _returnToUrl
+                    : Application.absoluteURL;
+                if (!string.IsNullOrEmpty(returnToUrl))
+                    handoff["ReturnToUrl"] = returnToUrl;
+#endif
+            }
+
             return JsonConvert.SerializeObject(handoff);
         }
+        
+        internal string GetReturnToPackage() => _returnToPackage;
+        internal string GetReturnToActivityClassName() => _returnToActivityClassName;
+        internal string GetReturnToUrl() => _returnToUrl;
 
-        /// <summary>Returns the stored returnToPackage from the handoff (so the assessment app can launch back to the launcher), then clears it so it is only used once.</summary>
+        /// <summary>Clears the stored return target after a successful return launch so it is only used once.</summary>
+        internal void ClearReturnTarget()
+        {
+            _returnToPackage = null;
+            _returnToActivityClassName = null;
+            _returnToUrl = null;
+        }
+
+        /// <summary>Returns the stored return package from the handoff, then clears the full return target so it is only used once.</summary>
         internal string GetAndClearReturnToPackage()
         {
             var value = _returnToPackage;
-            _returnToPackage = null;
+            ClearReturnTarget();
             return value;
         }
-        
         /// <summary>
         /// Update user data (userData only) and reauthenticate to sync with server.
         /// Session userId is read-only and set only by the backend. Merges existing UserData with the optional id (userData.id) and additionalUserData, then sends via re-auth.
@@ -1338,7 +1382,7 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             if (_runtimeAuth.buildType == "production_custom")
                 return;
-            string orgTokenQuery = Utils.GetQueryParam("org_token", Application.absoluteURL);
+            string orgTokenQuery = Utils.GetQueryParam("org_token");
             if (!string.IsNullOrEmpty(orgTokenQuery))
             {
                 _runtimeAuth.orgToken = orgTokenQuery;
@@ -1353,11 +1397,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
 
-            string pinQuery = Utils.GetQueryParam("assessment_pin", Application.absoluteURL);
-            if (string.IsNullOrEmpty(pinQuery))
-                pinQuery = Utils.GetQueryParam("assessmentPin", Application.absoluteURL);
-            if (!string.IsNullOrWhiteSpace(pinQuery))
-                _webglQueryAssessmentPin = pinQuery.Trim();
+            string pinQuery = Utils.GetQueryParam("assessment_pin");
+            if (string.IsNullOrEmpty(pinQuery)) pinQuery = Utils.GetQueryParam("assessmentPin");
+            if (!string.IsNullOrWhiteSpace(pinQuery)) _webglQueryAssessmentPin = pinQuery.Trim();
         }
 
         private static string GetOrCreateDeviceId()
@@ -1451,6 +1493,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
                 _sessionUsedAuthHandoff = true;
                 _returnToPackage = ResponseData?.ReturnToPackage;
+                _returnToActivityClassName = ResponseData?.ReturnToActivityClassName;
+                _returnToUrl = ResponseData?.ReturnToUrl;
                 ResponseData.UserData ??= new Dictionary<string, string>();
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
 

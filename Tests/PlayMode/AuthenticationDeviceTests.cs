@@ -577,7 +577,7 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         yield return PerformAuth(r => app1Success = r);
         Assert.IsTrue(app1Success, "App 1 should authenticate successfully.");
         string packageName = GetHandoffTargetPackageName();
-        bool launched = AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest(packageName, includeReturnToPackage: true);
+        bool launched = AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest(packageName, includeReturn: true);
         Assert.IsTrue(launched, "LaunchAppWithAuthHandoffForTest(includeReturnToPackage) should succeed.");
         FullTeardownForAppSwitch(clearAuthHandoff: false);
         Logcat.Info("(Test) Leaving App 1, launching App 2 (auth_handoff with ReturnToPackage).");
@@ -625,7 +625,7 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         Assert.IsTrue(Abxr.GetAuthResponse() != null, "App 1 should have auth response after success.");
 
         string packageName = GetHandoffTargetPackageName();
-        bool launched = AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest(packageName, includeReturnToPackage: true);
+        bool launched = AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest(packageName, includeReturn: true);
         Assert.IsTrue(launched, "LaunchAppWithAuthHandoffForTest(includeReturnToPackage) should succeed.");
         FullTeardownForAppSwitch(clearAuthHandoff: false);
         Logcat.Info("(Test) Leaving App 1, launching App 2 (auth_handoff with ReturnToPackage).");

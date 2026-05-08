@@ -482,52 +482,31 @@ namespace AbxrLib.Runtime
 		/// <summary>Returns the full auth response from the last successful authentication (Token, UserData, AppId, Modules, PackageName, etc.). Null if not authenticated.</summary>
 		internal AuthResponse GetAuthResponse() => _authService?.ResponseData;
 
-		/// <summary>Launches another Android app and passes the current auth session via the auth_handoff intent extra.
+		/// <summary>Launches another app and passes the current auth session via the requested platform mechanism.
 		/// The target app must also use AbxrLib; it will adopt the session without re-authenticating.
-		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().
-		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.</summary>
-		internal bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false)
+		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse(), or a deep link / web URL.</summary>
+		internal bool LaunchAppWithAuthHandoff(Abxr.AppLaunchRequest request)
 		{
-			if (string.IsNullOrEmpty(packageName))
+			if (request == null)
 			{
-				Logcat.Warning("LaunchAppWithAuthHandoff: packageName is empty");
+				Logcat.Warning("LaunchAppWithAuthHandoff: request is null");
 				return false;
 			}
+
 			if (!(_authService?.Authenticated ?? false))
 			{
 				Logcat.Warning("LaunchAppWithAuthHandoff: not authenticated");
 				return false;
 			}
-#if UNITY_ANDROID && !UNITY_EDITOR
-			try
+
+			string handoffJson = _authService.GetHandoffJson(request.IncludeReturn);
+			if (string.IsNullOrEmpty(handoffJson))
 			{
-				string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
-				if (handoffJson == null)
-				{
-					Logcat.Warning("LaunchAppWithAuthHandoff: failed to build handoff payload");
-					return false;
-				}
-				using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-				using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-				using var intent = new AndroidJavaObject("android.content.Intent");
-				using var intentClass = new AndroidJavaClass("android.content.Intent");
-				intent.Call<AndroidJavaObject>("setAction", intentClass.GetStatic<string>("ACTION_MAIN"));
-				intent.Call<AndroidJavaObject>("setPackage", packageName);
-				intent.Call<AndroidJavaObject>("putExtra", "auth_handoff", handoffJson);
-				intent.Call<AndroidJavaObject>("addFlags", intentClass.GetStatic<int>("FLAG_ACTIVITY_NEW_TASK"));
-				activity.Call("startActivity", intent);
-				Logcat.Info($"Launched '{packageName}' with auth handoff");
-				return true;
-			}
-			catch (Exception ex)
-			{
-				Logcat.Error($"LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}");
+				Logcat.Warning("LaunchAppWithAuthHandoff: failed to build handoff payload");
 				return false;
 			}
-#else
-			Logcat.Warning("LaunchAppWithAuthHandoff is only supported on Android");
-			return false;
-#endif
+
+			return AppLauncher.LaunchAppWithAuthHandoff(request, handoffJson);
 		}
 
 		/// <summary>
@@ -536,10 +515,10 @@ namespace AbxrLib.Runtime
 		/// Use when testing flows that would call LaunchAppWithAuthHandoff in production.
 		/// </summary>
 		/// <param name="packageName">Target package name (validated like production; used only for consistency).</param>
-		/// <param name="includeReturnToPackage">If true, handoff includes ReturnToPackage so the receiving app can return the session.</param>
+		/// <param name="includeReturn">If true, handoff includes return info so the receiving app can return the session.</param>
 		/// <param name="useBase64Encoding">If true, inject the handoff as base64-encoded JSON so NormalizeHandoffPayload is exercised.</param>
 		/// <returns>True if authenticated and handoff was injected, false otherwise.</returns>
-		internal bool LaunchAppWithAuthHandoffForTest(string packageName, bool includeReturnToPackage = false, bool useBase64Encoding = false)
+		internal bool LaunchAppWithAuthHandoffForTest(string packageName, bool includeReturn = false, bool useBase64Encoding = false)
 		{
 			if (string.IsNullOrEmpty(packageName))
 			{
@@ -551,8 +530,8 @@ namespace AbxrLib.Runtime
 				Logcat.Warning("LaunchAppWithAuthHandoffForTest: not authenticated");
 				return false;
 			}
-			string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
-			if (handoffJson == null)
+			string handoffJson = _authService.GetHandoffJson(includeReturn);
+			if (string.IsNullOrEmpty(handoffJson))
 			{
 				Logcat.Warning("LaunchAppWithAuthHandoffForTest: failed to build handoff payload");
 				return false;
@@ -566,7 +545,7 @@ namespace AbxrLib.Runtime
 		}
 
 		/// <summary>For testing only. Returns the handoff JSON that would be sent by LaunchAppWithAuthHandoff (e.g. so tests can simulate App 2 returning the session to App 1).</summary>
-		internal string GetHandoffJsonForTesting(bool includeReturnToPackage = false) => _authService?.GetHandoffJson(includeReturnToPackage);
+		internal string GetHandoffJsonForTesting(bool includeReturn = false) => _authService?.GetHandoffJson(includeReturn);
 
 		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
 		private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)
@@ -906,10 +885,7 @@ internal void StartNewSession()
 				// If user is completing their own assessment (not the default), silently remove the default assessment
 				// This removes it as if it never existed - no completion event will be sent
 				// This handles the case where user completes an assessment without starting it
-				if (assessmentName != "DEFAULT" && _assessmentStartTimes.ContainsKey("DEFAULT"))
-				{
-					_assessmentStartTimes.Remove("DEFAULT");
-				}
+				if (assessmentName != "DEFAULT") _assessmentStartTimes.Remove("DEFAULT");
 				
 				AddDuration(_assessmentStartTimes, assessmentName, meta);
 			}
@@ -929,7 +905,14 @@ internal void StartNewSession()
 			bool assessmentFullyComplete = !inModuleSequence || _currentModuleIndex >= (modules?.Count ?? 0);
 			if (shouldExitOrReturn && assessmentFullyComplete)
 			{
-				_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
+				if (_exitAfterAssessmentCoroutine == null)
+				{
+					_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
+				}
+				else
+				{
+					Logcat.Warning("Assessment complete return/exit is already in progress; ignoring duplicate completion request.");
+				}
 			}
 		}
 		
@@ -940,50 +923,92 @@ internal void StartNewSession()
 			EventAssessmentComplete(experienceName, 100, Abxr.EventStatus.Complete, meta);
 
 		/// <summary>
-		/// Coroutine to exit the application after a 2-second delay when assessment is complete
-		/// and the session used auth handoff with return to launcher enabled.
-		/// If the handoff included ReturnToPackage, launch that app with the current session first (then clear it so no loop).
+		/// Exits after assessment completion when the session used auth handoff.
+		/// If the handoff included a return target, launch back to it with the current session, then quit.
+		/// On Android: launches ReturnToPackage, using ReturnToActivityClassName as an explicit-component
+		/// target when present (lets the return launch skip the &lt;queries&gt; manifest requirement on API 30+).
+		/// On WebGL: navigates to ReturnToUrl. Standalone has no return support.
 		/// </summary>
 		private IEnumerator ExitAfterAssessmentComplete()
 		{
-			string returnToPackage = _authService?.GetAndClearReturnToPackage();
+			Logcat.Info("Assessment complete with auth handoff");
+
+			// Send all data we might have before quitting
+			SendAll();
+			yield return new WaitForSeconds(0.5f);
+
+			string returnToPackage = _authService?.GetReturnToPackage();
+			string returnToActivityClassName = _authService?.GetReturnToActivityClassName();
+			string returnToUrl = _authService?.GetReturnToUrl();
+
+			Abxr.AppLaunchRequest returnRequest = null;
 			if (!string.IsNullOrEmpty(returnToPackage))
 			{
-				// In tests (Editor or Test Runner Player), "return to launcher" is simulated: inject handoff so the next subsystem can adopt the session. Do not start an Activity (e.g. com.UnityTestRunner.UnityTestRunner has no launchable Activity on device).
+				returnRequest = new Abxr.AppLaunchRequest
+				{
+					AndroidPackageName = returnToPackage,
+					AndroidActivityClassName = string.IsNullOrEmpty(returnToActivityClassName) ? null : returnToActivityClassName,
+					IncludeReturn = false
+				};
+			}
+			else if (!string.IsNullOrEmpty(returnToUrl))
+			{
+				returnRequest = new Abxr.AppLaunchRequest
+				{
+					Url = returnToUrl,
+					IncludeReturn = false
+				};
+			}
+
+			if (returnRequest != null)
+			{
+				bool launchSucceeded;
+
+				// In Editor / Test Runner builds, simulate the return launch by injecting the handoff
+				// so the next subsystem can adopt the session, rather than actually starting an Activity / navigating.
 				bool useInject = _simulateQuitInExitAfterAssessmentComplete;
-#if !(UNITY_ANDROID && !UNITY_EDITOR)
-				useInject = true; // Editor: always inject
+#if !(UNITY_ANDROID && !UNITY_EDITOR) && !(UNITY_WEBGL && !UNITY_EDITOR)
+				useInject = true;
 #endif
 				if (useInject)
 				{
-					if (LaunchAppWithAuthHandoffForTest(returnToPackage, includeReturnToPackage: false))
-						Logcat.Info($"Injected handoff for return-to launcher '{returnToPackage}' (Editor/test).");
+					string injectTarget = returnToPackage ?? returnToUrl;
+					launchSucceeded = LaunchAppWithAuthHandoffForTest(injectTarget, includeReturn: false);
+					if (launchSucceeded)
+						Logcat.Info($"Injected handoff for return target '{injectTarget}' (Editor/test).");
 					else
-						Logcat.Warning($"Failed to inject handoff for return target '{returnToPackage}'.");
+						Logcat.Warning($"Failed to inject handoff for return target '{injectTarget}'. Keeping this app open.");
 				}
-#if UNITY_ANDROID && !UNITY_EDITOR
 				else
 				{
-					if (LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false))
-						Logcat.Info($"Launched '{returnToPackage}' with auth handoff (return to launcher)");
-					else
-						Logcat.Warning($"Failed to launch return target '{returnToPackage}' with auth handoff");
+					launchSucceeded = LaunchAppWithAuthHandoff(returnRequest);
 				}
-#endif
+
+				if (!launchSucceeded)
+				{
+					_exitAfterAssessmentCoroutine = null;
+					yield break;
+				}
+
+				_authService?.ClearReturnTarget();
+				Logcat.Info("Return launch succeeded; quitting current app.");
 			}
-			SendAll();
-			Logcat.Info("Assessment complete with auth handoff - returning to launcher in 2 seconds");
-			yield return new WaitForSeconds(2f);
+			else
+			{
+				Logcat.Info("No return target present; quitting current app.");
+			}
+
 			if (_simulateQuitInExitAfterAssessmentComplete)
 			{
 				Logcat.Info("(Test) Simulated app quit - ExitAfterAssessmentComplete would have exited.");
+				_exitAfterAssessmentCoroutine = null;
 				yield break;
 			}
-	#if UNITY_EDITOR
+#if UNITY_EDITOR
 			UnityEditor.EditorApplication.isPlaying = false;
-	#else
+#else
 			Application.Quit();
-	#endif
+#endif
 		}
 		
 		internal void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta)

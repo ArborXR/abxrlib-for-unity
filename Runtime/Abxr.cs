@@ -118,6 +118,26 @@ public static partial class Abxr
 		User
 	}
 
+	/// <summary>
+	/// Target for <see cref="LaunchAppWithAuthHandoff(AppLaunchRequest)"/>
+	/// </summary>
+	public sealed class AppLaunchRequest
+	{
+		// Android package name. Used on Android/VR builds only. (e.g. "com.example.training")
+		public string AndroidPackageName { get; set; }
+		
+		// Optional Android Activity class name (e.g. "com.unity3d.player.UnityPlayerActivity")
+		// When set, the launcher uses an explicit-component Intent, which does not require a manifest entry on Android 11+
+		// When unset, falls back to getLaunchIntentForPackage, which does require queries on Android 11+.
+		public string AndroidActivityClassName { get; set; }
+
+		// URL to open. Used on WebGL and Standalone builds. (e.g. "https://example.com/training" or "trainingapp://launch")
+		public string Url { get; set; }
+
+		// If true, the handoff payload tells the launched app how to return to this app (not supported on Standalone).
+		public bool IncludeReturn { get; set; }
+	}
+
 	// ── Application quit / EndSession: auto-complete open assessment tree ─────────────────────────
 	/// <summary>
 	/// When the app quits or <see cref="EndSession"/> runs, the SDK completes any assessment, objective, or interaction
@@ -203,16 +223,12 @@ public static partial class Abxr
 	public static AuthResponse GetAuthResponse() => X?.GetAuthResponse();
 
 	/// <summary>
-	/// Launch another Android app and pass the current auth session to it via intent.
-	/// The target app must also use AbxrLib; it will adopt the active session without re-authenticating.
-	/// Call this in your OnAuthCompleted handler. The PackageName from GetAuthResponse() is the typical target.
-	/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's package) so the receiving app can return the session when assessment completes (return-to-launcher flow).
-	/// No-op on non-Android platforms.
+	/// Launch another AbxrLib app and pass the current auth session to it.
+	/// The target app must also use AbxrLib so it can adopt the active session without re-authenticating.
 	/// </summary>
-	/// <param name="packageName">Android package name of the app to launch (e.g. "com.example.myapp")</param>
-	/// <param name="includeReturnToPackage">If true, add ReturnToPackage to the handoff so the receiving app can call LaunchAppWithAuthHandoff(returnToPackage) when done.</param>
-	/// <returns>True if the launch was initiated, false if not authenticated or launch failed</returns>
-	public static bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false) => X?.LaunchAppWithAuthHandoff(packageName, includeReturnToPackage) ?? false;
+	/// <param name="request">The launch target. AndroidPackageName (+ optionally AndroidActivityClassName) for Android/VR, or Url for WebGL/Standalone.</param>
+	/// <returns>Launch success result</returns>
+	public static bool LaunchAppWithAuthHandoff(AppLaunchRequest request) => X?.LaunchAppWithAuthHandoff(request) ?? false;
 
 	/// <summary>Returns the session userId (read-only, set by backend). Not for public documentation.</summary>
 	public static string GetAnonymizedUserId() => X?.GetAnonymizedUserId();

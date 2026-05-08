@@ -164,8 +164,8 @@ namespace AbxrLib.Editor
                 config.authenticationStartDelay = Mathf.Clamp(EditorGUILayout.FloatField(new GUIContent(
                     "Authentication Start Delay (seconds)", "Delay in seconds before starting authentication (only applies when auto-start is enabled)"), config.authenticationStartDelay), 0f, 60f);
             EditorGUI.EndDisabledGroup();
-            config.enableReturnTo = !EditorGUILayout.Toggle(new GUIContent(
-                "Allow returnTo Launcher", "When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff."), !config.enableReturnTo);
+            config.enableReturnTo = EditorGUILayout.Toggle(new GUIContent(
+                "Allow returnTo Launcher", "When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff."), config.enableReturnTo);
 
             config.enablePinPadGuestAccess = EditorGUILayout.Toggle(new GUIContent(
                 "Enable PIN Pad Guest Access", "When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, that button is hidden at runtime. Requires KeyboardManager.skipButton on the PIN prefab (default AbxrPinPad does)."), config.enablePinPadGuestAccess);
