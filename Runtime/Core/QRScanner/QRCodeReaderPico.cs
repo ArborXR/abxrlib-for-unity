@@ -7,6 +7,7 @@
 #if UNITY_ANDROID && !UNITY_EDITOR && PICO_SDK_3_4_OR_NEWER
 using System;
 using System.Collections;
+using System.Threading.Tasks;
 using Unity.XR.PXR;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
@@ -23,6 +24,15 @@ namespace AbxrLib.Runtime.Core.QRScanner
         private PicoEnterpriseCameraFrameProvider _cameraProvider;
         private Texture2D _latestPreviewTexture;
 
+        // Background-decode handoff. Written on a thread-pool thread, read on the main thread in the scan loop.
+        // Reference/bool writes are atomic on the platforms we target, and a one-frame delay observing them is harmless here.
+        private volatile bool _decodeInFlight;
+        private volatile string _pendingResult;
+
+        // Reused across decode dispatches so we don't allocate a fresh pixel array every decode interval.
+        // Sized to the frame on first use and whenever the frame grows.
+        private Color32[] _decodeScratch;
+
         // ── IQrScanner / QrScannerBase overrides ─────────────────────────────────────
 
         public static bool IsAvailable => Instance != null && Instance.IsOfferedOnThisDevice;
@@ -38,6 +48,8 @@ namespace AbxrLib.Runtime.Core.QRScanner
         protected override IEnumerator ScanLoopCoroutine()
         {
             _latestPreviewTexture = null;
+            _decodeInFlight = false;
+            _pendingResult = null;
 
             Panel?.Show();
             Panel?.SetStatus("Starting camera...");
@@ -85,19 +97,54 @@ namespace AbxrLib.Runtime.Core.QRScanner
                     _latestPreviewTexture = frame.Texture;
                     Panel?.SetPreviewTexture(frame.Texture);
 
-                    if (Time.unscaledTime >= nextDecodeTime)
+                    // Pick up a result produced by a finished background decode.
+                    // Unity calls must run on the main thread, so the worker only sets a string and we act on it here.
+                    string ready = _pendingResult;
+                    if (!string.IsNullOrEmpty(ready))
+                    {
+                        _pendingResult = null;
+                        StopScanningInternal(false);
+                        ProcessQrScanResult(ready);
+                        yield break;
+                    }
+
+                    // Kick off a new decode only when the previous one has finished and the throttle interval has elapsed.
+                    // The in-flight guard prevents stacking decode tasks if a single decode runs longer than the interval.
+                    if (!_decodeInFlight && Time.unscaledTime >= nextDecodeTime &&
+                        frame.Pixels != null && frame.Width > 0 && frame.Height > 0)
                     {
                         nextDecodeTime = Time.unscaledTime + DecodeIntervalSeconds;
 
-                        string scanResult = QrCodeScanCommon.TryDecodeMatchingAbxrQr(
-                            BarcodeReader, frame.Pixels, frame.Width, frame.Height);
+                        // Snapshot the frame on the main thread.
+                        // The provider reuses its pixel buffer across frames, so the worker must not read
+                        // frame pixels directly — it could be overwritten mid-decode.
+                        int w = frame.Width;
+                        int h = frame.Height;
+                        int needed = w * h;
+                        if (_decodeScratch == null || _decodeScratch.Length < needed)
+                            _decodeScratch = new Color32[needed];
+                        Array.Copy(frame.Pixels, _decodeScratch, needed);
 
-                        if (!string.IsNullOrEmpty(scanResult))
+                        Color32[] pixels = _decodeScratch;
+                        var reader = BarcodeReader;
+                        _decodeInFlight = true;
+
+                        Task.Run(() =>
                         {
-                            StopScanningInternal(false);
-                            ProcessQrScanResult(scanResult);
-                            yield break;
-                        }
+                            try
+                            {
+                                string r = QrCodeScanCommon.TryDecodeMatchingAbxrQr(reader, pixels, w, h);
+                                if (!string.IsNullOrEmpty(r)) _pendingResult = r;
+                            }
+                            catch (Exception ex)
+                            {
+                                Logcat.Warning("PICO QR background decode error: " + ex.Message);
+                            }
+                            finally
+                            {
+                                _decodeInFlight = false;
+                            }
+                        });
                     }
                 }
 

@@ -16,8 +16,8 @@ namespace AbxrLib.Runtime.Core.QRScanner
     {
         [Header("Preferred Camera Settings")]
         [SerializeField] private XrCameraIdPICO preferredCameraId = XrCameraIdPICO.XR_CAMERA_ID_RGB_LEFT_PICO;
-        [SerializeField] private int preferredWidth = 640;
-        [SerializeField] private int preferredHeight = 480;
+        [SerializeField] private int preferredWidth = 1280;
+        [SerializeField] private int preferredHeight = 960;
         [SerializeField] private XrCameraImageFpsPICO preferredFps = XrCameraImageFpsPICO.XR_CAMERA_IMAGE_FPS_30_PICO;
         [SerializeField] private bool verboseLogging;
 

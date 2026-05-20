@@ -25,32 +25,43 @@ namespace AbxrLib.Runtime.Core.QRScanner
         {
             if (barcodeReader == null || pixels == null || pixels.Length == 0 || width <= 0 || height <= 0) return null;
 
+            // Fast path: single decode
+            Result single = null;
+            try
+            {
+                single = barcodeReader.Decode(pixels, width, height);
+            }
+            catch (Exception ex)
+            {
+                Logcat.Warning("QR decode error: " + ex.Message);
+            }
+            
+            if (single == null) return null; // found nothing
+
+            string text = single.Text?.Trim();
+            if (!string.IsNullOrEmpty(text) && text.StartsWith("ABXR:", StringComparison.OrdinalIgnoreCase))
+                return text;
+
+            // Found a code, but not an ABXR one. There may still be an ABXR code in frame
+            // that single-decode didn't return. Run multi-pass to look for it.
+            // Only bother running multi-pass for QR codes
+            if (single.BarcodeFormat != BarcodeFormat.QR_CODE) return null;
             try
             {
                 Result[] results = barcodeReader.DecodeMultiple(pixels, width, height);
-                if (results != null && results.Length > 0)
+                if (results != null)
                 {
                     foreach (Result result in results)
                     {
-                        string text = result?.Text?.Trim();
-                        if (!string.IsNullOrEmpty(text) && text.StartsWith("ABXR:", StringComparison.OrdinalIgnoreCase)) return text;
+                        text = result?.Text?.Trim();
+                        if (!string.IsNullOrEmpty(text) && text.StartsWith("ABXR:", StringComparison.OrdinalIgnoreCase))
+                            return text;
                     }
                 }
             }
             catch (Exception ex)
             {
                 Logcat.Warning("QR decode-multiple error: " + ex.Message);
-            }
-
-            try
-            {
-                Result result = barcodeReader.Decode(pixels, width, height);
-                string text = result?.Text?.Trim();
-                if (!string.IsNullOrEmpty(text) && text.StartsWith("ABXR:", StringComparison.OrdinalIgnoreCase)) return text;
-            }
-            catch (Exception ex)
-            {
-                Logcat.Warning("QR decode error: " + ex.Message);
             }
 
             return null;
