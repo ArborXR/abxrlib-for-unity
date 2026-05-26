@@ -223,10 +223,10 @@ namespace AbxrLib.Runtime.UI.Examples
         }
         
         /// <summary>
-        /// Example method to test hand tracking button activation programmatically
-        /// Useful for testing without actual hand tracking
+        /// Example method to activate a hand tracking button programmatically
+        /// Useful for demos or scripted activation without actual hand tracking
         /// </summary>
-        public void TestButtonActivation(int buttonIndex)
+        public void ActivateButtonProgrammatically(int buttonIndex)
         {
             if (handTrackingButtons != null && buttonIndex < handTrackingButtons.Length && handTrackingButtons[buttonIndex] != null)
             {

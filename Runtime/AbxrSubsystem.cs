@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Core.QRScanner;
 using AbxrLib.Runtime.Services.AI;
@@ -24,70 +23,6 @@ namespace AbxrLib.Runtime
     {
         // ── Singleton ────────────────────────────────────────────────
         internal static AbxrSubsystem Instance { get; private set; }
-
-        /// <summary>For testing only. Resets static state that survives MonoBehaviour destruction.</summary>
-        internal static void ResetStaticStateForTesting()
-        {
-            _assessmentStarted = false;
-            _nextRuntimeAuthConfigForTesting = null;
-            _simulateQuitInExitAfterAssessmentComplete = false;
-            _unitTestSsoSimulationFromConfigAllowed = false;
-            if (Instance != null) Instance._authService.ResetAuthStartedForTesting();
-            Abxr.ResetQuitClosingEventDefaultsForTesting();
-        }
-
-        /// <summary>For testing only. When true, ExitAfterAssessmentComplete() does not call EditorApplication.isPlaying = false / Application.Quit(); it logs and ends the coroutine so PlayMode tests can complete.</summary>
-        internal static bool SimulateQuitInExitAfterAssessmentComplete
-        {
-            get => _simulateQuitInExitAfterAssessmentComplete;
-            set => _simulateQuitInExitAfterAssessmentComplete = value;
-        }
-        private static bool _simulateQuitInExitAfterAssessmentComplete;
-
-        /// <summary>For testing only. When true (set by PlayMode test base), <see cref="Configuration.unitTestSsoAccessToken"/> may simulate MDM <see cref="GetIsAuthenticated"/>/<see cref="GetAccessToken"/> in Editor/Development builds. Remains false during normal Editor Play Mode and dev players so AbxrLib test-only fields on the config asset do not affect apps.</summary>
-        internal static bool UnitTestSsoSimulationFromConfigAllowed
-        {
-            get => _unitTestSsoSimulationFromConfigAllowed;
-            set => _unitTestSsoSimulationFromConfigAllowed = value;
-        }
-        private static bool _unitTestSsoSimulationFromConfigAllowed;
-
-        /// <summary>For testing only. When set before CreateSubsystem(), applied as overrides when the auth service is created (e.g. enableAutoStartAuthentication = false) so the Configuration asset is not modified.</summary>
-        internal static RuntimeAuthConfig NextRuntimeAuthConfigForTesting
-        {
-            get => _nextRuntimeAuthConfigForTesting;
-            set => _nextRuntimeAuthConfigForTesting = value;
-        }
-        private static RuntimeAuthConfig _nextRuntimeAuthConfigForTesting;
-
-        /// <summary>For testing only. Exposes the auth service so tests can simulate auth success.</summary>
-        internal AbxrAuthService AuthServiceForTesting => _authService;
-
-        /// <summary>For testing only. True when ArborMdmClient is available and connected (e.g. on Android device with MDM). Used to decide expected auth outcome in environment-dependent tests.</summary>
-        internal bool IsArborMdmClientAvailableAndConnected => _arborMdmClient != null && _arborMdmClient.IsConnected();
-
-        /// <summary>For testing only. True when transport selection has finished (REST or ArborInsights). Use before reading DeviceCanSupplyOrgCredentialForAuth so device/ArborInsights state is stable.</summary>
-        internal bool TransportSelectionComplete => _transportSelectionComplete;
-
-        /// <summary>For testing only. True when the device can supply org credentials for auth: MDM connected or ArborInsightsClient transport active (service supplies org). Read after transport selection is complete.</summary>
-        internal bool DeviceCanSupplyOrgCredentialForAuth => IsArborMdmClientAvailableAndConnected || IsUsingArborInsightsTransport();
-
-        /// <summary>For testing only. Exposes the data service so tests can inspect pending events/logs/telemetry.</summary>
-        internal AbxrDataService DataServiceForTesting => _dataService;
-
-        /// <summary>For testing only. REST transport when active; null when using ArborInsightsClient. Use for GetPending*ForTesting in PlayMode.</summary>
-        internal AbxrTransportRest RestTransportForTesting => _transport as AbxrTransportRest;
-
-        /// <summary>For testing only. Current transport (REST or ArborInsights). Use to check IsServiceTransport and call GetPending*ForTesting on any transport.</summary>
-        internal IAbxrTransport GetTransportForTesting() => _transport;
-
-        /// <summary>For testing only. Pending events from current transport; empty list when transport is null or service (device).</summary>
-        internal List<EventPayload> GetPendingEventsForTesting() => _transport?.GetPendingEventsForTesting() ?? new List<EventPayload>();
-        /// <summary>For testing only. Pending logs from current transport; empty when null or service.</summary>
-        internal List<LogPayload> GetPendingLogsForTesting() => _transport?.GetPendingLogsForTesting() ?? new List<LogPayload>();
-        /// <summary>For testing only. Pending telemetry from current transport; empty when null or service.</summary>
-        internal List<TelemetryPayload> GetPendingTelemetryForTesting() => _transport?.GetPendingTelemetryForTesting() ?? new List<TelemetryPayload>();
-
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
         private AbxrDataService _dataService;
@@ -179,11 +114,6 @@ namespace AbxrLib.Runtime
                 _arborInsightsClient.Start();
 #endif
             _authService = new AbxrAuthService(this, _arborMdmClient);
-            if (_nextRuntimeAuthConfigForTesting != null)
-            {
-                _authService.ApplyRuntimeAuthOverridesForTesting(_nextRuntimeAuthConfigForTesting);
-                _nextRuntimeAuthConfigForTesting = null;
-            }
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
             _dataService = new AbxrDataService(this, () => _transport);
@@ -369,16 +299,6 @@ namespace AbxrLib.Runtime
 #endif
         }
 
-        /// <summary>For testing only. True when current transport is ArborInsightsClient (Android only).</summary>
-        private bool IsUsingArborInsightsTransport()
-        {
-#if UNITY_ANDROID && !UNITY_EDITOR
-            return _transport is AbxrTransportArborInsights;
-#else
-            return false;
-#endif
-        }
-
         private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds)
         {
             while (!_transportSelectionComplete) yield return AuthStartPollWait;
@@ -529,44 +449,6 @@ namespace AbxrLib.Runtime
 			return false;
 #endif
 		}
-
-		/// <summary>
-		/// For testing only. Same validation and handoff payload as LaunchAppWithAuthHandoff but does not start an app;
-		/// injects the handoff via SetAuthHandoffForTesting so the test can emulate "App 2" receiving it.
-		/// Use when testing flows that would call LaunchAppWithAuthHandoff in production.
-		/// </summary>
-		/// <param name="packageName">Target package name (validated like production; used only for consistency).</param>
-		/// <param name="includeReturnToPackage">If true, handoff includes ReturnToPackage so the receiving app can return the session.</param>
-		/// <param name="useBase64Encoding">If true, inject the handoff as base64-encoded JSON so NormalizeHandoffPayload is exercised.</param>
-		/// <returns>True if authenticated and handoff was injected, false otherwise.</returns>
-		internal bool LaunchAppWithAuthHandoffForTest(string packageName, bool includeReturnToPackage = false, bool useBase64Encoding = false)
-		{
-			if (string.IsNullOrEmpty(packageName))
-			{
-				Logcat.Warning("LaunchAppWithAuthHandoffForTest: packageName is empty");
-				return false;
-			}
-			if (!(_authService?.Authenticated ?? false))
-			{
-				Logcat.Warning("LaunchAppWithAuthHandoffForTest: not authenticated");
-				return false;
-			}
-			string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
-			if (handoffJson == null)
-			{
-				Logcat.Warning("LaunchAppWithAuthHandoffForTest: failed to build handoff payload");
-				return false;
-			}
-			string payload = useBase64Encoding
-				? Convert.ToBase64String(Encoding.UTF8.GetBytes(handoffJson))
-				: handoffJson;
-			AbxrAuthService.SetAuthHandoffForTesting(payload);
-			Logcat.Info($"LaunchAppWithAuthHandoffForTest: injected handoff for '{packageName}'" + (useBase64Encoding ? " (base64)" : ""));
-			return true;
-		}
-
-		/// <summary>For testing only. Returns the handoff JSON that would be sent by LaunchAppWithAuthHandoff (e.g. so tests can simulate App 2 returning the session to App 1).</summary>
-		internal string GetHandoffJsonForTesting(bool includeReturnToPackage = false) => _authService?.GetHandoffJson(includeReturnToPackage);
 
 		/// <summary>Returns the first non-empty value for any of the given keys (case-sensitive).</summary>
 		private static string GetFirstNonEmpty(Dictionary<string, string> dict, params string[] keys)
@@ -946,39 +828,21 @@ internal void StartNewSession()
 		/// </summary>
 		private IEnumerator ExitAfterAssessmentComplete()
 		{
-			string returnToPackage = _authService?.GetAndClearReturnToPackage();
-			if (!string.IsNullOrEmpty(returnToPackage))
-			{
-				// In tests (Editor or Test Runner Player), "return to launcher" is simulated: inject handoff so the next subsystem can adopt the session. Do not start an Activity (e.g. com.UnityTestRunner.UnityTestRunner has no launchable Activity on device).
-				bool useInject = _simulateQuitInExitAfterAssessmentComplete;
-#if !(UNITY_ANDROID && !UNITY_EDITOR)
-				useInject = true; // Editor: always inject
-#endif
-				if (useInject)
-				{
-					if (LaunchAppWithAuthHandoffForTest(returnToPackage, includeReturnToPackage: false))
-						Logcat.Info($"Injected handoff for return-to launcher '{returnToPackage}' (Editor/test).");
-					else
-						Logcat.Warning($"Failed to inject handoff for return target '{returnToPackage}'.");
-				}
+            string returnToPackage = _authService?.GetAndClearReturnToPackage();
+            if (!string.IsNullOrEmpty(returnToPackage))
+            {
 #if UNITY_ANDROID && !UNITY_EDITOR
-				else
-				{
-					if (LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false))
-						Logcat.Info($"Launched '{returnToPackage}' with auth handoff (return to launcher)");
-					else
-						Logcat.Warning($"Failed to launch return target '{returnToPackage}' with auth handoff");
-				}
+                if (LaunchAppWithAuthHandoff(returnToPackage, includeReturnToPackage: false))
+                    Logcat.Info($"Launched '{returnToPackage}' with auth handoff (return to launcher)");
+                else
+                    Logcat.Warning($"Failed to launch return target '{returnToPackage}' with auth handoff");
+#else
+                Logcat.Warning($"Return target '{returnToPackage}' requested, but auth handoff launch is only supported on Android.");
 #endif
-			}
+            }
 			SendAll();
 			Logcat.Info("Assessment complete with auth handoff - returning to launcher in 2 seconds");
 			yield return new WaitForSeconds(2f);
-			if (_simulateQuitInExitAfterAssessmentComplete)
-			{
-				Logcat.Info("(Test) Simulated app quit - ExitAfterAssessmentComplete would have exited.");
-				yield break;
-			}
 	#if UNITY_EDITOR
 			UnityEditor.EditorApplication.isPlaying = false;
 	#else
@@ -1131,21 +995,11 @@ internal void StartNewSession()
 		
 		internal bool GetIsAuthenticated()
 		{
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-			var cfg = Configuration.Instance;
-			if (cfg != null && cfg.unitTestConfigEnabled && !string.IsNullOrWhiteSpace(cfg.unitTestSsoAccessToken) && _unitTestSsoSimulationFromConfigAllowed)
-				return true;
-#endif
 			return _arborMdmClient != null && _arborMdmClient.IsConnected() && _arborMdmClient.ServiceWrapper != null && _arborMdmClient.ServiceWrapper.GetIsAuthenticated();
 		}
 
 		internal string GetAccessToken()
 		{
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-			var cfg = Configuration.Instance;
-			if (cfg != null && cfg.unitTestConfigEnabled && !string.IsNullOrWhiteSpace(cfg.unitTestSsoAccessToken) && _unitTestSsoSimulationFromConfigAllowed)
-				return cfg.unitTestSsoAccessToken;
-#endif
 			return _arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetAccessToken() : "";
 		}
 		

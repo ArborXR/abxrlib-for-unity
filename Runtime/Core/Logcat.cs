@@ -16,7 +16,7 @@ namespace AbxrLib.Runtime.Core
             return $"[AbxrLib] {message} (Line: {lineNumber}, {className}.{memberName})";
         }
 
-        /// <summary>Sends to Android logcat when on Android; never throws. Falls back to Unity log if JNI fails (e.g. Test Runner Player).</summary>
+        /// <summary>Sends to Android logcat when on Android; never throws. Falls back to Unity log if JNI fails.</summary>
         private static void LogToAndroid(string logLevel, string formatted, string fallbackMessage)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -37,7 +37,7 @@ namespace AbxrLib.Runtime.Core
             string formatted = Format(message, lineNumber, memberName, filePath);
             LogToAndroid(logLevel, formatted, message);
 #if !UNITY_EDITOR
-            // In Player (including Test Runner Player), always emit to Unity log so Editor's Player log window shows output
+            // In Player, always emit to Unity log so Editor's Player log window shows output
             switch (logLevel)
             {
                 case "e":
@@ -74,7 +74,7 @@ namespace AbxrLib.Runtime.Core
             Log("d", message, lineNumber, memberName, filePath);
         }
 
-        /// <summary>Emitted in Editor (including Test Runner), development builds, or when ENABLE_LOGS/DEVELOPMENT_BUILD is defined; no-op in release.</summary>
+        /// <summary>Emitted in the Editor, development builds, or when ENABLE_LOGS/DEVELOPMENT_BUILD is defined; no-op in release.</summary>
         public static void Warning(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string memberName = null, [CallerFilePath] string filePath = null)
         {
 #if !UNITY_EDITOR && !DEVELOPMENT_BUILD

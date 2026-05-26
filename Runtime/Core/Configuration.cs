@@ -113,23 +113,11 @@ namespace AbxrLib.Runtime.Core
         [HideInInspector]
         public int maxDictionarySize = 50;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        [HideInInspector] public bool unitTestConfigEnabled = false;
-        [HideInInspector] public string unitTestAuthPin = "";
-        [HideInInspector] public string unitTestAuthBadPin = "";
-        [HideInInspector] public string unitTestAuthText = "";
-        [HideInInspector] public string unitTestAuthEmail = "";
-        [HideInInspector] public string unitTestAuthEmailDomain = "";
-        [HideInInspector] public string unitTestDeviceId = "";
-        [HideInInspector] public string unitTestFingerprint = "";
-        /// <summary>Fake MDM SSO access token (JWT) for PlayMode tests of the MDM identity skip path. Requires <see cref="unitTestConfigEnabled"/>.</summary>
-        [HideInInspector] public string unitTestSsoAccessToken = "";
-#endif
 
-        /// <summary>Edit-mode and unit tests: validates this asset in memory (Inspector / EditMode tests).</summary>
+        /// <summary>Validates this asset in memory for the Inspector and editor tooling.</summary>
         public bool IsValid() => Configuration.ValidateAppConfig(this);
 
-        /// <summary>Clamps numeric fields on this serialized asset (Editor authoring / EditMode tests).</summary>
+        /// <summary>Clamps numeric fields on this serialized asset for editor authoring.</summary>
         public void ClampNumericSettings()
         {
             ClampInt(nameof(sendRetriesOnFailure), ref sendRetriesOnFailure, 0, 10, 3);

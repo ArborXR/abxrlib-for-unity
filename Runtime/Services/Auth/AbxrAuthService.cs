@@ -44,7 +44,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
-        /// <summary>Runtime auth values: loaded from Configuration then updated by GetArborData, GetQueryData, intent, SetOrgId/SetAuthSecret. Holds authMechanism (from GET config when not already set, or set by tests); copied to _authMechanism so we can mutate prompt for user input.</summary>
+        /// <summary>Runtime auth values loaded from Configuration and updated by GetArborData, GetQueryData, intent, and SetOrgId/SetAuthSecret.</summary>
         private readonly RuntimeAuthConfig _runtimeAuth = new RuntimeAuthConfig();
         /// <summary>Working copy of _runtimeAuth.authMechanism for this session; prompt is temporarily set to user input in KeyboardAuthenticate. All code uses this.</summary>
         private AuthMechanism _authMechanism;
@@ -60,10 +60,8 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _attemptActive;
         internal bool IsAuthenticationAttemptActive => _attemptActive;
         private bool _isAuthStarted;
-        /// <summary>True after <see cref="Authenticate"/> has scheduled <c>AuthenticateCoroutine</c> at least once this process; never cleared in production. Use to gate one-time configuration before auth.</summary>
+        /// <summary>True after <see cref="Authenticate"/> has scheduled <c>AuthenticateCoroutine</c> at least once this process. Use to gate one-time configuration before auth.</summary>
         internal bool HasAuthenticationStarted => _isAuthStarted;
-        /// <summary>Testing only. Clears <see cref="HasAuthenticationStarted"/> so tests can run multiple auth scenarios in one session.</summary>
-        internal void ResetAuthStartedForTesting() => _isAuthStarted = false;
         private Coroutine _reAuthCoroutine;
         private Coroutine _retryCoroutine;
         private Dictionary<string, string> _userData;
@@ -107,9 +105,6 @@ namespace AbxrLib.Runtime.Services.Auth
         /// (the service handles token refresh). Data/events/telemetry/storage routing is via the current transport.
         /// </summary>
         public bool UsingArborInsightsClientForData() => _usedArborInsightsClientForSession;
-
-        /// <summary>When true, Authenticate() skips LoadRuntimeAuthFromConfig() and uses the already-set _runtimeAuth (set via SetRuntimeAuthForTesting). Testing only.</summary>
-        private bool _useInjectedRuntimeAuthForTesting;
 
         public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient ArborMdmClient)
         {
@@ -172,9 +167,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 ClearAuthenticationState();
 
             // Load runtime auth from Configuration, then apply GetArborData/GetQueryData/intent so runtime config reflects all sources.
-            // When tests inject runtime auth, skip loading from Configuration so the injected values are used.
-            if (!_useInjectedRuntimeAuthForTesting)
-                LoadRuntimeAuthFromConfig();
+            LoadRuntimeAuthFromConfig();
 
             // GetArborData() no-ops when ArborMdmClient is not available; when available it applies device/org from MDM.
             GetArborData();
@@ -218,10 +211,10 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             _runtimeAuth.CopyAuthFieldsTo(_payload);
 
-            // Auth handoff (intent / CLI / test inject): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
+            // Auth handoff (intent / CLI): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
             CheckAuthHandoff();
 
-            // Use runtime auth mechanism for the device authentication request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
+            // Use the runtime auth mechanism for the device authentication request.
             _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
 
             _isAuthStarted = true;
@@ -495,7 +488,7 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
-                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret). Use _runtimeAuth so injected test config and runtime overrides are respected.
+                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret). Use _runtimeAuth so runtime overrides are respected.
                 if (_runtimeAuth.useAppTokens)
                 {
                     _payload.appId = null;
@@ -772,17 +765,12 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (config != null)
                     {
                         Configuration.Instance.ApplyConfigPayload(config);
-                        // Use GET config only when _runtimeAuth.authMechanism not already set (e.g. by tests). Apply learner launcher only when we just filled from config.
-                        bool filledFromConfig = _runtimeAuth.authMechanism == null || string.IsNullOrEmpty(_runtimeAuth.authMechanism.type);
-                        if (filledFromConfig)
+                        _runtimeAuth.authMechanism = config.authMechanism ?? new AuthMechanism();
+                        if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.inputSource))
+                            _runtimeAuth.authMechanism.inputSource = "user";
+                        if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_runtimeAuth.authMechanism.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
                         {
-                            _runtimeAuth.authMechanism = config.authMechanism ?? new AuthMechanism();
-                            if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.inputSource))
-                                _runtimeAuth.authMechanism.inputSource = "user";
-                            if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_runtimeAuth.authMechanism.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
-                            {
-                                _runtimeAuth.authMechanism.type = "assessmentPin";
-                            }
+                            _runtimeAuth.authMechanism.type = "assessmentPin";
                         }
                         
                         _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
@@ -902,8 +890,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private void ApplyNoneUserAuthMechanismForSession()
         {
             _authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
-            if (!_useInjectedRuntimeAuthForTesting)
-                _runtimeAuth.authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
+            _runtimeAuth.authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
         }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -939,25 +926,6 @@ namespace AbxrLib.Runtime.Services.Auth
             return s.Trim();
         }
 #endif
-
-        /// <summary>For testing only. Applies the given auth response and invokes OnSucceeded so subsystem and Abxr.OnAuthCompleted behave as after a real auth.</summary>
-        internal void SimulateAuthSuccess(AuthResponse response)
-        {
-            if (response == null) return;
-            Authenticated = true;
-            ResponseData = response;
-            if (ResponseData.Modules?.Count > 1)
-                ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
-            // Keep ResponseData.UserId for read-only use (GetAnonymizedUserId). Sync UserData into _userData.
-            ResponseData.UserData ??= new Dictionary<string, string>();
-            bool ssoUserDataChanged = MergeSsoAccessTokenIntoUserData(ResponseData.UserData);
-            if (ResponseData.UserData != null)
-                _userData = new Dictionary<string, string>(ResponseData.UserData);
-            OnSucceeded?.Invoke();
-            if (ssoUserDataChanged)
-                SetUserData(null, null);
-        }
-
         private void ClearAuthenticationState()
         {
             Authenticated = false;
@@ -965,9 +933,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _tokenExpiry = DateTime.MinValue;
             _payload.sessionId = null;
             _authMechanism = new AuthMechanism();
-            // Preserve test-injected authMechanism so GetConfigurationCoroutine does not overwrite with server config.
-            if (!_useInjectedRuntimeAuthForTesting)
-                _runtimeAuth.authMechanism = null;
+            _runtimeAuth.authMechanism = null;
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
             _returnToPackage = null;
@@ -995,19 +961,11 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>
         /// Check for authentication handoff from external launcher apps
         /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params.
-        /// For TestRunner: tests can inject payload via SetAuthHandoffForTesting so the flow can be asserted without a real intent.
         /// Invalid payload: logs and returns (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
         /// </summary>
         private void CheckAuthHandoff()
         {
-            string handoffPayload = null;
-            if (!string.IsNullOrEmpty(_authHandoffForTesting))
-            {
-                handoffPayload = _authHandoffForTesting;
-                _authHandoffForTesting = null;
-            }
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
+            string handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
             if (string.IsNullOrEmpty(handoffPayload))
                 handoffPayload = Utils.GetCommandLineArg("auth_handoff");
             if (string.IsNullOrEmpty(handoffPayload))
@@ -1053,20 +1011,6 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             return null;
         }
-
-        /// <summary>Testing only. Injects the next auth_handoff payload so the next Authenticate() sees it (e.g. to simulate App 2 receiving handoff from App 1). Cleared after one use.</summary>
-        internal static void SetAuthHandoffForTesting(string handoffJson)
-        {
-            _authHandoffForTesting = handoffJson;
-        }
-
-        /// <summary>Testing only. Clears any injected auth_handoff payload.</summary>
-        internal static void ClearAuthHandoffForTesting()
-        {
-            _authHandoffForTesting = null;
-        }
-
-        private static string _authHandoffForTesting;
 
         private static bool ShouldRetry(UnityWebRequest request)
         {
@@ -1161,7 +1105,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _userData = merged;
 
             // Reauthenticate to sync with server. Do not fire OnSucceeded/OnAuthCompleted (users think they are just updating user reference).
-            // Completion is reported via OnUserDataSyncCompleted only; tests and optional app code can subscribe there.
+            // Completion is reported via OnUserDataSyncCompleted only; optional app code can subscribe there.
             _attemptActive = true;
             _runner.StartCoroutine(CoSetUserDataReAuth());
         }
@@ -1505,83 +1449,28 @@ namespace AbxrLib.Runtime.Services.Auth
             return true;
         }
 
-        // ── Testing only (For TestRunner) ───────────────────────────────
-
-        /// <summary>Testing only. Overwrites runtime auth with the given config so Authenticate() uses it instead of loading from Configuration. ApplyAbxrOverridesToRuntimeAuth still runs and applies Abxr.SetOrgId/SetAuthSecret/SetDeviceId. Only overwrites enableAutoStartAuthentication when config has it set (HasValue). Mirrors ExtractConfigData: when buildType is "production" (not production_custom), orgToken/orgId/authSecret are not accepted and are cleared.</summary>
-        internal void SetRuntimeAuthForTesting(RuntimeAuthConfig config)
-        {
-            if (config == null) return;
-            _runtimeAuth.useAppTokens = config.useAppTokens;
-            _runtimeAuth.appToken = config.appToken;
-            _runtimeAuth.orgToken = config.orgToken;
-            _runtimeAuth.appId = config.appId;
-            _runtimeAuth.orgId = config.orgId;
-            _runtimeAuth.authSecret = config.authSecret;
-            _runtimeAuth.buildType = config.buildType ?? "production";
-            if (config.enableAutoStartAuthentication.HasValue)
-                _runtimeAuth.enableAutoStartAuthentication = config.enableAutoStartAuthentication;
-            if (config.enableReturnTo.HasValue)
-                _runtimeAuth.enableReturnTo = config.enableReturnTo;
-            if (config.enableAutoStartModules.HasValue)
-                _runtimeAuth.enableAutoStartModules = config.enableAutoStartModules;
-            if (config.enableAutoAdvanceModules.HasValue)
-                _runtimeAuth.enableAutoAdvanceModules = config.enableAutoAdvanceModules;
-            _runtimeAuth.authMechanism = config.authMechanism;
-            // Production (non-custom) does not accept org credentials from config; they must come from device/MDM at runtime (same as ExtractConfigData).
-            if (_runtimeAuth.buildType == "production")
-            {
-                _runtimeAuth.orgToken = null;
-                _runtimeAuth.orgId = null;
-                _runtimeAuth.authSecret = null;
-            }
-            _runtimeAuth.CopyAuthFieldsTo(_payload);
-            _useInjectedRuntimeAuthForTesting = true;
-        }
-
-        /// <summary>Testing only. Applies only the fields set on overrides (e.g. enableAutoStartAuthentication) without replacing auth credentials. Used when a pending config is applied at subsystem creation so the Configuration asset is not modified.</summary>
-        internal void ApplyRuntimeAuthOverridesForTesting(RuntimeAuthConfig overrides)
-        {
-            if (overrides == null) return;
-            if (overrides.enableAutoStartAuthentication.HasValue)
-                _runtimeAuth.enableAutoStartAuthentication = overrides.enableAutoStartAuthentication;
-            if (overrides.enableReturnTo.HasValue)
-                _runtimeAuth.enableReturnTo = overrides.enableReturnTo;
-            if (overrides.enableAutoStartModules.HasValue)
-                _runtimeAuth.enableAutoStartModules = overrides.enableAutoStartModules;
-            if (overrides.enableAutoAdvanceModules.HasValue)
-                _runtimeAuth.enableAutoAdvanceModules = overrides.enableAutoAdvanceModules;
-            if (overrides.authMechanism != null)
-                _runtimeAuth.authMechanism = overrides.authMechanism;
-        }
-
-        /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
+        /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration in GetConfigData).</summary>
         internal bool GetEffectiveEnableAutoStartModules()
         {
             return _runtimeAuth.enableAutoStartModules ?? Configuration.Instance?.enableAutoStartModules ?? true;
         }
 
-        /// <summary>Returns enableAutoAdvanceModules from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
+        /// <summary>Returns enableAutoAdvanceModules from runtime auth (loaded from Configuration in GetConfigData).</summary>
         internal bool GetEffectiveEnableAutoAdvanceModules()
         {
             return _runtimeAuth.enableAutoAdvanceModules ?? Configuration.Instance?.enableAutoAdvanceModules ?? true;
         }
 
-        /// <summary>Returns enableReturnTo from runtime auth (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting/ApplyRuntimeAuthOverridesForTesting).</summary>
+        /// <summary>Returns enableReturnTo from runtime auth (loaded from Configuration in GetConfigData).</summary>
         internal bool GetEffectiveEnableReturnTo()
         {
             return _runtimeAuth.enableReturnTo ?? Configuration.Instance?.enableReturnTo ?? true;
         }
 
-        /// <summary>Returns enableAutoStartAuthentication from the runtime auth config (loaded from Configuration in GetConfigData, or set via SetRuntimeAuthForTesting).</summary>
+        /// <summary>Returns enableAutoStartAuthentication from the runtime auth config (loaded from Configuration in GetConfigData).</summary>
         internal bool GetEnableAutoStartAuthentication()
         {
             return _runtimeAuth.enableAutoStartAuthentication ?? true;
-        }
-
-        /// <summary>Testing only. Clears the injected runtime auth flag so the next Authenticate() loads from Configuration again.</summary>
-        internal void ClearRuntimeAuthInjectionForTesting()
-        {
-            _useInjectedRuntimeAuthForTesting = false;
         }
 
         // ── Runtime auth overrides (Abxr.SetOrgId / SetAuthSecret / SetDeviceId) ─────
@@ -1607,7 +1496,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 _runtimeAuth.deviceId = value ?? "";
         }
 
-        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters (or from MDM via GetDeviceTags) are used. Only overwrites when the getter returns a non-empty value so we do not wipe config/injected credentials with empty (e.g. Editor with no MDM).</summary>
+        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters (or from MDM via GetDeviceTags) are used. Only overwrites when the getter returns a non-empty value so we do not wipe configured credentials with empty values (e.g. Editor with no MDM).</summary>
         private void ApplyAbxrOverridesToRuntimeAuth()
         {
             if (_runtimeAuth == null) return;

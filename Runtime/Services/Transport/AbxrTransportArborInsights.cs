@@ -230,10 +230,6 @@ namespace AbxrLib.Runtime.Services.Transport
             // No-op; service session is cleared on Unbind.
         }
 
-        public List<EventPayload> GetPendingEventsForTesting() => new List<EventPayload>();
-        public List<LogPayload> GetPendingLogsForTesting() => new List<LogPayload>();
-        public List<TelemetryPayload> GetPendingTelemetryForTesting() => new List<TelemetryPayload>();
-
         /// <summary>Parses auth response and returns true if valid success (same rule as auth service: token/modules or appId-only for second-stage).</summary>
         private static bool ParseAndCheckValidSuccess(string responseJson)
         {

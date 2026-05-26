@@ -838,19 +838,6 @@ public static partial class Abxr
 		AbxrSubsystem.Instance?.NotifyRestUrlChanged();
 		return true;
 	}
-
-	/// <summary>For testing only. Restores <see cref="OnQuitAssessmentStatus"/> and related quit-closing defaults.</summary>
-	internal static void ResetQuitClosingEventDefaultsForTesting()
-	{
-		OnQuitAssessmentStatus = EventStatus.Fail;
-		OnQuitAssessmentScore = 0;
-		OnQuitObjectiveStatus = EventStatus.Incomplete;
-		OnQuitObjectiveScore = 0;
-		OnQuitInteractionType = InteractionType.Null;
-		OnQuitInteractionResult = InteractionResult.Neutral;
-		OnQuitInteractionResponse = "";
-		OnQuitInteractionScore = null;
-	}
 	
 	private static AbxrSubsystem X
 	{

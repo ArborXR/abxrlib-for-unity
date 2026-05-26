@@ -56,7 +56,7 @@ namespace AbxrLib.Runtime.Types
         /// <summary>Device tags from MDM when connected; otherwise null/empty.</summary>
         public string[] tags;
 
-        /// <summary>Auth mechanism (type, prompt, domain). When null or empty type, filled from GET config when received; when set (e.g. by tests) before config is fetched, that value is used and not overwritten. Learner launcher is applied only when we just filled from config.</summary>
+        /// <summary>Auth mechanism (type, prompt, domain). When null or empty type, filled from GET config when received.</summary>
         public AuthMechanism authMechanism;
 
         /// <summary>
@@ -237,7 +237,7 @@ namespace AbxrLib.Runtime.Types
 
     /// <summary>
     /// GET /v1/storage/config response shape. The API may include any keys; Newtonsoft ignores JSON properties that do not map to members.
-    /// <see cref="AbxrLib.Runtime.Core.Configuration.ApplyConfigPayload"/> merges only a subset; credentials, token mode, build type, module timing/sequence, auth UI, AbxrTarget defaults, learner launcher, ArborInsightsClient/ArborMdmClient (build-time from Unity asset), and unit-test fields are deserialized but not applied.
+    /// <see cref="AbxrLib.Runtime.Core.Configuration.ApplyConfigPayload"/> merges only a subset; credentials, token mode, build type, module timing/sequence, auth UI, AbxrTarget defaults, learner launcher, and ArborInsightsClient/ArborMdmClient settings remain build-time values from the Unity asset.
     /// </summary>
     [Serializable]
     public class ConfigPayload
@@ -298,14 +298,6 @@ namespace AbxrLib.Runtime.Types
         public bool? defaultAutoCreateTriggerCollider;
         public bool? enableAutoStartAuthentication;
         public bool? enableLearnerLauncherMode;
-        public bool? unitTestConfigEnabled;
-        public string unitTestAuthPin;
-        public string unitTestAuthBadPin;
-        public string unitTestAuthText;
-        public string unitTestAuthEmail;
-        public string unitTestAuthEmailDomain;
-        public string unitTestDeviceId;
-        public string unitTestFingerprint;
     }
 
     // ── Data payloads for /v1/collect/data ────────────────────────────

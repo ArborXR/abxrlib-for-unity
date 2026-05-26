@@ -3,13 +3,10 @@
  * 
  * AbxrLib for Unity - Internal Visibility Configuration
  * 
- * This file allows the Editor assembly to access internal members of the Runtime assembly.
- * This is necessary for build-time processing (e.g., Android manifest post-processing)
- * while keeping these APIs hidden from external user code.
+ * This file allows the Editor assembly to access internal members of the Runtime assembly
+ * for build-time processing while keeping these APIs hidden from external user code.
  */
 
 using System.Runtime.CompilerServices;
 
 [assembly: InternalsVisibleTo("AbxrLib.Editor")]
-[assembly: InternalsVisibleTo("AbxrLib.Tests.EditMode")]
-[assembly: InternalsVisibleTo("AbxrLib.Tests.PlayMode")]

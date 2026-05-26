@@ -55,7 +55,7 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
-        /// <summary>Used by <see cref="AppConfig.IsValid"/> (EditMode tests / Inspector).</summary>
+        /// <summary>Used by <see cref="AppConfig.IsValid"/> and the Inspector.</summary>
         internal static bool ValidateAppConfig(AppConfig a)
         {
             if (a == null) return false;
@@ -148,17 +148,6 @@ namespace AbxrLib.Runtime.Core
         public bool enableSceneEvents = true;
         public int maxDictionarySize = 50;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        public bool unitTestConfigEnabled = false;
-        public string unitTestAuthPin = "";
-        public string unitTestAuthBadPin = "";
-        public string unitTestAuthText = "";
-        public string unitTestAuthEmail = "";
-        public string unitTestAuthEmailDomain = "";
-        public string unitTestDeviceId = "";
-        public string unitTestFingerprint = "";
-        public string unitTestSsoAccessToken = "";
-#endif
 
         /// <summary>Validates runtime settings (auth + URL + numeric clamp).</summary>
         public bool IsValid()
@@ -263,17 +252,6 @@ namespace AbxrLib.Runtime.Core
             c.enableAutomaticTelemetry = a.enableAutomaticTelemetry;
             c.enableSceneEvents = a.enableSceneEvents;
             c.maxDictionarySize = a.maxDictionarySize;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            c.unitTestConfigEnabled = a.unitTestConfigEnabled;
-            c.unitTestAuthPin = a.unitTestAuthPin;
-            c.unitTestAuthBadPin = a.unitTestAuthBadPin;
-            c.unitTestAuthText = a.unitTestAuthText;
-            c.unitTestAuthEmail = a.unitTestAuthEmail;
-            c.unitTestAuthEmailDomain = a.unitTestAuthEmailDomain;
-            c.unitTestDeviceId = a.unitTestDeviceId;
-            c.unitTestFingerprint = a.unitTestFingerprint;
-            c.unitTestSsoAccessToken = a.unitTestSsoAccessToken;
-#endif
         }
 
         /// <summary>Merges GET /v1/storage/config into the runtime instance only. Not applied: credentials, token mode, build type, module timing, auth UI, prefabs, ArborInsightsClient/ArborMdmClient (build-time from AppConfig only).</summary>
@@ -325,14 +303,6 @@ namespace AbxrLib.Runtime.Core
                 CopyFromAppConfigInto(_instance, _authoringAsset);
                 _instance.ClampNumericSettingsCore();
             }
-        }
-
-        internal static void ResetForTesting()
-        {
-            _instance = null;
-            _authoringAsset = null;
-            _validatedOnce = false;
-            _lastValidationErrorMessage = null;
         }
     }
 }
