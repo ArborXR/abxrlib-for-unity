@@ -267,6 +267,12 @@ public static partial class Abxr
 	}
 	
 	/// <summary>
+	/// Manually initializes AbxrLib when Enable Automatic Initialization is off in configuration.
+	/// Safe to call more than once; subsequent calls are ignored after the SDK is initialized.
+	/// </summary>
+	public static void Initialize() => AbxrLib.Runtime.Core.Initialize.CreateSubsystemIfNeeded();
+
+	/// <summary>
 	/// Manually start the authentication process
 	/// Use this when Enable Auto Start Authentication is off in configuration
 	/// or when you want to trigger authentication at a specific time in your app

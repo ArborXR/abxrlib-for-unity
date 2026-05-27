@@ -7,10 +7,18 @@ namespace AbxrLib.Runtime.Core
 {
     public static class Initialize
     {
-
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void OnBeforeSceneLoad()
         {
+            if (!Configuration.AutomaticInitializationEnabled) return;
+
+            CreateSubsystemIfNeeded();
+        }
+
+        internal static AbxrSubsystem CreateSubsystemIfNeeded()
+        {
+            if (AbxrSubsystem.Instance != null) return AbxrSubsystem.Instance;
+
             ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler");
             ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -20,9 +28,8 @@ namespace AbxrLib.Runtime.Core
             ObjectAttacher.Attach<QRCodeReaderMeta>("QRCodeReaderMeta");
 #endif
 #endif
-            if (AbxrSubsystem.Instance != null) return;
             var go = new GameObject("[AbxrLib]");
-            go.AddComponent<AbxrSubsystem>();
+            return go.AddComponent<AbxrSubsystem>();
         }
     }
 }

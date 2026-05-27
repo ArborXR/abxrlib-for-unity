@@ -238,6 +238,43 @@ namespace AbxrLib.Runtime
             Configuration.ClearRuntimeConfig();
         }
         
+#if UNITY_INCLUDE_TESTS
+        /// <summary>
+        /// This deterministic cleanup runs immediately before the test-owned subsystem GameObject is destroyed.
+        /// It is not a standalone reset path;
+        /// package integration tests isolate runtime state by destroying and recreating the subsystem for each test.
+        /// </summary>
+        internal void CleanupBeforeDestroyForTest()
+        {
+            if (_delayedStartCoroutine != null)
+            {
+                StopCoroutine(_delayedStartCoroutine);
+                _delayedStartCoroutine = null;
+            }
+
+            if (_exitAfterAssessmentCoroutine != null)
+            {
+                StopCoroutine(_exitAfterAssessmentCoroutine);
+                _exitAfterAssessmentCoroutine = null;
+            }
+
+            _transport?.ClearAllPending();
+
+            _superMetaData.Clear();
+            PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
+            PlayerPrefs.Save();
+
+            _assessmentStarted = false;
+            _currentModuleIndex = 0;
+            _appOnInputRequested = null;
+            AIProxyApi.ClearPastMessages();
+
+            _authService?.ResetForTest();
+
+            if (Instance == this) Instance = null;
+        }
+#endif
+        
         private void OnApplicationFocus(bool hasFocus)
         {
 	        if (!hasFocus) SendAll();

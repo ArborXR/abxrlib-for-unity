@@ -37,18 +37,28 @@ namespace AbxrLib.Runtime.Core
             }
         }
 
-        private static void EnsureLoaded()
+        internal static bool AutomaticInitializationEnabled
         {
-            if (_instance != null) return;
+            get
+            {
+                EnsureLoaded(validate: false);
+                return _instance.enableAutomaticInitialization;
+            }
+        }
 
-            var asset = Resources.Load<AppConfig>(CONFIG_NAME);
-            if (!asset)
-                asset = ScriptableObject.CreateInstance<AppConfig>();
+        private static void EnsureLoaded(bool validate = true)
+        {
+            if (_instance == null)
+            {
+                var asset = Resources.Load<AppConfig>(CONFIG_NAME);
+                if (!asset)
+                    asset = ScriptableObject.CreateInstance<AppConfig>();
 
-            _authoringAsset = asset;
-            _instance = CopyFromAppConfig(asset);
+                _authoringAsset = asset;
+                _instance = CopyFromAppConfig(asset);
+            }
 
-            if (!_validatedOnce)
+            if (validate && !_validatedOnce)
             {
                 _instance.IsValid();
                 _validatedOnce = true;
@@ -112,6 +122,7 @@ namespace AbxrLib.Runtime.Core
         public string appToken;
         public string orgToken;
         public string restUrl = "https://lib-backend.xrdm.app/";
+        public bool enableAutomaticInitialization = true;
         public bool authUIFollowCamera = true;
         public bool enableDirectTouchInteraction = true;
         public float authUIDistanceFromCamera = 1.0f;
@@ -217,6 +228,7 @@ namespace AbxrLib.Runtime.Core
             c.appToken = a.appToken;
             c.orgToken = a.orgToken;
             c.restUrl = a.restUrl;
+            c.enableAutomaticInitialization = a.enableAutomaticInitialization;
             c.authUIFollowCamera = a.authUIFollowCamera;
             c.enableDirectTouchInteraction = a.enableDirectTouchInteraction;
             c.authUIDistanceFromCamera = a.authUIDistanceFromCamera;
@@ -254,7 +266,7 @@ namespace AbxrLib.Runtime.Core
             c.maxDictionarySize = a.maxDictionarySize;
         }
 
-        /// <summary>Merges GET /v1/storage/config into the runtime instance only. Not applied: credentials, token mode, build type, module timing, auth UI, prefabs, ArborInsightsClient/ArborMdmClient (build-time from AppConfig only).</summary>
+        /// <summary>Merges GET /v1/storage/config into the runtime instance only. Not applied: credentials, token mode, build type, SDK lifecycle, module timing, auth UI, prefabs, ArborInsightsClient/ArborMdmClient (build-time from AppConfig only).</summary>
         public void ApplyConfigPayload(ConfigPayload payload)
         {
             if (payload == null) return;
@@ -304,5 +316,20 @@ namespace AbxrLib.Runtime.Core
                 _instance.ClampNumericSettingsCore();
             }
         }
+
+#if UNITY_INCLUDE_TESTS
+        /// <summary>
+        /// Test-only reset path.
+        /// Creates a transient in-memory authoring config instead of loading Resources/AbxrLib.asset,
+        /// so package tests never accidentally use a project's real config or a test fixture asset.
+        /// </summary>
+        internal static void UseTransientDefaultsForTest()
+        {
+            _authoringAsset = ScriptableObject.CreateInstance<AppConfig>();
+            _instance = CopyFromAppConfig(_authoringAsset);
+            _validatedOnce = false;
+            _lastValidationErrorMessage = null;
+        }
+#endif
     }
 }

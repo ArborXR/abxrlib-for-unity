@@ -126,6 +126,11 @@ namespace AbxrLib.Editor
             EditorGUILayout.EndVertical();
         
             EditorGUILayout.Space();
+            EditorGUILayout.LabelField("SDK Lifecycle", EditorStyles.boldLabel);
+            config.enableAutomaticInitialization = EditorGUILayout.Toggle(new GUIContent(
+                "Enable Automatic Initialization", "When enabled, AbxrLib initializes automatically before the first scene loads. When disabled, call Abxr.Initialize() manually after configuring the SDK."), config.enableAutomaticInitialization);
+
+            EditorGUILayout.Space();
             EditorGUILayout.LabelField("UI Behavior Control", EditorStyles.boldLabel);
             config.authUIFollowCamera = EditorGUILayout.Toggle(new GUIContent(
                 "Auth UI Follow Camera", "When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions."), config.authUIFollowCamera);
@@ -258,6 +263,9 @@ namespace AbxrLib.Editor
                 config.defaultMaxDistanceLimit = defaultConfig.defaultMaxDistanceLimit;
                 config.defaultAutoCreateTriggerCollider = defaultConfig.defaultAutoCreateTriggerCollider;
                 
+                // SDK Lifecycle
+                config.enableAutomaticInitialization = defaultConfig.enableAutomaticInitialization;
+
                 // Authentication Control
                 config.enableAutoStartAuthentication = defaultConfig.enableAutoStartAuthentication;
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;

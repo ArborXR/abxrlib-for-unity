@@ -37,8 +37,12 @@ namespace AbxrLib.Runtime.Core
         
         public static T Attach<T>(string componentName) where T : MonoBehaviour
         {
+            var root = RootTransform;
+            var existing = root.GetComponentInChildren<T>(true);
+            if (existing != null) return existing;
+
             var go = new GameObject(componentName);
-            go.transform.SetParent(RootTransform, worldPositionStays: false);
+            go.transform.SetParent(root, worldPositionStays: false);
             return go.AddComponent<T>();
         }
     }

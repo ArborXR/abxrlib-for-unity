@@ -34,6 +34,10 @@ namespace AbxrLib.Runtime.Core
         [Header("Service Provider")]
         public string restUrl = "https://lib-backend.xrdm.app/";
 
+        [Header("SDK Lifecycle")]
+        [Tooltip("When enabled, AbxrLib initializes automatically before the first scene loads. When disabled, call Abxr.Initialize() manually after configuring the SDK.")]
+        public bool enableAutomaticInitialization = true;
+
         [Header("UI Behavior Control")]
         [Tooltip("When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions.")]
         public bool authUIFollowCamera = true;

@@ -338,6 +338,22 @@ namespace AbxrLib.Runtime.Services.Auth
             _retryCoroutine = null;
             _attemptActive = false;
         }
+#if UNITY_INCLUDE_TESTS
+        /// <summary>
+        /// Clear auth/session state without destroying the runner.
+        /// </summary>
+        internal void ResetForTest()
+        {
+            _stopping = false;
+            _attemptActive = false;
+            _isAuthStarted = false;
+            StopReAuthPolling();
+            if (_retryCoroutine != null && _runner != null)
+                _runner.StopCoroutine(_retryCoroutine);
+            _retryCoroutine = null;
+            ClearSessionAndPrepareForNew();
+        }
+#endif
         
         // ── Core auth flow (coroutine) ───────────────────────────────
 
