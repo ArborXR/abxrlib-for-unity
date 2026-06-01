@@ -10,10 +10,10 @@ using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
-namespace AbxrLib.Runtime.Services.Transport
+namespace AbxrLib.Runtime.Services
 {
-    /// <summary>REST (UnityWebRequest) implementation of IAbxrTransport. Queues data/storage and sends via HTTP with auth headers from auth service.</summary>
-    internal class AbxrTransportRest : IAbxrTransport
+    /// <summary>REST (UnityWebRequest) service. Queues data/storage and sends auth, config, data, and storage requests via HTTP.</summary>
+    internal class AbxrRestService
     {
         private const string AuthPath = "/v1/auth/token";
         private const string ConfigPath = "/v1/storage/config";
@@ -37,11 +37,9 @@ namespace AbxrLib.Runtime.Services.Transport
         private Coroutine _tickCoroutine;
         private bool _stopped;
 
-        public bool IsServiceTransport => false;
-
         private static Uri RestUri(string path) => new Uri(new Uri(Configuration.Instance.restUrl), path);
 
-        /// <summary>Stops the tick coroutine so this transport can be released when replaced (e.g. by ArborInsights transport). Prevents leak and ongoing CPU use.</summary>
+        /// <summary>Stops the tick coroutine.</summary>
         internal void Stop()
         {
             _stopped = true;
@@ -52,7 +50,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
         }
 
-        public AbxrTransportRest(AbxrAuthService authService, MonoBehaviour runner)
+        internal AbxrRestService(AbxrAuthService authService, MonoBehaviour runner)
         {
             _authService = authService ?? throw new ArgumentNullException(nameof(authService));
             _runner = runner ?? throw new ArgumentNullException(nameof(runner));
@@ -75,11 +73,11 @@ namespace AbxrLib.Runtime.Services.Transport
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
             yield return request.SendWebRequest();
 
-            // Always pass response body when present so auth service gets the same error payload as service transport (ExtractAuthErrorMessage, OnFailed message).
+            // Always pass response body when present so auth service can surface API errors consistently.
             string response = request.downloadHandler?.text;
             long responseCode = request.responseCode;
 
-            // Same success rule as service transport (AuthResponse.IsValidSuccess) so auth service sees consistent behavior.
+            // Same success rule as auth service (AuthResponse.IsValidSuccess).
             bool success = false;
             if (!string.IsNullOrEmpty(response))
             {
@@ -90,9 +88,9 @@ namespace AbxrLib.Runtime.Services.Transport
                 }
                 catch { /* treat as failure */ }
             }
-            // Transport decides: API rejected credentials (do not retry) when HTTP 401 or 403.
+            // REST decides: API rejected credentials (do not retry) when HTTP 401 or 403.
             bool isAuthRejectedByApi = !success && (responseCode == 401 || responseCode == 403);
-            // Normalize empty failure body so auth service logs the same message for both transports.
+            // Normalize empty failure body for auth service logging.
             string responseBody = response ?? "";
             if (string.IsNullOrEmpty(responseBody) && !success)
                 responseBody = "No response body.";

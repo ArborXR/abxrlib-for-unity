@@ -152,7 +152,6 @@ namespace AbxrLib.Runtime.Core
         public int pruneSentItemsOlderThanHours = 12;
         public int maximumCachedItems = 1024;
         public bool retainLocalAfterSent;
-        public bool enableArborInsightsClient = true;
         public bool enableArborMdmClient = true;
         public bool enableLearnerLauncherMode = false;
         public bool enableAutomaticTelemetry = true;
@@ -258,7 +257,6 @@ namespace AbxrLib.Runtime.Core
             c.pruneSentItemsOlderThanHours = a.pruneSentItemsOlderThanHours;
             c.maximumCachedItems = a.maximumCachedItems;
             c.retainLocalAfterSent = a.retainLocalAfterSent;
-            c.enableArborInsightsClient = a.enableArborInsightsClient;
             c.enableArborMdmClient = a.enableArborMdmClient;
             c.enableLearnerLauncherMode = a.enableLearnerLauncherMode;
             c.enableAutomaticTelemetry = a.enableAutomaticTelemetry;
@@ -266,7 +264,7 @@ namespace AbxrLib.Runtime.Core
             c.maxDictionarySize = a.maxDictionarySize;
         }
 
-        /// <summary>Merges GET /v1/storage/config into the runtime instance only. Not applied: credentials, token mode, build type, SDK lifecycle, module timing, auth UI, prefabs, ArborInsightsClient/ArborMdmClient (build-time from AppConfig only).</summary>
+        /// <summary>Merges GET /v1/storage/config into the runtime instance only. Not applied: credentials, token mode, build type, SDK lifecycle, module timing, auth UI, prefabs, ArborMdmClient (build-time from AppConfig only).</summary>
         public void ApplyConfigPayload(ConfigPayload payload)
         {
             if (payload == null) return;

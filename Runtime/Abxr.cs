@@ -828,7 +828,7 @@ public static partial class Abxr
 	/// <summary>
 	/// Sets the Insights REST base URL at runtime (e.g. staging vs production). Allowed only before authentication has been started for the first time this run
 	/// (call before <see cref="StartAuthentication"/> or any path that calls into auth). After the first auth flow starts, the URL cannot be changed until the app restarts.
-	/// Updates <see cref="Configuration.Instance"/>; also refreshes the LLM proxy URL and syncs ArborInsightsClient when the JNI bridge is initialized (Android).
+	/// Updates <see cref="Configuration.Instance"/>; REST requests and the LLM proxy read the updated URL when building requests.
 	/// </summary>
 	/// <returns>True if the URL was applied; false if validation failed or authentication has already started (<paramref name="errorMessage"/> explains why).</returns>
 	public static bool TrySetRestUrl(string restUrl, out string errorMessage)
@@ -841,7 +841,6 @@ public static partial class Abxr
 			return false;
 		}
 		Configuration.Instance.restUrl = restUrl;
-		AbxrSubsystem.Instance?.NotifyRestUrlChanged();
 		return true;
 	}
 	

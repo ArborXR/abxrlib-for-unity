@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
-using AbxrLib.Runtime.Services.Transport;
+using AbxrLib.Runtime.Services;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
@@ -73,7 +73,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private readonly MonoBehaviour _runner;
         private readonly ArborMdmClient _ArborMdmClient;
-        private Func<IAbxrTransport> _getTransport;
+        private AbxrRestService _restService;
         
         private const string DeviceIdKey = "abxrlib_device_id";
         
@@ -92,19 +92,6 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>After one auto-submit from <see cref="_webglQueryAssessmentPin"/>, further attempts use the normal PIN prompt (retry flow).</summary>
         private bool _webglUrlPinAutoSubmitAttempted;
 #endif
-
-        /// <summary>
-        /// True only when we completed authentication via ArborInsightsClient this session.
-        /// Set once when auth succeeds through the service transport. Used only to skip re-auth polling
-        /// (ReAuthPollCoroutine) when the service handles re-auth; data routing is via the transport, not this flag.
-        /// </summary>
-        private bool _usedArborInsightsClientForSession = false;
-
-        /// <summary>
-        /// True when this session authenticated via ArborInsightsClient. When true, re-auth polling is skipped
-        /// (the service handles token refresh). Data/events/telemetry/storage routing is via the current transport.
-        /// </summary>
-        public bool UsingArborInsightsClientForData() => _usedArborInsightsClientForSession;
 
         public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient ArborMdmClient)
         {
@@ -143,11 +130,9 @@ namespace AbxrLib.Runtime.Services.Auth
 #endif
             SetSessionData();
 
-            // Do not block on ArborInsightsClient here: bind is started before this constructor runs,
-            // and auth waits for service ready in a coroutine so the scene can load without lag.
         }
 
-        internal void SetTransportGetter(Func<IAbxrTransport> getter) => _getTransport = getter;
+        internal void SetRestService(AbxrRestService restService) => _restService = restService;
 
         // ── Public API ───────────────────────────────────────────────
         
@@ -225,7 +210,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// Submit user input when there is an outstanding OnInputRequested. Called by subsystem (Abxr.OnInputSubmitted).
-        /// If no input was requested, this is a no-op. Empty or whitespace-only input is rejected and OnInputRequested is re-invoked with an error (no transport call).
+        /// If no input was requested, this is a no-op. Empty or whitespace-only input is rejected and OnInputRequested is re-invoked with an error (no REST call).
         /// </summary>
         public void SubmitInput(string input)
         {
@@ -298,7 +283,6 @@ namespace AbxrLib.Runtime.Services.Auth
         
         public void SetAuthHeaders(UnityWebRequest request, string json = null)
         {
-            // When using ArborInsightsClient for data, Token/Secret are not set; only REST path should call this.
             if (ResponseData == null || string.IsNullOrEmpty(ResponseData.Token) || string.IsNullOrEmpty(ResponseData.Secret))
             {
                 Logcat.Error("Cannot set auth headers - authentication tokens are missing");
@@ -338,6 +322,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _retryCoroutine = null;
             _attemptActive = false;
         }
+
 #if UNITY_INCLUDE_TESTS
         /// <summary>
         /// Clear auth/session state without destroying the runner.
@@ -449,7 +434,7 @@ namespace AbxrLib.Runtime.Services.Auth
             public bool IsAuthRejectedByApi;
         }
 
-        /// <summary>Extract a user-facing error string from auth failure JSON. Same keys for REST and service so behavior is identical.</summary>
+        /// <summary>Extract a user-facing error string from auth failure JSON.</summary>
         private static string ExtractAuthErrorMessage(string responseJson)
         {
             if (string.IsNullOrEmpty(responseJson)) return null;
@@ -476,11 +461,11 @@ namespace AbxrLib.Runtime.Services.Auth
             return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
         }
 
-        /// <summary>Attempts auth via current transport. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure; when false (e.g. keyboard submit), one attempt only.</summary>
+        /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure; when false (e.g. keyboard submit), one attempt only.</summary>
         private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
-            if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
+            if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
             var authMech = CreateAuthMechanismDict();
@@ -498,7 +483,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 _payload.SSOAccessToken = Abxr.GetAccessToken();
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
-            var transport = _getTransport();
+            var restService = _restService;
 
             while (true)
             {
@@ -517,7 +502,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     _payload.orgToken = null;
                 }
 
-                // Log what we send (same for REST and ArborInsightsClient) so both transports show the request. Tag with auth kind so response logs pair clearly.
+                // Log what we send so request and response logs pair clearly.
                 bool isDeviceAuth = _payload.authMechanism == null;
                 string stageLabel = isDeviceAuth ? "device-auth" : "user-auth";
                 if (_payload.authMechanism != null)
@@ -529,7 +514,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
                 var holder = new AuthRequestResultHolder();
-                yield return transport.AuthRequestCoroutine(_payload, (ok, json, isAuthRejectedByApi) =>
+                yield return restService.AuthRequestCoroutine(_payload, (ok, json, isAuthRejectedByApi) =>
                 {
                     holder.Success = ok;
                     holder.Response = json;
@@ -538,8 +523,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 if (ApplyAuthResponse(holder.Response, stageLabel))
                 {
-                    if (transport.IsServiceTransport)
-                        _usedArborInsightsClientForSession = true;
                     _payload.buildType = savedBuildType;
                     onComplete(true, null);
                     yield break;
@@ -552,7 +535,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield break;
                 }
 
-                // Device authentication (withRetry): do not retry when the transport reported auth rejected or response body contains an explicit error.
+                // Device authentication (withRetry): do not retry when REST reported auth rejected or response body contains an explicit error.
                 // Retrying would keep hitting the same rejection; treat as permanent failure and no-op for the rest of the session.
                 string explicitError = ExtractAuthErrorMessage(holder.Response);
                 bool isAuthRejected = holder.IsAuthRejectedByApi || !string.IsNullOrEmpty(explicitError);
@@ -696,7 +679,7 @@ namespace AbxrLib.Runtime.Services.Auth
             return false;
         }
 
-        /// <summary>Parses auth response and applies it. Uses the same success rule as both transports (AuthResponse.IsValidSuccess): token or modules or appId-only (user authentication required). When token is present (REST), validates JWT and sets expiry; service responses have token stripped so we skip that. Single place for ResponseData, UserData, Modules.</summary>
+        /// <summary>Parses auth response and applies it. Full REST auth responses must include a token; appId-only responses are allowed for second-stage user authentication. Single place for ResponseData, UserData, Modules.</summary>
         /// <param name="stageLabel">Optional label for logging, e.g. "device-auth" or "user-auth", so logs clearly pair request and response.</param>
         private bool ApplyAuthResponse(string responseText, string stageLabel = null)
         {
@@ -709,7 +692,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (!AuthResponse.IsValidSuccess(postResponse))
                     return false;
 
-                // When we have a token (REST path), validate JWT and set expiry. Service strips token from response so this only runs for REST.
                 if (!string.IsNullOrEmpty(postResponse.Token))
                 {
                     Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
@@ -732,6 +714,11 @@ namespace AbxrLib.Runtime.Services.Auth
                         Logcat.Error($"Invalid JWT token expiration: {ex.Message}");
                         return false;
                     }
+                }
+                else if (postResponse.Modules != null && postResponse.Modules.Count > 0)
+                {
+                    Logcat.Error("Invalid authentication response - missing token");
+                    return false;
                 }
 
                 ResponseData = postResponse;
@@ -759,16 +746,16 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        // ── GET /v1/storage/config (or from service when auth was via ArborInsightsClient) ───
+        // ── GET /v1/storage/config ───
 
         private IEnumerator GetConfigurationCoroutine(Action<bool, string> onComplete)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
-            if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
+            if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
 
             string configJson = null;
             string failureDetail = null;
-            yield return _getTransport().GetConfigCoroutine((ok, json) =>
+            yield return _restService.GetConfigCoroutine((ok, json) =>
             {
                 if (ok) configJson = json; else failureDetail = json;
             });
@@ -820,8 +807,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private IEnumerator ReAuthPollCoroutine()
         {
-            // When using ArborInsightsClient for data, re-auth is the service's responsibility; exit the loop.
-            while (!_stopping && !UsingArborInsightsClientForData())
+            while (!_stopping)
             {
                 yield return ReAuthWait;
 
@@ -897,7 +883,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             OnSucceeded?.Invoke();
             Logcat.Info("Authenticated successfully");
-            // Push merged MDM SSO claims to the API via the same transport as SetUserData (custom re-auth); completion is OnUserDataSyncCompleted only.
+            // Push merged MDM SSO claims to the API via the same REST auth path as SetUserData (custom re-auth); completion is OnUserDataSyncCompleted only.
             if (ssoUserDataChanged)
                 SetUserData(null, null);
         }
@@ -953,7 +939,6 @@ namespace AbxrLib.Runtime.Services.Auth
             _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
             _returnToPackage = null;
-            _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
             _userData = null;
             _credentialsRejectedByApi = false;
@@ -1044,7 +1029,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>
         /// Builds the JSON payload passed via the auth_handoff Android intent extra.
         /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
-        /// so the receiving app and its ArborInsightsClient service can fully adopt the session.
+        /// so the receiving app can adopt the REST-authenticated session.
         /// When includeReturnToPackage is true, adds ReturnToPackage (current app's identifier) so the receiving app can return the session when assessment completes.
         /// </summary>
         internal string GetHandoffJson(bool includeReturnToPackage = false)
@@ -1379,9 +1364,7 @@ namespace AbxrLib.Runtime.Services.Auth
             try
             {
                 ResponseData = JsonConvert.DeserializeObject<AuthResponse>(responseText);
-                // For non-handoff paths, Token is required. For handoff, it may be absent when App A used the
-                // ArborInsightsClient transport (which doesn't require Token in its auth response).
-                if (!handoff && string.IsNullOrEmpty(ResponseData.Token))
+                if (string.IsNullOrEmpty(ResponseData.Token))
                 {
                     throw new Exception("Invalid authentication response - missing token");
                 }
@@ -1414,24 +1397,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 _returnToPackage = ResponseData?.ReturnToPackage;
                 ResponseData.UserData ??= new Dictionary<string, string>();
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
-
-                // For the ArborInsightsClient transport: the normal AuthRequestCoroutine is bypassed by handoff,
-                // so the service has no knowledge of this session. Pass the full auth response JSON so the
-                // service can set apiToken/apiSecret/restUrl atomically and start accepting events immediately.
-                var transport = _getTransport?.Invoke();
-                if (transport?.IsServiceTransport == true)
-                {
-#if UNITY_ANDROID && !UNITY_EDITOR
-                    try
-                    {
-                        string handoffRestUrl = Configuration.Instance?.restUrl ?? "";
-                        ArborInsightsClient.SetAuthFromHandoff(responseText, handoffRestUrl);
-                    }
-                    catch (Exception ex) { Logcat.Warning($"SetAuthFromHandoff failed: {ex.Message}"); }
-#endif
-                    // Mark as service-authenticated so re-auth polling is skipped (service manages token refresh)
-                    _usedArborInsightsClientForSession = true;
-                }
 
                 _deviceAuthDeferredByHandoff = true;
                 // AuthenticateCoroutine runs GET config next, then AuthSucceeded (user auth not re-required after handoff).

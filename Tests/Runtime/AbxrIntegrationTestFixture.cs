@@ -125,7 +125,6 @@ namespace AbxrLib.Tests.Runtime
             c.enableSceneEvents = false;
             c.headsetTracking = false;
             c.recordIpAddress = false;
-            c.enableArborInsightsClient = false;
             c.enableArborMdmClient = false;
 
             // Reset fields that can be changed by /v1/storage/config so tests do not leak.

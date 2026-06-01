@@ -67,7 +67,7 @@ namespace AbxrLib.Tests.Editor
         }
 
         [Test]
-        public void AuthResponse_ModulesAlone_IsSuccess()
+        public void AuthResponse_ModulesAlone_IsFailure_ForRestOnly()
         {
             var resp = new AuthResponse
             {
@@ -76,7 +76,7 @@ namespace AbxrLib.Tests.Editor
                     new ModuleData { Id = "m1", Name = "Module 1" },
                 },
             };
-            Assert.IsTrue(AuthResponse.IsValidSuccess(resp));
+            Assert.IsFalse(AuthResponse.IsValidSuccess(resp));
         }
 
         [Test]

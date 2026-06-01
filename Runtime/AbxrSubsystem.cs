@@ -10,7 +10,7 @@ using AbxrLib.Runtime.Services.Data;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Services.Telemetry;
 using AbxrLib.Runtime.Services.Platform;
-using AbxrLib.Runtime.Services.Transport;
+using AbxrLib.Runtime.Services;
 using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
@@ -28,13 +28,8 @@ namespace AbxrLib.Runtime
         private AbxrDataService _dataService;
         private AbxrTelemetryService _telemetryService;
         private ArborMdmClient _arborMdmClient;
-#if UNITY_ANDROID && !UNITY_EDITOR
-	    private ArborInsightsClient _arborInsightsClient;
-#endif
         private AbxrStorageService _storageService;
-        private volatile IAbxrTransport _transport;
-        private bool _transportSelectionComplete;
-        private Coroutine _transportSelectionCoroutine;
+        private AbxrRestService _restService;
         private AIProxyApi _aiProxyApi;
         private SceneChangeDetector _sceneChangeDetector;
         private HeadsetDetector _headsetDetector;
@@ -71,9 +66,6 @@ namespace AbxrLib.Runtime
 
         public static readonly long StartTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        private static readonly WaitForSecondsRealtime TransportPollWait = new WaitForSecondsRealtime(0.25f);
-        private static readonly WaitForSecondsRealtime AuthStartPollWait = new WaitForSecondsRealtime(0.1f);
-
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
 
@@ -108,26 +100,14 @@ namespace AbxrLib.Runtime
                 // Start bind early so it can complete while the scene loads; auth will wait for ready in a coroutine.
                 _arborMdmClient.Initialize();
             }
-            if (Configuration.Instance.enableArborInsightsClient)
-                _arborInsightsClient = new ArborInsightsClient();
-            if (_arborInsightsClient != null)
-                _arborInsightsClient.Start();
 #endif
             _authService = new AbxrAuthService(this, _arborMdmClient);
-            _transport = new AbxrTransportRest(_authService, this);
-            _authService.SetTransportGetter(() => _transport);
-            _dataService = new AbxrDataService(this, () => _transport);
+            _restService = new AbxrRestService(_authService, this);
+            _authService.SetRestService(_restService);
+            _dataService = new AbxrDataService(_restService);
             _telemetryService = new AbxrTelemetryService(this);
             _aiProxyApi = new AIProxyApi(_authService);
-            _storageService = new AbxrStorageService(_authService, this, () => _transport);
-
-            _transportSelectionComplete = false;
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (Configuration.Instance.enableArborInsightsClient && _arborInsightsClient != null)
-                _transportSelectionCoroutine = StartCoroutine(WaitForTransportSelectionCoroutine());
-            else
-#endif
-                _transportSelectionComplete = true;
+            _storageService = new AbxrStorageService(_authService, _restService);
             
             // Subscribe to OnAuthCompleted to start delayed DEFAULT assessment timer
             Abxr.OnAuthCompleted += OnAuthCompletedHandler;
@@ -172,7 +152,7 @@ namespace AbxrLib.Runtime
             else
                 Logcat.Info($"Version {AbxrLibVersion.Version} Initialized.");
 
-            // Auto-start auth (gated on transport selection so first auth uses correct backend).
+            // Auto-start auth after the optional configured delay.
             //
             // Invalid AbxrLib asset (missing/invalid credentials or rest URL): always use this coroutine path — do not
             // call HandleAuthCompleted from Awake. AbxrSubsystem.Awake runs during BeforeSceneLoad, before the scene
@@ -184,12 +164,12 @@ namespace AbxrLib.Runtime
             // no session; apps that continue without analytics should handle success == false (as for any failed auth).
             // This is not success == true (unlike a completed session with authMechanism none from the backend).
             //
-            // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass; the transport may fail
+            // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass; the REST request may fail
             // on first request. MDM/query overrides after LoadRuntimeAuthFromConfig may fix credentials; do not gate on
             // Configuration.LastValidationErrorMessage alone inside Authenticate() (it can be stale after overrides).
             bool enableAutoStart = _authService.GetEnableAutoStartAuthentication();
             if (enableAutoStart)
-                StartCoroutine(AuthStartAfterTransportSelectionCoroutine(settings.authenticationStartDelay));
+                StartCoroutine(AuthStartCoroutine(settings.authenticationStartDelay));
             else
                 Logcat.Info("Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
 
@@ -203,20 +183,13 @@ namespace AbxrLib.Runtime
         private void OnDestroy()
         {
             Abxr.OnAuthCompleted -= OnAuthCompletedHandler;
-            if (_transportSelectionCoroutine != null)
-            {
-                StopCoroutine(_transportSelectionCoroutine);
-                _transportSelectionCoroutine = null;
-            }
             _authService?.Shutdown();
             _telemetryService?.Stop();
             _sceneChangeDetector?.Stop();
             _headsetDetector?.Stop();
-            if (_transport is AbxrTransportRest rest)
-                rest.Stop();
+            _restService?.Stop();
 #if UNITY_ANDROID && !UNITY_EDITOR
             _arborMdmClient?.Shutdown();
-            _arborInsightsClient?.Stop();
 #endif
             
             if (_delayedStartCoroutine != null)
@@ -258,7 +231,7 @@ namespace AbxrLib.Runtime
                 _exitAfterAssessmentCoroutine = null;
             }
 
-            _transport?.ClearAllPending();
+            _restService?.ClearAllPending();
 
             _superMetaData.Clear();
             PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
@@ -286,8 +259,7 @@ namespace AbxrLib.Runtime
         }
 
         /// <summary>
-        /// Ends the current session: closes running events, flushes data, calls transport OnQuit (REST: ForceSend; service: Unbind),
-        /// clears pending batches, storage, super metadata, and auth state. Used by OnApplicationQuit and by Abxr.EndSession().
+        /// Ends the current session: closes running events, flushes data, flushes REST, clears pending batches, storage, super metadata, and auth state. Used by OnApplicationQuit and by Abxr.EndSession().
         /// Does not start a new session; call Abxr.StartAuthentication() when ready.
         /// </summary>
         internal void OnApplicationQuitHandler()
@@ -296,10 +268,10 @@ namespace AbxrLib.Runtime
 	        if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
 	        if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 	        CloseRunningEvents();
-	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync).
+	        // ForceSend sets the batch flags; OnQuit performs a synchronous REST flush before the app exits.
 	        SendAll();
-            _transport?.OnQuit();
-	        _transport?.ClearAllPending();
+            _restService?.OnQuit();
+	        _restService?.ClearAllPending();
 	        _superMetaData.Clear();
 	        PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
 	        PlayerPrefs.Save();
@@ -311,34 +283,8 @@ namespace AbxrLib.Runtime
         
         internal void DoAuthenticate() => _authService.Authenticate();
 
-        private IEnumerator WaitForTransportSelectionCoroutine()
+        private IEnumerator AuthStartCoroutine(float delaySeconds)
         {
-            const int waitAttempts = 40;
-            if (!ArborInsightsClient.IsServicePackageInstalled())
-            {
-                _transportSelectionComplete = true;
-                yield break;
-            }
-            for (int i = 0; i < waitAttempts && !ArborInsightsClient.ServiceIsFullyInitialized(); i++)
-                yield return TransportPollWait;
-            if (ArborInsightsClient.ServiceIsFullyInitialized())
-                SwitchToArborInsightsTransport();
-            _transportSelectionComplete = true;
-        }
-
-        private void SwitchToArborInsightsTransport()
-        {
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (_transport is AbxrTransportRest rest)
-                rest.Stop();
-            _transport = new AbxrTransportArborInsights();
-            Logcat.Info("Switched to ArborInsightsClient transport.");
-#endif
-        }
-
-        private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds)
-        {
-            while (!_transportSelectionComplete) yield return AuthStartPollWait;
             if (delaySeconds > 0) yield return new WaitForSeconds(delaySeconds);
             DoAuthenticate();
         }
@@ -499,8 +445,8 @@ namespace AbxrLib.Runtime
 			return null;
 		}
 		
-		/// <summary>Starts authentication. Waits for transport selection to complete first so the first auth uses the correct backend (service if available, else REST).</summary>
-		internal void StartAuthentication() => StartCoroutine(AuthStartAfterTransportSelectionCoroutine(0f));
+		/// <summary>Starts authentication.</summary>
+		internal void StartAuthentication() => StartCoroutine(AuthStartCoroutine(0f));
 
 		/// <summary>True when the SDK is waiting for auth input (OnInputRequested was invoked). Use with device-specific QR availability to show "Scan QR" only when it will be accepted (e.g. Meta: IsAuthInputRequestPending() &amp;&amp; MetaQRCodeReader.Instance.IsQRScanningAvailable()).</summary>
 		internal bool IsAuthInputRequestPending() => _authService != null && _authService.IsInputRequestPending;
@@ -525,14 +471,13 @@ namespace AbxrLib.Runtime
 		
 		/// <summary>
 		/// Starts an entirely fresh session: clears all API tokens, auth state, and pending data; then re-authenticates.
-		/// When using ArborInsightsClient (Android), unbinds and rebinds the service so the connection is fresh.
 		/// Equivalent to the user closing the app and starting it again from a session perspective.
 		/// </summary>
-internal void StartNewSession()
-        {
+		internal void StartNewSession()
+		{
 			Configuration.ClearRuntimeConfig();
 			// Clear in-memory batchers so no previous-session events/telemetry/logs/storage are sent with the new session.
-			_transport?.ClearAllPending();
+			_restService?.ClearAllPending();
 
 			// Super metadata is per-session; clear in-memory and persisted value.
 			_superMetaData.Clear();
@@ -545,20 +490,12 @@ internal void StartNewSession()
 			_currentModuleIndex = 0;
 			AIProxyApi.ClearPastMessages();
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-			// When using ArborInsightsClient, unbind then bind to clear session-related connection state and get a fresh connection.
-			if (_arborInsightsClient != null && ArborInsightsClient.IsServiceBound())
-			{
-				ArborInsightsClient.Unbind();
-				ArborInsightsClient.Bind(null);
-			}
-#endif
 			_authService.ClearSessionAndPrepareForNew();
 			_authService.Authenticate(clearStateFirst: false);
 		}
 
 		/// <summary>
-		/// Ends the current session (same as quit-time logic): closes running events, flushes, unbinds/flushes transport, clears pending data and auth state.
+		/// Ends the current session (same as quit-time logic): closes running events, flushes REST, clears pending data and auth state.
 		/// Does not start a new session. Call Abxr.StartAuthentication() when ready to begin a fresh session.
 		/// </summary>
 		internal void EndSession()
@@ -991,23 +928,6 @@ internal void StartNewSession()
 			_authService?.SetRuntimeAuthAuthSecret(authSecret);
 		}
 
-		/// <summary>After <see cref="Configuration.Instance"/>.restUrl changes: sync the device client JNI session when bound. REST transport and LLM proxy read <c>restUrl</c> when building each request.</summary>
-		internal void NotifyRestUrlChanged()
-		{
-#if UNITY_ANDROID && !UNITY_EDITOR
-			if (ArborInsightsClient.IsInitialized())
-			{
-				try
-				{
-					ArborInsightsClient.set_RestUrl(Configuration.Instance.restUrl ?? "");
-				}
-				catch (Exception ex)
-				{
-					Logcat.Warning($"Could not sync restUrl to ArborInsightsClient: {ex.Message}");
-				}
-			}
-#endif
-		}
 
 		internal void SetDeviceId(string deviceId)
 		{

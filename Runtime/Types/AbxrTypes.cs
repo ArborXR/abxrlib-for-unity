@@ -223,13 +223,13 @@ namespace AbxrLib.Runtime.Types
         public string ReturnToPackage;
         public List<ModuleData> Modules;
 
-        /// <summary>Single rule for both REST and service transports: response is a valid auth success (full success or second-stage required). Full success = Token or Modules present. Second-stage required = AppId present but no token/modules (proceed to config and PIN prompt). Error payloads (e.g. {"message":"..."}) have no AppId/Token/Modules.</summary>
+        /// <summary>Single rule for REST: response is a valid auth success (full success or second-stage required). Full success = Token present. Second-stage required = AppId present but no token (proceed to config and PIN prompt). Error payloads (e.g. {"message":"..."}) have no AppId/Token/Modules.</summary>
         public static bool IsValidSuccess(AuthResponse r)
         {
             if (r == null) return false;
-            bool hasTokenOrModules = !string.IsNullOrEmpty(r.Token) || (r.Modules != null && r.Modules.Count > 0);
-            bool secondStageRequired = !hasTokenOrModules && !string.IsNullOrEmpty(r.AppId);
-            return hasTokenOrModules || secondStageRequired;
+            bool hasToken = !string.IsNullOrEmpty(r.Token);
+            bool secondStageRequired = !hasToken && !string.IsNullOrEmpty(r.AppId);
+            return hasToken || secondStageRequired;
         }
     }
 
@@ -237,7 +237,7 @@ namespace AbxrLib.Runtime.Types
 
     /// <summary>
     /// GET /v1/storage/config response shape. The API may include any keys; Newtonsoft ignores JSON properties that do not map to members.
-    /// <see cref="AbxrLib.Runtime.Core.Configuration.ApplyConfigPayload"/> merges only a subset; credentials, token mode, build type, module timing/sequence, auth UI, AbxrTarget defaults, learner launcher, and ArborInsightsClient/ArborMdmClient settings remain build-time values from the Unity asset.
+    /// <see cref="AbxrLib.Runtime.Core.Configuration.ApplyConfigPayload"/> merges only a subset; credentials, token mode, build type, module timing/sequence, auth UI, AbxrTarget defaults, learner launcher, and ArborMdmClient settings remain build-time values from the Unity asset.
     /// </summary>
     [Serializable]
     public class ConfigPayload
@@ -279,7 +279,6 @@ namespace AbxrLib.Runtime.Types
         public string maxDictionarySize;
 
         // ── Also accepted in GET /v1/storage/config JSON; deserialized but NOT merged into Configuration (developer-controlled in Unity) ──
-        public bool? enableArborInsightsClient;
         public bool? enableArborMdmClient;
         public bool? useAppTokens;
         public string buildType;
