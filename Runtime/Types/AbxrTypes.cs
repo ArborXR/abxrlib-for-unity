@@ -223,13 +223,12 @@ namespace AbxrLib.Runtime.Types
         public string ReturnToPackage;
         public List<ModuleData> Modules;
 
-        /// <summary>Single rule for REST: response is a valid auth success (full success or second-stage required). Full success = Token present. Second-stage required = AppId present but no token (proceed to config and PIN prompt). Error payloads (e.g. {"message":"..."}) have no AppId/Token/Modules.</summary>
+        /// <summary>Single rule for REST: a successful auth response must include the session token and API secret returned by /v1/auth/token.</summary>
         public static bool IsValidSuccess(AuthResponse r)
         {
-            if (r == null) return false;
-            bool hasToken = !string.IsNullOrEmpty(r.Token);
-            bool secondStageRequired = !hasToken && !string.IsNullOrEmpty(r.AppId);
-            return hasToken || secondStageRequired;
+            return r != null
+                   && !string.IsNullOrEmpty(r.Token)
+                   && !string.IsNullOrEmpty(r.Secret);
         }
     }
 

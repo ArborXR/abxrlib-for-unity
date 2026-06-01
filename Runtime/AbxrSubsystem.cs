@@ -341,6 +341,7 @@ namespace AbxrLib.Runtime
 
 	        var modules = _authService.ResponseData.Modules;
 	        if (modules == null || modules.Count == 0) return;
+	        if (!_authService.GetEffectiveEnableAutoStartModules() || _currentModuleIndex >= modules.Count) return;
 
 	        if (Abxr.OnModuleTarget == null)
 	        {
@@ -348,10 +349,7 @@ namespace AbxrLib.Runtime
 		        return;
 	        }
 
-	        if (_authService.GetEffectiveEnableAutoStartModules() && _currentModuleIndex < modules.Count)
-	        {
-		        Abxr.OnModuleTarget.Invoke(modules[_currentModuleIndex].Target);
-	        }
+	        Abxr.OnModuleTarget.Invoke(modules[_currentModuleIndex].Target);
         }
 
 		/// <summary>Returns the session userId (read-only, set by backend). Do not document for now.</summary>

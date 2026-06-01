@@ -77,7 +77,7 @@ namespace AbxrLib.Runtime.Services
             string response = request.downloadHandler?.text;
             long responseCode = request.responseCode;
 
-            // Same success rule as auth service (AuthResponse.IsValidSuccess).
+            // Same REST success rule as auth service: token + secret are both required.
             bool success = false;
             if (!string.IsNullOrEmpty(response))
             {

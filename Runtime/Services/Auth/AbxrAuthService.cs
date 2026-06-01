@@ -242,22 +242,21 @@ namespace AbxrLib.Runtime.Services.Auth
         public void KeyboardAuthenticate(string input)
         {
             string originalPrompt = _authMechanism.prompt;
+            string enteredAuthValue = input;
+
             // For email type: put full email (userInput + "@" + domain) into prompt for the auth request; server does not use domain from payload. Domain is client-only for prompting and building this value.
             if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
-                _authMechanism.prompt = input + "@" + _authMechanism.domain;
-            else
-                _authMechanism.prompt = input;
+                enteredAuthValue = input + "@" + _authMechanism.domain;
+
+            _authMechanism.prompt = enteredAuthValue;
+
+            // Store the entered value before the REST request so ApplyAuthResponse can merge it into UserData when the response is parsed. PIN is never stored in UserData—only used as auth prompt.
+            _enteredAuthValue = _authMechanism.type == "email" || _authMechanism.type == "text"
+                ? enteredAuthValue
+                : null;
 
             _runner.StartCoroutine(AuthRequestCoroutine((success, errorMessage) =>
             {
-                // Store the entered value only for email and text so we can add it to UserData. PIN is never stored in UserData—only used as auth prompt.
-                if (_authMechanism.type == "email" || _authMechanism.type == "text")
-                {
-                    _enteredAuthValue = input;
-                    if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
-                        _enteredAuthValue += "@" + _authMechanism.domain;
-                }
-
                 _authMechanism.prompt = originalPrompt;
                 if (success)
                 {
@@ -403,7 +402,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 yield break;
             }
             
-            if (!string.IsNullOrEmpty(_authMechanism?.type))  // Need user input
+            if (NeedsUserAuthentication(_authMechanism))
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
                 if (!_webglUrlPinAutoSubmitAttempted && !string.IsNullOrEmpty(_webglQueryAssessmentPin))
@@ -679,7 +678,7 @@ namespace AbxrLib.Runtime.Services.Auth
             return false;
         }
 
-        /// <summary>Parses auth response and applies it. Full REST auth responses must include a token; appId-only responses are allowed for second-stage user authentication. Single place for ResponseData, UserData, Modules.</summary>
+        /// <summary>Parses auth response and applies it. REST auth responses must include both token and secret. Single place for ResponseData, UserData, Modules.</summary>
         /// <param name="stageLabel">Optional label for logging, e.g. "device-auth" or "user-auth", so logs clearly pair request and response.</param>
         private bool ApplyAuthResponse(string responseText, string stageLabel = null)
         {
@@ -731,6 +730,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     ResponseData.UserData ??= new Dictionary<string, string>();
                     var keyName = _authMechanism?.type == "email" ? "email" : "text";
                     ResponseData.UserData[keyName] = _enteredAuthValue;
+                    _enteredAuthValue = null;
                 }
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
                 // Debug: server userData and keyboard merge only; MDM SSO JWT merge runs in AuthSucceeded when the session auth sequence is complete.
@@ -862,6 +862,13 @@ namespace AbxrLib.Runtime.Services.Auth
                 domain = source.domain ?? "",
                 inputSource = !string.IsNullOrEmpty(source.inputSource) ? source.inputSource : "user"
             };
+        }
+
+        private static bool NeedsUserAuthentication(AuthMechanism mechanism)
+        {
+            return mechanism != null
+                   && !string.IsNullOrEmpty(mechanism.type)
+                   && !string.Equals(mechanism.type, "none", StringComparison.OrdinalIgnoreCase);
         }
 
         private void AuthSucceeded()
@@ -1381,6 +1388,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 ResponseData.UserData ??= new Dictionary<string, string>();
                 string keyName = _authMechanism?.type == "email" ? "email" : "text";
                 ResponseData.UserData[keyName] = _enteredAuthValue;
+                _enteredAuthValue = null;
             }
 
             if (ResponseData.Modules?.Count > 1)

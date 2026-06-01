@@ -61,9 +61,15 @@ namespace AbxrLib.Tests.Editor
         // ── AuthResponse.IsValidSuccess ──────────────────────────────
 
         [Test]
-        public void AuthResponse_TokenAlone_IsSuccess()
+        public void AuthResponse_TokenAndSecret_IsSuccess()
         {
-            Assert.IsTrue(AuthResponse.IsValidSuccess(new AuthResponse { Token = "anything" }));
+            Assert.IsTrue(AuthResponse.IsValidSuccess(new AuthResponse { Token = "anything", Secret = "secret" }));
+        }
+
+        [Test]
+        public void AuthResponse_TokenWithoutSecret_IsFailure()
+        {
+            Assert.IsFalse(AuthResponse.IsValidSuccess(new AuthResponse { Token = "anything" }));
         }
 
         [Test]
@@ -80,10 +86,9 @@ namespace AbxrLib.Tests.Editor
         }
 
         [Test]
-        public void AuthResponse_AppIdAlone_IsSuccess_TwoStage()
+        public void AuthResponse_AppIdAlone_IsFailure_ForRestOnly()
         {
-            // No token/modules but AppId present -> second-stage required, still considered a valid success
-            Assert.IsTrue(AuthResponse.IsValidSuccess(new AuthResponse { AppId = "some-app" }));
+            Assert.IsFalse(AuthResponse.IsValidSuccess(new AuthResponse { AppId = "some-app" }));
         }
 
         [Test]
