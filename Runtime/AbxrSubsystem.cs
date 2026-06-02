@@ -162,7 +162,7 @@ namespace AbxrLib.Runtime
             // AuthenticateCoroutine / device auth / HTTP). That invokes OnFailed → HandleAuthCompleted(false, …) →
             // Abxr.OnAuthCompleted(false, error). Same pipeline as API/network terminal failure: Authenticated stays false,
             // no session; apps that continue without analytics should handle success == false (as for any failed auth).
-            // This is not success == true (unlike a completed session with authMechanism none from the backend).
+            // This is not success == true (unlike a completed session with no user-auth requirement).
             //
             // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass; the REST request may fail
             // on first request. MDM/query overrides after LoadRuntimeAuthFromConfig may fix credentials; do not gate on

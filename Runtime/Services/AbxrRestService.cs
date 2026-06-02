@@ -12,6 +12,15 @@ using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Services
 {
+    internal sealed class RestAuthResult
+    {
+        public bool Success;
+        public string Body;
+        public long StatusCode;
+        public bool Retryable;
+        public bool AuthRejected;
+    }
+
     /// <summary>REST (UnityWebRequest) service. Queues data/storage and sends auth, config, data, and storage requests via HTTP.</summary>
     internal class AbxrRestService
     {
@@ -61,7 +70,7 @@ namespace AbxrLib.Runtime.Services
 
         private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, bool> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<RestAuthResult> onComplete)
         {
             string url = RestUri(AuthPath).ToString();
             string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
@@ -73,30 +82,81 @@ namespace AbxrLib.Runtime.Services
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
             yield return request.SendWebRequest();
 
-            // Always pass response body when present so auth service can surface API errors consistently.
-            string response = request.downloadHandler?.text;
-            long responseCode = request.responseCode;
+            string responseBody = request.downloadHandler?.text ?? "";
+            long statusCode = request.responseCode;
 
-            // Same REST success rule as auth service: token + secret are both required.
-            bool success = false;
-            if (!string.IsNullOrEmpty(response))
+            bool responseShapeIsValid = false;
+            if (!string.IsNullOrEmpty(responseBody))
             {
                 try
                 {
-                    var parsed = JsonConvert.DeserializeObject<AuthResponse>(response);
-                    success = AuthResponse.IsValidSuccess(parsed);
+                    var parsed = JsonConvert.DeserializeObject<AuthResponse>(responseBody);
+                    responseShapeIsValid = AuthResponse.IsValidSuccess(parsed);
                 }
-                catch { /* treat as failure */ }
+                catch
+                {
+                    responseShapeIsValid = false;
+                }
             }
-            // REST decides: API rejected credentials (do not retry) when HTTP 401 or 403.
-            bool isAuthRejectedByApi = !success && (responseCode == 401 || responseCode == 403);
-            // Normalize empty failure body for auth service logging.
-            string responseBody = response ?? "";
-            if (string.IsNullOrEmpty(responseBody) && !success)
-                responseBody = "No response body.";
+
+            bool httpSuccess = request.result == UnityWebRequest.Result.Success;
+            bool success = httpSuccess && responseShapeIsValid;
+            bool authRejected = !success && (statusCode == 401 || statusCode == 403);
+            bool retryable = !success && IsRetryableAuthFailure(request, responseBody);
+
             if (!success)
-                Logcat.Warning($"AuthRequest failed: {responseBody}");
-            onComplete?.Invoke(success, responseBody, isAuthRejectedByApi);
+            {
+                string detail = string.IsNullOrEmpty(responseBody)
+                    ? $"HTTP {statusCode}: {request.error ?? "No response body."}"
+                    : responseBody;
+                Logcat.Warning($"AuthRequest failed: {detail}");
+            }
+
+            onComplete?.Invoke(new RestAuthResult
+            {
+                Success = success,
+                Body = responseBody,
+                StatusCode = statusCode,
+                Retryable = retryable,
+                AuthRejected = authRejected
+            });
+        }
+
+        private static bool IsRetryableAuthFailure(UnityWebRequest request, string responseBody)
+        {
+            if (request.result == UnityWebRequest.Result.ConnectionError) return true;
+
+            long code = request.responseCode;
+            if (code == 408 || code == 429) return true;
+            if (code < 500 || code > 599) return false;
+
+            // Backend-provided detail/message/error bodies on 5xx responses are intentional
+            // failures; surface them instead of retrying the same rejected request.
+            return !HasExplicitBackendError(responseBody);
+        }
+
+        private static bool HasExplicitBackendError(string responseBody)
+        {
+            if (string.IsNullOrEmpty(responseBody)) return false;
+            try
+            {
+                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseBody);
+                if (obj == null) return false;
+                return HasNonEmptyValue(obj, "detail")
+                       || HasNonEmptyValue(obj, "message")
+                       || HasNonEmptyValue(obj, "error");
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool HasNonEmptyValue(Dictionary<string, object> obj, string key)
+        {
+            if (!obj.TryGetValue(key, out var value) || value == null) return false;
+            if (value is string s) return !string.IsNullOrEmpty(s);
+            return !string.IsNullOrEmpty(value.ToString());
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)

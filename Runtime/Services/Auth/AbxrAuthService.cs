@@ -77,9 +77,6 @@ namespace AbxrLib.Runtime.Services.Auth
         
         private const string DeviceIdKey = "abxrlib_device_id";
         
-        // Store entered email/text value for email and text auth methods
-        private string _enteredAuthValue;
-        
         // Auth handoff for external launcher apps
         private bool _sessionUsedAuthHandoff;
         private string _returnToPackage;
@@ -199,8 +196,8 @@ namespace AbxrLib.Runtime.Services.Auth
             // Auth handoff (intent / CLI): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
             CheckAuthHandoff();
 
-            // Use the runtime auth mechanism for the device authentication request.
-            _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
+            // Use the runtime auth mechanism for the user-auth stage after config is fetched
+            _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
 
             _isAuthStarted = true;
             _runner.StartCoroutine(AuthenticateCoroutine());
@@ -249,11 +246,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 enteredAuthValue = input + "@" + _authMechanism.domain;
 
             _authMechanism.prompt = enteredAuthValue;
-
-            // Store the entered value before the REST request so ApplyAuthResponse can merge it into UserData when the response is parsed. PIN is never stored in UserData—only used as auth prompt.
-            _enteredAuthValue = _authMechanism.type == "email" || _authMechanism.type == "text"
-                ? enteredAuthValue
-                : null;
 
             _runner.StartCoroutine(AuthRequestCoroutine((success, errorMessage) =>
             {
@@ -379,14 +371,14 @@ namespace AbxrLib.Runtime.Services.Auth
             if (!configOk)
             {
                 Logcat.Warning(string.IsNullOrEmpty(configFailureDetail)
-                    ? "GET config failed; continuing with Configuration defaults and no user auth prompt (auth_mechanism treated as none)."
-                    : $"GET config failed ({configFailureDetail}); continuing with Configuration defaults and no user auth prompt (auth_mechanism treated as none).");
-                ApplyNoneUserAuthMechanismForSession();
+                    ? "GET config failed; continuing with Configuration defaults and no user auth prompt (authMechanism cleared)."
+                    : $"GET config failed ({configFailureDetail}); continuing with Configuration defaults and no user auth prompt (authMechanism cleared).");
+                ClearUserAuthMechanismForSession();
             }
             else if (_sessionUsedAuthHandoff)
             {
                 // Session identity came from the launcher; do not require a second PIN/email step from GET config.
-                ApplyNoneUserAuthMechanismForSession();
+                ClearUserAuthMechanismForSession();
             }
 #if UNITY_WEBGL && !UNITY_EDITOR
             else
@@ -426,13 +418,6 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        private class AuthRequestResultHolder
-        {
-            public bool Success;
-            public string Response;
-            public bool IsAuthRejectedByApi;
-        }
-
         /// <summary>Extract a user-facing error string from auth failure JSON.</summary>
         private static string ExtractAuthErrorMessage(string responseJson)
         {
@@ -460,7 +445,16 @@ namespace AbxrLib.Runtime.Services.Auth
             return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
         }
 
-        /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure; when false (e.g. keyboard submit), one attempt only.</summary>
+        private static string DescribeAuthFailure(RestAuthResult result)
+        {
+            string explicitError = ExtractAuthErrorMessage(result?.Body);
+            if (!string.IsNullOrEmpty(explicitError)) return explicitError;
+            if (result == null) return "Authentication request failed.";
+            if (result.StatusCode > 0) return $"Authentication request failed (HTTP {result.StatusCode}).";
+            return "Authentication request failed.";
+        }
+
+        /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). Device auth can retry transport/server transient failures; user-auth and SetUserData re-auth are one-shot.</summary>
         private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
@@ -468,11 +462,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
             var authMech = CreateAuthMechanismDict();
-            // Device authentication (withRetry): never send auth_mechanism; backend returns token or user authentication required. When withRetry is false (keyboard submit or SetUserData re-auth), send authMech so we send type=custom + userData for SetUserData or type+prompt for user authentication.
-            if (withRetry)
-                _payload.authMechanism = null;
-            else
-                _payload.authMechanism = IsAuthMechanismMeaningful(authMech) ? authMech : null;
+            // Device authentication (withRetry): never send authMechanism. User auth and SetUserData re-auth send only explicit supported request shapes.
+            _payload.authMechanism = withRetry ? null : IsAuthMechanismMeaningful(authMech) ? authMech : null;
 
             string savedBuildType = _payload.buildType;
             if (_payload.buildType == "production_custom")
@@ -482,6 +473,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 _payload.SSOAccessToken = Abxr.GetAccessToken();
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
+            int maxRetries = Math.Max(0, Configuration.Instance.sendRetriesOnFailure);
+            int retriesAttempted = 0;
             var restService = _restService;
 
             while (true)
@@ -501,7 +494,6 @@ namespace AbxrLib.Runtime.Services.Auth
                     _payload.orgToken = null;
                 }
 
-                // Log what we send so request and response logs pair clearly.
                 bool isDeviceAuth = _payload.authMechanism == null;
                 string stageLabel = isDeviceAuth ? "device-auth" : "user-auth";
                 if (_payload.authMechanism != null)
@@ -512,44 +504,50 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
-                var holder = new AuthRequestResultHolder();
-                yield return restService.AuthRequestCoroutine(_payload, (ok, json, isAuthRejectedByApi) =>
-                {
-                    holder.Success = ok;
-                    holder.Response = json;
-                    holder.IsAuthRejectedByApi = isAuthRejectedByApi;
-                });
+                RestAuthResult result = null;
+                yield return restService.AuthRequestCoroutine(_payload, r => result = r);
 
-                if (ApplyAuthResponse(holder.Response, stageLabel))
+                if (result != null && result.Success && ApplyAuthResponse(result.Body, stageLabel))
                 {
                     _payload.buildType = savedBuildType;
                     onComplete(true, null);
                     yield break;
                 }
 
+                string message = DescribeAuthFailure(result);
+
                 if (!withRetry)
                 {
                     _payload.buildType = savedBuildType;
-                    onComplete(false, ExtractAuthErrorMessage(holder.Response));
+                    onComplete(false, message);
                     yield break;
                 }
 
-                // Device authentication (withRetry): do not retry when REST reported auth rejected or response body contains an explicit error.
-                // Retrying would keep hitting the same rejection; treat as permanent failure and no-op for the rest of the session.
-                string explicitError = ExtractAuthErrorMessage(holder.Response);
-                bool isAuthRejected = holder.IsAuthRejectedByApi || !string.IsNullOrEmpty(explicitError);
-                if (isAuthRejected)
+                if (result != null && result.AuthRejected)
                 {
                     _credentialsRejectedByApi = true;
                     _payload.buildType = savedBuildType;
-                    string message = !string.IsNullOrEmpty(explicitError) ? explicitError : "Authentication was rejected by the API (credentials invalid or denied).";
                     Logcat.Warning($"AuthRequest failed: {message} No further auth attempts will be made this session.");
                     onComplete(false, message);
                     yield break;
                 }
 
-                string logDetail = ExtractAuthErrorMessage(holder.Response) ?? "No response body.";
-                Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
+                if (result == null || !result.Retryable)
+                {
+                    _payload.buildType = savedBuildType;
+                    onComplete(false, message);
+                    yield break;
+                }
+
+                if (retriesAttempted >= maxRetries)
+                {
+                    _payload.buildType = savedBuildType;
+                    onComplete(false, message);
+                    yield break;
+                }
+
+                retriesAttempted++;
+                Logcat.Warning($"AuthRequest failed: {message} Retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
         }
@@ -588,7 +586,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// When <see cref="Abxr.GetIsAuthenticated"/> is true and <see cref="Abxr.GetAccessToken"/> is a JWT with usable identity claims,
-        /// merges SSO claims into <see cref="ResponseData"/>, treats auth mechanism as none for this step, and returns true so the caller can call <see cref="AuthSucceeded"/> without prompting.
+        /// merges SSO claims into <see cref="ResponseData"/>, clears the auth mechanism for this step, and returns true so the caller can call <see cref="AuthSucceeded"/> without prompting.
         /// Skipped when <see cref="Configuration.enableLearnerLauncherMode"/> is on so assessment PIN / <see cref="Abxr.OnInputSubmitted"/> is not bypassed.
         /// </summary>
         private bool TryCompleteUserAuthUsingMdmSsoIdentity()
@@ -610,7 +608,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 return false;
             }
 
-            ApplyNoneUserAuthMechanismForSession();
+            ClearUserAuthMechanismForSession();
             _ssoUserDataMergedBeforeAuthSucceeded = true;
             Logcat.Info("MDM SSO user identity applied; skipping auth mechanism prompt (GET config authMechanism ignored for this session).");
             return true;
@@ -678,70 +676,75 @@ namespace AbxrLib.Runtime.Services.Auth
             return false;
         }
 
-        /// <summary>Parses auth response and applies it. REST auth responses must include both token and secret. Single place for ResponseData, UserData, Modules.</summary>
-        /// <param name="stageLabel">Optional label for logging, e.g. "device-auth" or "user-auth", so logs clearly pair request and response.</param>
-        private bool ApplyAuthResponse(string responseText, string stageLabel = null)
+        /// <summary>
+        /// Parses and applies an auth response. REST auth success requires both token and secret,
+        /// and handoff uses the same validation path so session data has one source of truth.
+        /// </summary>
+        /// <param name="responseText"></param>
+        /// <param name="stageLabel">Optional label for logging, e.g. "device-auth", "user-auth", or "handoff".</param>
+        /// <param name="handoff">When true, marks the session as supplied by an external handoff after validation.</param>
+        private bool ApplyAuthResponse(string responseText, string stageLabel = null, bool handoff = false)
         {
             if (string.IsNullOrEmpty(responseText)) return false;
             try
             {
                 var postResponse = JsonConvert.DeserializeObject<AuthResponse>(responseText);
-                if (postResponse == null) return false;
-
                 if (!AuthResponse.IsValidSuccess(postResponse))
                     return false;
 
-                if (!string.IsNullOrEmpty(postResponse.Token))
-                {
-                    Dictionary<string, object> decodedJwt = Utils.DecodeJwt(postResponse.Token);
-                    if (decodedJwt == null)
-                    {
-                        Logcat.Error("Failed to decode JWT token");
-                        return false;
-                    }
-                    if (!decodedJwt.ContainsKey("exp"))
-                    {
-                        Logcat.Error("JWT token missing expiration field");
-                        return false;
-                    }
-                    try
-                    {
-                        _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
-                    }
-                    catch (Exception ex)
-                    {
-                        Logcat.Error($"Invalid JWT token expiration: {ex.Message}");
-                        return false;
-                    }
-                }
-                else if (postResponse.Modules != null && postResponse.Modules.Count > 0)
-                {
-                    Logcat.Error("Invalid authentication response - missing token");
+                if (!TrySetTokenExpiryFromJwt(postResponse.Token))
                     return false;
-                }
 
                 ResponseData = postResponse;
                 if (ResponseData.Modules?.Count > 1)
                     ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
-                // Keep ResponseData.UserId for read-only use (GetAnonymizedUserId). Sync UserData into _userData.
                 ResponseData.UserData ??= new Dictionary<string, string>();
-                if (!string.IsNullOrEmpty(_enteredAuthValue))
-                {
-                    ResponseData.UserData ??= new Dictionary<string, string>();
-                    var keyName = _authMechanism?.type == "email" ? "email" : "text";
-                    ResponseData.UserData[keyName] = _enteredAuthValue;
-                    _enteredAuthValue = null;
-                }
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
-                // Debug: server userData and keyboard merge only; MDM SSO JWT merge runs in AuthSucceeded when the session auth sequence is complete.
-                var userDataLog = ResponseData.UserData == null ? "(null)" : string.Join(", ", ResponseData.UserData.Select(kvp => kvp.Key + "=" + kvp.Value));
+
                 string stagePrefix = !string.IsNullOrEmpty(stageLabel) ? $" ({stageLabel})" : "";
+                var userDataLog = ResponseData.UserData == null
+                    ? "(null)"
+                    : string.Join(", ", ResponseData.UserData.Select(kvp => kvp.Key + "=" + kvp.Value));
                 Logcat.Debug($"Auth response{stagePrefix}: userId={ResponseData.UserId ?? "(null)"}, userData=[{userDataLog}], token={(!string.IsNullOrEmpty(ResponseData.Token) ? "present" : "(null)")}, appId={ResponseData.AppId ?? "(null)"}, modules={ResponseData.Modules?.Count ?? 0}");
+
+                if (handoff)
+                {
+                    Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
+                    _sessionUsedAuthHandoff = true;
+                    _returnToPackage = ResponseData.ReturnToPackage;
+                    _deviceAuthDeferredByHandoff = true;
+                }
+
                 return true;
             }
             catch (Exception ex)
             {
                 Logcat.Error($"Authentication response handling failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool TrySetTokenExpiryFromJwt(string token)
+        {
+            Dictionary<string, object> decodedJwt = Utils.DecodeJwt(token);
+            if (decodedJwt == null)
+            {
+                Logcat.Error("Failed to decode JWT token");
+                return false;
+            }
+            if (!decodedJwt.TryGetValue("exp", out var expValue) || expValue == null)
+            {
+                Logcat.Error("JWT token missing expiration field");
+                return false;
+            }
+            try
+            {
+                _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(expValue)).UtcDateTime;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logcat.Error($"Invalid JWT token expiration: {ex.Message}");
                 return false;
             }
         }
@@ -768,17 +771,22 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (config != null)
                     {
                         Configuration.Instance.ApplyConfigPayload(config);
-                        _runtimeAuth.authMechanism = config.authMechanism ?? new AuthMechanism();
-                        if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.inputSource))
-                            _runtimeAuth.authMechanism.inputSource = "user";
-                        if (Configuration.Instance.enableLearnerLauncherMode && !string.Equals(_runtimeAuth.authMechanism.type ?? "", "assessmentPin", StringComparison.OrdinalIgnoreCase))
+
+                        _runtimeAuth.authMechanism = CopyAuthMechanism(config.authMechanism);
+                        if (Configuration.Instance.enableLearnerLauncherMode && !IsAuthMechanismType(_runtimeAuth.authMechanism, "assessmentPin"))
                         {
-                            _runtimeAuth.authMechanism.type = "assessmentPin";
+                            _runtimeAuth.authMechanism = new AuthMechanism
+                            {
+                                type = "assessmentPin",
+                                prompt = config.authMechanism?.prompt ?? "",
+                                domain = config.authMechanism?.domain ?? "",
+                                inputSource = "user"
+                            };
                         }
-                        
+
                         _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
                         string authType = _authMechanism?.type ?? "";
-                        if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
+                        if (NeedsUserAuthentication(_authMechanism))
                         {
                             Logcat.Info("User Authentication Required.");
                             Logcat.Debug($" - Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
@@ -851,25 +859,47 @@ namespace AbxrLib.Runtime.Services.Auth
             _runtimeAuth.tags = null;
         }
 
-        /// <summary>Returns a mutable copy of the given auth mechanism so we can set prompt to user input without mutating _runtimeAuth.</summary>
+        /// <summary>Returns a mutable copy of a supported user-auth mechanism, or null when user auth is not required.</summary>
         private static AuthMechanism CopyAuthMechanism(AuthMechanism source)
         {
-            if (source == null) return new AuthMechanism();
+            if (source == null) return null;
+
+            string type = (source.type ?? "").Trim();
+            if (string.IsNullOrEmpty(type) || string.Equals(type, "none", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            string normalizedType = NormalizeUserAuthType(type);
+            if (string.IsNullOrEmpty(normalizedType))
+            {
+                Logcat.Warning($"Unsupported authMechanism.type '{type}' from configuration; continuing without user authentication.");
+                return null;
+            }
+
             return new AuthMechanism
             {
-                type = source.type ?? "",
+                type = normalizedType,
                 prompt = source.prompt ?? "",
                 domain = source.domain ?? "",
-                inputSource = !string.IsNullOrEmpty(source.inputSource) ? source.inputSource : "user"
+                inputSource = !string.IsNullOrEmpty(source.inputSource) ? source.inputSource : "user",
+                allowGuest = source.allowGuest
             };
         }
 
-        private static bool NeedsUserAuthentication(AuthMechanism mechanism)
+        private static string NormalizeUserAuthType(string type)
         {
-            return mechanism != null
-                   && !string.IsNullOrEmpty(mechanism.type)
-                   && !string.Equals(mechanism.type, "none", StringComparison.OrdinalIgnoreCase);
+            if (string.Equals(type, "assessmentPin", StringComparison.OrdinalIgnoreCase)) return "assessmentPin";
+            if (string.Equals(type, "email", StringComparison.OrdinalIgnoreCase)) return "email";
+            if (string.Equals(type, "text", StringComparison.OrdinalIgnoreCase)) return "text";
+            return null;
         }
+
+        private static bool IsSupportedUserAuthType(string type) => !string.IsNullOrEmpty(NormalizeUserAuthType(type));
+
+        private static bool IsAuthMechanismType(AuthMechanism mechanism, string type) =>
+            mechanism != null && string.Equals(mechanism.type, type, StringComparison.OrdinalIgnoreCase);
+
+        private static bool NeedsUserAuthentication(AuthMechanism mechanism) =>
+            mechanism != null && IsSupportedUserAuthType(mechanism.type);
 
         private void AuthSucceeded()
         {
@@ -896,10 +926,10 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>For handoff receivers and GET-config failure: no keyboard/PIN; keep Configuration asset defaults for other fields.</summary>
-        private void ApplyNoneUserAuthMechanismForSession()
+        private void ClearUserAuthMechanismForSession()
         {
-            _authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
-            _runtimeAuth.authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "", inputSource = "user" };
+            _authMechanism = null;
+            _runtimeAuth.authMechanism = null;
         }
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -941,9 +971,8 @@ namespace AbxrLib.Runtime.Services.Auth
             ResponseData = new AuthResponse();
             _tokenExpiry = DateTime.MinValue;
             _payload.sessionId = null;
-            _authMechanism = new AuthMechanism();
+            _authMechanism = null;
             _runtimeAuth.authMechanism = null;
-            _enteredAuthValue = null;
             _sessionUsedAuthHandoff = false;
             _returnToPackage = null;
             _inputRequestPending = false;
@@ -990,7 +1019,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
             Logcat.Info("Processing authentication handoff from external launcher");
-            if (!ParseAuthResponse(normalized, true))
+            if (!ApplyAuthResponse(normalized, "handoff", handoff: true))
                 Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
         }
 
@@ -1014,23 +1043,12 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             catch
             {
-                // Not valid base64; treat as raw and let ParseAuthResponse validate
+                // Not valid base64; treat as raw and let ApplyAuthResponse validate
                 return s;
             }
             return null;
         }
 
-        private static bool ShouldRetry(UnityWebRequest request)
-        {
-            if (request.result == UnityWebRequest.Result.ConnectionError) return true;
-
-            long code = request.responseCode;
-            if (code == 408 || code == 429) return true;
-            if (code >= 500 && code <= 599) return true;
-
-            return false;
-        }
-        
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
 
         /// <summary>
@@ -1130,22 +1148,21 @@ namespace AbxrLib.Runtime.Services.Auth
             }, withRetry: false);
         }
         
-        /// <summary>True when the dict has a non-empty "type" (user authentication or custom). Without type, we omit authMechanism so device authentication sends no auth_mechanism (prompt/inputSource alone are not meaningful).</summary>
-        private static bool IsAuthMechanismMeaningful(Dictionary<string, string> dict)
-        {
-            if (dict == null || dict.Count == 0) return false;
-            return dict.TryGetValue("type", out var type) && !string.IsNullOrEmpty(type);
-        }
+        /// <summary>True when the dict has a non-empty "type".</summary>
+        private static bool IsAuthMechanismMeaningful(Dictionary<string, string> dict) =>
+            dict != null && dict.TryGetValue("type", out var type) && !string.IsNullOrEmpty(type);
 
         private Dictionary<string, string> CreateAuthMechanismDict()
         {
             var dict = new Dictionary<string, string>();
 
-            // SetUserData re-auth must send type=custom with userData; do not use current _authMechanism (e.g. email).
-            if (_setUserDataReAuthActive && _userData != null)
+            // SetUserData re-auth is the only client-originated custom auth path
+            if (_setUserDataReAuthActive)
             {
                 dict["type"] = "custom";
                 dict["inputSource"] = "user";
+                if (_userData == null) return dict;
+
                 foreach (var item in _userData)
                 {
                     if (item.Key != "type" && item.Key != "prompt" && item.Key != "inputSource")
@@ -1154,34 +1171,13 @@ namespace AbxrLib.Runtime.Services.Auth
                 return dict;
             }
 
-            // When we have an explicit auth mechanism (assessmentPin, email, text), use it so second-stage auth sends the correct type and prompt. Exclude "none" so that after anonymous session we still send type=custom when _userData is set (SetUserData re-auth).
-            bool useExplicitMechanism = _authMechanism != null && !string.IsNullOrEmpty(_authMechanism.type) && _authMechanism.type != "custom" && !string.Equals(_authMechanism.type, "none", StringComparison.OrdinalIgnoreCase);
-            if (useExplicitMechanism)
-            {
-                if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
-                dict["prompt"] = _authMechanism.prompt ?? "";
-                // Domain is client-only (prompting and building full email for prompt); server does not use it in the request.
-                if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
-                return dict;
-            }
+            // User-input auth supports only the backend-defined types returned by config
+            if (!NeedsUserAuthentication(_authMechanism)) return dict;
 
-            // Custom auth when we have a userData dictionary to send (may be empty so developers can clear all userData). Session userId is not set by client. Only when _userData is non-null (set from response or SetUserData); when null we skip so first request does not send type=custom.
-            if (_userData != null)
-            {
-                dict["type"] = "custom";
-                dict["inputSource"] = "user";
-                foreach (var item in _userData)
-                {
-                    if (item.Key != "type" && item.Key != "prompt" && item.Key != "inputSource")
-                        dict[item.Key] = item.Value;
-                }
-                return dict;
-            }
-
-            if (_authMechanism == null) return dict;
-            if (!string.IsNullOrEmpty(_authMechanism.type)) dict["type"] = _authMechanism.type;
-            if (!string.IsNullOrEmpty(_authMechanism.prompt)) dict["prompt"] = _authMechanism.prompt;
-            if (!string.IsNullOrEmpty(_authMechanism.inputSource)) dict["inputSource"] = _authMechanism.inputSource;
+            dict["type"] = _authMechanism.type;
+            dict["prompt"] = _authMechanism.prompt ?? "";
+            if (!string.IsNullOrEmpty(_authMechanism.inputSource))
+                dict["inputSource"] = _authMechanism.inputSource;
             return dict;
         }
 
@@ -1198,14 +1194,13 @@ namespace AbxrLib.Runtime.Services.Auth
         private void GetConfigData()
         {
             var config = Configuration.Instance;
-            _runtimeAuth.enableAutoStartAuthentication = config != null ? config.enableAutoStartAuthentication : true;
-            _runtimeAuth.enableReturnTo = config != null ? config.enableReturnTo : true;
-            _runtimeAuth.enableAutoStartModules = config != null ? config.enableAutoStartModules : true;
-            _runtimeAuth.enableAutoAdvanceModules = config != null ? config.enableAutoAdvanceModules : true;
+            _runtimeAuth.enableAutoStartAuthentication = config?.enableAutoStartAuthentication ?? true;
+            _runtimeAuth.enableReturnTo = config?.enableReturnTo ?? true;
+            _runtimeAuth.enableAutoStartModules = config?.enableAutoStartModules ?? true;
+            _runtimeAuth.enableAutoAdvanceModules = config?.enableAutoAdvanceModules ?? true;
 
             var configData = Utils.ExtractConfigData(config);
-            if (!configData.isValid)
-                return;
+            if (!configData.isValid) return;
 
             // Establish subsystem defaults for device/partner/tags when runtime auth is first loaded (e.g. constructor / Awake sequence).
             string deviceIdFromSubsystem = Abxr.GetDeviceId();
@@ -1235,8 +1230,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         private void GetArborData()
         {
-            if (_ArborMdmClient == null || !_ArborMdmClient.IsConnected())
-                return;
+            if (_ArborMdmClient == null || !_ArborMdmClient.IsConnected()) return;
 
             // MDM available: always accept deviceId, partner, tags from Arbor.
             _runtimeAuth.partner = "arborxr";
@@ -1366,123 +1360,40 @@ namespace AbxrLib.Runtime.Services.Auth
             //TODO Geolocation
         }
         
-        private bool ParseAuthResponse(string responseText, bool handoff = false)
-        {
-            try
-            {
-                ResponseData = JsonConvert.DeserializeObject<AuthResponse>(responseText);
-                if (string.IsNullOrEmpty(ResponseData.Token))
-                {
-                    throw new Exception("Invalid authentication response - missing token");
-                }
-            }
-            catch (Exception e)
-            {
-                Logcat.Error($"Failed to parse auth response: {e.Message}");
-                return false;
-            }
-            
-            if (!string.IsNullOrEmpty(_enteredAuthValue))
-            {
-                // Initialize UserData if it's null
-                ResponseData.UserData ??= new Dictionary<string, string>();
-                string keyName = _authMechanism?.type == "email" ? "email" : "text";
-                ResponseData.UserData[keyName] = _enteredAuthValue;
-                _enteredAuthValue = null;
-            }
-
-            if (ResponseData.Modules?.Count > 1)
-            {
-                ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
-            }
-            
-            if (handoff)
-            {
-                // Set token expiry to far in the future since we're trusting the handoff
-                _tokenExpiry = DateTime.UtcNow.AddHours(24);
-                Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
-                _sessionUsedAuthHandoff = true;
-                _returnToPackage = ResponseData?.ReturnToPackage;
-                ResponseData.UserData ??= new Dictionary<string, string>();
-                _userData = new Dictionary<string, string>(ResponseData.UserData);
-
-                _deviceAuthDeferredByHandoff = true;
-                // AuthenticateCoroutine runs GET config next, then AuthSucceeded (user auth not re-required after handoff).
-                return true;
-            }
-            
-            // Decode JWT with error handling
-            Dictionary<string, object> decodedJwt = Utils.DecodeJwt(ResponseData.Token);
-            if (decodedJwt == null)
-            {
-                Logcat.Error("Failed to decode JWT token");
-                return false;
-            }
-                    
-            if (!decodedJwt.ContainsKey("exp"))
-            {
-                Logcat.Error("JWT token missing expiration field");
-                return false;
-            }
-                    
-            try
-            {
-                _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds((long)decodedJwt["exp"]).UtcDateTime;
-            }
-            catch (Exception e)
-            {
-                Logcat.Error($"Invalid JWT token expiration {e.Message}");
-                return false;
-            }
-            
-            return true;
-        }
-
         /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration in GetConfigData).</summary>
-        internal bool GetEffectiveEnableAutoStartModules()
-        {
-            return _runtimeAuth.enableAutoStartModules ?? Configuration.Instance?.enableAutoStartModules ?? true;
-        }
+        internal bool GetEffectiveEnableAutoStartModules() =>
+            _runtimeAuth.enableAutoStartModules ?? Configuration.Instance?.enableAutoStartModules ?? true;
 
         /// <summary>Returns enableAutoAdvanceModules from runtime auth (loaded from Configuration in GetConfigData).</summary>
-        internal bool GetEffectiveEnableAutoAdvanceModules()
-        {
-            return _runtimeAuth.enableAutoAdvanceModules ?? Configuration.Instance?.enableAutoAdvanceModules ?? true;
-        }
+        internal bool GetEffectiveEnableAutoAdvanceModules() =>
+            _runtimeAuth.enableAutoAdvanceModules ?? Configuration.Instance?.enableAutoAdvanceModules ?? true;
 
         /// <summary>Returns enableReturnTo from runtime auth (loaded from Configuration in GetConfigData).</summary>
-        internal bool GetEffectiveEnableReturnTo()
-        {
-            return _runtimeAuth.enableReturnTo ?? Configuration.Instance?.enableReturnTo ?? true;
-        }
+        internal bool GetEffectiveEnableReturnTo() =>
+            _runtimeAuth.enableReturnTo ?? Configuration.Instance?.enableReturnTo ?? true;
 
         /// <summary>Returns enableAutoStartAuthentication from the runtime auth config (loaded from Configuration in GetConfigData).</summary>
-        internal bool GetEnableAutoStartAuthentication()
-        {
-            return _runtimeAuth.enableAutoStartAuthentication ?? true;
-        }
+        internal bool GetEnableAutoStartAuthentication() =>
+            _runtimeAuth.enableAutoStartAuthentication ?? true;
 
         // ── Runtime auth overrides (Abxr.SetOrgId / SetAuthSecret / SetDeviceId) ─────
 
         /// <summary>Updates runtime auth orgId. Called by subsystem when Abxr.SetOrgId() is used.</summary>
         internal void SetRuntimeAuthOrgId(string value)
         {
-            if (_runtimeAuth != null)
-                _runtimeAuth.orgId = value ?? "";
+            if (_runtimeAuth != null) _runtimeAuth.orgId = value ?? "";
         }
 
         /// <summary>Updates runtime auth authSecret. Called by subsystem when Abxr.SetAuthSecret() is used.</summary>
         internal void SetRuntimeAuthAuthSecret(string value)
         {
-            if (_runtimeAuth != null)
-                _runtimeAuth.authSecret = value ?? "";
+            if (_runtimeAuth != null) _runtimeAuth.authSecret = value ?? "";
         }
 
         /// <summary>Updates runtime auth deviceId. Called by subsystem when Abxr.SetDeviceId() is used.</summary>
         internal void SetRuntimeAuthDeviceId(string value)
         {
-            if (_runtimeAuth != null)
-                _runtimeAuth.deviceId = value ?? "";
+            if (_runtimeAuth != null) _runtimeAuth.deviceId = value ?? "";
         }
 
         /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters (or from MDM via GetDeviceTags) are used. Only overwrites when the getter returns a non-empty value so we do not wipe configured credentials with empty values (e.g. Editor with no MDM).</summary>

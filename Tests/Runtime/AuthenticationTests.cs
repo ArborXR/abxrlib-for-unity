@@ -123,6 +123,8 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator Auth_Fails_On_500_With_Explicit_Error_No_Retry()
         {
+            Configuration.Instance.sendRetriesOnFailure = 2;
+
             FakeBackend.QueueScenario(
                 path: "/v1/auth/token",
                 status: 500,
@@ -138,6 +140,27 @@ namespace AbxrLib.Tests.Runtime
         }
 
         // ── Retry path ──────────────────────────────────────────────
+
+        [UnityTest]
+        public IEnumerator Auth_Retries_Transient_500_EmptyBody_Then_Succeeds()
+        {
+            Configuration.Instance.sendRetriesOnFailure = 1;
+            Configuration.Instance.sendRetryIntervalSeconds = 1;
+
+            FakeBackend.QueueEmptyBodyScenario(
+                path: "/v1/auth/token",
+                status: 500);
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody());
+
+            yield return RunAuthAndWait(timeoutSeconds: 6f);
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.AreEqual(2, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "transient server failures should retry when sendRetriesOnFailure allows it");
+        }
 
         [UnityTest]
         public IEnumerator Auth_Rejection_Latches_Within_Session()
@@ -321,6 +344,15 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator Auth_EmailInput_AppendsDomain_And_SendsEmailAuthMechanism()
         {
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody());
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "email", "learner@school.edu" } }));
+
             FakeBackend.QueueScenario(
                 path: "/v1/storage/config",
                 method: "GET",
