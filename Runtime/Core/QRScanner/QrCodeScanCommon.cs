@@ -15,7 +15,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
                 AutoRotate = true,
                 Options =
                 {
-                    PossibleFormats = new List<BarcodeFormat> { BarcodeFormat.QR_CODE },
+                    PossibleFormats = new List<BarcodeFormat> { BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.CODE_93 },
                     TryHarder = true
                 }
             };
@@ -30,6 +30,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
             try
             {
                 single = barcodeReader.Decode(pixels, width, height);
+                Debug.LogError("AbxrLib: FOUND BARCODE: " + single.Text);
             }
             catch (Exception ex)
             {
