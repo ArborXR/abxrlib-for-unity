@@ -135,29 +135,8 @@ namespace AbxrLib.Runtime.Services
             return !HasExplicitBackendError(responseBody);
         }
 
-        private static bool HasExplicitBackendError(string responseBody)
-        {
-            if (string.IsNullOrEmpty(responseBody)) return false;
-            try
-            {
-                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseBody);
-                if (obj == null) return false;
-                return HasNonEmptyValue(obj, "detail")
-                       || HasNonEmptyValue(obj, "message")
-                       || HasNonEmptyValue(obj, "error");
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static bool HasNonEmptyValue(Dictionary<string, object> obj, string key)
-        {
-            if (!obj.TryGetValue(key, out var value) || value == null) return false;
-            if (value is string s) return !string.IsNullOrEmpty(s);
-            return !string.IsNullOrEmpty(value.ToString());
-        }
+        private static bool HasExplicitBackendError(string responseBody) =>
+            AbxrAuthService.TryExtractAuthErrorMessage(responseBody, out _, includePlainTextFallback: false);
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
         {

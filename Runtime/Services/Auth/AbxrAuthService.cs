@@ -10,6 +10,7 @@ using AbxrLib.Runtime.Services;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -78,6 +79,13 @@ namespace AbxrLib.Runtime.Services.Auth
         private const string DeviceIdKey = "abxrlib_device_id";
         
         // Auth handoff for external launcher apps
+#if UNITY_INCLUDE_TESTS
+        /// <summary>
+        /// Test-only auth_handoff injection point. Lets PlayMode tests exercise the receiver path
+        /// without mutating process command-line args or Android intents.
+        /// </summary>
+        internal static string TestAuthHandoffPayload;
+#endif
         private bool _sessionUsedAuthHandoff;
         private string _returnToPackage;
         /// <summary>True when a valid auth_handoff was parsed; AuthenticateCoroutine skips device AuthRequestCoroutine and completes after GET config (same as normal flow).</summary>
@@ -150,10 +158,9 @@ namespace AbxrLib.Runtime.Services.Auth
 
             // Load runtime auth from Configuration, then apply GetArborData/GetQueryData/intent so runtime config reflects all sources.
             LoadRuntimeAuthFromConfig();
-
-            // GetArborData() no-ops when ArborMdmClient is not available; when available it applies device/org from MDM.
+#if UNITY_ANDROID && !UNITY_EDITOR
             GetArborData();
-
+#endif
             // Apply Abxr.SetOrgId/SetAuthSecret/SetDeviceId into runtime auth (after config load so overrides win; after GetArborData so MDM can have set org token first).
             ApplyAbxrOverridesToRuntimeAuth();
 
@@ -184,14 +191,13 @@ namespace AbxrLib.Runtime.Services.Auth
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
             GetQueryData();
 #endif
-            var validationError = _runtimeAuth.IsValidToSend();
+            var validationError = _runtimeAuth.PreparePayloadForAuth(_payload);
             if (validationError != null)
             {
                 _attemptActive = false;
                 OnFailed?.Invoke(validationError);
                 return;
             }
-            _runtimeAuth.CopyAuthFieldsTo(_payload);
 
             // Auth handoff (intent / CLI): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
             CheckAuthHandoff();
@@ -265,9 +271,12 @@ namespace AbxrLib.Runtime.Services.Auth
                     SetInputSource("user");  // In case it was changed by QR Scanner
 
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.
-                    OnFailed?.Invoke("Authentication failed");
+                    string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : "Authentication Failed";
+                    string promptError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : "Authentication Failed";
+
+                    OnFailed?.Invoke(completedError);
                     _inputRequestPending = true;
-                    OnInputRequested?.Invoke(_authMechanism.type, originalPrompt, _authMechanism.domain, "Authentication Failed");
+                    OnInputRequested?.Invoke(_authMechanism.type, originalPrompt, _authMechanism.domain, promptError);
                 }
             }, withRetry: false));
         }
@@ -320,6 +329,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         internal void ResetForTest()
         {
+            TestAuthHandoffPayload = null;
             _stopping = false;
             _attemptActive = false;
             _isAuthStarted = false;
@@ -419,37 +429,89 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>Extract a user-facing error string from auth failure JSON.</summary>
-        private static string ExtractAuthErrorMessage(string responseJson)
+        internal static bool TryExtractAuthErrorMessage(string responseBody, out string message, bool includePlainTextFallback = true)
         {
-            if (string.IsNullOrEmpty(responseJson)) return null;
+            message = null;
+            if (string.IsNullOrWhiteSpace(responseBody)) return false;
+
             try
             {
-                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
-                if (obj == null) return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
-                // Backend (e.g. FastAPI) uses "detail" (string or array); other APIs use "message" or "error". Check all so REST and service behave the same.
-                string FromValue(object v)
+                JToken root = JToken.Parse(responseBody);
+
+                message = ExtractMessageToken(GetProperty(root, "message")) ??
+                          ExtractMessageToken(GetProperty(root, "detail")) ??
+                          ExtractMessageToken(GetProperty(root, "error"));
+
+                if (string.IsNullOrWhiteSpace(message) && includePlainTextFallback && IsScalar(root))
                 {
-                    if (v == null) return null;
-                    if (v is string s) return s;
-                    // Newtonsoft deserializes to JValue/JArray; JArray.ToString() is not useful; try first element.
-                    var jarr = v as Newtonsoft.Json.Linq.JArray;
-                    if (jarr != null && jarr.Count > 0 && jarr[0] != null)
-                        return jarr[0].ToString();
-                    return v.ToString();
+                    message = ExtractMessageToken(root);
                 }
-                if (obj.TryGetValue("detail", out var detail)) { var s = FromValue(detail); if (!string.IsNullOrEmpty(s)) return s; }
-                if (obj.TryGetValue("message", out var msg)) { var s = FromValue(msg); if (!string.IsNullOrEmpty(s)) return s; }
-                if (obj.TryGetValue("error", out var err)) { var s = FromValue(err); if (!string.IsNullOrEmpty(s)) return s; }
+
+                message = NormalizeErrorMessage(message);
+                return !string.IsNullOrEmpty(message);
             }
-            catch { /* ignore */ }
-            return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
+            catch (JsonReaderException)
+            {
+                if (!includePlainTextFallback) return false;
+
+                message = NormalizeErrorMessage(responseBody);
+                return !string.IsNullOrEmpty(message);
+            }
+            catch
+            {
+                return false;
+            }
         }
+
+        private static JToken GetProperty(JToken token, string propertyName)
+        {
+            if (token is JObject obj && obj.TryGetValue(propertyName, StringComparison.OrdinalIgnoreCase, out JToken value)) return value;
+            return null;
+        }
+
+        private static string ExtractMessageToken(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null || token.Type == JTokenType.Undefined) return null;
+
+            switch (token.Type)
+            {
+                case JTokenType.String:
+                case JTokenType.Integer:
+                case JTokenType.Float:
+                case JTokenType.Boolean:
+                    return token.ToString();
+
+                case JTokenType.Object:
+                    return ExtractMessageToken(GetProperty(token, "msg")) ??
+                           ExtractMessageToken(GetProperty(token, "message")) ??
+                           ExtractMessageToken(GetProperty(token, "detail")) ??
+                           ExtractMessageToken(GetProperty(token, "error"));
+
+                case JTokenType.Array:
+                    foreach (JToken child in token.Children())
+                    {
+                        string childMessage = ExtractMessageToken(child);
+                        if (!string.IsNullOrWhiteSpace(childMessage))
+                            return childMessage;
+                    }
+                    return null;
+
+                default:
+                    return null;
+            }
+        }
+
+        private static bool IsScalar(JToken token) =>
+            token?.Type is JTokenType.String or JTokenType.Integer or JTokenType.Float or JTokenType.Boolean;
+
+        private static string NormalizeErrorMessage(string value) =>
+            string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
         private static string DescribeAuthFailure(RestAuthResult result)
         {
-            string explicitError = ExtractAuthErrorMessage(result?.Body);
-            if (!string.IsNullOrEmpty(explicitError)) return explicitError;
             if (result == null) return "Authentication request failed.";
+            if (TryExtractAuthErrorMessage(result.Body, out string explicitError)) return explicitError;
+            if (result.StatusCode >= 200 && result.StatusCode <= 299) return "Authentication request returned an invalid response.";
             if (result.StatusCode > 0) return $"Authentication request failed (HTTP {result.StatusCode}).";
             return "Authentication request failed.";
         }
@@ -460,17 +522,13 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
 
+            var validationError = _runtimeAuth.PreparePayloadForAuth(_payload);
+            if (validationError != null) { onComplete(false, validationError); yield break; }
+
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
             var authMech = CreateAuthMechanismDict();
             // Device authentication (withRetry): never send authMechanism. User auth and SetUserData re-auth send only explicit supported request shapes.
             _payload.authMechanism = withRetry ? null : IsAuthMechanismMeaningful(authMech) ? authMech : null;
-
-            string savedBuildType = _payload.buildType;
-            if (_payload.buildType == "production_custom")
-                _payload.buildType = "production";
-
-            if (Abxr.GetIsAuthenticated())
-                _payload.SSOAccessToken = Abxr.GetAccessToken();
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             int maxRetries = Math.Max(0, Configuration.Instance.sendRetriesOnFailure);
@@ -480,19 +538,6 @@ namespace AbxrLib.Runtime.Services.Auth
             while (true)
             {
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
-
-                // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret). Use _runtimeAuth so runtime overrides are respected.
-                if (_runtimeAuth.useAppTokens)
-                {
-                    _payload.appId = null;
-                    _payload.orgId = null;
-                    _payload.authSecret = null;
-                }
-                else
-                {
-                    _payload.appToken = null;
-                    _payload.orgToken = null;
-                }
 
                 bool isDeviceAuth = _payload.authMechanism == null;
                 string stageLabel = isDeviceAuth ? "device-auth" : "user-auth";
@@ -509,7 +554,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 if (result != null && result.Success && ApplyAuthResponse(result.Body, stageLabel))
                 {
-                    _payload.buildType = savedBuildType;
                     onComplete(true, null);
                     yield break;
                 }
@@ -518,7 +562,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 if (!withRetry)
                 {
-                    _payload.buildType = savedBuildType;
                     onComplete(false, message);
                     yield break;
                 }
@@ -526,7 +569,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (result != null && result.AuthRejected)
                 {
                     _credentialsRejectedByApi = true;
-                    _payload.buildType = savedBuildType;
                     Logcat.Warning($"AuthRequest failed: {message} No further auth attempts will be made this session.");
                     onComplete(false, message);
                     yield break;
@@ -534,14 +576,12 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 if (result == null || !result.Retryable)
                 {
-                    _payload.buildType = savedBuildType;
                     onComplete(false, message);
                     yield break;
                 }
 
                 if (retriesAttempted >= maxRetries)
                 {
-                    _payload.buildType = savedBuildType;
                     onComplete(false, message);
                     yield break;
                 }
@@ -1011,6 +1051,12 @@ namespace AbxrLib.Runtime.Services.Auth
                 handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
 #endif
             }
+#if UNITY_INCLUDE_TESTS
+            string testHandoffPayload = TestAuthHandoffPayload;
+            TestAuthHandoffPayload = null;
+
+            if (string.IsNullOrEmpty(handoffPayload)) handoffPayload = testHandoffPayload;
+#endif
             if (string.IsNullOrEmpty(handoffPayload)) return;
             string normalized = NormalizeHandoffPayload(handoffPayload);
             if (string.IsNullOrEmpty(normalized))
@@ -1223,7 +1269,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             _runtimeAuth.CopyAuthFieldsTo(_payload);
         }
-
+#if UNITY_ANDROID && !UNITY_EDITOR
         /// <summary>
         /// When ArborMdmClient is available and connected: updates deviceId, partner, tags from MDM; for production_custom that is all we accept (org credentials stay from config). For other build types, updates orgToken (app tokens) or orgId/authSecret (legacy) from MDM.
         /// When MDM is not available, returns immediately (runtime auth is updated by Abxr.SetOrgId/SetAuthSecret/SetDeviceId directly).
@@ -1279,7 +1325,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
             _runtimeAuth.CopyAuthFieldsTo(_payload);
         }
-
+#endif
 #if UNITY_WEBGL && !UNITY_EDITOR
         private void GetQueryData()
         {

@@ -23,6 +23,13 @@ namespace AbxrLib.Runtime
     {
         // ── Singleton ────────────────────────────────────────────────
         internal static AbxrSubsystem Instance { get; private set; }
+
+#if UNITY_INCLUDE_TESTS
+        /// <summary>Test-only SSO override. Null means use the real client</summary>
+        internal static bool? TestSsoIsAuthenticated;
+        internal static string TestSsoAccessToken;
+#endif
+
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
         private AbxrDataService _dataService;
@@ -950,11 +957,17 @@ namespace AbxrLib.Runtime
 		
 		internal bool GetIsAuthenticated()
 		{
+#if UNITY_INCLUDE_TESTS
+			if (TestSsoIsAuthenticated.HasValue) return TestSsoIsAuthenticated.Value;
+#endif
 			return _arborMdmClient != null && _arborMdmClient.IsConnected() && _arborMdmClient.ServiceWrapper != null && _arborMdmClient.ServiceWrapper.GetIsAuthenticated();
 		}
 
 		internal string GetAccessToken()
 		{
+#if UNITY_INCLUDE_TESTS
+			if (TestSsoIsAuthenticated.HasValue) return TestSsoAccessToken ?? "";
+#endif
 			return _arborMdmClient != null && _arborMdmClient.IsConnected() ? _arborMdmClient.ServiceWrapper?.GetAccessToken() : "";
 		}
 		

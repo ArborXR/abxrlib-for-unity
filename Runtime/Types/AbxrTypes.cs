@@ -146,7 +146,6 @@ namespace AbxrLib.Runtime.Types
         public void CopyAuthFieldsTo(AuthPayload payload)
         {
             if (payload == null) return;
-            payload.buildType = buildType;
             payload.deviceId = deviceId;
             payload.partner = partner ?? "none";
             payload.tags = tags;
@@ -167,6 +166,18 @@ namespace AbxrLib.Runtime.Types
                 payload.orgToken = null;
             }
         }
+
+        /// <summary>
+        /// Validate the auth fields required for a backend auth request, then copy the single selected credential mode into the payload.
+        /// Returns null when the payload is ready to send, or a user-facing validation error otherwise.
+        /// </summary>
+        public string PreparePayloadForAuth(AuthPayload payload)
+        {
+            var err = IsValidToSend();
+            if (err != null) return err;
+            CopyAuthFieldsTo(payload);
+            return null;
+        }
     }
 
     // ── Auth payload sent TO the backend ──────────────────────────────
@@ -184,11 +195,8 @@ namespace AbxrLib.Runtime.Types
         public string appToken; // omit when using legacy credentials
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string orgToken;
-        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public string buildType; // Production (Custom APK) sends "production" to API
         public string deviceId;
         public string userId;
-        public string SSOAccessToken;
         public string[] tags;
         public string sessionId;
         public string partner;
@@ -277,10 +285,9 @@ namespace AbxrLib.Runtime.Types
         public bool? enableSceneEvents;
         public string maxDictionarySize;
 
-        // ── Also accepted in GET /v1/storage/config JSON; deserialized but NOT merged into Configuration (developer-controlled in Unity) ──
+        // Developer-controlled values that may appear in GET /v1/storage/config JSON but are not merged into Configuration
         public bool? enableArborMdmClient;
         public bool? useAppTokens;
-        public string buildType;
         public string authenticationStartDelay;
         public bool? enableAutoStartModules;
         public bool? enableAutoAdvanceModules;

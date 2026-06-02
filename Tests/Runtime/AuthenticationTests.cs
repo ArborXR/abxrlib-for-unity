@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Core;
 using NUnit.Framework;
@@ -52,7 +53,7 @@ namespace AbxrLib.Tests.Runtime
             if (userData != null) body["userData"] = userData;
             if (appId != null) body["appId"] = appId;
             if (packageName != null) body["packageName"] = packageName;
-            body["modules"] = modules ?? new object[0];
+            body["modules"] = modules ?? Array.Empty<object>();
             return body;
         }
 
@@ -65,6 +66,46 @@ namespace AbxrLib.Tests.Runtime
                     return kvp.Value;
             }
             return null;
+        }
+
+        private static string JwtWithClaims(Dictionary<string, object> claims)
+        {
+            var header = new Dictionary<string, object>
+            {
+                { "typ", "JWT" },
+                { "alg", "HS256" }
+            };
+
+            return $"{Base64UrlEncodeJson(header)}.{Base64UrlEncodeJson(claims)}.c2ln";
+        }
+
+        private static string Base64UrlEncodeJson(object value)
+        {
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(value);
+            return Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+        }
+
+        private static void QueueAssessmentPinConfig(string prompt = "Enter your test PIN")
+        {
+            FakeBackend.QueueScenario(
+                path: "/v1/storage/config",
+                method: "GET",
+                status: 200,
+                body: new Dictionary<string, object>
+                {
+                    {
+                        "authMechanism",
+                        new Dictionary<string, object>
+                        {
+                            { "type", "assessmentPin" },
+                            { "prompt", prompt },
+                            { "inputSource", "user" }
+                        }
+                    }
+                });
         }
 
         // ── Happy path ──────────────────────────────────────────────
@@ -84,19 +125,137 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator Auth_Request_Includes_AppToken_In_Body()
+        public IEnumerator Auth_AppTokens_ProductionCustom_UsesConfiguredOrgToken_AndOmitsLegacyFields()
         {
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "production_custom";
+            c.appToken = FakeAppToken;
+            c.orgToken = FakeOrgToken;
+
+            // Populate legacy fields too, so the test proves app-token mode does not leak them.
+            c.appID = "00000000-0000-0000-0000-000000000011";
+            c.orgID = "00000000-0000-0000-0000-000000000022";
+            c.authSecret = "legacy-secret-should-not-leak";
+
             yield return RunAuthAndWait();
-            Assert.IsTrue(LastAuthSuccess);
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
 
             var req = FakeBackend.GetRequests("/v1/auth/token").Single();
             Assert.IsNotNull(req.BodyJson, "auth body should be JSON");
             Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"], "appToken should be sent in the body");
             Assert.AreEqual(FakeOrgToken, (string)req.BodyJson["orgToken"], "orgToken should be sent in the body");
-            // Legacy fields should be omitted when useAppTokens=true (NullValueHandling.Ignore on the serializer).
             Assert.IsNull(req.BodyJson["appId"]);
             Assert.IsNull(req.BodyJson["orgId"]);
             Assert.IsNull(req.BodyJson["authSecret"]);
+        }
+
+        // ── Build type credential-source behavior ──────────────────
+
+        [UnityTest]
+        public IEnumerator Auth_AppTokens_Production_IgnoresConfiguredOrgToken_AndUsesRuntimeOrgToken()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "production";
+            c.appToken = FakeAppToken;
+            c.orgToken = FakeOrgToken;
+
+            // Production/shared builds must not send the build-time org token from config.
+            // Runtime org identification comes from MDM, query/intent, or these explicit overrides.
+            Abxr.SetOrgId("00000000-0000-0000-0000-000000000033");
+            Abxr.SetAuthSecret("runtime-fingerprint-secret");
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"]);
+
+            var orgToken = (string)req.BodyJson["orgToken"];
+            Assert.IsFalse(string.IsNullOrEmpty(orgToken), "production auth still needs runtime org identification before sending");
+            Assert.AreNotEqual(FakeOrgToken, orgToken,
+                "production app-token auth should ignore the configured orgToken and use runtime-provided org credentials instead");
+            Assert.AreEqual(3, orgToken.Split('.').Length, "runtime orgToken should be JWT-shaped");
+
+            Assert.IsNull(req.BodyJson["buildType"]);
+            Assert.IsNull(req.BodyJson["appId"]);
+            Assert.IsNull(req.BodyJson["orgId"]);
+            Assert.IsNull(req.BodyJson["authSecret"]);
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_AppTokens_Development_UsesConfiguredOrgToken()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "development";
+            c.appToken = FakeAppToken;
+            c.orgToken = FakeOrgToken;
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"]);
+            Assert.AreEqual(FakeOrgToken, (string)req.BodyJson["orgToken"],
+                "development builds may use the configured orgToken for local/custom testing");
+            Assert.IsNull(req.BodyJson["buildType"]);
+            Assert.IsNull(req.BodyJson["appId"]);
+            Assert.IsNull(req.BodyJson["orgId"]);
+            Assert.IsNull(req.BodyJson["authSecret"]);
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_Legacy_Production_IgnoresConfiguredOrgCredentials_AndUsesRuntimeOrgCredentials()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = false;
+            c.buildType = "production";
+            c.appID = "00000000-0000-0000-0000-000000000011";
+            c.orgID = "00000000-0000-0000-0000-000000000022";
+            c.authSecret = "configured-secret-should-not-be-sent";
+
+            // Production/shared builds do not trust orgID/authSecret from the build-time config.
+            Abxr.SetOrgId("00000000-0000-0000-0000-000000000033");
+            Abxr.SetAuthSecret("runtime-fingerprint-secret");
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual("00000000-0000-0000-0000-000000000011", (string)req.BodyJson["appId"]);
+            Assert.AreEqual("00000000-0000-0000-0000-000000000033", (string)req.BodyJson["orgId"],
+                "production legacy auth should use runtime-provided orgId, not the configured orgID");
+            Assert.AreEqual("runtime-fingerprint-secret", (string)req.BodyJson["authSecret"],
+                "production legacy auth should use runtime-provided authSecret/fingerprint, not the configured authSecret");
+            Assert.IsNull(req.BodyJson["buildType"]);
+            Assert.IsNull(req.BodyJson["appToken"]);
+            Assert.IsNull(req.BodyJson["orgToken"]);
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_Legacy_Development_UsesConfiguredOrgCredentials()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = false;
+            c.buildType = "development";
+            c.appID = "00000000-0000-0000-0000-000000000011";
+            c.orgID = "00000000-0000-0000-0000-000000000022";
+            c.authSecret = "configured-development-secret";
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual("00000000-0000-0000-0000-000000000011", (string)req.BodyJson["appId"]);
+            Assert.AreEqual("00000000-0000-0000-0000-000000000022", (string)req.BodyJson["orgId"],
+                "development legacy auth should use the configured orgID");
+            Assert.AreEqual("configured-development-secret", (string)req.BodyJson["authSecret"],
+                "development legacy auth should use the configured authSecret");
+            Assert.IsNull(req.BodyJson["buildType"]);
+            Assert.IsNull(req.BodyJson["appToken"]);
+            Assert.IsNull(req.BodyJson["orgToken"]);
         }
 
         // ── Rejection paths ────────────────────────────────────────
@@ -193,28 +352,13 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator Auth_ConfigRequiresPin_RequestsInput_ThenSucceeds()
         {
-            FakeBackend.QueueScenario(
-                path: "/v1/storage/config",
-                method: "GET",
-                status: 200,
-                body: new Dictionary<string, object>
-                {
-                    {
-                        "authMechanism",
-                        new Dictionary<string, object>
-                        {
-                            { "type", "assessmentPin" },
-                            { "prompt", "Enter your test PIN" },
-                            { "inputSource", "user" },
-                        }
-                    },
-                });
+            QueueAssessmentPinConfig();
 
             bool inputRequested = false;
             string requestedType = null;
             string requestedPrompt = null;
 
-            Abxr.OnInputRequested = (type, prompt, domain, error) =>
+            Abxr.OnInputRequested = (type, prompt, _, _) =>
             {
                 inputRequested = true;
                 requestedType = type;
@@ -244,14 +388,14 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator Auth_ProductionCustom_Sends_Production_BuildType()
+        public IEnumerator Auth_Request_Omits_ClientOnly_BuildType()
         {
             yield return RunAuthAndWait();
-            Assert.IsTrue(LastAuthSuccess);
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
 
             var req = FakeBackend.GetRequests("/v1/auth/token").Single();
-            Assert.AreEqual("production", (string)req.BodyJson["buildType"],
-                "production_custom is a Unity/client configuration value; the REST API receives production.");
+            Assert.IsNull(req.BodyJson["buildType"],
+                "buildType is a Unity/client credential-selection value; the current backend auth schema does not consume it.");
         }
 
         [UnityTest]
@@ -267,7 +411,7 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator Auth_Request_Includes_LegacyCredentials_When_UseAppTokensFalse()
+        public IEnumerator Auth_Legacy_ProductionCustom_UsesConfiguredOrgCredentials_AndOmitsAppTokens()
         {
             var c = Configuration.Instance;
             c.useAppTokens = false;
@@ -275,11 +419,13 @@ namespace AbxrLib.Tests.Runtime
             c.appID = "00000000-0000-0000-0000-000000000011";
             c.orgID = "00000000-0000-0000-0000-000000000022";
             c.authSecret = "legacy-secret";
-            c.appToken = null;
-            c.orgToken = null;
+
+            // Populate app-token fields too, so the test proves legacy mode does not leak them.
+            c.appToken = FakeAppToken;
+            c.orgToken = FakeOrgToken;
 
             yield return RunAuthAndWait();
-            Assert.IsTrue(LastAuthSuccess);
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
 
             var req = FakeBackend.GetRequests("/v1/auth/token").Single();
             Assert.AreEqual("00000000-0000-0000-0000-000000000011", (string)req.BodyJson["appId"]);
@@ -305,26 +451,61 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_LegacyMode_MissingOrgCredentials_FailsBeforeNetwork()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = false;
+            c.buildType = "production_custom";
+            c.appID = "00000000-0000-0000-0000-000000000011";
+            c.orgID = null;
+            c.authSecret = null;
+            c.appToken = FakeAppToken;
+            c.orgToken = FakeOrgToken;
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[AbxrLib\] Authentication failure"));
+
+            yield return RunAuthAndWait(timeoutSeconds: 3f);
+
+            Assert.IsFalse(LastAuthSuccess);
+            Assert.That(LastAuthError, Does.Contain("Organization identification unavailable"));
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "invalid legacy credentials should fail before a REST auth request is sent");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_AppTokenMode_BuildsDynamicOrgToken_FromOverrides()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "production";
+            c.appToken = FakeAppToken;
+            c.orgToken = null;
+
+            Abxr.SetOrgId("00000000-0000-0000-0000-000000000022");
+            Abxr.SetAuthSecret("device-fingerprint-secret");
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"]);
+            var dynamicOrgToken = (string)req.BodyJson["orgToken"];
+            Assert.IsFalse(string.IsNullOrEmpty(dynamicOrgToken),
+                "dynamic orgToken should be generated from orgId + authSecret overrides");
+            Assert.AreEqual(3, dynamicOrgToken.Split('.').Length,
+                "dynamic orgToken should be a JWT-shaped compact token");
+
+            Assert.IsNull(req.BodyJson["appId"]);
+            Assert.IsNull(req.BodyJson["orgId"]);
+            Assert.IsNull(req.BodyJson["authSecret"]);
+        }
+
+        [UnityTest]
         public IEnumerator Auth_PinSubmission_Sends_AssessmentPin_And_ReusesSessionId()
         {
-            FakeBackend.QueueScenario(
-                path: "/v1/storage/config",
-                method: "GET",
-                status: 200,
-                body: new Dictionary<string, object>
-                {
-                    {
-                        "authMechanism",
-                        new Dictionary<string, object>
-                        {
-                            { "type", "assessmentPin" },
-                            { "prompt", "Enter your test PIN" },
-                            { "inputSource", "user" },
-                        }
-                    },
-                });
+            QueueAssessmentPinConfig();
 
-            Abxr.OnInputRequested = (type, prompt, domain, error) => Abxr.OnInputSubmitted("123456");
+            Abxr.OnInputRequested = (_, _, _, _) => Abxr.OnInputSubmitted("123456");
 
             yield return RunAuthAndWait();
 
@@ -336,9 +517,400 @@ namespace AbxrLib.Tests.Runtime
                 "user auth should update the same backend session");
 
             var mechanism = requests[1].BodyJson["authMechanism"];
-            Assert.AreEqual("assessmentPin", (string)mechanism["type"]);
-            Assert.AreEqual("123456", (string)mechanism["prompt"]);
-            Assert.AreEqual("user", (string)mechanism["inputSource"]);
+            Assert.AreEqual("assessmentPin", (string)mechanism?["type"]);
+            Assert.AreEqual("123456", (string)mechanism?["prompt"]);
+            Assert.AreEqual("user", (string)mechanism?["inputSource"]);
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_PinSubmission_Fails_ThenRePrompts_AndSucceeds()
+        {
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "device" } }));
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 401,
+                body: new Dictionary<string, object> { { "detail", "Invalid assessment PIN" } });
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "pinStatus", "accepted" } }));
+
+            QueueAssessmentPinConfig();
+
+            var requestedTypes = new List<string>();
+            var requestedPrompts = new List<string>();
+            var requestedErrors = new List<string>();
+            var submittedPins = new List<string>();
+            var authSuccesses = new List<bool>();
+            var authErrors = new List<string>();
+
+            Action<bool, string> authCompletedHandler = (success, error) =>
+            {
+                authSuccesses.Add(success);
+                authErrors.Add(error);
+            };
+
+            Abxr.OnInputRequested = (type, prompt, _, error) =>
+            {
+                requestedTypes.Add(type);
+                requestedPrompts.Add(prompt);
+                requestedErrors.Add(error);
+
+                if (requestedTypes.Count == 1)
+                {
+                    submittedPins.Add("000000");
+                    Abxr.OnInputSubmitted("000000");
+                }
+                else if (requestedTypes.Count == 2)
+                {
+                    submittedPins.Add("123456");
+                    Abxr.OnInputSubmitted("123456");
+                }
+            };
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[AbxrLib\] Authentication failure: Invalid assessment PIN"));
+
+            Abxr.OnAuthCompleted += authCompletedHandler;
+            Abxr.StartAuthentication();
+
+            float elapsed = 0f;
+            while (!authSuccesses.Contains(true) && elapsed < 10f)
+            {
+                yield return null;
+                elapsed += Time.unscaledDeltaTime;
+            }
+            Abxr.OnAuthCompleted -= authCompletedHandler;
+
+            Assert.Contains(true, authSuccesses, "expected final auth success after retrying with the corrected PIN");
+            CollectionAssert.AreEqual(new[] { false, true }, authSuccesses,
+                "bad PIN should emit a failed auth event, then the corrected PIN should complete auth successfully");
+            Assert.AreEqual("Invalid assessment PIN", authErrors[0]);
+            Assert.IsNull(authErrors[1]);
+
+            CollectionAssert.AreEqual(new[] { "assessmentPin", "assessmentPin" }, requestedTypes);
+            CollectionAssert.AreEqual(new[] { "Enter your test PIN", "Enter your test PIN" }, requestedPrompts);
+            CollectionAssert.AreEqual(new[] { "", "Invalid assessment PIN" }, requestedErrors,
+                "the second prompt should carry the backend error message so the app can show the failed PIN state");
+            CollectionAssert.AreEqual(new[] { "000000", "123456" }, submittedPins);
+            Assert.IsFalse(Abxr.IsAuthInputRequestPending(),
+                "successful retry should clear the pending-input state");
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(3, requests.Count,
+                "expected device auth, failed user-auth PIN, then successful user-auth PIN retry");
+            Assert.IsNull(requests[0].BodyJson["authMechanism"],
+                "device auth must not send authMechanism");
+            Assert.AreEqual((string)requests[0].BodyJson["sessionId"], (string)requests[1].BodyJson["sessionId"],
+                "failed PIN auth should use the same backend session as device auth");
+            Assert.AreEqual((string)requests[0].BodyJson["sessionId"], (string)requests[2].BodyJson["sessionId"],
+                "successful PIN retry should continue the same backend session");
+
+            var failedMechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("assessmentPin", (string)failedMechanism?["type"]);
+            Assert.AreEqual("000000", (string)failedMechanism?["prompt"]);
+            Assert.AreEqual("user", (string)failedMechanism?["inputSource"]);
+
+            var retryMechanism = requests[2].BodyJson["authMechanism"];
+            Assert.AreEqual("assessmentPin", (string)retryMechanism?["type"]);
+            Assert.AreEqual("123456", (string)retryMechanism?["prompt"]);
+            Assert.AreEqual("user", (string)retryMechanism?["inputSource"]);
+
+            var userData = Abxr.GetUserData();
+            Assert.IsNotNull(userData);
+            Assert.AreEqual("accepted", userData["pinStatus"],
+                "successful retry should replace the device-auth user data with the accepted PIN response data");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_SkipKeyboardInput_CompletesAuth_WithoutUserAuthPost()
+        {
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "device" } }));
+
+            QueueAssessmentPinConfig();
+
+            bool inputRequested = false;
+            string requestedType = null;
+            string requestedPrompt = null;
+            string requestedError = null;
+            int authRequestCountAtPrompt = -1;
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[AbxrLib\] Skipping user authentication\."));
+
+            Abxr.OnInputRequested = (type, prompt, _, error) =>
+            {
+                inputRequested = true;
+                requestedType = type;
+                requestedPrompt = prompt;
+                requestedError = error;
+                authRequestCountAtPrompt = FakeBackend.GetRequests("/v1/auth/token").Count;
+
+                Assert.IsTrue(Abxr.IsAuthInputRequestPending(),
+                    "input should be marked pending while the app's OnInputRequested handler is running");
+
+                Abxr.OnInputSubmitted("**skip**");
+            };
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(inputRequested, "Expected the SDK to request keyboard/PIN input before skip was submitted.");
+            Assert.AreEqual("assessmentPin", requestedType);
+            Assert.AreEqual("Enter your test PIN", requestedPrompt);
+            Assert.AreEqual("", requestedError);
+            Assert.AreEqual(1, authRequestCountAtPrompt,
+                "the prompt should happen after device auth and before any user-auth request");
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsNull(LastAuthError);
+            Assert.IsFalse(Abxr.IsAuthInputRequestPending(),
+                "submitting **skip** should clear the pending-input state");
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(1, requests.Count,
+                "**skip** should accept the device-authenticated session and avoid the follow-up user-auth POST.");
+            Assert.IsNull(requests[0].BodyJson["authMechanism"],
+                "device auth must not send authMechanism; skip should not create a user-auth request.");
+
+            var userData = Abxr.GetUserData();
+            Assert.IsNotNull(userData);
+            Assert.AreEqual("device", userData["authMode"],
+                "skip should preserve the original device-auth response data rather than replacing it with user-auth data.");
+        }
+
+        // ── MDM SSO ─────────────────────────────────────────────
+
+        [UnityTest]
+        public IEnumerator Auth_MdmSsoIdentity_SkipsPinPrompt_AndSyncsSsoClaims()
+        {
+            var ssoToken = JwtWithClaims(new Dictionary<string, object>
+            {
+                { "sub", "sso-subject-123" },
+                { "email", "sso.user@example.com" },
+                { "preferred_username", "sso.user@example.com" },
+                { "name", "SSO User" }
+            });
+
+            AbxrTestHooks.SetSsoForTest(isAuthenticated: true, accessToken: ssoToken);
+
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object>
+                {
+                    { "authMode", "device" },
+                    { "email", "backend@example.com" }
+                }));
+            QueueAssessmentPinConfig("Enter SSO-protected PIN");
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object>
+                {
+                    { "authMode", "sso-synced" },
+                }));
+
+            bool inputRequested = false;
+            Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
+
+            bool syncDone = false;
+            bool syncSuccess = false;
+            string syncError = null;
+            Abxr.OnUserDataSyncCompleted = (success, error) =>
+            {
+                syncDone = true;
+                syncSuccess = success;
+                syncError = error;
+            };
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsFalse(inputRequested,
+                "Valid MDM SSO identity should bypass the configured assessmentPin prompt.");
+            Assert.IsFalse(Abxr.IsAuthInputRequestPending(),
+                "SSO bypass should not leave keyboard input pending.");
+
+            yield return WaitUntil(
+                () => syncDone,
+                timeoutSeconds: 5f,
+                description: "merged SSO user data should be synced with a custom re-auth request");
+
+            Abxr.OnUserDataSyncCompleted = null;
+            Assert.IsTrue(syncSuccess, syncError);
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, requests.Count,
+                "Expected device auth plus one custom user-data sync. There should be no assessmentPin user-auth POST.");
+
+            Assert.IsNull(requests[0].BodyJson["authMechanism"],
+                "Initial device auth must not send authMechanism.");
+
+            var syncMechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("custom", (string)syncMechanism?["type"]);
+            Assert.AreEqual("user", (string)syncMechanism?["inputSource"]);
+            Assert.AreEqual("device", (string)syncMechanism?["authMode"],
+                "The SSO sync should send the merged device-auth userData back to the backend.");
+            Assert.AreEqual("sso-subject-123", (string)syncMechanism?["sub"]);
+            Assert.AreEqual("sso.user@example.com", (string)syncMechanism?["sso_email"],
+                "Existing backend email should not be overwritten; conflicting SSO email should be prefixed.");
+            Assert.AreEqual("SSO User", (string)syncMechanism?["name"]);
+            Assert.IsNull(syncMechanism?["assessmentPin"],
+                "SSO bypass should not submit an assessmentPin auth mechanism.");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_MdmSsoTokenWithoutIdentity_DoesNotBypassPinPrompt()
+        {
+            var ssoTokenWithoutIdentity = JwtWithClaims(new Dictionary<string, object>
+            {
+                { "aud", "example-audience" },
+                { "iss", "example-issuer" }
+            });
+
+            AbxrTestHooks.SetSsoForTest(isAuthenticated: true, accessToken: ssoTokenWithoutIdentity);
+
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "device" } }));
+            QueueAssessmentPinConfig();
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "pinStatus", "accepted" } }));
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "sso-claims-synced-after-pin" } }));
+
+            bool inputRequested = false;
+            Abxr.OnInputRequested = (type, prompt, _, _) =>
+            {
+                inputRequested = true;
+                Assert.AreEqual("assessmentPin", type);
+                Assert.AreEqual("Enter your test PIN", prompt);
+                Abxr.OnInputSubmitted("123456");
+            };
+
+            bool syncDone = false;
+            bool syncSuccess = false;
+            string syncError = null;
+            Abxr.OnUserDataSyncCompleted = (success, error) =>
+            {
+                syncDone = true;
+                syncSuccess = success;
+                syncError = error;
+            };
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsTrue(inputRequested,
+                "SSO token without usable identity claims should not bypass user authentication.");
+
+            yield return WaitUntil(
+                () => syncDone,
+                timeoutSeconds: 5f,
+                description: "decodable non-identity SSO claims are synced after explicit PIN auth");
+
+            Abxr.OnUserDataSyncCompleted = null;
+            Assert.IsTrue(syncSuccess, syncError);
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(3, requests.Count,
+                "Expected device auth, explicit PIN user auth, then current SSO-claim sync behavior after successful PIN auth.");
+
+            Assert.IsNull(requests[0].BodyJson["authMechanism"]);
+
+            var pinMechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("assessmentPin", (string)pinMechanism?["type"]);
+            Assert.AreEqual("123456", (string)pinMechanism?["prompt"]);
+            Assert.AreEqual("user", (string)pinMechanism?["inputSource"]);
+
+            var syncMechanism = requests[2].BodyJson["authMechanism"];
+            Assert.AreEqual("custom", (string)syncMechanism?["type"]);
+            Assert.IsNull(syncMechanism?["assessmentPin"],
+                "The follow-up SSO claim sync should not masquerade as a PIN auth request.");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_MdmSsoIdentity_DoesNotBypassPrompt_WhenLearnerLauncherModeEnabled()
+        {
+            Configuration.Instance.enableLearnerLauncherMode = true;
+
+            var ssoToken = JwtWithClaims(new Dictionary<string, object>
+            {
+                { "sub", "sso-subject-123" },
+                { "email", "sso.user@example.com" }
+            });
+
+            AbxrTestHooks.SetSsoForTest(isAuthenticated: true, accessToken: ssoToken);
+
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "device" } }));
+            QueueAssessmentPinConfig("Enter learner-launcher PIN");
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "pinStatus", "accepted" } }));
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "sso-synced-after-learner-auth" } }));
+
+            bool inputRequested = false;
+            Abxr.OnInputRequested = (type, prompt, _, _) =>
+            {
+                inputRequested = true;
+                Assert.AreEqual("assessmentPin", type);
+                Assert.AreEqual("Enter learner-launcher PIN", prompt);
+                Abxr.OnInputSubmitted("123456");
+            };
+
+            bool syncDone = false;
+            bool syncSuccess = false;
+            string syncError = null;
+            Abxr.OnUserDataSyncCompleted = (success, error) =>
+            {
+                syncDone = true;
+                syncSuccess = success;
+                syncError = error;
+            };
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsTrue(inputRequested,
+                "Learner Launcher Mode should force learner auth even when MDM SSO identity exists.");
+
+            yield return WaitUntil(
+                () => syncDone,
+                timeoutSeconds: 5f,
+                description: "SSO claims should sync only after explicit learner auth in Learner Launcher Mode");
+
+            Abxr.OnUserDataSyncCompleted = null;
+            Assert.IsTrue(syncSuccess, syncError);
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(3, requests.Count,
+                "Expected device auth, explicit learner PIN auth, then SSO user-data sync.");
+
+            var pinMechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("assessmentPin", (string)pinMechanism?["type"]);
+            Assert.AreEqual("123456", (string)pinMechanism?["prompt"]);
+
+            var syncMechanism = requests[2].BodyJson["authMechanism"];
+            Assert.AreEqual("custom", (string)syncMechanism?["type"]);
+            Assert.AreEqual("sso-subject-123", (string)syncMechanism?["sub"]);
+            Assert.IsNull(syncMechanism?["assessmentPin"],
+                "Learner Launcher Mode should use a real learner PIN request before any SSO claim sync.");
         }
 
         [UnityTest]
@@ -348,11 +920,6 @@ namespace AbxrLib.Tests.Runtime
                 path: "/v1/auth/token",
                 status: 201,
                 body: AuthBody());
-            FakeBackend.QueueScenario(
-                path: "/v1/auth/token",
-                status: 201,
-                body: AuthBody(userData: new Dictionary<string, object> { { "email", "learner@school.edu" } }));
-
             FakeBackend.QueueScenario(
                 path: "/v1/storage/config",
                 method: "GET",
@@ -366,13 +933,17 @@ namespace AbxrLib.Tests.Runtime
                             { "type", "email" },
                             { "prompt", "Enter school email" },
                             { "domain", "school.edu" },
-                            { "inputSource", "user" },
+                            { "inputSource", "user" }
                         }
-                    },
+                    }
                 });
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "email", "learner@school.edu" } }));
 
             string requestedDomain = null;
-            Abxr.OnInputRequested = (type, prompt, domain, error) =>
+            Abxr.OnInputRequested = (_, _, domain, _) =>
             {
                 requestedDomain = domain;
                 Abxr.OnInputSubmitted("learner");
@@ -386,14 +957,60 @@ namespace AbxrLib.Tests.Runtime
             var requests = FakeBackend.GetRequests("/v1/auth/token");
             Assert.AreEqual(2, requests.Count);
             var mechanism = requests[1].BodyJson["authMechanism"];
-            Assert.AreEqual("email", (string)mechanism["type"]);
-            Assert.AreEqual("learner@school.edu", (string)mechanism["prompt"]);
-            Assert.AreEqual("user", (string)mechanism["inputSource"]);
-            Assert.IsNull(mechanism["domain"], "domain is client-side prompt/config data and should not be sent in authMechanism");
+            Assert.AreEqual("email", (string)mechanism?["type"]);
+            Assert.AreEqual("learner@school.edu", (string)mechanism?["prompt"]);
+            Assert.AreEqual("user", (string)mechanism?["inputSource"]);
+            Assert.IsNull(mechanism?["domain"], "domain is client-side prompt/config data and should not be sent in authMechanism");
 
             var userData = Abxr.GetUserData();
             Assert.IsNotNull(userData);
             Assert.AreEqual("learner@school.edu", userData["email"]);
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_TextInput_Sends_TextAuthMechanism()
+        {
+            FakeBackend.QueueScenario(
+                path: "/v1/storage/config",
+                method: "GET",
+                status: 200,
+                body: new Dictionary<string, object>
+                {
+                    {
+                        "authMechanism",
+                        new Dictionary<string, object>
+                        {
+                            { "type", "text" },
+                            { "prompt", "Enter learner id" },
+                            { "inputSource", "user" }
+                        }
+                    },
+                });
+
+            bool inputRequested = false;
+            string requestedType = null;
+            string requestedPrompt = null;
+            Abxr.OnInputRequested = (type, prompt, _, _) =>
+            {
+                inputRequested = true;
+                requestedType = type;
+                requestedPrompt = prompt;
+                Abxr.OnInputSubmitted("learner-123");
+            };
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(inputRequested, "Expected the SDK to request text input from the app.");
+            Assert.AreEqual("text", requestedType);
+            Assert.AreEqual("Enter learner id", requestedPrompt);
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, requests.Count, "expected device auth followed by text user auth");
+            var mechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("text", (string)mechanism?["type"]);
+            Assert.AreEqual("learner-123", (string)mechanism?["prompt"]);
+            Assert.AreEqual("user", (string)mechanism?["inputSource"]);
         }
 
         // ── Response shape variations ──────────────────────────────
@@ -401,8 +1018,7 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator Config_Endpoint_Override_Merges_Into_Runtime()
         {
-            // /v1/storage/config can override a subset of runtime config (see Configuration.ApplyConfigPayload).
-            // Values arrive as strings in the portal payload; the runtime parses them.
+            // /v1/storage/config can override a subset of runtime config (see Configuration.ApplyConfigPayload)
             FakeBackend.QueueScenario(
                 path: "/v1/storage/config",
                 method: "GET",
@@ -410,7 +1026,7 @@ namespace AbxrLib.Tests.Runtime
                 body: new Dictionary<string, object>
                 {
                     { "sendNextBatchWait", "47" },
-                    { "maximumCachedItems", "999" },
+                    { "maximumCachedItems", "999" }
                 });
 
             yield return RunAuthAndWait();
@@ -435,6 +1051,7 @@ namespace AbxrLib.Tests.Runtime
             yield return RunAuthAndWait();
 
             Assert.IsFalse(LastAuthSuccess);
+            Assert.AreEqual("Authentication request returned an invalid response.", LastAuthError);
             Assert.AreEqual(1, FakeBackend.GetRequests("/v1/auth/token").Count);
             Assert.AreEqual(0, FakeBackend.GetRequests("/v1/storage/config").Count,
                 "REST auth success requires token+secret, so config should not be fetched for appId-only responses");
@@ -475,7 +1092,7 @@ namespace AbxrLib.Tests.Runtime
                                 { "id", "module-1" },
                                 { "name", "Module 1" },
                                 { "target", "scene-1" },
-                                { "order", 0 },
+                                { "order", 0 }
                             }
                         }
                     }
@@ -501,12 +1118,13 @@ namespace AbxrLib.Tests.Runtime
                 body: new Dictionary<string, object> { { "detail", "config unavailable" } });
 
             bool inputRequested = false;
-            Abxr.OnInputRequested = (type, prompt, domain, error) => inputRequested = true;
+            Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
 
             yield return RunAuthAndWait();
 
             Assert.IsTrue(LastAuthSuccess, LastAuthError);
-            Assert.IsFalse(inputRequested, "config failures should keep the device-authenticated anonymous session rather than prompting for a synthetic authMechanism");
+            Assert.IsFalse(inputRequested,
+                "config failures should keep the device-authenticated anonymous session rather than prompting for a synthetic authMechanism");
             Assert.AreEqual(1, FakeBackend.GetRequests("/v1/auth/token").Count);
             Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count);
         }
@@ -526,13 +1144,13 @@ namespace AbxrLib.Tests.Runtime
                         {
                             { "type", "none" },
                             { "prompt", "ignored" },
-                            { "inputSource", "user" },
+                            { "inputSource", "user" }
                         }
                     },
                 });
 
             bool inputRequested = false;
-            Abxr.OnInputRequested = (type, prompt, domain, error) => inputRequested = true;
+            Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
 
             yield return RunAuthAndWait();
 
@@ -555,14 +1173,14 @@ namespace AbxrLib.Tests.Runtime
                             { "id", "module-2" },
                             { "name", "Second" },
                             { "target", "scene-2" },
-                            { "order", 2 },
+                            { "order", 2 }
                         },
                         new Dictionary<string, object>
                         {
                             { "id", "module-1" },
                             { "name", "First" },
                             { "target", "scene-1" },
-                            { "order", 1 },
+                            { "order", 1 }
                         },
                     }));
 
@@ -586,7 +1204,7 @@ namespace AbxrLib.Tests.Runtime
             string syncError = null;
             int authCompletedCount = 0;
 
-            Action<bool, string> authCompletedHandler = (success, error) => authCompletedCount++;
+            Action<bool, string> authCompletedHandler = (_, _) => authCompletedCount++;
             Abxr.OnAuthCompleted += authCompletedHandler;
             Abxr.OnUserDataSyncCompleted = (success, error) =>
             {
@@ -601,7 +1219,7 @@ namespace AbxrLib.Tests.Runtime
                 { "cohort", "alpha" },
                 { "type", "should-not-leak" },
                 { "prompt", "should-not-leak" },
-                { "inputSource", "should-not-leak" },
+                { "inputSource", "should-not-leak" }
             });
 
             yield return WaitUntil(() => syncDone, 5f, "SetUserData re-auth completed");
@@ -615,13 +1233,12 @@ namespace AbxrLib.Tests.Runtime
             var requests = FakeBackend.GetRequests("/v1/auth/token");
             Assert.AreEqual(2, requests.Count, "expected initial auth plus SetUserData custom re-auth");
             var mechanism = requests[1].BodyJson["authMechanism"];
-            Assert.AreEqual("custom", (string)mechanism["type"]);
-            Assert.AreEqual("user", (string)mechanism["inputSource"]);
-            Assert.AreEqual("learner-42", (string)mechanism["id"]);
-            Assert.AreEqual("learner@example.com", (string)mechanism["email"]);
-            Assert.AreEqual("alpha", (string)mechanism["cohort"]);
-            Assert.IsNull(mechanism["prompt"], "reserved user-data field prompt should not be forwarded as custom auth data");
+            Assert.AreEqual("custom", (string)mechanism?["type"]);
+            Assert.AreEqual("user", (string)mechanism?["inputSource"]);
+            Assert.AreEqual("learner-42", (string)mechanism?["id"]);
+            Assert.AreEqual("learner@example.com", (string)mechanism?["email"]);
+            Assert.AreEqual("alpha", (string)mechanism?["cohort"]);
+            Assert.IsNull(mechanism?["prompt"], "reserved user-data field prompt should not be forwarded as custom auth data");
         }
-
     }
 }

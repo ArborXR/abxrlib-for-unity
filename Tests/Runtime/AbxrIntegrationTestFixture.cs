@@ -76,7 +76,7 @@ namespace AbxrLib.Tests.Runtime
             AbxrTestHooks.CreateSubsystemForTest();
             yield return null;
 
-            Assert.IsTrue(AbxrTestHooks.hasSubsystemInstance, "AbxrSubsystem was not created by the test fixture.");
+            Assert.IsTrue(AbxrTestHooks.HasSubsystemInstance, "AbxrSubsystem was not created by the test fixture.");
 
             LastAuthDone = false;
             LastAuthSuccess = false;
@@ -87,6 +87,7 @@ namespace AbxrLib.Tests.Runtime
         public IEnumerator PerTestTearDown()
         {
             RemoveAuthCompletedHandler();
+            Abxr.OnUserDataSyncCompleted = null;
 
             if (_logCallback != null)
             {

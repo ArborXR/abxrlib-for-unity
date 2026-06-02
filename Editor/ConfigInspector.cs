@@ -16,7 +16,7 @@ namespace AbxrLib.Editor
             string[] buildTypeDisplayNames = { "Production", "Development", "Production (Custom APK)" };
             int currentSelection = config.buildType == "production" ? 0 : (config.buildType == "development" ? 1 : 2);
             int newSelection = EditorGUILayout.Popup(new GUIContent(
-                "Build Type", "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only).\nProduction (Custom APK): For single-customer builds; requires Organization Token; API receives buildType Production."),
+                "Build Type", "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only).\nProduction (Custom APK): For single-customer builds; requires Organization Token;"),
                 currentSelection, buildTypeDisplayNames);
             
             config.buildType = buildTypeValues[newSelection];
@@ -43,7 +43,7 @@ namespace AbxrLib.Editor
                     EditorGUILayout.HelpBox("In Production, Organization Token from config is not sent. The field is disabled for shared production builds.", MessageType.Info);
                 else if (isProductionCustom)
                     EditorGUILayout.HelpBox(
-                        "Production (Custom APK): For custom APKs per customer. Organization Token is required. The API receives buildType Production.",
+                        "Production (Custom APK): For custom APKs per customer. Organization Token is required.",
                         MessageType.Info);
                 else
                     EditorGUILayout.HelpBox(
@@ -73,11 +73,12 @@ namespace AbxrLib.Editor
                 else if (isProductionCustomLegacy)
                 {
                     EditorGUILayout.HelpBox(
-                        "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization Secret are required. The API receives buildType Production.",
+                        "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization Secret are required.",
                         MessageType.Info);
                 }
             }
-                    // Use App Tokens checkbox right under buildType dropdown
+            
+            // Use App Tokens checkbox right under buildType dropdown
             EditorGUILayout.Space(5);
             config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(
                 "Use App Tokens", "When enabled, use App Tokens (JWT) instead of appID/orgID/authSecret combination"), config.useAppTokens);
