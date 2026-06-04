@@ -523,6 +523,73 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_PinSubmission_DoesNotMutateConfiguredPrompt_WhileUserAuthIsInFlight()
+        {
+            const string configuredPrompt = "Enter the protected assessment PIN";
+
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "device" } }));
+            QueueAssessmentPinConfig(configuredPrompt);
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "pinStatus", "accepted" } }),
+                delayMs: 3000);
+
+            bool authDone = false;
+            bool authSuccess = false;
+            string authError = null;
+            Action<bool, string> authCompletedHandler = (success, error) =>
+            {
+                authDone = true;
+                authSuccess = success;
+                authError = error;
+            };
+
+            Abxr.OnInputRequested = (type, prompt, _, _) =>
+            {
+                Assert.AreEqual("assessmentPin", type);
+                Assert.AreEqual(configuredPrompt, prompt);
+                Abxr.OnInputSubmitted("654321");
+            };
+
+            Abxr.OnAuthCompleted += authCompletedHandler;
+            try
+            {
+                Abxr.StartAuthentication();
+
+                yield return WaitUntil(
+                    () => FakeBackend.GetRequests("/v1/auth/token").Count >= 2,
+                    3f,
+                    "user-auth request reached the backend");
+
+                var service = AbxrTestHooks.GetAuthServiceForTest();
+                Assert.IsNotNull(service, "auth service should exist while auth is in flight");
+                Assert.AreEqual(
+                    configuredPrompt,
+                    service.GetAuthMechanismPromptForTest(),
+                    "submitted PIN should not replace the configured authMechanism prompt while the request is in flight");
+
+                var requests = FakeBackend.GetRequests("/v1/auth/token");
+                var mechanism = requests[1].BodyJson["authMechanism"];
+                Assert.AreEqual("assessmentPin", (string)mechanism?["type"]);
+                Assert.AreEqual("654321", (string)mechanism?["prompt"],
+                    "the submitted PIN should still be sent in the request payload");
+                Assert.AreEqual("user", (string)mechanism?["inputSource"]);
+
+                yield return WaitUntil(() => authDone, 7f, "auth completed after delayed user-auth response");
+            }
+            finally
+            {
+                Abxr.OnAuthCompleted -= authCompletedHandler;
+            }
+
+            Assert.IsTrue(authSuccess, authError);
+        }
+
+        [UnityTest]
         public IEnumerator Auth_PinSubmission_Fails_ThenRePrompts_AndSucceeds()
         {
             FakeBackend.QueueScenario(

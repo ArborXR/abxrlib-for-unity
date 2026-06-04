@@ -47,7 +47,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private readonly AuthPayload _payload;
         /// <summary>Runtime auth values loaded from Configuration and updated by GetArborData, GetQueryData, intent, and SetOrgId/SetAuthSecret.</summary>
         private readonly RuntimeAuthConfig _runtimeAuth = new RuntimeAuthConfig();
-        /// <summary>Working copy of _runtimeAuth.authMechanism for this session; prompt is temporarily set to user input in KeyboardAuthenticate. All code uses this.</summary>
+        /// <summary>Working copy of _runtimeAuth.authMechanism for this session. Its prompt remains the configured UI prompt; submitted user input is passed per request.</summary>
         private AuthMechanism _authMechanism;
         private DateTime _tokenExpiry = DateTime.MinValue;
         private bool _inputRequestPending;
@@ -244,18 +244,13 @@ namespace AbxrLib.Runtime.Services.Auth
         
         public void KeyboardAuthenticate(string input)
         {
-            string originalPrompt = _authMechanism.prompt;
-            string enteredAuthValue = input;
-
-            // For email type: put full email (userInput + "@" + domain) into prompt for the auth request; server does not use domain from payload. Domain is client-only for prompting and building this value.
-            if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
-                enteredAuthValue = input + "@" + _authMechanism.domain;
-
-            _authMechanism.prompt = enteredAuthValue;
+            string configuredType = _authMechanism.type;
+            string configuredPrompt = _authMechanism.prompt;
+            string configuredDomain = _authMechanism.domain;
+            string submittedAuthPrompt = BuildSubmittedAuthPrompt(input) ?? "";
 
             _runner.StartCoroutine(AuthRequestCoroutine((success, errorMessage) =>
             {
-                _authMechanism.prompt = originalPrompt;
                 if (success)
                 {
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -276,9 +271,24 @@ namespace AbxrLib.Runtime.Services.Auth
 
                     OnFailed?.Invoke(completedError);
                     _inputRequestPending = true;
-                    OnInputRequested?.Invoke(_authMechanism.type, originalPrompt, _authMechanism.domain, promptError);
+                    OnInputRequested?.Invoke(configuredType, configuredPrompt, configuredDomain, promptError);
                 }
-            }, withRetry: false));
+            }, withRetry: false, submittedAuthPrompt: submittedAuthPrompt));
+        }
+
+        private string BuildSubmittedAuthPrompt(string input)
+        {
+            // For email type: put full email (userInput + "@" + domain) into the auth request; server does not use domain from payload. Domain is client-only for prompting and building this value.
+            if (_authMechanism != null &&
+                _authMechanism.type == "email" &&
+                !string.IsNullOrEmpty(_authMechanism.domain) &&
+                input != null &&
+                !input.Contains("@"))
+            {
+                return input + "@" + _authMechanism.domain;
+            }
+
+            return input;
         }
         
         public void SetAuthHeaders(UnityWebRequest request, string json = null)
@@ -339,6 +349,8 @@ namespace AbxrLib.Runtime.Services.Auth
             _retryCoroutine = null;
             ClearSessionAndPrepareForNew();
         }
+        
+        internal string GetAuthMechanismPromptForTest() => _authMechanism?.prompt;
 #endif
         
         // ── Core auth flow (coroutine) ───────────────────────────────
@@ -517,7 +529,7 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). Device auth can retry transport/server transient failures; user-auth and SetUserData re-auth are one-shot.</summary>
-        private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true)
+        private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true, string submittedAuthPrompt = null)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
@@ -526,7 +538,7 @@ namespace AbxrLib.Runtime.Services.Auth
             if (validationError != null) { onComplete(false, validationError); yield break; }
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
-            var authMech = CreateAuthMechanismDict();
+            var authMech = CreateAuthMechanismDict(submittedAuthPrompt);
             // Device authentication (withRetry): never send authMechanism. User auth and SetUserData re-auth send only explicit supported request shapes.
             _payload.authMechanism = withRetry ? null : IsAuthMechanismMeaningful(authMech) ? authMech : null;
 
@@ -544,7 +556,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (_payload.authMechanism != null)
                 {
                     var authMechLog = string.Join(", ", _payload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
-                    Logcat.Debug($"Auth request ({stageLabel}): authMechanism=[{authMechLog}], _authMechanism.prompt={(_authMechanism?.prompt ?? "(null)")} (length={_authMechanism?.prompt?.Length ?? 0})");
+                    string configuredPrompt = _authMechanism?.prompt ?? "(null)";
+                    Logcat.Debug($"Auth request ({stageLabel}): authMechanism=[{authMechLog}], configuredPrompt={configuredPrompt} (submittedPromptLength={submittedAuthPrompt?.Length ?? 0})");
                 }
                 else
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
@@ -1198,7 +1211,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private static bool IsAuthMechanismMeaningful(Dictionary<string, string> dict) =>
             dict != null && dict.TryGetValue("type", out var type) && !string.IsNullOrEmpty(type);
 
-        private Dictionary<string, string> CreateAuthMechanismDict()
+        private Dictionary<string, string> CreateAuthMechanismDict(string submittedAuthPrompt = null)
         {
             var dict = new Dictionary<string, string>();
 
@@ -1221,7 +1234,7 @@ namespace AbxrLib.Runtime.Services.Auth
             if (!NeedsUserAuthentication(_authMechanism)) return dict;
 
             dict["type"] = _authMechanism.type;
-            dict["prompt"] = _authMechanism.prompt ?? "";
+            dict["prompt"] = submittedAuthPrompt ?? _authMechanism.prompt ?? "";
             if (!string.IsNullOrEmpty(_authMechanism.inputSource))
                 dict["inputSource"] = _authMechanism.inputSource;
             return dict;
