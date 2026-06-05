@@ -191,7 +191,7 @@ namespace AbxrLib.Tests.Runtime
             c.useAppTokens = true;
             c.buildType = "production";
             c.appToken = FakeAppToken;
-            c.orgToken = null;
+            c.orgToken = AlternateOrgToken;
 
             var platform = new FakeAuthPlatformSource
             {
@@ -207,6 +207,37 @@ namespace AbxrLib.Tests.Runtime
             Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"]);
             Assert.AreEqual(FakeOrgToken, (string)req.BodyJson["orgToken"],
                 "Standalone production builds should accept org_token from desktop sources such as CLI/file.");
+            Assert.AreNotEqual(AlternateOrgToken, (string)req.BodyJson["orgToken"],
+                "production standalone builds should not trust build-time orgToken when desktop sources provide one.");
+            Assert.AreEqual("none", (string)req.BodyJson["partner"],
+                "Desktop auth should not be marked as Arbor MDM sourced.");
+        }
+
+        [UnityTest]
+        public IEnumerator Standalone_Development_UsesOrgTokenFromDesktopSources_AndOverridesConfiguredOrgToken()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "development";
+            c.appToken = FakeAppToken;
+            c.orgToken = AlternateOrgToken;
+
+            var platform = new FakeAuthPlatformSource
+            {
+                IsStandalonePlayer = true,
+                DesktopOrgToken = FakeOrgToken
+            };
+            yield return RecreateSubsystemWith(platform);
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"]);
+            Assert.AreEqual(FakeOrgToken, (string)req.BodyJson["orgToken"],
+                "Standalone development builds are not production_custom, so desktop org_token input should be accepted.");
+            Assert.AreNotEqual(AlternateOrgToken, (string)req.BodyJson["orgToken"],
+                "desktop org_token should override configured development orgToken.");
             Assert.AreEqual("none", (string)req.BodyJson["partner"],
                 "Desktop auth should not be marked as Arbor MDM sourced.");
         }
@@ -305,6 +336,105 @@ namespace AbxrLib.Tests.Runtime
             Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count,
                 "The adopted handoff session should still fetch config using the supplied auth headers.");
             Assert.IsTrue(AbxrTestHooks.GetAuthServiceForTest()?.SessionUsedAuthHandoff() ?? false);
+        }
+
+        [UnityTest]
+        public IEnumerator Android_ArborMdmNonProductionCustom_AppTokens_BuildsDynamicOrgTokenFromMdm()
+        {
+            const string mdmOrgId = "00000000-0000-0000-0000-000000004242";
+            const string mdmFingerprint = "mdm-fingerprint-app-token-secret";
+
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "development";
+            c.appToken = FakeAppToken;
+            c.orgToken = AlternateOrgToken;
+
+            var platform = new FakeAuthPlatformSource
+            {
+                IsAndroidPlayer = true,
+                ArborMdmConnected = true,
+                CurrentDeviceId = "mdm-device-app-token",
+                CurrentOrgId = mdmOrgId,
+                CurrentFingerprint = mdmFingerprint,
+                CurrentDeviceTags = new[] { "classroom", "app-token" }
+            };
+            yield return RecreateSubsystemWith(platform);
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"]);
+
+            var dynamicOrgToken = (string)req.BodyJson["orgToken"];
+            Assert.AreEqual(Utils.BuildOrgTokenDynamic(mdmOrgId, mdmFingerprint), dynamicOrgToken,
+                "non-production_custom app-token auth should build orgToken from Arbor MDM org id + fingerprint.");
+            Assert.AreNotEqual(AlternateOrgToken, dynamicOrgToken,
+                "non-production_custom app-token auth should replace configured orgToken with Arbor MDM data when MDM is connected.");
+
+            var orgTokenPayload = Utils.TryDecodeJwtPayload(dynamicOrgToken);
+            Assert.IsNotNull(orgTokenPayload, "Arbor MDM dynamic org token payload should be decodable.");
+            Assert.AreEqual(mdmOrgId, (string)orgTokenPayload["orgId"],
+                "Arbor MDM dynamic org token should be built from the MDM org id.");
+
+            Assert.IsNull(req.BodyJson["appId"]);
+            Assert.IsNull(req.BodyJson["orgId"]);
+            Assert.IsNull(req.BodyJson["authSecret"]);
+            Assert.AreEqual("mdm-device-app-token", (string)req.BodyJson["deviceId"]);
+            Assert.AreEqual("arborxr", (string)req.BodyJson["partner"]);
+            CollectionAssert.AreEqual(
+                new[] { "classroom", "app-token" },
+                req.BodyJson["tags"]?.Select(t => (string)t).ToArray());
+        }
+
+        [UnityTest]
+        public IEnumerator Android_ArborMdmNonProductionCustom_Legacy_UsesMdmOrgCredentials()
+        {
+            const string configuredOrgId = "00000000-0000-0000-0000-000000000022";
+            const string mdmOrgId = "00000000-0000-0000-0000-000000004242";
+            const string configuredAuthSecret = "configured-development-secret";
+            const string mdmFingerprint = "mdm-fingerprint-legacy-secret";
+
+            var c = Configuration.Instance;
+            c.useAppTokens = false;
+            c.buildType = "development";
+            c.appID = "00000000-0000-0000-0000-000000000011";
+            c.orgID = configuredOrgId;
+            c.authSecret = configuredAuthSecret;
+            c.appToken = FakeAppToken;
+            c.orgToken = FakeOrgToken;
+
+            var platform = new FakeAuthPlatformSource
+            {
+                IsAndroidPlayer = true,
+                ArborMdmConnected = true,
+                CurrentDeviceId = "mdm-device-legacy",
+                CurrentOrgId = mdmOrgId,
+                CurrentFingerprint = mdmFingerprint,
+                CurrentDeviceTags = new[] { "classroom", "legacy" }
+            };
+            yield return RecreateSubsystemWith(platform);
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual("00000000-0000-0000-0000-000000000011", (string)req.BodyJson["appId"]);
+            Assert.AreEqual(mdmOrgId, (string)req.BodyJson["orgId"],
+                "non-production_custom legacy auth should replace configured orgID with the Arbor MDM org id.");
+            Assert.AreEqual(mdmFingerprint, (string)req.BodyJson["authSecret"],
+                "non-production_custom legacy auth should replace configured authSecret with the Arbor MDM fingerprint.");
+            Assert.AreNotEqual(configuredOrgId, (string)req.BodyJson["orgId"]);
+            Assert.AreNotEqual(configuredAuthSecret, (string)req.BodyJson["authSecret"]);
+
+            Assert.IsNull(req.BodyJson["appToken"]);
+            Assert.IsNull(req.BodyJson["orgToken"]);
+            Assert.AreEqual("mdm-device-legacy", (string)req.BodyJson["deviceId"]);
+            Assert.AreEqual("arborxr", (string)req.BodyJson["partner"]);
+            CollectionAssert.AreEqual(
+                new[] { "classroom", "legacy" },
+                req.BodyJson["tags"]?.Select(t => (string)t).ToArray());
         }
 
         [UnityTest]
