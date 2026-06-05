@@ -12,28 +12,7 @@ namespace AbxrLib.Tests.Runtime
     [TestFixture]
     public class PlatformConditionalAuthTests : AbxrIntegrationTestFixture
     {
-        private const string ValidJwtWithExpiration = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.c2ln";
         private const string AlternateOrgToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbHRlcm5hdGUtb3JnIn0.c2ln";
-
-        private static void QueueAssessmentPinConfig(string prompt = "Enter your test PIN")
-        {
-            FakeBackend.QueueScenario(
-                path: "/v1/storage/config",
-                method: "GET",
-                status: 200,
-                body: new Dictionary<string, object>
-                {
-                    {
-                        "authMechanism",
-                        new Dictionary<string, object>
-                        {
-                            { "type", "assessmentPin" },
-                            { "prompt", prompt },
-                            { "inputSource", "user" }
-                        }
-                    }
-                });
-        }
 
         private static string BuildHandoffJson()
         {

@@ -2,9 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -15,52 +13,6 @@ namespace AbxrLib.Tests.Runtime
     [TestFixture]
     public class AuthHandoffTests : AbxrIntegrationTestFixture
     {
-        private const string ValidJwtWithExpiration = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.c2ln";
-        private const string FakeAppId = "00000000-0000-0000-0000-000000000001";
-
-        private static Dictionary<string, object> AuthBody(string token = ValidJwtWithExpiration,
-            string secret = "test-secret", object userData = null, string userId = "test-user-id",
-            object modules = null, string appId = FakeAppId, string packageName = "com.example.testapp")
-        {
-            var body = new Dictionary<string, object>();
-
-            if (token != null) body["token"] = token;
-            if (secret != null) body["secret"] = secret;
-            if (userId != null) body["userId"] = userId;
-            if (userData != null) body["userData"] = userData;
-            if (appId != null) body["appId"] = appId;
-            if (packageName != null) body["packageName"] = packageName;
-
-            body["modules"] = modules ?? Array.Empty<object>();
-
-            return body;
-        }
-
-        private static string HandoffJson(string token = ValidJwtWithExpiration, string secret = "handoff-secret",
-            object userData = null, string userId = "handoff-user-id", object modules = null,
-            string appId = FakeAppId, string packageName = "com.example.handoffapp", string returnToPackage = null)
-        {
-            var body = AuthBody(token, secret, userData, userId, modules, appId, packageName);
-
-            if (returnToPackage != null) body["ReturnToPackage"] = returnToPackage;
-
-            return JsonConvert.SerializeObject(body);
-        }
-
-        private static string Base64Utf8(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
-
-        private static string GetHeader(RecordedRequest request, string name)
-        {
-            if (request?.Headers == null) return null;
-
-            foreach (var kvp in request.Headers)
-            {
-                if (string.Equals(kvp.Key, name, StringComparison.OrdinalIgnoreCase)) return kvp.Value;
-            }
-
-            return null;
-        }
-
         [UnityTest]
         public IEnumerator AuthHandoff_RawJson_SkipsDeviceAuth_ButStillGetsConfigWithHandoffHeaders()
         {
@@ -97,22 +49,7 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator AuthHandoff_ConfigRequiresPin_DoesNotPrompt_AndDoesNotPostUserAuth()
         {
-            FakeBackend.QueueScenario(
-                path: "/v1/storage/config",
-                method: "GET",
-                status: 200,
-                body: new Dictionary<string, object>
-                {
-                    {
-                        "authMechanism",
-                        new Dictionary<string, object>
-                        {
-                            { "type", "assessmentPin" },
-                            { "prompt", "Enter your test PIN" },
-                            { "inputSource", "user" },
-                        }
-                    },
-                });
+            QueueAssessmentPinConfig();
 
             bool inputRequested = false;
             Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;

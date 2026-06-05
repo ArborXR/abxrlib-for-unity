@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using Newtonsoft.Json;
 using AbxrLib.Runtime.Core;
 using NUnit.Framework;
 using UnityEngine;
@@ -28,6 +30,10 @@ namespace AbxrLib.Tests.Runtime
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LWFwcCJ9.c2ln";
         protected const string FakeOrgToken =
             "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LW9yZyJ9.c2ln";
+        protected const string ValidJwtWithExpiration =
+            "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.c2ln";
+        protected const string FakeAppId = "00000000-0000-0000-0000-000000000001";
+        protected const string DefaultAssessmentPinPrompt = "Enter your test PIN";
 
         protected bool LastAuthDone { get; private set; }
         protected bool LastAuthSuccess { get; private set; }
@@ -143,6 +149,104 @@ namespace AbxrLib.Tests.Runtime
             c.maxDictionarySize = 50;
 
             Assert.IsTrue(c.IsValid(), Configuration.LastValidationErrorMessage ?? "Test configuration should be valid.");
+        }
+
+        // ── Fake backend response builders ───────────────────────────
+
+        protected static Dictionary<string, object> AuthBody(
+            string token = ValidJwtWithExpiration,
+            string secret = "test-secret",
+            object userData = null,
+            string userId = "test-user-id",
+            object modules = null,
+            string appId = FakeAppId,
+            string packageName = "com.example.testapp")
+        {
+            var body = new Dictionary<string, object>();
+            if (token != null) body["token"] = token;
+            if (secret != null) body["secret"] = secret;
+            if (userId != null) body["userId"] = userId;
+            if (userData != null) body["userData"] = userData;
+            if (appId != null) body["appId"] = appId;
+            if (packageName != null) body["packageName"] = packageName;
+            body["modules"] = modules ?? Array.Empty<object>();
+            return body;
+        }
+
+        protected static string HandoffJson(
+            string token = ValidJwtWithExpiration,
+            string secret = "handoff-secret",
+            object userData = null,
+            string userId = "handoff-user-id",
+            object modules = null,
+            string appId = FakeAppId,
+            string packageName = "com.example.handoffapp",
+            string returnToPackage = null)
+        {
+            var body = AuthBody(token, secret, userData, userId, modules, appId, packageName);
+            if (returnToPackage != null) body["ReturnToPackage"] = returnToPackage;
+            return JsonConvert.SerializeObject(body);
+        }
+
+        protected static void QueueAssessmentPinConfig(string prompt = DefaultAssessmentPinPrompt) =>
+            QueueAuthMechanismConfig("assessmentPin", prompt);
+
+        protected static void QueueAuthMechanismConfig(string type, string prompt, string inputSource = "user", string domain = null)
+        {
+            var mechanism = new Dictionary<string, object>
+            {
+                { "type", type },
+                { "prompt", prompt },
+                { "inputSource", inputSource }
+            };
+            if (domain != null) mechanism["domain"] = domain;
+
+            QueueStorageConfig(new Dictionary<string, object>
+            {
+                { "authMechanism", mechanism }
+            });
+        }
+
+        protected static void QueueStorageConfig(object body, int status = 200)
+        {
+            FakeBackend.QueueScenario(
+                path: "/v1/storage/config",
+                method: "GET",
+                status: status,
+                body: body);
+        }
+
+        protected static string GetHeader(RecordedRequest request, string name)
+        {
+            if (request?.Headers == null) return null;
+            foreach (var kvp in request.Headers)
+            {
+                if (string.Equals(kvp.Key, name, StringComparison.OrdinalIgnoreCase))
+                    return kvp.Value;
+            }
+            return null;
+        }
+
+        protected static string JwtWithClaims(Dictionary<string, object> claims)
+        {
+            var header = new Dictionary<string, object>
+            {
+                { "typ", "JWT" },
+                { "alg", "HS256" }
+            };
+
+            return $"{Base64UrlEncodeJson(header)}.{Base64UrlEncodeJson(claims)}.c2ln";
+        }
+
+        protected static string Base64Utf8(string value) => Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
+
+        private static string Base64UrlEncodeJson(object value)
+        {
+            var json = JsonConvert.SerializeObject(value);
+            return Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
         }
 
         // ── Test helpers ────────────────────────────────────────────

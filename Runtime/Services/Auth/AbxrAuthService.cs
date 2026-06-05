@@ -179,16 +179,8 @@ namespace AbxrLib.Runtime.Services.Auth
             // When using app tokens with no org token yet, build dynamic org token from overrides (SetOrgId/SetAuthSecret) or from MDM (already set in GetArborData). Same logic as GetArborData but for when MDM is not connected—overrides supply orgId and authSecret (fingerprint) to sign the JWT.
             if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken) && !string.IsNullOrEmpty(_runtimeAuth.orgId) && !string.IsNullOrEmpty(_runtimeAuth.authSecret))
             {
-                try
-                {
-                    string dynamicToken = Utils.BuildOrgTokenDynamic(_runtimeAuth.orgId, _runtimeAuth.authSecret);
-                    if (!string.IsNullOrEmpty(dynamicToken))
-                        _runtimeAuth.orgToken = dynamicToken;
-                }
-                catch (Exception ex)
-                {
-                    Logcat.Error($"BuildOrgTokenDynamic from overrides failed: {ex.Message}");
-                }
+                string dynamicToken = Utils.BuildOrgTokenDynamic(_runtimeAuth.orgId, _runtimeAuth.authSecret);
+                if (!string.IsNullOrEmpty(dynamicToken)) _runtimeAuth.orgToken = dynamicToken;
             }
 
             if (_platformSource.IsAndroidPlayer) ApplyAndroidIntentOrgTokenIfAvailable(copyToPayload: false);
@@ -1233,34 +1225,15 @@ namespace AbxrLib.Runtime.Services.Auth
             // Non-production_custom: update auth from MDM (dynamic org token or orgId/authSecret).
             if (_runtimeAuth.useAppTokens)
             {
-                try
-                {
-                    string fingerprint = _platformSource.GetCurrentFingerprint();
-                    string orgId = _platformSource.GetCurrentOrgId();
-                    string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, fingerprint);
-                    if (!string.IsNullOrEmpty(dynamicToken))
-                        _runtimeAuth.orgToken = dynamicToken;
-                }
-                catch (Exception ex)
-                {
-                    Logcat.Error($"BuildOrgTokenDynamic failed: {ex.Message}\n" +
-                                  $"Exception Type: {ex.GetType().Name}\n" +
-                                  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-                }
+                string fingerprint = _platformSource.GetCurrentFingerprint();
+                string orgId = _platformSource.GetCurrentOrgId();
+                string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, fingerprint);
+                if (!string.IsNullOrEmpty(dynamicToken)) _runtimeAuth.orgToken = dynamicToken;
             }
             else
             {
                 _runtimeAuth.orgId = _platformSource.GetCurrentOrgId();
-                try
-                {
-                    _runtimeAuth.authSecret = _platformSource.GetCurrentFingerprint();
-                }
-                catch (Exception ex)
-                {
-                    Logcat.Error($"Authentication initialization failed: {ex.Message}\n" +
-                                  $"Exception Type: {ex.GetType().Name}\n" +
-                                  $"Stack Trace: {ex.StackTrace ?? "No stack trace available"}");
-                }
+                _runtimeAuth.authSecret = _platformSource.GetCurrentFingerprint();
             }
 
             _runtimeAuth.CopyAuthFieldsTo(_payload);

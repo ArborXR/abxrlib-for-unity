@@ -562,8 +562,7 @@ namespace AbxrLib.Runtime.Core
         /// <returns>JWT string in compact form, or null if inputs are invalid</returns>
         internal static string BuildOrgTokenDynamic(string orgId, string fingerprint)
         {
-            if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(fingerprint))
-                return null;
+            if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(fingerprint)) return null;
             try
             {
                 const string headerJson = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}";
@@ -575,11 +574,9 @@ namespace AbxrLib.Runtime.Core
                 string message = headerB64 + "." + payloadB64;
                 byte[] messageBytes = Encoding.UTF8.GetBytes(message);
                 byte[] secretKey = Encoding.UTF8.GetBytes(fingerprint);
-                using (var hmac = new HMACSHA256(secretKey))
-                {
-                    byte[] signature = hmac.ComputeHash(messageBytes);
-                    return message + "." + Base64UrlEncode(signature);
-                }
+                using var hmac = new HMACSHA256(secretKey);
+                byte[] signature = hmac.ComputeHash(messageBytes);
+                return message + "." + Base64UrlEncode(signature);
             }
             catch (Exception ex)
             {

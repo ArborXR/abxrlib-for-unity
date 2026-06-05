@@ -2,11 +2,13 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.TestTools;
 
 namespace AbxrLib.Tests.Runtime
@@ -34,80 +36,6 @@ namespace AbxrLib.Tests.Runtime
     [TestFixture]
     public class AuthenticationTests : AbxrIntegrationTestFixture
     {
-        private const string ValidJwtWithExpiration = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjQxMDI0NDQ4MDB9.c2ln";
-        private const string FakeAppId = "00000000-0000-0000-0000-000000000001";
-
-        private static Dictionary<string, object> AuthBody(
-            string token = ValidJwtWithExpiration,
-            string secret = "test-secret",
-            object userData = null,
-            string userId = "test-user-id",
-            object modules = null,
-            string appId = FakeAppId,
-            string packageName = "com.example.testapp")
-        {
-            var body = new Dictionary<string, object>();
-            if (token != null) body["token"] = token;
-            if (secret != null) body["secret"] = secret;
-            if (userId != null) body["userId"] = userId;
-            if (userData != null) body["userData"] = userData;
-            if (appId != null) body["appId"] = appId;
-            if (packageName != null) body["packageName"] = packageName;
-            body["modules"] = modules ?? Array.Empty<object>();
-            return body;
-        }
-
-        private static string GetHeader(RecordedRequest request, string name)
-        {
-            if (request?.Headers == null) return null;
-            foreach (var kvp in request.Headers)
-            {
-                if (string.Equals(kvp.Key, name, StringComparison.OrdinalIgnoreCase))
-                    return kvp.Value;
-            }
-            return null;
-        }
-
-        private static string JwtWithClaims(Dictionary<string, object> claims)
-        {
-            var header = new Dictionary<string, object>
-            {
-                { "typ", "JWT" },
-                { "alg", "HS256" }
-            };
-
-            return $"{Base64UrlEncodeJson(header)}.{Base64UrlEncodeJson(claims)}.c2ln";
-        }
-
-        private static string Base64UrlEncodeJson(object value)
-        {
-            var json = Newtonsoft.Json.JsonConvert.SerializeObject(value);
-            return Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
-                .TrimEnd('=')
-                .Replace('+', '-')
-                .Replace('/', '_');
-        }
-
-        private static void QueueAssessmentPinConfig(string prompt = "Enter your test PIN")
-        {
-            FakeBackend.QueueScenario(
-                path: "/v1/storage/config",
-                method: "GET",
-                status: 200,
-                body: new Dictionary<string, object>
-                {
-                    {
-                        "authMechanism",
-                        new Dictionary<string, object>
-                        {
-                            { "type", "assessmentPin" },
-                            { "prompt", prompt },
-                            { "inputSource", "user" }
-                        }
-                    }
-                });
-        }
-
         // ── Happy path ──────────────────────────────────────────────
 
         [UnityTest]
@@ -322,6 +250,34 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_RetryableDeviceAuthFailure_StopsAfterMaxRetries()
+        {
+            Configuration.Instance.sendRetriesOnFailure = 2;
+            Configuration.Instance.sendRetryIntervalSeconds = 1;
+
+            FakeBackend.QueueEmptyBodyScenario(path: "/v1/auth/token", status: 500);
+
+            LogAssert.Expect(LogType.Error, new Regex(
+                @"\[AbxrLib\] Authentication failure: Authentication request failed \(HTTP 500\)\."));
+
+            yield return RunAuthAndWait(timeoutSeconds: 8f);
+
+            Assert.IsFalse(LastAuthSuccess);
+            Assert.AreEqual("Authentication request failed (HTTP 500).", LastAuthError);
+            Assert.AreEqual(3, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "sendRetriesOnFailure counts retries after the initial device-auth attempt, so 2 retries means 3 total attempts.");
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/storage/config").Count,
+                "the auth flow should not fetch config after device auth exhausts its retry budget.");
+
+            var service = AbxrTestHooks.GetAuthServiceForTest();
+            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
+            Assert.IsFalse(service.Authenticated,
+                "auth should remain unauthenticated after exhausting retryable device-auth failures.");
+            Assert.IsFalse(service.IsAuthenticationAttemptActive,
+                "the failed retry sequence should clear the active auth attempt flag.");
+        }
+
+        [UnityTest]
         public IEnumerator Auth_Rejection_Latches_Within_Session()
         {
             // First call: 401 → terminal rejection → _credentialsRejectedByApi latches
@@ -346,6 +302,210 @@ namespace AbxrLib.Tests.Runtime
                 requestsAfterFirst,
                 FakeBackend.GetRequests("/v1/auth/token").Count,
                 "After rejection latches, subsequent StartAuthentication() calls should not send new requests.");
+        }
+
+
+        [UnityTest]
+        public IEnumerator Auth_StartAuthentication_WhenServiceStopping_IsNoOp()
+        {
+            var service = AbxrTestHooks.GetAuthServiceForTest();
+            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
+
+            int authCompletedCount = 0;
+            Action<bool, string> authCompletedHandler = (_, _) => authCompletedCount++;
+            Abxr.OnAuthCompleted += authCompletedHandler;
+            try
+            {
+                service.Shutdown();
+                Abxr.StartAuthentication();
+
+                yield return null;
+                yield return null;
+            }
+            finally
+            {
+                Abxr.OnAuthCompleted -= authCompletedHandler;
+            }
+
+            Assert.AreEqual(0, authCompletedCount,
+                "StartAuthentication should be ignored after the auth service has begun stopping.");
+            Assert.IsFalse(service.Authenticated,
+                "a no-op StartAuthentication call should not mark the service authenticated.");
+            Assert.IsFalse(service.IsAuthenticationAttemptActive,
+                "a no-op StartAuthentication call should not start a new auth attempt.");
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "stopping auth should not send a device-auth request.");
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/storage/config").Count,
+                "stopping auth should not fetch config.");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_AttemptInactiveAfterConfig_FailsBeforeUserAuthPrompt()
+        {
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "device" } }));
+            FakeBackend.QueueScenario(
+                path: "/v1/storage/config",
+                method: "GET",
+                status: 200,
+                delayMs: 1000,
+                body: new Dictionary<string, object>
+                {
+                    {
+                        "authMechanism",
+                        new Dictionary<string, object>
+                        {
+                            { "type", "assessmentPin" },
+                            { "prompt", "Enter delayed PIN" },
+                            { "inputSource", "user" }
+                        }
+                    }
+                });
+
+            bool inputRequested = false;
+            int authCompletedCount = 0;
+            bool authSuccess = true;
+            string authError = null;
+            Action<bool, string> authCompletedHandler = (success, error) =>
+            {
+                authCompletedCount++;
+                authSuccess = success;
+                authError = error;
+            };
+
+            Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
+            LogAssert.Expect(LogType.Error, new Regex(@"\[AbxrLib\] Authentication failure: Auth stopped or attempt inactive"));
+
+            var service = AbxrTestHooks.GetAuthServiceForTest();
+            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
+
+            Abxr.OnAuthCompleted += authCompletedHandler;
+            try
+            {
+                Abxr.StartAuthentication();
+
+                yield return WaitUntil(
+                    () => FakeBackend.GetRequests("/v1/storage/config").Count >= 1,
+                    timeoutSeconds: 3f,
+                    description: "delayed config request reached the backend");
+
+                SetPrivateBoolForTest(service, "_attemptActive", false);
+
+                yield return WaitUntil(
+                    () => authCompletedCount > 0,
+                    timeoutSeconds: 5f,
+                    description: "auth completed after attempt was marked inactive");
+            }
+            finally
+            {
+                Abxr.OnAuthCompleted -= authCompletedHandler;
+            }
+
+            Assert.AreEqual(1, authCompletedCount,
+                "marking an in-flight auth attempt inactive should fail the current attempt exactly once.");
+            Assert.IsFalse(authSuccess);
+            Assert.AreEqual("Auth stopped or attempt inactive", authError);
+            Assert.IsFalse(inputRequested,
+                "the inactive-at-config guard should run before user input is requested.");
+            Assert.IsFalse(service.Authenticated,
+                "an inactive attempt should not complete authentication.");
+            Assert.IsFalse(service.IsAuthenticationAttemptActive,
+                "the inactive-at-config guard should leave the service with no active auth attempt.");
+
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "only the initial device-auth request should be sent before the inactive guard fires.");
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count,
+                "config should have been fetched before the inactive guard aborted the flow.");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_SubmitInput_WithoutPendingRequest_IsIgnored()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex(
+                @"\[AbxrLib\] OnInputSubmitted was ignored: no input request is pending\. Call OnInputSubmitted only once, after OnInputRequested has been invoked\."));
+
+            Assert.IsFalse(Abxr.IsAuthInputRequestPending(),
+                "test should start with no auth input request pending");
+
+            Abxr.OnInputSubmitted("orphan-input");
+            yield return null;
+
+            Assert.IsFalse(Abxr.IsAuthInputRequestPending(),
+                "submitting input without a pending request should remain a no-op");
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "orphan input should not start or advance authentication");
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/storage/config").Count,
+                "orphan input should not fetch config");
+        }
+
+
+        [UnityTest]
+        public IEnumerator Auth_SetAuthHeaders_MissingTokenOrResponseData_DoesNotSetHeaders()
+        {
+            var service = AbxrTestHooks.GetAuthServiceForTest();
+            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
+
+            SetAuthResponseForTest(service, new AuthResponse { Secret = "secret-without-token" });
+            LogAssert.Expect(LogType.Error, new Regex(
+                @"\[AbxrLib\] Cannot set auth headers - authentication tokens are missing"));
+
+            using (var request = UnityWebRequest.Get(FakeBackend.BaseUrl + "/headers-missing-token"))
+            {
+                service.SetAuthHeaders(request, "{\"event\":\"test\"}");
+                AssertAuthHeadersNotSet(request);
+            }
+
+            SetAuthResponseForTest(service, null);
+            LogAssert.Expect(LogType.Error, new Regex(
+                @"\[AbxrLib\] Cannot set auth headers - authentication tokens are missing"));
+
+            using (var request = UnityWebRequest.Get(FakeBackend.BaseUrl + "/headers-null-response"))
+            {
+                service.SetAuthHeaders(request);
+                AssertAuthHeadersNotSet(request);
+            }
+
+            yield return null;
+        }
+
+
+        [UnityTest]
+        public IEnumerator Auth_SetAuthHeaders_WithJson_IncludesJsonCrcInHash()
+        {
+            const string token = "header-token";
+            const string secret = "header-secret";
+            const string json = "{\"event\":\"test\",\"value\":42}";
+
+            var service = AbxrTestHooks.GetAuthServiceForTest();
+            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
+
+            SetAuthResponseForTest(service, new AuthResponse
+            {
+                Token = token,
+                Secret = secret
+            });
+
+            using (var request = UnityWebRequest.Get(FakeBackend.BaseUrl + "/headers-with-json"))
+            {
+                service.SetAuthHeaders(request, json);
+
+                string timestamp = request.GetRequestHeader("x-abxrlib-timestamp");
+                string actualHash = request.GetRequestHeader("x-abxrlib-hash");
+                uint jsonCrc = Utils.ComputeCRC(json);
+                string expectedHash = Utils.ComputeSha256Hash(token + secret + timestamp + jsonCrc);
+                string hashWithoutJsonCrc = Utils.ComputeSha256Hash(token + secret + timestamp);
+
+                Assert.AreEqual("Bearer " + token, request.GetRequestHeader("Authorization"));
+                Assert.IsFalse(string.IsNullOrEmpty(timestamp), "SetAuthHeaders should set a timestamp before computing the hash.");
+                Assert.AreEqual(expectedHash, actualHash,
+                    "SetAuthHeaders should append the CRC of the supplied JSON to the hash string.");
+                Assert.AreNotEqual(hashWithoutJsonCrc, actualHash,
+                    "Passing JSON should produce a different hash than token + secret + timestamp alone.");
+            }
+
+            yield return null;
         }
 
 
@@ -834,6 +994,190 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_MdmSsoPreferredUsername_SetsUserDataEmail_WhenBackendEmailMissing()
+        {
+            const string ssoEmail = "sso.preferred@example.com";
+            var ssoToken = JwtWithClaims(new Dictionary<string, object>
+            {
+                { "sub", "sso-subject-email-fallback" },
+                { "preferred_username", ssoEmail }
+            });
+
+            AbxrTestHooks.SetSsoForTest(isAuthenticated: true, accessToken: ssoToken);
+
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object>
+                {
+                    { "authMode", "device" }
+                }));
+            QueueAssessmentPinConfig("Enter SSO-protected PIN");
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object>
+                {
+                    { "authMode", "sso-email-synced" }
+                }));
+
+            bool inputRequested = false;
+            Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
+
+            Dictionary<string, string> userDataAtAuthCompleted = null;
+            Action<bool, string> captureUserDataAtAuthCompleted = (success, _) =>
+            {
+                if (success) userDataAtAuthCompleted = Abxr.GetUserData();
+            };
+
+            bool syncDone = false;
+            bool syncSuccess = false;
+            string syncError = null;
+            Abxr.OnUserDataSyncCompleted = (success, error) =>
+            {
+                syncDone = true;
+                syncSuccess = success;
+                syncError = error;
+            };
+
+            Abxr.OnAuthCompleted += captureUserDataAtAuthCompleted;
+            try
+            {
+                yield return RunAuthAndWait();
+            }
+            finally
+            {
+                Abxr.OnAuthCompleted -= captureUserDataAtAuthCompleted;
+            }
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsFalse(inputRequested,
+                "Valid MDM SSO identity should bypass the configured assessmentPin prompt.");
+
+            Assert.IsNotNull(userDataAtAuthCompleted,
+                "OnAuthCompleted should see the SSO-merged userData before the follow-up sync request starts.");
+            Assert.AreEqual("device", userDataAtAuthCompleted["authMode"]);
+            Assert.AreEqual("sso-subject-email-fallback", userDataAtAuthCompleted["sub"]);
+            Assert.AreEqual(ssoEmail, userDataAtAuthCompleted["preferred_username"]);
+            Assert.AreEqual(ssoEmail, userDataAtAuthCompleted["email"],
+                "EnsureEmailFromSsoJwtClaims should promote preferred_username into userData.email when backend userData has no email.");
+            Assert.IsFalse(userDataAtAuthCompleted.ContainsKey("sso_email"),
+                "The SSO email fallback should use the canonical email key when there is no existing backend email conflict.");
+
+            yield return WaitUntil(
+                () => syncDone,
+                timeoutSeconds: 5f,
+                description: "SSO email fallback userData should be synced with a custom re-auth request");
+
+            Abxr.OnUserDataSyncCompleted = null;
+            Assert.IsTrue(syncSuccess, syncError);
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, requests.Count,
+                "Expected device auth plus one custom user-data sync. There should be no assessmentPin user-auth POST.");
+
+            Assert.IsNull(requests[0].BodyJson["authMechanism"],
+                "Initial device auth must not send authMechanism.");
+
+            var syncMechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("custom", (string)syncMechanism?["type"]);
+            Assert.AreEqual("user", (string)syncMechanism?["inputSource"]);
+            Assert.AreEqual("device", (string)syncMechanism?["authMode"],
+                "The SSO sync should preserve existing device-auth userData.");
+            Assert.AreEqual(ssoEmail, (string)syncMechanism?["preferred_username"],
+                "The original SSO preferred_username claim should be preserved in userData.");
+            Assert.AreEqual(ssoEmail, (string)syncMechanism?["email"],
+                "The custom sync request should include the userData.email value populated from preferred_username.");
+            Assert.IsNull(syncMechanism?["sso_email"],
+                "No prefixed SSO email should be sent when the backend response did not already contain email.");
+            Assert.IsNull(syncMechanism?["assessmentPin"],
+                "SSO bypass should not submit an assessmentPin auth mechanism.");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_MdmSsoClaimConflicts_PreservesBackendUserData_AndStoresSsoValuesWithPrefix()
+        {
+            var ssoToken = JwtWithClaims(new Dictionary<string, object>
+            {
+                { "sub", "sso-subject-456" },
+                { "cohort", "sso-cohort" },
+                { "role", "sso-role" },
+                { "email", "sso.user@example.com" }
+            });
+
+            AbxrTestHooks.SetSsoForTest(isAuthenticated: true, accessToken: ssoToken);
+
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object>
+                {
+                    { "authMode", "device" },
+                    { "cohort", "backend-cohort" },
+                    { "role", "backend-role" },
+                    { "sso_role", "existing-prefixed-role" },
+                    { "email", "backend@example.com" }
+                }));
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object>
+                {
+                    { "authMode", "sso-conflicts-synced" },
+                }));
+
+            bool syncDone = false;
+            bool syncSuccess = false;
+            string syncError = null;
+            Abxr.OnUserDataSyncCompleted = (success, error) =>
+            {
+                syncDone = true;
+                syncSuccess = success;
+                syncError = error;
+            };
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            yield return WaitUntil(
+                () => syncDone,
+                timeoutSeconds: 5f,
+                description: "SSO claim conflicts should be synced with prefixed userData keys");
+
+            Abxr.OnUserDataSyncCompleted = null;
+            Assert.IsTrue(syncSuccess, syncError);
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, requests.Count,
+                "Expected device auth plus one custom user-data sync for merged SSO claims.");
+
+            var syncMechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("custom", (string)syncMechanism?["type"]);
+            Assert.AreEqual("user", (string)syncMechanism?["inputSource"]);
+
+            Assert.AreEqual("sso-subject-456", (string)syncMechanism?["sub"],
+                "Non-conflicting SSO claims should be copied into userData directly.");
+
+            Assert.AreEqual("backend-cohort", (string)syncMechanism?["cohort"],
+                "Existing backend userData should not be overwritten by an SSO claim with the same key.");
+            Assert.AreEqual("sso-cohort", (string)syncMechanism?["sso_cohort"],
+                "Conflicting SSO claim values should be stored under sso_<key>.");
+
+            Assert.AreEqual("backend-role", (string)syncMechanism?["role"],
+                "The original conflicting userData key should keep the backend value.");
+            Assert.AreEqual("existing-prefixed-role", (string)syncMechanism?["sso_role"],
+                "If the first prefixed key already exists, it should not be overwritten.");
+            Assert.AreEqual("sso-role", (string)syncMechanism?["sso_role_1"],
+                "When sso_<key> already exists, the SSO value should use the next available suffixed key.");
+
+            Assert.AreEqual("backend@example.com", (string)syncMechanism?["email"],
+                "Existing backend email should not be overwritten by SSO email.");
+            Assert.AreEqual("sso.user@example.com", (string)syncMechanism?["sso_email"],
+                "Conflicting SSO email should be stored under the prefixed key like other userData conflicts.");
+        }
+
+        [UnityTest]
         public IEnumerator Auth_MdmSsoTokenWithoutIdentity_DoesNotBypassPinPrompt()
         {
             var ssoTokenWithoutIdentity = JwtWithClaims(new Dictionary<string, object>
@@ -990,23 +1334,7 @@ namespace AbxrLib.Tests.Runtime
                 path: "/v1/auth/token",
                 status: 201,
                 body: AuthBody());
-            FakeBackend.QueueScenario(
-                path: "/v1/storage/config",
-                method: "GET",
-                status: 200,
-                body: new Dictionary<string, object>
-                {
-                    {
-                        "authMechanism",
-                        new Dictionary<string, object>
-                        {
-                            { "type", "email" },
-                            { "prompt", "Enter school email" },
-                            { "domain", "school.edu" },
-                            { "inputSource", "user" }
-                        }
-                    }
-                });
+            QueueAuthMechanismConfig("email", "Enter school email", domain: "school.edu");
             FakeBackend.QueueScenario(
                 path: "/v1/auth/token",
                 status: 201,
@@ -1040,22 +1368,7 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator Auth_TextInput_Sends_TextAuthMechanism()
         {
-            FakeBackend.QueueScenario(
-                path: "/v1/storage/config",
-                method: "GET",
-                status: 200,
-                body: new Dictionary<string, object>
-                {
-                    {
-                        "authMechanism",
-                        new Dictionary<string, object>
-                        {
-                            { "type", "text" },
-                            { "prompt", "Enter learner id" },
-                            { "inputSource", "user" }
-                        }
-                    },
-                });
+            QueueAuthMechanismConfig("text", "Enter learner id");
 
             bool inputRequested = false;
             string requestedType = null;
@@ -1202,22 +1515,7 @@ namespace AbxrLib.Tests.Runtime
         [UnityTest]
         public IEnumerator Auth_ConfigAuthMechanismNone_DoesNotRequestInput_AndSucceeds()
         {
-            FakeBackend.QueueScenario(
-                path: "/v1/storage/config",
-                method: "GET",
-                status: 200,
-                body: new Dictionary<string, object>
-                {
-                    {
-                        "authMechanism",
-                        new Dictionary<string, object>
-                        {
-                            { "type", "none" },
-                            { "prompt", "ignored" },
-                            { "inputSource", "user" }
-                        }
-                    },
-                });
+            QueueAuthMechanismConfig("none", "ignored");
 
             bool inputRequested = false;
             Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
@@ -1261,6 +1559,35 @@ namespace AbxrLib.Tests.Runtime
             Assert.AreEqual(2, modules.Count);
             Assert.AreEqual("module-1", modules[0].Id);
             Assert.AreEqual("module-2", modules[1].Id);
+        }
+
+        private static void SetPrivateBoolForTest(object target, string fieldName, bool value)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, $"Expected {target.GetType().Name}.{fieldName} to exist for test setup.");
+            Assert.AreEqual(typeof(bool), field.FieldType,
+                $"Expected {target.GetType().Name}.{fieldName} to be a bool field.");
+            field.SetValue(target, value);
+        }
+
+        private static void SetAuthResponseForTest(object authService, AuthResponse response)
+        {
+            var responseDataSetter = authService.GetType()
+                .GetProperty("ResponseData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                ?.GetSetMethod(nonPublic: true);
+
+            Assert.IsNotNull(responseDataSetter, "Expected AbxrAuthService.ResponseData to have a private setter for test setup.");
+            responseDataSetter.Invoke(authService, new object[] { response });
+        }
+
+        private static void AssertAuthHeadersNotSet(UnityWebRequest request)
+        {
+            Assert.IsTrue(string.IsNullOrEmpty(request.GetRequestHeader("Authorization")),
+                "SetAuthHeaders should not set Authorization when tokens are unavailable.");
+            Assert.IsTrue(string.IsNullOrEmpty(request.GetRequestHeader("x-abxrlib-timestamp")),
+                "SetAuthHeaders should not set x-abxrlib-timestamp when tokens are unavailable.");
+            Assert.IsTrue(string.IsNullOrEmpty(request.GetRequestHeader("x-abxrlib-hash")),
+                "SetAuthHeaders should not set x-abxrlib-hash when tokens are unavailable.");
         }
 
         [UnityTest]
