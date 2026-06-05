@@ -13,6 +13,7 @@ namespace AbxrLib.Tests.Runtime
         internal static void ResetConfigurationForTest()
         {
             AbxrAuthService.TestAuthHandoffPayload = null;
+            AbxrAuthService.TestPlatformSource = null;
             ClearSsoForTest();
             Configuration.UseTransientDefaultsForTest();
             Configuration.Instance.enableAutomaticInitialization = false;
@@ -26,6 +27,12 @@ namespace AbxrLib.Tests.Runtime
 
         internal static void SetAuthHandoffPayloadForTest(string payload) =>
             AbxrAuthService.TestAuthHandoffPayload = payload;
+
+        internal static void SetPlatformSourceForTest(IAuthPlatformSource platformSource) =>
+            AbxrAuthService.TestPlatformSource = platformSource;
+
+        internal static void ClearPlatformSourceForTest() =>
+            AbxrAuthService.TestPlatformSource = null;
 
         internal static void SetSsoForTest(bool isAuthenticated, string accessToken)
         {
@@ -60,12 +67,13 @@ namespace AbxrLib.Tests.Runtime
         internal static void DestroySubsystemForTest(bool clearConfiguration = true)
         {
             AbxrAuthService.TestAuthHandoffPayload = null;
+            AbxrAuthService.TestPlatformSource = null;
             ClearSsoForTest();
 
             var instance = AbxrSubsystem.Instance;
             if (instance != null)
             {
-                instance.CleanupBeforeDestroyForTest();
+                instance.CleanupBeforeDestroyForTest(clearConfiguration);
                 Object.Destroy(instance.gameObject);
             }
 

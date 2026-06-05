@@ -215,17 +215,23 @@ namespace AbxrLib.Runtime
             PlayerPrefs.Save();
 
             if (Instance == this) Instance = null;
-            Configuration.ClearRuntimeConfig();
+#if UNITY_INCLUDE_TESTS
+            if (!_preserveRuntimeConfigurationOnDestroyForTest)
+#endif
+                Configuration.ClearRuntimeConfig();
         }
         
 #if UNITY_INCLUDE_TESTS
+        private bool _preserveRuntimeConfigurationOnDestroyForTest;
+
         /// <summary>
         /// This deterministic cleanup runs immediately before the test-owned subsystem GameObject is destroyed.
         /// It is not a standalone reset path;
         /// package integration tests isolate runtime state by destroying and recreating the subsystem for each test.
         /// </summary>
-        internal void CleanupBeforeDestroyForTest()
+        internal void CleanupBeforeDestroyForTest(bool clearRuntimeConfiguration = true)
         {
+            _preserveRuntimeConfigurationOnDestroyForTest = !clearRuntimeConfiguration;
             if (_delayedStartCoroutine != null)
             {
                 StopCoroutine(_delayedStartCoroutine);

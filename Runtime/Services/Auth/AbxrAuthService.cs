@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
@@ -45,7 +44,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
-        /// <summary>Runtime auth values loaded from Configuration and updated by GetArborData, GetQueryData, intent, and SetOrgId/SetAuthSecret.</summary>
+        /// <summary>Runtime auth values loaded from Configuration and updated by GetArborData, WebGL/desktop query data, intent, and SetOrgId/SetAuthSecret.</summary>
         private readonly RuntimeAuthConfig _runtimeAuth = new();
         /// <summary>Working copy of _runtimeAuth.authMechanism for this session. Its prompt remains the configured UI prompt; submitted user input is passed per request.</summary>
         private AuthMechanism _authMechanism;
@@ -74,34 +73,47 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private readonly MonoBehaviour _runner;
         private readonly ArborMdmClient _arborMdmClient;
+        private readonly IAuthPlatformSource _platformSource;
         private AbxrRestService _restService;
-        
-        private const string DeviceIdKey = "abxrlib_device_id";
         
         // Auth handoff for external launcher apps
 #if UNITY_INCLUDE_TESTS
         /// <summary>
-        /// Test-only auth_handoff injection point. Lets PlayMode tests exercise the receiver path
-        /// without mutating process command-line args or Android intents.
+        /// Lets PlayMode tests exercise the receiver path without mutating process command-line args or Android intents
         /// </summary>
         internal static string TestAuthHandoffPayload;
+
+        /// <summary>
+        /// Lets PlayMode tests exercise WebGL/Android branches without compiling the test assembly as those player platforms
+        /// </summary>
+        internal static IAuthPlatformSource TestPlatformSource;
 #endif
         private bool _sessionUsedAuthHandoff;
         private string _returnToPackage;
         /// <summary>True when a valid auth_handoff was parsed; AuthenticateCoroutine skips device AuthRequestCoroutine and completes after GET config (same as normal flow).</summary>
         private bool _deviceAuthDeferredByHandoff;
 
-#if UNITY_WEBGL && !UNITY_EDITOR
         /// <summary>WebGL: pre-filled assessment PIN from org token JWT claim <c>pin</c> (preferred) or from <c>assessment_pin</c>/<c>assessmentPin</c> URL query. When set, GET config can be overridden to assessmentPin and the first user-auth attempt auto-submits this value.</summary>
         private string _webglQueryAssessmentPin;
         /// <summary>After one auto-submit from <see cref="_webglQueryAssessmentPin"/>, further attempts use the normal PIN prompt (retry flow).</summary>
         private bool _webglUrlPinAutoSubmitAttempted;
+
+        private static IAuthPlatformSource ResolvePlatformSourceForRuntime()
+        {
+#if UNITY_INCLUDE_TESTS
+            if (TestPlatformSource != null) return TestPlatformSource;
 #endif
+            return UnityAuthPlatformSource.Instance;
+        }
 
         public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient)
+            : this(coroutineRunner, arborMdmClient, ResolvePlatformSourceForRuntime()) { }
+
+        internal AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient, IAuthPlatformSource platformSource)
         {
             _runner = coroutineRunner;
             _arborMdmClient = arborMdmClient;
+            _platformSource = platformSource ?? UnityAuthPlatformSource.Instance;
 
             _payload = new AuthPayload
             {
@@ -116,23 +128,25 @@ namespace AbxrLib.Runtime.Services.Auth
             };
             
             GetConfigData();
-#if UNITY_ANDROID && !UNITY_EDITOR
-            GetArborData();
-            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken))
+            if (_platformSource.IsAndroidPlayer)
             {
-                string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
-                if (!string.IsNullOrEmpty(orgTokenIntent))
+                GetArborData();
+                ApplyAndroidIntentOrgTokenIfAvailable();
+            }
+            else if (_platformSource.IsWebGlPlayer)
+            {
+                GetWebGlQueryData();
+                string webGlDeviceId = _platformSource.GetOrCreateWebGlDeviceId();
+                if (!string.IsNullOrEmpty(webGlDeviceId))
                 {
-                    _runtimeAuth.orgToken = orgTokenIntent;
-                    _runtimeAuth.CopyAuthFieldsTo(_payload);
+                    _payload.deviceId = webGlDeviceId;
+                    _runtimeAuth.deviceId = webGlDeviceId;
                 }
             }
-#elif UNITY_WEBGL && !UNITY_EDITOR
-            GetQueryData();
-            _payload.deviceId = GetOrCreateDeviceId();
-#elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
-            GetQueryData();
-#endif
+            else if (_platformSource.IsStandalonePlayer)
+            {
+                GetDesktopQueryData();
+            }
             SetSessionData();
         }
 
@@ -155,11 +169,10 @@ namespace AbxrLib.Runtime.Services.Auth
             if (clearStateFirst)
                 ClearAuthenticationState();
 
-            // Load runtime auth from Configuration, then apply GetArborData/GetQueryData/intent so runtime config reflects all sources.
+            // Load runtime auth from Configuration, then apply GetArborData/query data/intent so runtime config reflects all sources.
             LoadRuntimeAuthFromConfig();
-#if UNITY_ANDROID && !UNITY_EDITOR
-            GetArborData();
-#endif
+            if (_platformSource.IsAndroidPlayer) GetArborData();
+            
             // Apply Abxr.SetOrgId/SetAuthSecret/SetDeviceId into runtime auth (after config load so overrides win; after GetArborData so MDM can have set org token first).
             ApplyAbxrOverridesToRuntimeAuth();
 
@@ -178,18 +191,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
             }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken))
-            {
-                string orgTokenIntent = Utils.GetAndroidIntentParam("org_token");
-                if (!string.IsNullOrEmpty(orgTokenIntent))
-                    _runtimeAuth.orgToken = orgTokenIntent;
-            }
-#elif UNITY_WEBGL && !UNITY_EDITOR
-            GetQueryData();
-#elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
-            GetQueryData();
-#endif
+            if (_platformSource.IsAndroidPlayer) ApplyAndroidIntentOrgTokenIfAvailable(copyToPayload: false);
+            else if (_platformSource.IsWebGlPlayer) GetWebGlQueryData();
+            else if (_platformSource.IsStandalonePlayer) GetDesktopQueryData();
+            
             var validationError = _runtimeAuth.PreparePayloadForAuth(_payload);
             if (validationError != null)
             {
@@ -252,9 +257,7 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 if (success)
                 {
-#if UNITY_WEBGL && !UNITY_EDITOR
                     _webglQueryAssessmentPin = null;
-#endif
                     KeyboardHandler.Destroy();
                     AuthSucceeded();
                 }
@@ -334,6 +337,7 @@ namespace AbxrLib.Runtime.Services.Auth
         internal void ResetForTest()
         {
             TestAuthHandoffPayload = null;
+            TestPlatformSource = null;
             _stopping = false;
             _attemptActive = false;
             _isAuthStarted = false;
@@ -396,12 +400,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 // Session identity came from the launcher; do not require a second PIN/email step from GET config.
                 ClearUserAuthMechanismForSession();
             }
-#if UNITY_WEBGL && !UNITY_EDITOR
-            else
+            else if (_platformSource.IsWebGlPlayer)
             {
                 ApplyAssessmentPinFromUrlQueryIfPresent();
             }
-#endif
 
             if (_stopping || !_attemptActive)
             {
@@ -412,15 +414,13 @@ namespace AbxrLib.Runtime.Services.Auth
             
             if (NeedsUserAuthentication(_authMechanism))
             {
-#if UNITY_WEBGL && !UNITY_EDITOR
-                if (!_webglUrlPinAutoSubmitAttempted && !string.IsNullOrEmpty(_webglQueryAssessmentPin))
+                if (_platformSource.IsWebGlPlayer && !_webglUrlPinAutoSubmitAttempted && !string.IsNullOrEmpty(_webglQueryAssessmentPin))
                 {
                     _webglUrlPinAutoSubmitAttempted = true;
                     Logcat.Info("User authentication: submitting pre-filled assessment PIN (org token JWT or URL query, first attempt).");
                     KeyboardAuthenticate(_webglQueryAssessmentPin);
                 }
                 else
-#endif
                 {
                     if (TryCompleteUserAuthUsingMdmSsoIdentity())
                         AuthSucceeded();
@@ -804,7 +804,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        /// <summary>Load auth-related values from Configuration into _runtimeAuth. GetArborData/GetQueryData/intent will update _runtimeAuth next.</summary>
+        /// <summary>Load auth-related values from Configuration into _runtimeAuth. GetArborData/query data/intent will update _runtimeAuth next.</summary>
         private void LoadRuntimeAuthFromConfig()
         {
             var s = Configuration.Instance;
@@ -830,7 +830,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 }
             }
             // Establish subsystem defaults for device/partner/tags whenever we load runtime auth (e.g. each Authenticate call).
-            string deviceIdFromSubsystem = Abxr.GetDeviceId();
+            string deviceIdFromSubsystem = _platformSource.GetCurrentDeviceId();
             _runtimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : _payload.deviceId;
             _runtimeAuth.partner = "none";
             _runtimeAuth.tags = null;
@@ -908,10 +908,9 @@ namespace AbxrLib.Runtime.Services.Auth
             _runtimeAuth.authMechanism = null;
         }
 
-#if UNITY_WEBGL && !UNITY_EDITOR
         /// <summary>
         /// WebGL: when a pre-filled PIN was resolved (org token JWT <c>pin</c> claim, or <c>assessment_pin</c>/<c>assessmentPin</c> in the page URL), force user authentication to type <c>assessmentPin</c> after GET config succeeds (non-handoff).
-        /// Matches <see cref="GetQueryData"/> for org_token (skipped for production_custom).</summary>
+        /// Matches <see cref="GetWebGlQueryData"/> for org_token (skipped for production_custom).</summary>
         private void ApplyAssessmentPinFromUrlQueryIfPresent()
         {
             if (string.IsNullOrEmpty(_webglQueryAssessmentPin))
@@ -940,7 +939,6 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.IsNullOrWhiteSpace(s)) return null;
             return s.Trim();
         }
-#endif
         private void ClearAuthenticationState()
         {
             Authenticated = false;
@@ -956,9 +954,8 @@ namespace AbxrLib.Runtime.Services.Auth
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;
             _ssoUserDataMergedBeforeAuthSucceeded = false;
-#if UNITY_WEBGL && !UNITY_EDITOR
+            _webglQueryAssessmentPin = null;
             _webglUrlPinAutoSubmitAttempted = false;
-#endif
         }
 
         /// <summary>
@@ -978,15 +975,11 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         private void CheckAuthHandoff()
         {
-            string handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
+            string handoffPayload = _platformSource.GetAndroidIntentParam("auth_handoff");
             if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetCommandLineArg("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-            {
-#if UNITY_WEBGL && !UNITY_EDITOR
-                handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
-#endif
-            }
+                handoffPayload = _platformSource.GetCommandLineArg("auth_handoff");
+            if (string.IsNullOrEmpty(handoffPayload) && _platformSource.IsWebGlPlayer)
+                handoffPayload = Utils.GetQueryParam("auth_handoff", _platformSource.AbsoluteUrl ?? "");
 #if UNITY_INCLUDE_TESTS
             string testHandoffPayload = TestAuthHandoffPayload;
             TestAuthHandoffPayload = null;
@@ -1185,7 +1178,7 @@ namespace AbxrLib.Runtime.Services.Auth
             if (!configData.isValid) return;
 
             // Establish subsystem defaults for device/partner/tags when runtime auth is first loaded (e.g. constructor / Awake sequence).
-            string deviceIdFromSubsystem = Abxr.GetDeviceId();
+            string deviceIdFromSubsystem = _platformSource.GetCurrentDeviceId();
             _runtimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : _payload.deviceId;
             _runtimeAuth.partner = "none";
             _runtimeAuth.tags = null;
@@ -1205,19 +1198,30 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             _runtimeAuth.CopyAuthFieldsTo(_payload);
         }
-#if UNITY_ANDROID && !UNITY_EDITOR
+        /// <summary>Applies an Android org_token intent extra when app-token auth has no org token yet</summary>
+        private void ApplyAndroidIntentOrgTokenIfAvailable(bool copyToPayload = true)
+        {
+            if (!_runtimeAuth.useAppTokens || !string.IsNullOrEmpty(_runtimeAuth.orgToken)) return;
+
+            string orgTokenIntent = _platformSource.GetAndroidIntentParam("org_token");
+            if (string.IsNullOrEmpty(orgTokenIntent)) return;
+
+            _runtimeAuth.orgToken = orgTokenIntent;
+            if (copyToPayload) _runtimeAuth.CopyAuthFieldsTo(_payload);
+        }
+
         /// <summary>
-        /// When ArborMdmClient is available and connected: updates deviceId, partner, tags from MDM; for production_custom that is all we accept (org credentials stay from config). For other build types, updates orgToken (app tokens) or orgId/authSecret (legacy) from MDM.
+        /// When Arbor MDM is available and connected: updates deviceId, partner, tags from MDM; for production_custom that is all we accept (org credentials stay from config). For other build types, updates orgToken (app tokens) or orgId/authSecret (legacy) from MDM.
         /// When MDM is not available, returns immediately (runtime auth is updated by Abxr.SetOrgId/SetAuthSecret/SetDeviceId directly).
         /// </summary>
         private void GetArborData()
         {
-            if (_arborMdmClient == null || !_arborMdmClient.IsConnected()) return;
+            if (!_platformSource.IsArborMdmConnected(_arborMdmClient)) return;
 
             // MDM available: always accept deviceId, partner, tags from Arbor.
             _runtimeAuth.partner = "arborxr";
-            _runtimeAuth.deviceId = Abxr.GetDeviceId();
-            _runtimeAuth.tags = Abxr.GetDeviceTags();
+            _runtimeAuth.deviceId = _platformSource.GetCurrentDeviceId();
+            _runtimeAuth.tags = _platformSource.GetCurrentDeviceTags();
 
             // production_custom: only deviceId/partner/tags from MDM; org credentials stay from config.
             if (_runtimeAuth.buildType == "production_custom")
@@ -1231,8 +1235,8 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 try
                 {
-                    string fingerprint = Abxr.GetFingerprint();
-                    string orgId = Abxr.GetOrgId();
+                    string fingerprint = _platformSource.GetCurrentFingerprint();
+                    string orgId = _platformSource.GetCurrentOrgId();
                     string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, fingerprint);
                     if (!string.IsNullOrEmpty(dynamicToken))
                         _runtimeAuth.orgToken = dynamicToken;
@@ -1246,10 +1250,10 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             else
             {
-                _runtimeAuth.orgId = Abxr.GetOrgId();
+                _runtimeAuth.orgId = _platformSource.GetCurrentOrgId();
                 try
                 {
-                    _runtimeAuth.authSecret = Abxr.GetFingerprint();
+                    _runtimeAuth.authSecret = _platformSource.GetCurrentFingerprint();
                 }
                 catch (Exception ex)
                 {
@@ -1261,13 +1265,13 @@ namespace AbxrLib.Runtime.Services.Auth
 
             _runtimeAuth.CopyAuthFieldsTo(_payload);
         }
-#endif
-#if UNITY_WEBGL && !UNITY_EDITOR
-        private void GetQueryData()
+
+        private void GetWebGlQueryData()
         {
-            if (_runtimeAuth.buildType == "production_custom")
-                return;
-            string orgTokenQuery = Utils.GetQueryParam("org_token", Application.absoluteURL);
+            if (_runtimeAuth.buildType == "production_custom") return;
+
+            string absoluteUrl = _platformSource.AbsoluteUrl ?? "";
+            string orgTokenQuery = Utils.GetQueryParam("org_token", absoluteUrl);
             if (!string.IsNullOrEmpty(orgTokenQuery))
             {
                 _runtimeAuth.orgToken = orgTokenQuery;
@@ -1282,55 +1286,40 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
 
-            string pinQuery = Utils.GetQueryParam("assessment_pin", Application.absoluteURL);
+            string pinQuery = Utils.GetQueryParam("assessment_pin", absoluteUrl);
             if (string.IsNullOrEmpty(pinQuery))
-                pinQuery = Utils.GetQueryParam("assessmentPin", Application.absoluteURL);
+                pinQuery = Utils.GetQueryParam("assessmentPin", absoluteUrl);
             if (!string.IsNullOrWhiteSpace(pinQuery))
                 _webglQueryAssessmentPin = pinQuery.Trim();
         }
 
-        private static string GetOrCreateDeviceId()
+        private void GetDesktopQueryData()
         {
-            if (PlayerPrefs.HasKey(DeviceIdKey))
-                return PlayerPrefs.GetString(DeviceIdKey);
-            string newGuid = Guid.NewGuid().ToString();
-            PlayerPrefs.SetString(DeviceIdKey, newGuid);
-            PlayerPrefs.Save();
-            return newGuid;
-        }
-#elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
-        private void GetQueryData()
-        {
-            if (_runtimeAuth.buildType == "production_custom")
-                return;
-            string orgToken = Utils.GetOrgTokenFromDesktopSources();
+            if (_runtimeAuth.buildType == "production_custom") return;
+
+            string orgToken = _platformSource.GetDesktopOrgToken();
             if (!string.IsNullOrEmpty(orgToken))
             {
                 _runtimeAuth.orgToken = orgToken;
                 _runtimeAuth.CopyAuthFieldsTo(_payload);
             }
         }
-#endif
+
         private void SetSessionData()
         {
             _payload.deviceModel = DeviceModel.deviceModel;
-#if UNITY_ANDROID && !UNITY_EDITOR
-            if (Configuration.Instance.recordIpAddress) _payload.ipAddress = Utils.GetIPAddress();
-            
-            // Read build_fingerprint from Android manifest
-            _payload.buildFingerprint = Utils.GetAndroidManifestMetadata("com.arborxr.abxrlib.build_fingerprint");
-            
-            var currentAssembly = Assembly.GetExecutingAssembly();
-            AssemblyName[] referencedAssemblies = currentAssembly.GetReferencedAssemblies();
-            foreach (AssemblyName assemblyName in referencedAssemblies)
+            if (_platformSource.IsAndroidPlayer)
             {
-                if (assemblyName.Name == "XRDM.SDK.External.Unity")
-                {
-                    _payload.xrdmVersion = assemblyName.Version.ToString();
-                    break;
-                }
+                if (Configuration.Instance.recordIpAddress)
+                    _payload.ipAddress = _platformSource.GetIpAddress();
+
+                // Read build_fingerprint from Android manifest
+                _payload.buildFingerprint = _platformSource.GetAndroidManifestMetadata("com.arborxr.abxrlib.build_fingerprint");
+
+                string xrdmVersion = _platformSource.GetXrdmVersion();
+                if (!string.IsNullOrEmpty(xrdmVersion))
+                    _payload.xrdmVersion = xrdmVersion;
             }
-#endif
             //TODO Geolocation
         }
         
@@ -1370,20 +1359,21 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_runtimeAuth != null) _runtimeAuth.deviceId = value ?? "";
         }
 
-        /// <summary>Applies current Abxr getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters (or from MDM via GetDeviceTags) are used. Only overwrites when the getter returns a non-empty value so we do not wipe configured credentials with empty values (e.g. Editor with no MDM).</summary>
+        /// <summary>Applies current platform/subsystem getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters (or from MDM via GetDeviceTags) are used.
+        /// Only overwrites when the getter returns a non-empty value so we do not wipe configured credentials with empty values (e.g. Editor with no MDM).</summary>
         private void ApplyAbxrOverridesToRuntimeAuth()
         {
             if (_runtimeAuth == null) return;
-            string orgId = Abxr.GetOrgId();
+            string orgId = _platformSource.GetCurrentOrgId();
             if (!string.IsNullOrEmpty(orgId))
                 _runtimeAuth.orgId = orgId;
-            string authSecret = Abxr.GetFingerprint();
+            string authSecret = _platformSource.GetCurrentFingerprint();
             if (!string.IsNullOrEmpty(authSecret))
                 _runtimeAuth.authSecret = authSecret;
-            string deviceId = Abxr.GetDeviceId();
+            string deviceId = _platformSource.GetCurrentDeviceId();
             if (!string.IsNullOrEmpty(deviceId))
                 _runtimeAuth.deviceId = deviceId;
-            string[] tags = Abxr.GetDeviceTags();
+            string[] tags = _platformSource.GetCurrentDeviceTags();
             if (tags != null && tags.Length > 0)
                 _runtimeAuth.tags = tags;
         }
