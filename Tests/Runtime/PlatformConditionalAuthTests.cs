@@ -185,6 +185,78 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Standalone_Production_UsesOrgTokenFromDesktopSources()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "production";
+            c.appToken = FakeAppToken;
+            c.orgToken = null;
+
+            var platform = new FakeAuthPlatformSource
+            {
+                IsStandalonePlayer = true,
+                DesktopOrgToken = FakeOrgToken
+            };
+            yield return RecreateSubsystemWith(platform);
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"]);
+            Assert.AreEqual(FakeOrgToken, (string)req.BodyJson["orgToken"],
+                "Standalone production builds should accept org_token from desktop sources such as CLI/file.");
+            Assert.AreEqual("none", (string)req.BodyJson["partner"],
+                "Desktop auth should not be marked as Arbor MDM sourced.");
+        }
+
+        [UnityTest]
+        public IEnumerator Standalone_ProductionCustom_IgnoresDesktopOrgToken_AndKeepsConfiguredOrgToken()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "production_custom";
+            c.appToken = FakeAppToken;
+            c.orgToken = FakeOrgToken;
+
+            var platform = new FakeAuthPlatformSource
+            {
+                IsStandalonePlayer = true,
+                DesktopOrgToken = AlternateOrgToken
+            };
+            yield return RecreateSubsystemWith(platform);
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual(FakeAppToken, (string)req.BodyJson["appToken"]);
+            Assert.AreEqual(FakeOrgToken, (string)req.BodyJson["orgToken"],
+                "production_custom standalone builds should keep configured org credentials and ignore desktop org_token input.");
+        }
+
+        [UnityTest]
+        public IEnumerator Standalone_AuthHandoffFromCommandLine_SkipsDeviceAuth_ButFetchesConfig()
+        {
+            var platform = new FakeAuthPlatformSource
+            {
+                IsStandalonePlayer = true
+            };
+            platform.CommandLineArgs["auth_handoff"] = BuildHandoffJson();
+            yield return RecreateSubsystemWith(platform);
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "A valid standalone auth_handoff command-line argument should adopt the supplied session and skip device auth.");
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count,
+                "The adopted handoff session should still fetch config using the supplied auth headers.");
+            Assert.IsTrue(AbxrTestHooks.GetAuthServiceForTest()?.SessionUsedAuthHandoff() ?? false);
+        }
+
+        [UnityTest]
         public IEnumerator Android_IntentOrgToken_AndSessionMetadata_AreApplied()
         {
             var c = Configuration.Instance;
