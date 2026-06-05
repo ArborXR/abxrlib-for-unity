@@ -596,10 +596,12 @@ namespace AbxrLib.Tests.Runtime
                 path: "/v1/auth/token",
                 status: 201,
                 body: AuthBody(userData: new Dictionary<string, object> { { "authMode", "device" } }));
+            const string backendPinError = "Invalid assessment pin or the assessment is already active";
+
             FakeBackend.QueueScenario(
                 path: "/v1/auth/token",
                 status: 401,
-                body: new Dictionary<string, object> { { "detail", "Invalid assessment PIN" } });
+                body: new Dictionary<string, object> { { "detail", backendPinError } });
             FakeBackend.QueueScenario(
                 path: "/v1/auth/token",
                 status: 201,
@@ -638,7 +640,7 @@ namespace AbxrLib.Tests.Runtime
                 }
             };
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[AbxrLib\] Authentication failure: Invalid assessment PIN"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[AbxrLib\] Authentication failure: Invalid assessment pin or the assessment is already active"));
 
             Abxr.OnAuthCompleted += authCompletedHandler;
             Abxr.StartAuthentication();
@@ -654,13 +656,14 @@ namespace AbxrLib.Tests.Runtime
             Assert.Contains(true, authSuccesses, "expected final auth success after retrying with the corrected PIN");
             CollectionAssert.AreEqual(new[] { false, true }, authSuccesses,
                 "bad PIN should emit a failed auth event, then the corrected PIN should complete auth successfully");
-            Assert.AreEqual("Invalid assessment PIN", authErrors[0]);
+            Assert.AreEqual(backendPinError, authErrors[0],
+                "OnAuthCompleted should keep the detailed backend error for logging/diagnostics.");
             Assert.IsNull(authErrors[1]);
 
             CollectionAssert.AreEqual(new[] { "assessmentPin", "assessmentPin" }, requestedTypes);
             CollectionAssert.AreEqual(new[] { "Enter your test PIN", "Enter your test PIN" }, requestedPrompts);
-            CollectionAssert.AreEqual(new[] { "", "Invalid assessment PIN" }, requestedErrors,
-                "the second prompt should carry the backend error message so the app can show the failed PIN state");
+            CollectionAssert.AreEqual(new[] { "", "Authentication Failed" }, requestedErrors,
+                "the retry prompt should show a short generic message instead of the full backend PIN failure detail");
             CollectionAssert.AreEqual(new[] { "000000", "123456" }, submittedPins);
             Assert.IsFalse(Abxr.IsAuthInputRequestPending(),
                 "successful retry should clear the pending-input state");

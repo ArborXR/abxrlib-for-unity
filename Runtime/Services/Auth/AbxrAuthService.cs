@@ -10,7 +10,6 @@ using AbxrLib.Runtime.Services;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -41,12 +40,13 @@ namespace AbxrLib.Runtime.Services.Auth
         // ── Constants ────────────────────────────────────────────────
         private const float ReAuthPollSeconds = 60f;
         private const int ReAuthThresholdSeconds = 120;
-        private static readonly WaitForSeconds ReAuthWait = new WaitForSeconds(ReAuthPollSeconds);
+        private const string GenericAuthenticationFailureMessage = "Authentication Failed";
+        private static readonly WaitForSeconds ReAuthWait = new(ReAuthPollSeconds);
 
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
         /// <summary>Runtime auth values loaded from Configuration and updated by GetArborData, GetQueryData, intent, and SetOrgId/SetAuthSecret.</summary>
-        private readonly RuntimeAuthConfig _runtimeAuth = new RuntimeAuthConfig();
+        private readonly RuntimeAuthConfig _runtimeAuth = new();
         /// <summary>Working copy of _runtimeAuth.authMechanism for this session. Its prompt remains the configured UI prompt; submitted user input is passed per request.</summary>
         private AuthMechanism _authMechanism;
         private DateTime _tokenExpiry = DateTime.MinValue;
@@ -73,7 +73,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _ssoUserDataMergedBeforeAuthSucceeded;
 
         private readonly MonoBehaviour _runner;
-        private readonly ArborMdmClient _ArborMdmClient;
+        private readonly ArborMdmClient _arborMdmClient;
         private AbxrRestService _restService;
         
         private const string DeviceIdKey = "abxrlib_device_id";
@@ -98,10 +98,10 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _webglUrlPinAutoSubmitAttempted;
 #endif
 
-        public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient ArborMdmClient)
+        public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient)
         {
             _runner = coroutineRunner;
-            _ArborMdmClient = ArborMdmClient;
+            _arborMdmClient = arborMdmClient;
 
             _payload = new AuthPayload
             {
@@ -134,7 +134,6 @@ namespace AbxrLib.Runtime.Services.Auth
             GetQueryData();
 #endif
             SetSessionData();
-
         }
 
         internal void SetRestService(AbxrRestService restService) => _restService = restService;
@@ -239,7 +238,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private void RequestKeyboardInput(bool firstAttempt = true)
         {
             _inputRequestPending = true;
-            OnInputRequested?.Invoke(_authMechanism.type, _authMechanism.prompt, _authMechanism.domain, firstAttempt ? "" : "Authentication Failed");
+            OnInputRequested?.Invoke(_authMechanism.type, _authMechanism.prompt, _authMechanism.domain, firstAttempt ? "" : GenericAuthenticationFailureMessage);
         }
         
         public void KeyboardAuthenticate(string input)
@@ -264,26 +263,21 @@ namespace AbxrLib.Runtime.Services.Auth
                     KeyboardHandler.StopProcessing();
                     KeyboardHandler.ShowPinPad();
                     SetInputSource("user");  // In case it was changed by QR Scanner
-
-                    // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.
-                    string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : "Authentication Failed";
-                    string promptError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : "Authentication Failed";
+                    
+                    string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : GenericAuthenticationFailureMessage;
 
                     OnFailed?.Invoke(completedError);
                     _inputRequestPending = true;
-                    OnInputRequested?.Invoke(configuredType, configuredPrompt, configuredDomain, promptError);
+                    OnInputRequested?.Invoke(configuredType, configuredPrompt, configuredDomain, GenericAuthenticationFailureMessage);
                 }
             }, withRetry: false, submittedAuthPrompt: submittedAuthPrompt));
         }
 
         private string BuildSubmittedAuthPrompt(string input)
         {
-            // For email type: put full email (userInput + "@" + domain) into the auth request; server does not use domain from payload. Domain is client-only for prompting and building this value.
-            if (_authMechanism != null &&
-                _authMechanism.type == "email" &&
-                !string.IsNullOrEmpty(_authMechanism.domain) &&
-                input != null &&
-                !input.Contains("@"))
+            // Server does not use domain from payload. Domain is client-only for prompting and building this value.
+            if (_authMechanism != null && _authMechanism.type == "email" &&
+                !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
             {
                 return input + "@" + _authMechanism.domain;
             }
@@ -313,8 +307,8 @@ namespace AbxrLib.Runtime.Services.Auth
         
             request.SetRequestHeader("x-abxrlib-hash", Utils.ComputeSha256Hash(hashString));
         }
-        
-        public void StopReAuthPolling()
+
+        private void StopReAuthPolling()
         {
             if (_reAuthCoroutine != null && _runner != null)
             {
@@ -440,92 +434,10 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        /// <summary>Extract a user-facing error string from auth failure JSON.</summary>
-        internal static bool TryExtractAuthErrorMessage(string responseBody, out string message, bool includePlainTextFallback = true)
-        {
-            message = null;
-            if (string.IsNullOrWhiteSpace(responseBody)) return false;
-
-            try
-            {
-                JToken root = JToken.Parse(responseBody);
-
-                message = ExtractMessageToken(GetProperty(root, "message")) ??
-                          ExtractMessageToken(GetProperty(root, "detail")) ??
-                          ExtractMessageToken(GetProperty(root, "error"));
-
-                if (string.IsNullOrWhiteSpace(message) && includePlainTextFallback && IsScalar(root))
-                {
-                    message = ExtractMessageToken(root);
-                }
-
-                message = NormalizeErrorMessage(message);
-                return !string.IsNullOrEmpty(message);
-            }
-            catch (JsonReaderException)
-            {
-                if (!includePlainTextFallback) return false;
-
-                message = NormalizeErrorMessage(responseBody);
-                return !string.IsNullOrEmpty(message);
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static JToken GetProperty(JToken token, string propertyName)
-        {
-            if (token is JObject obj && obj.TryGetValue(propertyName, StringComparison.OrdinalIgnoreCase, out JToken value)) return value;
-            return null;
-        }
-
-        private static string ExtractMessageToken(JToken token)
-        {
-            if (token == null || token.Type == JTokenType.Null || token.Type == JTokenType.Undefined) return null;
-
-            switch (token.Type)
-            {
-                case JTokenType.String:
-                case JTokenType.Integer:
-                case JTokenType.Float:
-                case JTokenType.Boolean:
-                    return token.ToString();
-
-                case JTokenType.Object:
-                    return ExtractMessageToken(GetProperty(token, "msg")) ??
-                           ExtractMessageToken(GetProperty(token, "message")) ??
-                           ExtractMessageToken(GetProperty(token, "detail")) ??
-                           ExtractMessageToken(GetProperty(token, "error"));
-
-                case JTokenType.Array:
-                    foreach (JToken child in token.Children())
-                    {
-                        string childMessage = ExtractMessageToken(child);
-                        if (!string.IsNullOrWhiteSpace(childMessage))
-                            return childMessage;
-                    }
-                    return null;
-
-                default:
-                    return null;
-            }
-        }
-
-        private static bool IsScalar(JToken token) =>
-            token?.Type is JTokenType.String or JTokenType.Integer or JTokenType.Float or JTokenType.Boolean;
-
-        private static string NormalizeErrorMessage(string value) =>
-            string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
         private static string DescribeAuthFailure(RestAuthResult result)
         {
             if (result == null) return "Authentication request failed.";
-            if (TryExtractAuthErrorMessage(result.Body, out string explicitError)) return explicitError;
-            if (result.StatusCode >= 200 && result.StatusCode <= 299) return "Authentication request returned an invalid response.";
-            if (result.StatusCode > 0) return $"Authentication request failed (HTTP {result.StatusCode}).";
-            return "Authentication request failed.";
+            return AuthResponseParser.DescribeFailure(result.Body, result.StatusCode);
         }
 
         /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). Device auth can retry transport/server transient failures; user-auth and SetUserData re-auth are one-shot.</summary>
@@ -565,7 +477,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 RestAuthResult result = null;
                 yield return restService.AuthRequestCoroutine(_payload, r => result = r);
 
-                if (result != null && result.Success && ApplyAuthResponse(result.Body, stageLabel))
+                if (result != null && result.Success && ApplyAuthResponse(result.Response, stageLabel))
                 {
                     onComplete(true, null);
                     yield break;
@@ -687,9 +599,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 string valueStr = Utils.JwtPayloadValueToString(kvp.Value);
                 if (string.IsNullOrEmpty(valueStr)) continue;
                 string key = kvp.Key;
-                if (!userData.ContainsKey(key))
+                if (userData.TryAdd(key, valueStr))
                 {
-                    userData[key] = valueStr;
                     changed = true;
                 }
                 else
@@ -738,13 +649,26 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <param name="handoff">When true, marks the session as supplied by an external handoff after validation.</param>
         private bool ApplyAuthResponse(string responseText, string stageLabel = null, bool handoff = false)
         {
-            if (string.IsNullOrEmpty(responseText)) return false;
+            if (!AuthResponseParser.TryParseSuccess(responseText, out AuthResponse postResponse, out string parseError))
+            {
+                if (AuthResponseParser.IsParseFailure(parseError))
+                    Logcat.Error($"Authentication response handling failed: {parseError}");
+                return false;
+            }
+
+            return ApplyAuthResponse(postResponse, stageLabel, handoff);
+        }
+
+        /// <summary>
+        /// Applies an already-parsed auth response. REST transport parses normal responses before invoking
+        /// this method, so successful REST auth does not deserialize the same body twice.
+        /// </summary>
+        private bool ApplyAuthResponse(AuthResponse postResponse, string stageLabel = null, bool handoff = false)
+        {
+            if (!AuthResponse.IsValidSuccess(postResponse)) return false;
+
             try
             {
-                var postResponse = JsonConvert.DeserializeObject<AuthResponse>(responseText);
-                if (!AuthResponse.IsValidSuccess(postResponse))
-                    return false;
-
                 if (!TrySetTokenExpiryFromJwt(postResponse.Token))
                     return false;
 
@@ -838,9 +762,9 @@ namespace AbxrLib.Runtime.Services.Auth
                         }
 
                         _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
-                        string authType = _authMechanism?.type ?? "";
                         if (NeedsUserAuthentication(_authMechanism))
                         {
+                            string authType = _authMechanism?.type ?? "";
                             Logcat.Info("User Authentication Required.");
                             Logcat.Debug($" - Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
                         }
@@ -974,8 +898,7 @@ namespace AbxrLib.Runtime.Services.Auth
             OnSucceeded?.Invoke();
             Logcat.Info("Authenticated successfully");
             // Push merged MDM SSO claims to the API via the same REST auth path as SetUserData (custom re-auth); completion is OnUserDataSyncCompleted only.
-            if (ssoUserDataChanged)
-                SetUserData(null, null);
+            if (ssoUserDataChanged) SetUserData();
         }
 
         /// <summary>For handoff receivers and GET-config failure: no keyboard/PIN; keep Configuration asset defaults for other fields.</summary>
@@ -1239,7 +1162,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 dict["inputSource"] = _authMechanism.inputSource;
             return dict;
         }
-
+        
         /// <summary>
         /// Set the input source for authentication (e.g., "user", "QRlms")
         /// This indicates how the authentication value was provided
@@ -1289,7 +1212,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         private void GetArborData()
         {
-            if (_ArborMdmClient == null || !_ArborMdmClient.IsConnected()) return;
+            if (_arborMdmClient == null || !_arborMdmClient.IsConnected()) return;
 
             // MDM available: always accept deviceId, partner, tags from Arbor.
             _runtimeAuth.partner = "arborxr";
@@ -1388,14 +1311,6 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 #endif
-
-        private static bool LooksLikeJwt(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return false;
-            var parts = value.Split('.');
-            return parts.Length == 3;
-        }
-
         private void SetSessionData()
         {
             _payload.deviceModel = DeviceModel.deviceModel;

@@ -19,6 +19,7 @@ namespace AbxrLib.Runtime.Services
         public long StatusCode;
         public bool Retryable;
         public bool AuthRejected;
+        public AuthResponse Response;
     }
 
     /// <summary>REST (UnityWebRequest) service. Queues data/storage and sends auth, config, data, and storage requests via HTTP.</summary>
@@ -85,19 +86,10 @@ namespace AbxrLib.Runtime.Services
             string responseBody = request.downloadHandler?.text ?? "";
             long statusCode = request.responseCode;
 
-            bool responseShapeIsValid = false;
-            if (!string.IsNullOrEmpty(responseBody))
-            {
-                try
-                {
-                    var parsed = JsonConvert.DeserializeObject<AuthResponse>(responseBody);
-                    responseShapeIsValid = AuthResponse.IsValidSuccess(parsed);
-                }
-                catch
-                {
-                    responseShapeIsValid = false;
-                }
-            }
+            bool responseShapeIsValid = AuthResponseParser.TryParseSuccess(
+                responseBody,
+                out AuthResponse parsedResponse,
+                out _);
 
             bool httpSuccess = request.result == UnityWebRequest.Result.Success;
             bool success = httpSuccess && responseShapeIsValid;
@@ -118,7 +110,8 @@ namespace AbxrLib.Runtime.Services
                 Body = responseBody,
                 StatusCode = statusCode,
                 Retryable = retryable,
-                AuthRejected = authRejected
+                AuthRejected = authRejected,
+                Response = success ? parsedResponse : null
             });
         }
 
@@ -136,7 +129,7 @@ namespace AbxrLib.Runtime.Services
         }
 
         private static bool HasExplicitBackendError(string responseBody) =>
-            AbxrAuthService.TryExtractAuthErrorMessage(responseBody, out _, includePlainTextFallback: false);
+            AuthResponseParser.HasExplicitBackendError(responseBody);
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
         {
