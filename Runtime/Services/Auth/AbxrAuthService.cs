@@ -63,7 +63,6 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>True after <see cref="Authenticate"/> has scheduled <c>AuthenticateCoroutine</c> at least once this process. Use to gate one-time configuration before auth.</summary>
         internal bool HasAuthenticationStarted => _isAuthStarted;
         private Coroutine _reAuthCoroutine;
-        private Coroutine _retryCoroutine;
         private Dictionary<string, string> _userData;
         /// <summary>True while the auth request is from SetUserData re-auth; ensures we send type=custom with userData instead of current _authMechanism (e.g. email).</summary>
         private bool _setUserDataReAuthActive;
@@ -136,12 +135,7 @@ namespace AbxrLib.Runtime.Services.Auth
             else if (_platformSource.IsWebGlPlayer)
             {
                 GetWebGlQueryData();
-                string webGlDeviceId = _platformSource.GetOrCreateWebGlDeviceId();
-                if (!string.IsNullOrEmpty(webGlDeviceId))
-                {
-                    _payload.deviceId = webGlDeviceId;
-                    _runtimeAuth.deviceId = webGlDeviceId;
-                }
+                ApplyWebGlDeviceIdFromPlatform();
             }
             else if (_platformSource.IsStandalonePlayer)
             {
@@ -177,11 +171,7 @@ namespace AbxrLib.Runtime.Services.Auth
             ApplyAbxrOverridesToRuntimeAuth();
 
             // When using app tokens with no org token yet, build dynamic org token from overrides (SetOrgId/SetAuthSecret) or from MDM (already set in GetArborData). Same logic as GetArborData but for when MDM is not connected—overrides supply orgId and authSecret (fingerprint) to sign the JWT.
-            if (_runtimeAuth.useAppTokens && string.IsNullOrEmpty(_runtimeAuth.orgToken) && !string.IsNullOrEmpty(_runtimeAuth.orgId) && !string.IsNullOrEmpty(_runtimeAuth.authSecret))
-            {
-                string dynamicToken = Utils.BuildOrgTokenDynamic(_runtimeAuth.orgId, _runtimeAuth.authSecret);
-                if (!string.IsNullOrEmpty(dynamicToken)) _runtimeAuth.orgToken = dynamicToken;
-            }
+            TrySetDynamicOrgToken(_runtimeAuth.orgId, _runtimeAuth.authSecret);
 
             if (_platformSource.IsAndroidPlayer) ApplyAndroidIntentOrgTokenIfAvailable(copyToPayload: false);
             else if (_platformSource.IsWebGlPlayer) GetWebGlQueryData();
@@ -316,9 +306,6 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _stopping = true;
             StopReAuthPolling();
-            if (_retryCoroutine != null && _runner != null)
-                _runner.StopCoroutine(_retryCoroutine);
-            _retryCoroutine = null;
             _attemptActive = false;
         }
 
@@ -334,9 +321,6 @@ namespace AbxrLib.Runtime.Services.Auth
             _attemptActive = false;
             _isAuthStarted = false;
             StopReAuthPolling();
-            if (_retryCoroutine != null && _runner != null)
-                _runner.StopCoroutine(_retryCoroutine);
-            _retryCoroutine = null;
             ClearSessionAndPrepareForNew();
         }
         
@@ -821,11 +805,36 @@ namespace AbxrLib.Runtime.Services.Auth
                     _runtimeAuth.authSecret = s.authSecret;
                 }
             }
-            // Establish subsystem defaults for device/partner/tags whenever we load runtime auth (e.g. each Authenticate call).
+            SetDefaultRuntimeDeviceContext();
+        }
+
+        private void SetDefaultRuntimeDeviceContext()
+        {
             string deviceIdFromSubsystem = _platformSource.GetCurrentDeviceId();
             _runtimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : _payload.deviceId;
             _runtimeAuth.partner = "none";
             _runtimeAuth.tags = null;
+        }
+
+        private void ApplyWebGlDeviceIdFromPlatform()
+        {
+            string webGlDeviceId = _platformSource.GetOrCreateWebGlDeviceId();
+            if (string.IsNullOrEmpty(webGlDeviceId)) return;
+
+            _payload.deviceId = webGlDeviceId;
+            _runtimeAuth.deviceId = webGlDeviceId;
+        }
+
+        private void TrySetDynamicOrgToken(string orgId, string authSecret, bool overwriteExisting = false)
+        {
+            if (!_runtimeAuth.useAppTokens) return;
+            if (!overwriteExisting && !string.IsNullOrEmpty(_runtimeAuth.orgToken)) return;
+            if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(authSecret)) return;
+
+            string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, authSecret);
+            if (string.IsNullOrEmpty(dynamicToken)) return;
+
+            _runtimeAuth.orgToken = dynamicToken;
         }
 
         /// <summary>Returns a mutable copy of a supported user-auth mechanism, or null when user auth is not required.</summary>
@@ -1169,11 +1178,7 @@ namespace AbxrLib.Runtime.Services.Auth
             var configData = Utils.ExtractConfigData(config);
             if (!configData.isValid) return;
 
-            // Establish subsystem defaults for device/partner/tags when runtime auth is first loaded (e.g. constructor / Awake sequence).
-            string deviceIdFromSubsystem = _platformSource.GetCurrentDeviceId();
-            _runtimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : _payload.deviceId;
-            _runtimeAuth.partner = "none";
-            _runtimeAuth.tags = null;
+            SetDefaultRuntimeDeviceContext();
 
             _runtimeAuth.useAppTokens = configData.useAppTokens;
             _runtimeAuth.buildType = configData.buildType ?? "production";
@@ -1225,10 +1230,9 @@ namespace AbxrLib.Runtime.Services.Auth
             // Non-production_custom: update auth from MDM (dynamic org token or orgId/authSecret).
             if (_runtimeAuth.useAppTokens)
             {
-                string fingerprint = _platformSource.GetCurrentFingerprint();
-                string orgId = _platformSource.GetCurrentOrgId();
-                string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, fingerprint);
-                if (!string.IsNullOrEmpty(dynamicToken)) _runtimeAuth.orgToken = dynamicToken;
+                TrySetDynamicOrgToken(_platformSource.GetCurrentOrgId(),
+                    _platformSource.GetCurrentFingerprint(),
+                    overwriteExisting: true);
             }
             else
             {
@@ -1315,22 +1319,13 @@ namespace AbxrLib.Runtime.Services.Auth
         // ── Runtime auth overrides (Abxr.SetOrgId / SetAuthSecret / SetDeviceId) ─────
 
         /// <summary>Updates runtime auth orgId. Called by subsystem when Abxr.SetOrgId() is used.</summary>
-        internal void SetRuntimeAuthOrgId(string value)
-        {
-            if (_runtimeAuth != null) _runtimeAuth.orgId = value ?? "";
-        }
+        internal void SetRuntimeAuthOrgId(string value) => _runtimeAuth.orgId = value ?? "";
 
         /// <summary>Updates runtime auth authSecret. Called by subsystem when Abxr.SetAuthSecret() is used.</summary>
-        internal void SetRuntimeAuthAuthSecret(string value)
-        {
-            if (_runtimeAuth != null) _runtimeAuth.authSecret = value ?? "";
-        }
+        internal void SetRuntimeAuthAuthSecret(string value) => _runtimeAuth.authSecret = value ?? "";
 
         /// <summary>Updates runtime auth deviceId. Called by subsystem when Abxr.SetDeviceId() is used.</summary>
-        internal void SetRuntimeAuthDeviceId(string value)
-        {
-            if (_runtimeAuth != null) _runtimeAuth.deviceId = value ?? "";
-        }
+        internal void SetRuntimeAuthDeviceId(string value) => _runtimeAuth.deviceId = value ?? "";
 
         /// <summary>Applies current platform/subsystem getters (GetOrgId, GetFingerprint, GetDeviceId, GetDeviceTags) to _runtimeAuth so values set via Abxr setters (or from MDM via GetDeviceTags) are used.
         /// Only overwrites when the getter returns a non-empty value so we do not wipe configured credentials with empty values (e.g. Editor with no MDM).</summary>
