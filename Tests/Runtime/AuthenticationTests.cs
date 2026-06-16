@@ -301,6 +301,105 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_ReAuthPoll_WhenTokenNearExpiry_StartsNewAuthentication()
+        {
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "phase", "initial" } }));
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "phase", "reauth" } }));
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var service = AbxrTestHooks.GetAuthServiceForTest();
+            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
+            Assert.IsFalse(service.IsAuthenticationAttemptActive,
+                "the re-auth poll should only trigger after the initial auth attempt is idle.");
+
+            SetPrivateDateTimeForTest(service, "_tokenExpiry", DateTime.UtcNow.AddSeconds(30));
+
+            bool reauthDone = false;
+            bool reauthSuccess = false;
+            string reauthError = null;
+            Action<bool, string> reauthCompletedHandler = (success, error) =>
+            {
+                reauthDone = true;
+                reauthSuccess = success;
+                reauthError = error;
+            };
+
+            Abxr.OnAuthCompleted += reauthCompletedHandler;
+            try
+            {
+                var poll = GetPrivateCoroutineForTest(service, "ReAuthPollCoroutine");
+                Assert.IsTrue(poll.MoveNext(),
+                    "the re-auth poll coroutine should first yield its polling interval.");
+                Assert.IsInstanceOf<WaitForSeconds>(poll.Current,
+                    "the first re-auth poll step should wait before checking token expiry.");
+
+                Assert.IsTrue(poll.MoveNext(),
+                    "manually advancing past the wait should execute one re-auth poll iteration.");
+
+                yield return WaitUntil(() => reauthDone, 5f, "re-auth poll triggered authentication completed");
+            }
+            finally
+            {
+                Abxr.OnAuthCompleted -= reauthCompletedHandler;
+            }
+
+            Assert.IsTrue(reauthSuccess, reauthError);
+            Assert.IsTrue(service.Authenticated,
+                "the service should remain authenticated after poll-triggered re-auth succeeds.");
+            Assert.IsFalse(service.IsAuthenticationAttemptActive,
+                "the poll-triggered re-auth attempt should complete and clear the active flag.");
+            Assert.AreEqual("reauth", Abxr.GetUserData()["phase"],
+                "poll-triggered re-auth should apply the fresh auth response.");
+
+            var authRequests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, authRequests.Count,
+                "near-expiry tokens should trigger exactly one additional device-auth request.");
+            Assert.IsNull(authRequests[1].BodyJson["authMechanism"],
+                "poll-triggered re-auth should be a device-auth refresh, not user auth.");
+            Assert.AreEqual(2, FakeBackend.GetRequests("/v1/storage/config").Count,
+                "poll-triggered re-auth should run the normal post-auth config fetch.");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_ReAuthPoll_WhenTokenNotNearExpiry_DoesNotStartAuthentication()
+        {
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var service = AbxrTestHooks.GetAuthServiceForTest();
+            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
+            SetPrivateDateTimeForTest(service, "_tokenExpiry", DateTime.UtcNow.AddMinutes(10));
+
+            int authRequestsBeforePoll = FakeBackend.GetRequests("/v1/auth/token").Count;
+            int configRequestsBeforePoll = FakeBackend.GetRequests("/v1/storage/config").Count;
+
+            var poll = GetPrivateCoroutineForTest(service, "ReAuthPollCoroutine");
+            Assert.IsTrue(poll.MoveNext(),
+                "the re-auth poll coroutine should first yield its polling interval.");
+            Assert.IsInstanceOf<WaitForSeconds>(poll.Current,
+                "the first re-auth poll step should wait before checking token expiry.");
+            Assert.IsTrue(poll.MoveNext(),
+                "manually advancing past the wait should execute one re-auth poll iteration.");
+
+            yield return null;
+
+            Assert.AreEqual(authRequestsBeforePoll, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "tokens outside the re-auth threshold should not start a new auth request.");
+            Assert.AreEqual(configRequestsBeforePoll, FakeBackend.GetRequests("/v1/storage/config").Count,
+                "tokens outside the re-auth threshold should not fetch config again.");
+            Assert.IsFalse(service.IsAuthenticationAttemptActive,
+                "a non-expiring token poll should leave auth idle.");
+        }
+
+        [UnityTest]
         public IEnumerator Auth_Rejection_Latches_Within_Session()
         {
             // First call: 401 → terminal rejection → _credentialsRejectedByApi latches
@@ -1677,6 +1776,26 @@ namespace AbxrLib.Tests.Runtime
             Assert.AreEqual(typeof(bool), field.FieldType,
                 $"Expected {target.GetType().Name}.{fieldName} to be a bool field.");
             field.SetValue(target, value);
+        }
+
+        private static void SetPrivateDateTimeForTest(object target, string fieldName, DateTime value)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, $"Expected {target.GetType().Name}.{fieldName} to exist for test setup.");
+            Assert.AreEqual(typeof(DateTime), field.FieldType,
+                $"Expected {target.GetType().Name}.{fieldName} to be a DateTime field.");
+            field.SetValue(target, value);
+        }
+
+        private static IEnumerator GetPrivateCoroutineForTest(object target, string methodName)
+        {
+            var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(method, $"Expected {target.GetType().Name}.{methodName} to exist for test setup.");
+
+            var result = method.Invoke(target, null);
+            Assert.IsInstanceOf<IEnumerator>(result,
+                $"Expected {target.GetType().Name}.{methodName} to return IEnumerator.");
+            return (IEnumerator)result;
         }
 
         private static void SetAuthResponseForTest(object authService, AuthResponse response)
