@@ -1253,6 +1253,46 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_GetConfig_WhenLearnerLauncherModeEnabled_ForcesAssessmentPinEvenWhenConfigSaysNone()
+        {
+            Configuration.Instance.enableLearnerLauncherMode = true;
+            QueueAuthMechanismConfig("none", "Enter learner-launcher PIN");
+
+            bool inputRequested = false;
+            string requestedType = null;
+            string requestedPrompt = null;
+            string requestedError = null;
+            Abxr.OnInputRequested = (type, prompt, _, error) =>
+            {
+                inputRequested = true;
+                requestedType = type;
+                requestedPrompt = prompt;
+                requestedError = error;
+                Abxr.OnInputSubmitted("learner-pin-123");
+            };
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsTrue(inputRequested,
+                "Learner Launcher Mode should require learner input even when GET config says no user auth is required.");
+            Assert.AreEqual("assessmentPin", requestedType);
+            Assert.AreEqual("Enter learner-launcher PIN", requestedPrompt);
+            Assert.AreEqual("", requestedError);
+
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count);
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, requests.Count, "expected device auth followed by forced learner PIN auth");
+            Assert.IsNull(requests[0].BodyJson["authMechanism"]);
+
+            var mechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("assessmentPin", (string)mechanism?["type"]);
+            Assert.AreEqual("learner-pin-123", (string)mechanism?["prompt"]);
+            Assert.AreEqual("user", (string)mechanism?["inputSource"]);
+        }
+
+        [UnityTest]
         public IEnumerator Auth_MdmSsoIdentity_DoesNotBypassPrompt_WhenLearnerLauncherModeEnabled()
         {
             Configuration.Instance.enableLearnerLauncherMode = true;
