@@ -493,38 +493,6 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        /// <summary>JWT claim names that may carry an email (OIDC, Azure AD, Google-style). First match wins when copying into <c>email</c>.</summary>
-        private static readonly string[] SsoJwtEmailClaimKeys =
-        {
-            "email",                // OIDC / Google ID token
-            "email_address",
-            "user_email",
-            "mail",                 // AD / Graph
-            "preferred_username",   // Azure AD (often UPN / email)
-            "upn",
-            "unique_name",
-        };
-
-        /// <summary>Returns true when the JWT payload has at least one identity-oriented claim (subject, OID, email, UPN, etc.) suitable for skipping the configured auth mechanism.</summary>
-        private static bool JwtPayloadHasUsableIdentity(Dictionary<string, object> payload)
-        {
-            if (payload == null || payload.Count == 0) return false;
-            string[] identityKeys = { "sub", "oid", "preferred_username", "upn", "unique_name" };
-            foreach (var k in identityKeys)
-            {
-                if (!payload.TryGetValue(k, out var v) || v == null) continue;
-                string s = Utils.JwtPayloadValueToString(v);
-                if (!string.IsNullOrWhiteSpace(s)) return true;
-            }
-            foreach (var claimKey in SsoJwtEmailClaimKeys)
-            {
-                if (!payload.TryGetValue(claimKey, out var raw) || raw == null) continue;
-                string s = Utils.JwtPayloadValueToString(raw);
-                if (!string.IsNullOrWhiteSpace(s)) return true;
-            }
-            return false;
-        }
-
         /// <summary>
         /// When <see cref="Abxr.GetIsAuthenticated"/> is true and <see cref="Abxr.GetAccessToken"/> is a JWT with usable identity claims,
         /// merges SSO claims into <see cref="ResponseData"/>, clears the auth mechanism for this step, and returns true so the caller can call <see cref="AuthSucceeded"/> without prompting.
@@ -534,16 +502,13 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             if (Configuration.Instance != null && Configuration.Instance.enableLearnerLauncherMode)
                 return false;
-            if (!Abxr.GetIsAuthenticated()) return false;
-            string token = Abxr.GetAccessToken();
-            if (string.IsNullOrWhiteSpace(token)) return false;
-            var payload = Utils.TryDecodeJwtPayload(token);
-            if (payload == null || payload.Count == 0) return false;
-            if (!JwtPayloadHasUsableIdentity(payload)) return false;
+
+            string token = GetAuthenticatedAccessToken();
+            if (!SsoUserDataMerger.AccessTokenHasUsableIdentity(token)) return false;
 
             if (ResponseData == null) return false;
             ResponseData.UserData ??= new Dictionary<string, string>();
-            if (!MergeSsoAccessTokenIntoUserData(ResponseData.UserData))
+            if (!SsoUserDataMerger.TryMergeAccessTokenIntoUserData(token, ResponseData.UserData))
             {
                 Logcat.Warning("MDM SSO: access token did not merge into userData; continuing with auth mechanism prompt.");
                 return false;
@@ -555,65 +520,12 @@ namespace AbxrLib.Runtime.Services.Auth
             return true;
         }
 
-        /// <summary>
-        /// When XRDM MDM reports SSO authenticated and the access token is a decodable JWT, merges payload claims into <paramref name="userData"/>.
-        /// Normally called from <see cref="AuthSucceeded"/> after optional keyboard/email step. When MDM SSO supplies identity, <see cref="TryCompleteUserAuthUsingMdmSsoIdentity"/> merges first and <see cref="AuthSucceeded"/> skips a second merge.
-        /// Conflicting claim keys are stored as <c>sso_</c>… (with numeric suffix if needed).
-        /// If <c>email</c> is still empty, copies from the first non-empty value among <see cref="SsoJwtEmailClaimKeys"/> in the JWT payload.
-        /// </summary>
-        /// <returns>True if any key was added or updated in <paramref name="userData"/>.</returns>
-        private static bool MergeSsoAccessTokenIntoUserData(Dictionary<string, string> userData)
+        private static string GetAuthenticatedAccessToken()
         {
-            if (userData == null || !Abxr.GetIsAuthenticated()) return false;
-            string token = Abxr.GetAccessToken();
-            if (string.IsNullOrWhiteSpace(token)) return false;
-            var payload = Utils.TryDecodeJwtPayload(token);
-            if (payload == null || payload.Count == 0) return false;
-            bool changed = false;
-            foreach (var kvp in payload)
-            {
-                string valueStr = Utils.JwtPayloadValueToString(kvp.Value);
-                if (string.IsNullOrEmpty(valueStr)) continue;
-                string key = kvp.Key;
-                if (userData.TryAdd(key, valueStr))
-                {
-                    changed = true;
-                }
-                else
-                {
-                    string prefixed = "sso_" + key;
-                    int suffix = 0;
-                    while (userData.ContainsKey(prefixed))
-                    {
-                        suffix++;
-                        prefixed = "sso_" + key + "_" + suffix;
-                    }
-                    userData[prefixed] = valueStr;
-                    changed = true;
-                }
-            }
-            if (EnsureEmailFromSsoJwtClaims(userData, payload))
-                changed = true;
-            return changed;
-        }
+            if (!Abxr.GetIsAuthenticated()) return null;
 
-        /// <summary>Sets <c>userData["email"]</c> from JWT when missing/blank, using <see cref="SsoJwtEmailClaimKeys"/> order; only when the claim value parses as an email.</summary>
-        /// <returns>True if <c>email</c> was set.</returns>
-        private static bool EnsureEmailFromSsoJwtClaims(Dictionary<string, string> userData, Dictionary<string, object> payload)
-        {
-            if (userData == null || payload == null) return false;
-            if (userData.TryGetValue("email", out var existing) && !string.IsNullOrWhiteSpace(existing))
-                return false;
-            foreach (var claimKey in SsoJwtEmailClaimKeys)
-            {
-                if (!payload.TryGetValue(claimKey, out var raw) || raw == null) continue;
-                string s = Utils.JwtPayloadValueToString(raw);
-                if (string.IsNullOrWhiteSpace(s)) continue;
-                if (!Utils.TryNormalizePlausibleEmail(s, out var normalized)) continue;
-                userData["email"] = normalized;
-                return true;
-            }
-            return false;
+            string token = Abxr.GetAccessToken();
+            return string.IsNullOrWhiteSpace(token) ? null : token;
         }
 
         /// <summary>
@@ -825,16 +737,17 @@ namespace AbxrLib.Runtime.Services.Auth
             _runtimeAuth.deviceId = webGlDeviceId;
         }
 
-        private void TrySetDynamicOrgToken(string orgId, string authSecret, bool overwriteExisting = false)
+        private bool TrySetDynamicOrgToken(string orgId, string authSecret, bool overwriteExisting = false)
         {
-            if (!_runtimeAuth.useAppTokens) return;
-            if (!overwriteExisting && !string.IsNullOrEmpty(_runtimeAuth.orgToken)) return;
-            if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(authSecret)) return;
+            if (!_runtimeAuth.useAppTokens) return false;
+            if (!overwriteExisting && !string.IsNullOrEmpty(_runtimeAuth.orgToken)) return false;
+            if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(authSecret)) return false;
 
             string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, authSecret);
-            if (string.IsNullOrEmpty(dynamicToken)) return;
+            if (string.IsNullOrEmpty(dynamicToken)) return false;
 
             _runtimeAuth.orgToken = dynamicToken;
+            return true;
         }
 
         /// <summary>Returns a mutable copy of a supported user-auth mechanism, or null when user auth is not required.</summary>
@@ -893,7 +806,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     ssoUserDataChanged = true;
                 }
                 else
-                    ssoUserDataChanged = MergeSsoAccessTokenIntoUserData(ResponseData.UserData);
+                    ssoUserDataChanged = SsoUserDataMerger.TryMergeAccessTokenIntoUserData(GetAuthenticatedAccessToken(), ResponseData.UserData);
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
             }
             OnSucceeded?.Invoke();
@@ -1230,7 +1143,8 @@ namespace AbxrLib.Runtime.Services.Auth
             // Non-production_custom: update auth from MDM (dynamic org token or orgId/authSecret).
             if (_runtimeAuth.useAppTokens)
             {
-                TrySetDynamicOrgToken(_platformSource.GetCurrentOrgId(),
+                TrySetDynamicOrgToken(
+                    _platformSource.GetCurrentOrgId(),
                     _platformSource.GetCurrentFingerprint(),
                     overwriteExisting: true);
             }
