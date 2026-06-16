@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -27,9 +26,7 @@ namespace AbxrLib.Tests.Runtime
 
             Assert.IsTrue(LastAuthSuccess, LastAuthError);
 
-            Assert.AreEqual(
-                0,
-                FakeBackend.GetRequests("/v1/auth/token").Count,
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/auth/token").Count,
                 "handoff receiver should adopt the provided session instead of POSTing device auth");
 
             var configReq = FakeBackend.GetRequests("/v1/storage/config").Single();
@@ -60,13 +57,10 @@ namespace AbxrLib.Tests.Runtime
 
             Assert.IsTrue(LastAuthSuccess, LastAuthError);
 
-            Assert.IsFalse(
-                inputRequested,
+            Assert.IsFalse(inputRequested,
                 "handoff sessions already have launcher-provided identity, so config authMechanism should not trigger a second PIN/email prompt");
 
-            Assert.AreEqual(
-                0,
-                FakeBackend.GetRequests("/v1/auth/token").Count,
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/auth/token").Count,
                 "handoff should skip both device auth and follow-up user-auth POSTs");
 
             Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count);
@@ -114,8 +108,7 @@ namespace AbxrLib.Tests.Runtime
             Assert.IsNotNull(authService);
             Assert.AreEqual("com.example.launcher", authService.GetAndClearReturnToPackage());
 
-            Assert.IsNull(
-                authService.GetAndClearReturnToPackage(),
+            Assert.IsNull(authService.GetAndClearReturnToPackage(),
                 "ReturnToPackage should be consumed once so return-to-launcher cannot loop forever");
         }
 
@@ -124,22 +117,36 @@ namespace AbxrLib.Tests.Runtime
         {
             AbxrTestHooks.SetAuthHandoffPayloadForTest("not-json-and-not-base64");
 
-            LogAssert.Expect(
-                LogType.Error,
+            LogAssert.Expect(LogType.Error,
                 new Regex(@"\[AbxrLib\] Authentication response handling failed"));
 
-            LogAssert.Expect(
-                LogType.Warning,
+            LogAssert.Expect(LogType.Warning,
                 new Regex(@"\[AbxrLib\] auth_handoff was present but the session could not be applied"));
 
             yield return RunAuthAndWait();
 
             Assert.IsTrue(LastAuthSuccess, LastAuthError);
 
-            Assert.AreEqual(
-                1,
-                FakeBackend.GetRequests("/v1/auth/token").Count,
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/auth/token").Count,
                 "invalid handoff should fall back to normal device auth, not leave the app unauthenticated");
+
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count);
+        }
+
+        [UnityTest]
+        public IEnumerator AuthHandoff_Base64NonJsonPayload_FallsBackToNormalDeviceAuth()
+        {
+            AbxrTestHooks.SetAuthHandoffPayloadForTest(Base64Utf8("not-json"));
+
+            LogAssert.Expect(LogType.Warning,
+                new Regex(@"\[AbxrLib\] auth_handoff was present but could not be normalized to JSON; continuing with device authentication\."));
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "base64 handoff payloads that decode to non-JSON should fall back to normal device auth.");
 
             Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count);
         }
@@ -149,17 +156,14 @@ namespace AbxrLib.Tests.Runtime
         {
             AbxrTestHooks.SetAuthHandoffPayloadForTest(HandoffJson(secret: null));
 
-            LogAssert.Expect(
-                LogType.Warning,
+            LogAssert.Expect(LogType.Warning,
                 new Regex(@"\[AbxrLib\] auth_handoff was present but the session could not be applied"));
 
             yield return RunAuthAndWait();
 
             Assert.IsTrue(LastAuthSuccess, LastAuthError);
 
-            Assert.AreEqual(
-                1,
-                FakeBackend.GetRequests("/v1/auth/token").Count,
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/auth/token").Count,
                 "handoff must include token and secret, otherwise signed follow-up requests would be impossible");
         }
 

@@ -53,6 +53,34 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_TrySetRestUrl_AfterAuthenticationStarted_ReturnsFalse_AndKeepsCurrentUrl()
+        {
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            string originalRestUrl = Configuration.Instance.restUrl;
+            bool changed = Abxr.TrySetRestUrl("https://example.invalid/", out string errorMessage);
+
+            Assert.IsFalse(changed, "restUrl should be locked after authentication has started.");
+            Assert.That(errorMessage, Does.Contain("restUrl cannot be changed after authentication has started"));
+            Assert.AreEqual(originalRestUrl, Configuration.Instance.restUrl,
+                "failed TrySetRestUrl calls should not mutate the active runtime configuration.");
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_SetDeviceId_BeforeAuthentication_UsesOverrideInAuthPayload()
+        {
+            Abxr.SetDeviceId("runtime-device-override");
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            var req = FakeBackend.GetRequests("/v1/auth/token").Single();
+            Assert.AreEqual("runtime-device-override", (string)req.BodyJson["deviceId"],
+                "SetDeviceId should update runtime auth before the first authentication request is sent.");
+        }
+
+        [UnityTest]
         public IEnumerator Auth_AppTokens_ProductionCustom_UsesConfiguredOrgToken_AndOmitsLegacyFields()
         {
             var c = Configuration.Instance;
@@ -234,13 +262,8 @@ namespace AbxrLib.Tests.Runtime
             Configuration.Instance.sendRetriesOnFailure = 1;
             Configuration.Instance.sendRetryIntervalSeconds = 1;
 
-            FakeBackend.QueueEmptyBodyScenario(
-                path: "/v1/auth/token",
-                status: 500);
-            FakeBackend.QueueScenario(
-                path: "/v1/auth/token",
-                status: 201,
-                body: AuthBody());
+            FakeBackend.QueueEmptyBodyScenario(path: "/v1/auth/token", status: 500);
+            FakeBackend.QueueScenario(path: "/v1/auth/token", status: 201, body: AuthBody());
 
             yield return RunAuthAndWait(timeoutSeconds: 6f);
 
@@ -1568,6 +1591,52 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_ConfigUnsupportedAuthMechanismType_DoesNotRequestInput_AndSucceeds()
+        {
+            QueueAuthMechanismConfig("magicLink", "Open your email");
+
+            LogAssert.Expect(LogType.Warning, new Regex(
+                @"\[AbxrLib\] Unsupported authMechanism\.type 'magicLink' from configuration; continuing without user authentication\."));
+
+            bool inputRequested = false;
+            Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsFalse(inputRequested,
+                "unsupported authMechanism types should be ignored rather than producing an unusable input prompt.");
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "unsupported config authMechanism should not trigger a follow-up user-auth request.");
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count);
+        }
+
+        [UnityTest]
+        public IEnumerator Auth_MalformedConfigResponse_Continues_AsAnonymous_WithoutInput()
+        {
+            FakeBackend.QueueRawScenario(
+                path: "/v1/storage/config",
+                status: 200,
+                raw: "{not-valid-json",
+                method: "GET");
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[AbxrLib\] GetConfiguration response handling failed:"));
+            LogAssert.Expect(LogType.Warning, new Regex(
+                @"\[AbxrLib\] GET config failed \(.*\); continuing with Configuration defaults and no user auth prompt \(authMechanism cleared\)\."));
+
+            bool inputRequested = false;
+            Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsFalse(inputRequested,
+                "malformed GET config responses should fall back to anonymous device auth instead of prompting for user auth.");
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/auth/token").Count);
+            Assert.AreEqual(1, FakeBackend.GetRequests("/v1/storage/config").Count);
+        }
+
+        [UnityTest]
         public IEnumerator Auth_Response_WithTokenAndModules_Succeeds_And_SortsModulesByOrder()
         {
             FakeBackend.QueueScenario(
@@ -1628,6 +1697,79 @@ namespace AbxrLib.Tests.Runtime
                 "SetAuthHeaders should not set x-abxrlib-timestamp when tokens are unavailable.");
             Assert.IsTrue(string.IsNullOrEmpty(request.GetRequestHeader("x-abxrlib-hash")),
                 "SetAuthHeaders should not set x-abxrlib-hash when tokens are unavailable.");
+        }
+
+        [UnityTest]
+        public IEnumerator SetUserData_BeforeAuth_IsIgnored_AndDoesNotSendRequests()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex(
+                @"\[AbxrLib\] Cannot set user data - not authenticated\. Call Authenticate\(\) first\."));
+
+            Abxr.SetUserData("learner-before-auth", new Dictionary<string, string>
+            {
+                { "email", "before-auth@example.com" }
+            });
+            yield return null;
+
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/auth/token").Count,
+                "SetUserData before authentication should be a no-op and should not start auth implicitly.");
+            Assert.AreEqual(0, FakeBackend.GetRequests("/v1/storage/config").Count);
+        }
+
+        [UnityTest]
+        public IEnumerator SetUserData_WhileUserDataSyncInProgress_IsIgnored()
+        {
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                body: AuthBody(userData: new Dictionary<string, object> { { "email", "initial@example.com" } }));
+            FakeBackend.QueueScenario(
+                path: "/v1/auth/token",
+                status: 201,
+                delayMs: 250,
+                body: AuthBody(userData: new Dictionary<string, object> { { "email", "first-sync@example.com" } }));
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+
+            bool syncDone = false;
+            bool syncSuccess = false;
+            string syncError = null;
+            Abxr.OnUserDataSyncCompleted = (success, error) =>
+            {
+                syncDone = true;
+                syncSuccess = success;
+                syncError = error;
+            };
+
+            Abxr.SetUserData("first-sync", new Dictionary<string, string>
+            {
+                { "cohort", "alpha" }
+            });
+
+            LogAssert.Expect(LogType.Warning, new Regex(
+                @"\[AbxrLib\] Authentication in progress\. Unable to sync user data\."));
+
+            Abxr.SetUserData("second-sync", new Dictionary<string, string>
+            {
+                { "cohort", "beta" }
+            });
+
+            yield return WaitUntil(() => syncDone, 5f, "first SetUserData re-auth completed");
+            Abxr.OnUserDataSyncCompleted = null;
+
+            Assert.IsTrue(syncSuccess, syncError);
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, requests.Count,
+                "the second SetUserData call should be ignored while the first custom re-auth is active.");
+
+            var mechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("custom", (string)mechanism?["type"]);
+            Assert.AreEqual("first-sync", (string)mechanism?["id"]);
+            Assert.AreEqual("alpha", (string)mechanism?["cohort"]);
+            Assert.AreNotEqual("second-sync", (string)mechanism?["id"],
+                "ignored SetUserData calls should not replace the in-flight custom auth payload.");
         }
 
         [UnityTest]

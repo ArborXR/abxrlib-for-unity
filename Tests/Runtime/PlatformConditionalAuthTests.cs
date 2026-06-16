@@ -143,6 +143,48 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator WebGl_OrgTokenPinClaim_AutoSubmitsAssessmentPin_WhenConfigDoesNotRequireAuth()
+        {
+            var c = Configuration.Instance;
+            c.useAppTokens = true;
+            c.buildType = "production";
+            c.appToken = FakeAppToken;
+            c.orgToken = null;
+
+            string orgTokenWithPin = JwtWithClaims(new Dictionary<string, object>
+            {
+                { "sub", "org-token-with-pin" },
+                { "pin", "jwt-pin-789" }
+            });
+
+            var platform = new FakeAuthPlatformSource
+            {
+                IsWebGlPlayer = true,
+                AbsoluteUrl = "https://example.test/index.html?org_token=" + Uri.EscapeDataString(orgTokenWithPin),
+                WebGlDeviceId = "webgl-jwt-pin-device"
+            };
+            yield return RecreateSubsystemWith(platform);
+
+            bool inputRequested = false;
+            Abxr.OnInputRequested = (_, _, _, _) => inputRequested = true;
+
+            yield return RunAuthAndWait();
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            Assert.IsFalse(inputRequested,
+                "a PIN embedded in the WebGL org_token JWT should be auto-submitted without app UI.");
+
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, requests.Count,
+                "expected device auth followed by auto-submitted assessmentPin user auth.");
+            Assert.AreEqual(orgTokenWithPin, (string)requests[0].BodyJson["orgToken"]);
+
+            var mechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("assessmentPin", (string)mechanism?["type"]);
+            Assert.AreEqual("jwt-pin-789", (string)mechanism?["prompt"]);
+            Assert.AreEqual("user", (string)mechanism?["inputSource"]);
+        }
+
+        [UnityTest]
         public IEnumerator WebGl_AuthHandoffFromUrl_SkipsDeviceAuth_ButFetchesConfig()
         {
             var platform = new FakeAuthPlatformSource
