@@ -1182,7 +1182,7 @@ namespace AbxrLib.Tests.Runtime
             Assert.AreEqual("sso-subject-email-fallback", userDataAtAuthCompleted["sub"]);
             Assert.AreEqual(ssoEmail, userDataAtAuthCompleted["preferred_username"]);
             Assert.AreEqual(ssoEmail, userDataAtAuthCompleted["email"],
-                "EnsureEmailFromSsoJwtClaims should promote preferred_username into userData.email when backend userData has no email.");
+                "SsoUserDataMerger should promote preferred_username into userData.email when backend userData has no email.");
             Assert.IsFalse(userDataAtAuthCompleted.ContainsKey("sso_email"),
                 "The SSO email fallback should use the canonical email key when there is no existing backend email conflict.");
 

@@ -189,7 +189,7 @@ namespace AbxrLib.Runtime.Services.Auth
             CheckAuthHandoff();
 
             // Use the runtime auth mechanism for the user-auth stage after config is fetched
-            _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
+            _authMechanism = AuthMechanismResolver.CopyForSession(_runtimeAuth.authMechanism);
 
             _isAuthStarted = true;
             _runner.StartCoroutine(AuthenticateCoroutine());
@@ -247,7 +247,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     KeyboardHandler.StopProcessing();
                     KeyboardHandler.ShowPinPad();
-                    SetInputSource("user");  // In case it was changed by QR Scanner
+                    SetInputSource(AuthMechanismResolver.UserInputSource);  // In case it was changed by QR Scanner
                     
                     string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : GenericAuthenticationFailureMessage;
 
@@ -261,7 +261,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private string BuildSubmittedAuthPrompt(string input)
         {
             // Server does not use domain from payload. Domain is client-only for prompting and building this value.
-            if (_authMechanism != null && _authMechanism.type == "email" &&
+            if (_authMechanism != null && _authMechanism.type == AuthMechanismResolver.Email &&
                 !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
             {
                 return input + "@" + _authMechanism.domain;
@@ -388,7 +388,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 yield break;
             }
             
-            if (NeedsUserAuthentication(_authMechanism))
+            if (AuthMechanismResolver.NeedsUserAuthentication(_authMechanism))
             {
                 if (_platformSource.IsWebGlPlayer && !_webglUrlPinAutoSubmitAttempted && !string.IsNullOrEmpty(_webglQueryAssessmentPin))
                 {
@@ -428,7 +428,7 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
             var authMech = CreateAuthMechanismDict(submittedAuthPrompt);
             // Device authentication (withRetry): never send authMechanism. User auth and SetUserData re-auth send only explicit supported request shapes.
-            _payload.authMechanism = withRetry ? null : IsAuthMechanismMeaningful(authMech) ? authMech : null;
+            _payload.authMechanism = withRetry ? null : AuthMechanismResolver.IsRequestMeaningful(authMech) ? authMech : null;
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             int maxRetries = Math.Max(0, Configuration.Instance.sendRetriesOnFailure);
@@ -637,20 +637,12 @@ namespace AbxrLib.Runtime.Services.Auth
                     {
                         Configuration.Instance.ApplyConfigPayload(config);
 
-                        _runtimeAuth.authMechanism = CopyAuthMechanism(config.authMechanism);
-                        if (Configuration.Instance.enableLearnerLauncherMode && !IsAuthMechanismType(_runtimeAuth.authMechanism, "assessmentPin"))
-                        {
-                            _runtimeAuth.authMechanism = new AuthMechanism
-                            {
-                                type = "assessmentPin",
-                                prompt = config.authMechanism?.prompt ?? "",
-                                domain = config.authMechanism?.domain ?? "",
-                                inputSource = "user"
-                            };
-                        }
+                        _runtimeAuth.authMechanism = AuthMechanismResolver.ResolveConfigMechanism(
+                            config.authMechanism,
+                            Configuration.Instance.enableLearnerLauncherMode);
 
-                        _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
-                        if (NeedsUserAuthentication(_authMechanism))
+                        _authMechanism = AuthMechanismResolver.CopyForSession(_runtimeAuth.authMechanism);
+                        if (AuthMechanismResolver.NeedsUserAuthentication(_authMechanism))
                         {
                             string authType = _authMechanism?.type ?? "";
                             Logcat.Info("User Authentication Required.");
@@ -750,48 +742,6 @@ namespace AbxrLib.Runtime.Services.Auth
             return true;
         }
 
-        /// <summary>Returns a mutable copy of a supported user-auth mechanism, or null when user auth is not required.</summary>
-        private static AuthMechanism CopyAuthMechanism(AuthMechanism source)
-        {
-            if (source == null) return null;
-
-            string type = (source.type ?? "").Trim();
-            if (string.IsNullOrEmpty(type) || string.Equals(type, "none", StringComparison.OrdinalIgnoreCase))
-                return null;
-
-            string normalizedType = NormalizeUserAuthType(type);
-            if (string.IsNullOrEmpty(normalizedType))
-            {
-                Logcat.Warning($"Unsupported authMechanism.type '{type}' from configuration; continuing without user authentication.");
-                return null;
-            }
-
-            return new AuthMechanism
-            {
-                type = normalizedType,
-                prompt = source.prompt ?? "",
-                domain = source.domain ?? "",
-                inputSource = !string.IsNullOrEmpty(source.inputSource) ? source.inputSource : "user",
-                allowGuest = source.allowGuest
-            };
-        }
-
-        private static string NormalizeUserAuthType(string type)
-        {
-            if (string.Equals(type, "assessmentPin", StringComparison.OrdinalIgnoreCase)) return "assessmentPin";
-            if (string.Equals(type, "email", StringComparison.OrdinalIgnoreCase)) return "email";
-            if (string.Equals(type, "text", StringComparison.OrdinalIgnoreCase)) return "text";
-            return null;
-        }
-
-        private static bool IsSupportedUserAuthType(string type) => !string.IsNullOrEmpty(NormalizeUserAuthType(type));
-
-        private static bool IsAuthMechanismType(AuthMechanism mechanism, string type) =>
-            mechanism != null && string.Equals(mechanism.type, type, StringComparison.OrdinalIgnoreCase);
-
-        private static bool NeedsUserAuthentication(AuthMechanism mechanism) =>
-            mechanism != null && IsSupportedUserAuthType(mechanism.type);
-
         private void AuthSucceeded()
         {
             _attemptActive = false;
@@ -830,13 +780,8 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.IsNullOrEmpty(_webglQueryAssessmentPin))
                 return;
 
-            if (_runtimeAuth.authMechanism == null)
-                _runtimeAuth.authMechanism = new AuthMechanism();
-            _runtimeAuth.authMechanism.type = "assessmentPin";
-            if (string.IsNullOrEmpty(_runtimeAuth.authMechanism.inputSource))
-                _runtimeAuth.authMechanism.inputSource = "user";
-
-            _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
+            _runtimeAuth.authMechanism = AuthMechanismResolver.ForceAssessmentPin(_runtimeAuth.authMechanism);
+            _authMechanism = AuthMechanismResolver.CopyForSession(_runtimeAuth.authMechanism);
 
             _webglUrlPinAutoSubmitAttempted = false;
             Logcat.Debug("User authentication: pre-filled assessment PIN available; mechanism set to assessmentPin (auto-submit on first attempt).");
@@ -1037,10 +982,6 @@ namespace AbxrLib.Runtime.Services.Auth
             }, withRetry: false);
         }
         
-        /// <summary>True when the dict has a non-empty "type".</summary>
-        private static bool IsAuthMechanismMeaningful(Dictionary<string, string> dict) =>
-            dict != null && dict.TryGetValue("type", out var type) && !string.IsNullOrEmpty(type);
-
         private Dictionary<string, string> CreateAuthMechanismDict(string submittedAuthPrompt = null)
         {
             var dict = new Dictionary<string, string>();
@@ -1049,7 +990,7 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_setUserDataReAuthActive)
             {
                 dict["type"] = "custom";
-                dict["inputSource"] = "user";
+                dict["inputSource"] = AuthMechanismResolver.UserInputSource;
                 if (_userData == null) return dict;
 
                 foreach (var item in _userData)
@@ -1061,7 +1002,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             // User-input auth supports only the backend-defined types returned by config
-            if (!NeedsUserAuthentication(_authMechanism)) return dict;
+            if (!AuthMechanismResolver.NeedsUserAuthentication(_authMechanism)) return dict;
 
             dict["type"] = _authMechanism.type;
             dict["prompt"] = submittedAuthPrompt ?? _authMechanism.prompt ?? "";
