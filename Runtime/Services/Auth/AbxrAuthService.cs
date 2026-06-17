@@ -59,6 +59,7 @@ namespace AbxrLib.Runtime.Services.Auth
         // ── Internal state ───────────────────────────────────────────
         private readonly RuntimeAuthContext _runtimeAuthContext;
         private readonly AuthSessionState _sessionState = new();
+        private readonly AuthHandoffCoordinator _authHandoff;
         private AuthPayload payload => _runtimeAuthContext.Payload;
         /// <summary>Working copy of the runtime auth mechanism for this session. Its prompt remains the configured UI prompt; submitted user input is passed per request.</summary>
         private AuthMechanism _authMechanism;
@@ -87,20 +88,19 @@ namespace AbxrLib.Runtime.Services.Auth
         // Auth handoff for external launcher apps
 #if UNITY_INCLUDE_TESTS
         /// <summary>
-        /// Lets PlayMode tests exercise the receiver path without mutating process command-line args or Android intents
+        /// Lets PlayMode tests exercise the receiver path without mutating process command-line args or Android intents.
         /// </summary>
-        internal static string TestAuthHandoffPayload;
+        internal static string TestAuthHandoffPayload
+        {
+            get => AuthHandoffCoordinator.TestPayload;
+            set => AuthHandoffCoordinator.TestPayload = value;
+        }
 
         /// <summary>
         /// Lets PlayMode tests exercise WebGL/Android branches without compiling the test assembly as those player platforms
         /// </summary>
         internal static IAuthPlatformSource TestPlatformSource;
 #endif
-        private bool _sessionUsedAuthHandoff;
-        private string _returnToPackage;
-        /// <summary>True when a valid auth_handoff was parsed; AuthenticateCoroutine skips device AuthRequestCoroutine and completes after GET config (same as normal flow).</summary>
-        private bool _deviceAuthDeferredByHandoff;
-
         /// <summary>After one WebGL auto-submit from the runtime auth context's assessment PIN, further attempts use the normal PIN prompt (retry flow).</summary>
         private bool _webglUrlPinAutoSubmitAttempted;
 
@@ -121,6 +121,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _platformSource = platformSource ?? UnityAuthPlatformSource.Instance;
 
             _runtimeAuthContext = new RuntimeAuthContext(arborMdmClient, _platformSource);
+            _authHandoff = new AuthHandoffCoordinator(_platformSource);
         }
 
         internal void SetRestService(AbxrRestService restService) => _restService = restService;
@@ -320,9 +321,8 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             bool authOk;
             string authError = null;
-            if (_deviceAuthDeferredByHandoff)
+            if (_authHandoff.TryConsumeDeferredDeviceAuth())
             {
-                _deviceAuthDeferredByHandoff = false;
                 authOk = true;
             }
             else
@@ -357,7 +357,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     : $"GET config failed ({configFailureDetail}); continuing with Configuration defaults and no user auth prompt (authMechanism cleared).");
                 ClearUserAuthMechanismForSession();
             }
-            else if (_sessionUsedAuthHandoff)
+            else if (_authHandoff.SessionUsedHandoff)
             {
                 // Session identity came from the launcher; do not require a second PIN/email step from GET config.
                 ClearUserAuthMechanismForSession();
@@ -526,7 +526,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool ApplyAuthResponse(string responseText, string stageLabel = null, bool handoff = false)
         {
             if (!_sessionState.TryApply(responseText, stageLabel)) return false;
-            if (handoff) ApplyAuthHandoffSessionState();
+            if (handoff) _authHandoff.MarkApplied(ResponseData);
             return true;
         }
 
@@ -537,16 +537,8 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool ApplyAuthResponse(AuthResponse postResponse, string stageLabel = null, bool handoff = false)
         {
             if (!_sessionState.TryApply(postResponse, stageLabel)) return false;
-            if (handoff) ApplyAuthHandoffSessionState();
+            if (handoff) _authHandoff.MarkApplied(ResponseData);
             return true;
-        }
-
-        private void ApplyAuthHandoffSessionState()
-        {
-            Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
-            _sessionUsedAuthHandoff = true;
-            _returnToPackage = ResponseData.ReturnToPackage;
-            _deviceAuthDeferredByHandoff = true;
         }
 
         // ── GET /v1/storage/config ───
@@ -651,12 +643,10 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _sessionState.Clear();
             _runtimeAuthContext.ClearAuthenticationState();
+            _authHandoff.Clear();
             _authMechanism = null;
-            _sessionUsedAuthHandoff = false;
-            _returnToPackage = null;
             _inputRequestPending = false;
             _credentialsRejectedByApi = false;
-            _deviceAuthDeferredByHandoff = false;
             _ssoUserDataMergedBeforeAuthSucceeded = false;
             _webglUrlPinAutoSubmitAttempted = false;
         }
@@ -672,57 +662,30 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         /// <summary>
-        /// Check for authentication handoff from external launcher apps
-        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params.
+        /// Check for authentication handoff from external launcher apps.
         /// Invalid payload: logs and returns (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
         /// </summary>
         private void CheckAuthHandoff()
         {
-            string handoffPayload = _platformSource.GetAndroidIntentParam("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = _platformSource.GetCommandLineArg("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload) && _platformSource.IsWebGlPlayer)
-                handoffPayload = Utils.GetQueryParam("auth_handoff", _platformSource.AbsoluteUrl ?? "");
-#if UNITY_INCLUDE_TESTS
-            string testHandoffPayload = TestAuthHandoffPayload;
-            TestAuthHandoffPayload = null;
+            if (!_authHandoff.TryReadIncomingPayload(out string normalized)) return;
 
-            if (string.IsNullOrEmpty(handoffPayload)) handoffPayload = testHandoffPayload;
-#endif
-            if (string.IsNullOrEmpty(handoffPayload)) return;
-            string normalized = AuthHandoffPayload.Normalize(handoffPayload);
-            if (string.IsNullOrEmpty(normalized))
-            {
-                Logcat.Warning("auth_handoff was present but could not be normalized to JSON; continuing with device authentication.");
-                return;
-            }
             Logcat.Info("Processing authentication handoff from external launcher");
             if (!ApplyAuthResponse(normalized, AuthHandoffPayload.StageLabel, handoff: true))
                 Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
         }
 
-        public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
+        public bool SessionUsedAuthHandoff() => _authHandoff.SessionUsedHandoff;
 
         /// <summary>
         /// Builds the JSON payload passed via the auth_handoff Android intent extra.
-        /// Includes all session credentials plus re-auth fields so the receiving app can adopt
-        /// the REST-authenticated session.
+        /// Includes all session credentials plus re-auth fields so the receiving app can adopt the authenticated session.
         /// </summary>
-        internal string GetHandoffJson(bool includeReturnToPackage = false)
-        {
-            if (ResponseData == null || !Authenticated) return null;
-
-            return AuthHandoffPayload.Build(ResponseData, payload, _sessionState.TokenExpiryUtc,
+        internal string GetHandoffJson(bool includeReturnToPackage = false) =>
+            AuthHandoffCoordinator.BuildOutgoingPayload(ResponseData, payload, _sessionState.TokenExpiryUtc, Authenticated,
                 includeReturnToPackage ? Application.identifier ?? "" : null);
-        }
 
         /// <summary>Returns the stored returnToPackage from the handoff (so the assessment app can launch back to the launcher), then clears it so it is only used once.</summary>
-        internal string GetAndClearReturnToPackage()
-        {
-            var value = _returnToPackage;
-            _returnToPackage = null;
-            return value;
-        }
+        internal string GetAndClearReturnToPackage() => _authHandoff.GetAndClearReturnToPackage();
         
         /// <summary>
         /// Update user data (userData only) and reauthenticate to sync with server.
