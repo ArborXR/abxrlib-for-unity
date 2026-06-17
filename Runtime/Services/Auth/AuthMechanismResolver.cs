@@ -15,6 +15,10 @@ namespace AbxrLib.Runtime.Services.Auth
         internal const string Email = "email";
         internal const string Text = "text";
         internal const string UserInputSource = "user";
+        internal const string QrLmsInputSource = "QRlms";
+
+        internal static string NormalizeInputSource(string inputSource) =>
+            string.IsNullOrWhiteSpace(inputSource) ? UserInputSource : inputSource.Trim();
 
         /// <summary>Returns a mutable, normalized copy of a supported user-auth mechanism, or null when user auth is not required.</summary>
         internal static AuthMechanism CopyForSession(AuthMechanism source)
@@ -37,7 +41,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 type = normalizedType,
                 prompt = source.prompt ?? "",
                 domain = source.domain ?? "",
-                inputSource = !string.IsNullOrEmpty(source.inputSource) ? source.inputSource : UserInputSource,
+                inputSource = NormalizeInputSource(source.inputSource),
                 allowGuest = source.allowGuest
             };
         }
@@ -63,7 +67,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 type = AssessmentPin,
                 prompt = source?.prompt ?? "",
                 domain = source?.domain ?? "",
-                inputSource = !string.IsNullOrEmpty(source?.inputSource) ? source.inputSource : UserInputSource,
+                inputSource = NormalizeInputSource(source?.inputSource),
                 allowGuest = source?.allowGuest
             };
         }

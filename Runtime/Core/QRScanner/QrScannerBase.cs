@@ -209,13 +209,14 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
             if (string.IsNullOrEmpty(scanResult)) return;
 
-            AuthService.SetInputSource("QRlms");
             if (!QrCodeScanCommon.TryExtractPinFromQrPayload(scanResult, out string pin))
             {
                 Logcat.Warning("Invalid QR code format (expected ABXR:XXXXXX or 6 digits): " + scanResult);
+                KeyboardHandler.ShowPinPad();
+                return;
             }
 
-            AuthService.KeyboardAuthenticate(pin);
+            AuthService.SubmitUserAuthInput(pin, AuthMechanismResolver.QrLmsInputSource);
         }
 
         protected void InvokeAndClearCallback(string value)

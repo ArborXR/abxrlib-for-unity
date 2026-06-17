@@ -47,6 +47,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private const float ReAuthPollSeconds = 60f;
         private const int ReAuthThresholdSeconds = 120;
         private const string GenericAuthenticationFailureMessage = "Authentication Failed";
+        private const string SkipUserAuthenticationInput = "**skip**";
         private static readonly WaitForSeconds ReAuthWait = new(ReAuthPollSeconds);
 
         private enum AuthRequestStage
@@ -165,9 +166,15 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// Submit user input when there is an outstanding OnInputRequested. Called by subsystem (Abxr.OnInputSubmitted).
-        /// If no input was requested, this is a no-op. Empty or whitespace-only input is rejected and OnInputRequested is re-invoked with an error (no REST call).
         /// </summary>
-        public void SubmitInput(string input)
+        public void SubmitInput(string input) =>
+            SubmitUserAuthInput(input, AuthMechanismResolver.UserInputSource);
+
+        /// <summary>
+        /// Submit user input when there is an outstanding OnInputRequested, together with the source that produced it (for example, "user" or "QRlms").
+        /// This keeps the source scoped to one auth request instead of mutating the session auth mechanism.
+        /// </summary>
+        public void SubmitUserAuthInput(string input, string inputSource = null)
         {
             if (!_inputRequestPending)
             {
@@ -175,17 +182,22 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
 
-            if (input == "**skip**")
+            if (input == SkipUserAuthenticationInput)
             {
-                _inputRequestPending = false;
-                Logcat.Warning("Skipping user authentication.");
-                KeyboardHandler.Destroy();
-                AuthSucceeded();
+                SkipUserAuthentication();
                 return;
             }
-            
+
             _inputRequestPending = false;
-            KeyboardAuthenticate(input);
+            AuthenticateUserInput(input, AuthMechanismResolver.NormalizeInputSource(inputSource));
+        }
+
+        private void SkipUserAuthentication()
+        {
+            _inputRequestPending = false;
+            Logcat.Warning("Skipping user authentication.");
+            KeyboardHandler.Destroy();
+            AuthSucceeded();
         }
         
         private void PromptForInput(string error = "") =>
@@ -197,12 +209,13 @@ namespace AbxrLib.Runtime.Services.Auth
             OnInputRequested?.Invoke(type, prompt, domain, error ?? "");
         }
         
-        public void KeyboardAuthenticate(string input)
+        private void AuthenticateUserInput(string input, string inputSource = null)
         {
             string configuredType = _authMechanism.type;
             string configuredPrompt = _authMechanism.prompt;
             string configuredDomain = _authMechanism.domain;
             string submittedAuthPrompt = BuildSubmittedAuthPrompt(input) ?? "";
+            string submittedInputSource = AuthMechanismResolver.NormalizeInputSource(inputSource);
 
             _runner.StartCoroutine(AuthRequestCoroutine(AuthRequestStage.UserInput, (success, errorMessage) =>
             {
@@ -216,16 +229,15 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     KeyboardHandler.StopProcessing();
                     KeyboardHandler.ShowPinPad();
-                    SetInputSource(AuthMechanismResolver.UserInputSource);  // In case it was changed by QR Scanner
-                    
+
                     string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : GenericAuthenticationFailureMessage;
 
                     OnFailed?.Invoke(completedError);
                     PromptForInput(configuredType, configuredPrompt, configuredDomain, GenericAuthenticationFailureMessage);
                 }
-            }, submittedAuthPrompt: submittedAuthPrompt));
+            }, submittedAuthPrompt: submittedAuthPrompt, submittedInputSource: submittedInputSource));
         }
-
+        
         private string BuildSubmittedAuthPrompt(string input)
         {
             // Server does not use domain from payload. Domain is client-only for prompting and building this value.
@@ -379,7 +391,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     _webglUrlPinAutoSubmitAttempted = true;
                     Logcat.Info("User authentication: submitting pre-filled assessment PIN (org token JWT or URL query, first attempt).");
-                    KeyboardAuthenticate(_runtimeAuthContext.WebGlAssessmentPin);
+                    AuthenticateUserInput(_runtimeAuthContext.WebGlAssessmentPin, AuthMechanismResolver.UserInputSource);
                 }
                 else
                 {
@@ -402,14 +414,14 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). Device auth can retry transport/server transient failures; user-auth and SetUserData re-auth are one-shot.</summary>
-        private IEnumerator AuthRequestCoroutine(AuthRequestStage stage, Action<bool, string> onComplete, string submittedAuthPrompt = null)
+        private IEnumerator AuthRequestCoroutine(AuthRequestStage stage, Action<bool, string> onComplete, string submittedAuthPrompt = null, string submittedInputSource = null)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
 
             if (string.IsNullOrEmpty(payload.sessionId)) payload.sessionId = Guid.NewGuid().ToString();
 
-            var requestPayload = payload.CopyForRequest(BuildRequestAuthMechanism(stage, submittedAuthPrompt));
+            var requestPayload = payload.CopyForRequest(BuildRequestAuthMechanism(stage, submittedAuthPrompt, submittedInputSource));
             var validationError = _runtimeAuthContext.PreparePayloadForAuth(requestPayload);
             if (validationError != null) { onComplete(false, validationError); yield break; }
 
@@ -737,16 +749,18 @@ namespace AbxrLib.Runtime.Services.Auth
             yield return AuthRequestCoroutine(AuthRequestStage.UserDataSync, FinishUserDataSyncAttempt);
         }
         
-        private Dictionary<string, string> BuildRequestAuthMechanism(AuthRequestStage stage, string submittedAuthPrompt = null)
+        private Dictionary<string, string> BuildRequestAuthMechanism(
+            AuthRequestStage stage, string submittedAuthPrompt = null, string submittedInputSource = null)
         {
-            var authMech = CreateAuthMechanismDict(stage, submittedAuthPrompt);
+            var authMech = CreateAuthMechanismDict(stage, submittedAuthPrompt, submittedInputSource);
             // Device authentication never sends authMechanism. User auth and SetUserData sync send only explicit supported request shapes.
             return stage == AuthRequestStage.Device
                 ? null
                 : AuthMechanismResolver.IsRequestMeaningful(authMech) ? authMech : null;
         }
 
-        private Dictionary<string, string> CreateAuthMechanismDict(AuthRequestStage stage, string submittedAuthPrompt = null)
+        private Dictionary<string, string> CreateAuthMechanismDict(
+            AuthRequestStage stage, string submittedAuthPrompt = null, string submittedInputSource = null)
         {
             var dict = new Dictionary<string, string>();
             if (stage == AuthRequestStage.Device) return dict;
@@ -772,19 +786,9 @@ namespace AbxrLib.Runtime.Services.Auth
 
             dict["type"] = _authMechanism.type;
             dict["prompt"] = submittedAuthPrompt ?? _authMechanism.prompt ?? "";
-            if (!string.IsNullOrEmpty(_authMechanism.inputSource))
-                dict["inputSource"] = _authMechanism.inputSource;
+            string requestInputSource = AuthMechanismResolver.NormalizeInputSource(submittedInputSource);
+            if (!string.IsNullOrEmpty(requestInputSource)) dict["inputSource"] = requestInputSource;
             return dict;
-        }
-        
-        /// <summary>
-        /// Set the input source for authentication (e.g., "user", "QRlms")
-        /// This indicates how the authentication value was provided
-        /// </summary>
-        /// <param name="inputSource">The input source value (defaults to "user" if not set)</param>
-        public void SetInputSource(string inputSource)
-        {
-            if (_authMechanism != null) _authMechanism.inputSource = inputSource;
         }
 
         /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration/runtime sources).</summary>

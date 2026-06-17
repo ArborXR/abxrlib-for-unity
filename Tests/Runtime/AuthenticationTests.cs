@@ -805,6 +805,30 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
+        public IEnumerator Auth_SubmitUserAuthInput_Sends_PerRequestInputSource()
+        {
+            QueueAssessmentPinConfig();
+
+            Abxr.OnInputRequested = (_, _, _, _) =>
+            {
+                var service = AbxrTestHooks.GetAuthServiceForTest();
+                Assert.IsNotNull(service, "auth service should exist while auth input is pending");
+                service.SubmitUserAuthInput("123456", "QRlms");
+            };
+
+            yield return RunAuthAndWait();
+
+            Assert.IsTrue(LastAuthSuccess, LastAuthError);
+            var requests = FakeBackend.GetRequests("/v1/auth/token");
+            Assert.AreEqual(2, requests.Count, "expected device auth followed by sourced user auth");
+
+            var mechanism = requests[1].BodyJson["authMechanism"];
+            Assert.AreEqual("assessmentPin", (string)mechanism?["type"]);
+            Assert.AreEqual("123456", (string)mechanism?["prompt"]);
+            Assert.AreEqual("QRlms", (string)mechanism?["inputSource"]);
+        }
+
+        [UnityTest]
         public IEnumerator Auth_PinSubmission_DoesNotMutateConfiguredPrompt_WhileUserAuthIsInFlight()
         {
             const string configuredPrompt = "Enter the protected assessment PIN";
