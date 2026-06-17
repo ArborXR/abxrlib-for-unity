@@ -2,7 +2,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Services;
@@ -846,76 +845,33 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.IsNullOrEmpty(handoffPayload)) handoffPayload = testHandoffPayload;
 #endif
             if (string.IsNullOrEmpty(handoffPayload)) return;
-            string normalized = NormalizeHandoffPayload(handoffPayload);
+            string normalized = AuthHandoffPayload.Normalize(handoffPayload);
             if (string.IsNullOrEmpty(normalized))
             {
                 Logcat.Warning("auth_handoff was present but could not be normalized to JSON; continuing with device authentication.");
                 return;
             }
             Logcat.Info("Processing authentication handoff from external launcher");
-            if (!ApplyAuthResponse(normalized, "handoff", handoff: true))
+            if (!ApplyAuthResponse(normalized, AuthHandoffPayload.StageLabel, handoff: true))
                 Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
-        }
-
-        /// <summary>
-        /// Returns the JSON string to use for handoff: if the value is raw JSON (starts with '{') use as-is;
-        /// if it is base64-encoded JSON, decode and return the decoded string. Returns null if decoding fails or result is not JSON.
-        /// </summary>
-        private static string NormalizeHandoffPayload(string value)
-        {
-            if (string.IsNullOrEmpty(value)) return null;
-            string s = value.Trim();
-            if (s.StartsWith("{")) return s;
-            try
-            {
-                byte[] bytes = Convert.FromBase64String(s);
-                string decoded = Encoding.UTF8.GetString(bytes);
-                if (string.IsNullOrEmpty(decoded)) return null;
-                decoded = decoded.Trim();
-                Logcat.Info("Normalized handoff payload from base64");
-                if (decoded.StartsWith("{")) return decoded;
-            }
-            catch
-            {
-                // Not valid base64; treat as raw and let ApplyAuthResponse validate
-                return s;
-            }
-            return null;
         }
 
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
 
         /// <summary>
         /// Builds the JSON payload passed via the auth_handoff Android intent extra.
-        /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
-        /// so the receiving app can adopt the REST-authenticated session.
-        /// When includeReturnToPackage is true, adds ReturnToPackage (current app's identifier) so the receiving app can return the session when assessment completes.
+        /// Includes all session credentials plus re-auth fields so the receiving app can adopt
+        /// the REST-authenticated session.
         /// </summary>
         internal string GetHandoffJson(bool includeReturnToPackage = false)
         {
             if (ResponseData == null || !Authenticated) return null;
 
-            // Use real token expiry from JWT decode; fall back to 24h if not set
-            long expiryMs = _tokenExpiry > DateTime.UtcNow
-                ? ((DateTimeOffset)_tokenExpiry).ToUnixTimeMilliseconds()
-                : ((DateTimeOffset)DateTime.UtcNow.AddHours(24)).ToUnixTimeMilliseconds();
-
-            var handoff = new Dictionary<string, object>
-            {
-                ["Token"]             = ResponseData.Token ?? "",
-                ["Secret"]            = ResponseData.Secret ?? "",
-                ["AppId"]             = ResponseData.AppId ?? _payload?.appId ?? "",
-                ["UserId"]            = ResponseData.UserId?.ToString() ?? "",
-                ["UserData"]          = ResponseData.UserData != null ? new Dictionary<string, string>(ResponseData.UserData) : new Dictionary<string, string>(),
-                ["DeviceId"]          = _payload?.deviceId ?? "",
-                ["AppToken"]          = _payload?.appToken ?? "",
-                ["OrgToken"]          = _payload?.orgToken ?? "",
-                ["OrgId"]             = _payload?.orgId ?? "",
-                ["TokenExpirationMs"] = expiryMs,
-            };
-            if (includeReturnToPackage)
-                handoff["ReturnToPackage"] = Application.identifier ?? "";
-            return JsonConvert.SerializeObject(handoff);
+            return AuthHandoffPayload.Build(
+                ResponseData,
+                _payload,
+                _tokenExpiry,
+                includeReturnToPackage ? Application.identifier ?? "" : null);
         }
 
         /// <summary>Returns the stored returnToPackage from the handoff (so the assessment app can launch back to the launcher), then clears it so it is only used once.</summary>
