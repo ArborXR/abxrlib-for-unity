@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Types;
@@ -48,13 +47,6 @@ namespace AbxrLib.Runtime.Services.Auth
         private const string GenericAuthenticationFailureMessage = "Authentication Failed";
         private const string SkipUserAuthenticationInput = "**skip**";
         private static readonly WaitForSeconds ReAuthWait = new(ReAuthPollSeconds);
-
-        private enum AuthRequestStage
-        {
-            Device,
-            UserInput,
-            UserDataSync
-        }
 
         // ── Internal state ───────────────────────────────────────────
         private readonly RuntimeAuthContext _runtimeAuthContext;
@@ -212,7 +204,7 @@ namespace AbxrLib.Runtime.Services.Auth
             string configuredType = _authMechanism.type;
             string configuredPrompt = _authMechanism.prompt;
             string configuredDomain = _authMechanism.domain;
-            string submittedAuthPrompt = BuildSubmittedAuthPrompt(input) ?? "";
+            string submittedAuthPrompt = AuthRequestBuilder.BuildSubmittedAuthPrompt(_authMechanism, input) ?? "";
             string submittedInputSource = AuthMechanismResolver.NormalizeInputSource(inputSource);
 
             _runner.StartCoroutine(AuthRequestCoroutine(AuthRequestStage.UserInput, (success, errorMessage) =>
@@ -234,18 +226,6 @@ namespace AbxrLib.Runtime.Services.Auth
                     PromptForInput(configuredType, configuredPrompt, configuredDomain, GenericAuthenticationFailureMessage);
                 }
             }, submittedAuthPrompt: submittedAuthPrompt, submittedInputSource: submittedInputSource));
-        }
-        
-        private string BuildSubmittedAuthPrompt(string input)
-        {
-            // Server does not use domain from payload. Domain is client-only for prompting and building this value.
-            if (_authMechanism != null && _authMechanism.type == AuthMechanismResolver.Email &&
-                !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
-            {
-                return input + "@" + _authMechanism.domain;
-            }
-
-            return input;
         }
         
         public void SetAuthHeaders(UnityWebRequest request, string json = null) =>
@@ -399,7 +379,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
             if (string.IsNullOrEmpty(payload.sessionId)) payload.sessionId = Guid.NewGuid().ToString();
 
-            var requestPayload = payload.CopyForRequest(BuildRequestAuthMechanism(stage, submittedAuthPrompt, submittedInputSource));
+            var requestPayload = AuthRequestBuilder.BuildPayload(
+                payload, stage, _authMechanism, _sessionState.UserDataSnapshot, submittedAuthPrompt, submittedInputSource);
             var validationError = _runtimeAuthContext.PreparePayloadForAuth(requestPayload);
             if (validationError != null) { onComplete(false, validationError); yield break; }
 
@@ -412,10 +393,10 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
-                string stageLabel = GetAuthRequestStageLabel(stage);
+                string stageLabel = AuthRequestBuilder.GetStageLabel(stage);
                 if (requestPayload.authMechanism != null)
                 {
-                    var authMechLog = string.Join(", ", requestPayload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
+                    string authMechLog = AuthRequestBuilder.FormatAuthMechanismForLog(requestPayload.authMechanism);
                     string configuredPrompt = _authMechanism?.prompt ?? "(null)";
                     Logcat.Debug($"Auth request ({stageLabel}): authMechanism=[{authMechLog}], configuredPrompt={configuredPrompt} (submittedPromptLength={submittedAuthPrompt?.Length ?? 0})");
                 }
@@ -464,14 +445,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
         }
-
-        private static string GetAuthRequestStageLabel(AuthRequestStage stage) => stage switch
-        {
-            AuthRequestStage.Device => "device-auth",
-            AuthRequestStage.UserInput => "user-auth",
-            AuthRequestStage.UserDataSync => "user-data-sync",
-            _ => "auth"
-        };
 
         /// <summary>
         /// When <see cref="Abxr.GetIsAuthenticated"/> is true and <see cref="Abxr.GetAccessToken"/> is a JWT with usable identity claims,
@@ -727,48 +700,6 @@ namespace AbxrLib.Runtime.Services.Auth
             yield return AuthRequestCoroutine(AuthRequestStage.UserDataSync, FinishUserDataSyncAttempt);
         }
         
-        private Dictionary<string, string> BuildRequestAuthMechanism(
-            AuthRequestStage stage, string submittedAuthPrompt = null, string submittedInputSource = null)
-        {
-            var authMech = CreateAuthMechanismDict(stage, submittedAuthPrompt, submittedInputSource);
-            // Device authentication never sends authMechanism. User auth and SetUserData sync send only explicit supported request shapes.
-            return stage == AuthRequestStage.Device
-                ? null
-                : AuthMechanismResolver.IsRequestMeaningful(authMech) ? authMech : null;
-        }
-
-        private Dictionary<string, string> CreateAuthMechanismDict(
-            AuthRequestStage stage, string submittedAuthPrompt = null, string submittedInputSource = null)
-        {
-            var dict = new Dictionary<string, string>();
-            if (stage == AuthRequestStage.Device) return dict;
-
-            if (stage == AuthRequestStage.UserDataSync)
-            {
-                // SetUserData sync is the only client-originated custom auth path.
-                dict["type"] = "custom";
-                dict["inputSource"] = AuthMechanismResolver.UserInputSource;
-                var userData = _sessionState.UserDataSnapshot;
-                if (userData == null) return dict;
-
-                foreach (var item in userData)
-                {
-                    if (item.Key != "type" && item.Key != "prompt" && item.Key != "inputSource")
-                        dict[item.Key] = item.Value;
-                }
-                return dict;
-            }
-
-            // User-input auth supports only the backend-defined types returned by config.
-            if (stage != AuthRequestStage.UserInput || !AuthMechanismResolver.NeedsUserAuthentication(_authMechanism)) return dict;
-
-            dict["type"] = _authMechanism.type;
-            dict["prompt"] = submittedAuthPrompt ?? _authMechanism.prompt ?? "";
-            string requestInputSource = AuthMechanismResolver.NormalizeInputSource(submittedInputSource);
-            if (!string.IsNullOrEmpty(requestInputSource)) dict["inputSource"] = requestInputSource;
-            return dict;
-        }
-
         /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration/runtime sources).</summary>
         internal bool GetEffectiveEnableAutoStartModules() => _runtimeAuthContext.GetEffectiveEnableAutoStartModules();
 
