@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
-using AbxrLib.Runtime.Services;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
@@ -84,7 +83,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private readonly MonoBehaviour _runner;
         private readonly IAuthPlatformSource _platformSource;
-        private AbxrRestService _restService;
+        private readonly IAuthApiClient _authApiClient;
         
         // Auth handoff for external launcher apps
 #if UNITY_INCLUDE_TESTS
@@ -114,18 +113,17 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient)
-            : this(coroutineRunner, arborMdmClient, ResolvePlatformSourceForRuntime()) { }
+            : this(coroutineRunner, arborMdmClient, ResolvePlatformSourceForRuntime(), new AuthApiClient()) { }
 
-        internal AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient, IAuthPlatformSource platformSource)
+        internal AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient, IAuthPlatformSource platformSource, IAuthApiClient authApiClient = null)
         {
             _runner = coroutineRunner;
             _platformSource = platformSource ?? UnityAuthPlatformSource.Instance;
+            _authApiClient = authApiClient ?? new AuthApiClient();
 
             _runtimeAuthContext = new RuntimeAuthContext(arborMdmClient, _platformSource);
             _authHandoff = new AuthHandoffCoordinator(_platformSource);
         }
-
-        internal void SetRestService(AbxrRestService restService) => _restService = restService;
 
         // ── Public API ───────────────────────────────────────────────
         
@@ -250,28 +248,8 @@ namespace AbxrLib.Runtime.Services.Auth
             return input;
         }
         
-        public void SetAuthHeaders(UnityWebRequest request, string json = null)
-        {
-            if (ResponseData == null || string.IsNullOrEmpty(ResponseData.Token) || string.IsNullOrEmpty(ResponseData.Secret))
-            {
-                Logcat.Error("Cannot set auth headers - authentication tokens are missing");
-                return;
-            }
-
-            request.SetRequestHeader("Authorization", "Bearer " + ResponseData.Token);
-        
-            string unixTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
-            request.SetRequestHeader("x-abxrlib-timestamp", unixTimeSeconds);
-        
-            string hashString = ResponseData.Token + ResponseData.Secret + unixTimeSeconds;
-            if (!string.IsNullOrEmpty(json))
-            {
-                uint crc = Utils.ComputeCRC(json);
-                hashString += crc;
-            }
-        
-            request.SetRequestHeader("x-abxrlib-hash", Utils.ComputeSha256Hash(hashString));
-        }
+        public void SetAuthHeaders(UnityWebRequest request, string json = null) =>
+            AuthHeaderSigner.TrySetAuthHeaders(request, ResponseData, json);
 
         private void StopReAuthPolling()
         {
@@ -417,7 +395,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator AuthRequestCoroutine(AuthRequestStage stage, Action<bool, string> onComplete, string submittedAuthPrompt = null, string submittedInputSource = null)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
-            if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
+            if (_authApiClient == null) { onComplete(false, "Auth API client not set"); yield break; }
 
             if (string.IsNullOrEmpty(payload.sessionId)) payload.sessionId = Guid.NewGuid().ToString();
 
@@ -428,7 +406,7 @@ namespace AbxrLib.Runtime.Services.Auth
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             int maxRetries = Math.Max(0, Configuration.Instance.sendRetriesOnFailure);
             int retriesAttempted = 0;
-            var restService = _restService;
+            var authApiClient = _authApiClient;
 
             while (true)
             {
@@ -445,7 +423,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
                 RestAuthResult result = null;
-                yield return restService.AuthRequestCoroutine(requestPayload, r => result = r);
+                yield return authApiClient.AuthRequestCoroutine(requestPayload, r => result = r);
 
                 if (result != null && result.Success && ApplyAuthResponse(result.Response, stageLabel))
                 {
@@ -558,11 +536,11 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator GetConfigurationCoroutine(Action<bool, string> onComplete)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
-            if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
+            if (_authApiClient == null) { onComplete(false, "Auth API client not set"); yield break; }
 
             string configJson = null;
             string failureDetail = null;
-            yield return _restService.GetConfigCoroutine((ok, json) =>
+            yield return _authApiClient.GetConfigCoroutine(ResponseData, (ok, json) =>
             {
                 if (ok) configJson = json; else failureDetail = json;
             });

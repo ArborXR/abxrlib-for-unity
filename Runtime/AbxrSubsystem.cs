@@ -109,8 +109,7 @@ namespace AbxrLib.Runtime
             }
 #endif
             _authService = new AbxrAuthService(this, _arborMdmClient);
-            _restService = new AbxrRestService(_authService, this);
-            _authService.SetRestService(_restService);
+            _restService = new AbxrRestService(new AuthSessionProvider(_authService), this);
             _dataService = new AbxrDataService(_restService);
             _telemetryService = new AbxrTelemetryService(this);
             _aiProxyApi = new AIProxyApi(_authService);

@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
@@ -12,26 +11,14 @@ using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Services
 {
-    internal sealed class RestAuthResult
-    {
-        public bool Success;
-        public string Body;
-        public long StatusCode;
-        public bool Retryable;
-        public bool AuthRejected;
-        public AuthResponse Response;
-    }
-
-    /// <summary>REST (UnityWebRequest) service. Queues data/storage and sends auth, config, data, and storage requests via HTTP.</summary>
+    /// <summary>REST (UnityWebRequest) service. Queues data/storage and sends signed data and storage requests via HTTP.</summary>
     internal class AbxrRestService
     {
-        private const string AuthPath = "/v1/auth/token";
-        private const string ConfigPath = "/v1/storage/config";
         private const string DataPath = "/v1/collect/data";
         private const string StoragePath = "/v1/storage";
         private static readonly WaitForSeconds WaitQuarterSecond = new WaitForSeconds(0.25f);
 
-        private readonly AbxrAuthService _authService;
+        private readonly IAuthSessionProvider _authSession;
         private readonly MonoBehaviour _runner;
 
         private readonly List<EventPayload> _eventPayloads = new();
@@ -60,118 +47,13 @@ namespace AbxrLib.Runtime.Services
             }
         }
 
-        internal AbxrRestService(AbxrAuthService authService, MonoBehaviour runner)
+        internal AbxrRestService(IAuthSessionProvider authSession, MonoBehaviour runner)
         {
-            _authService = authService ?? throw new ArgumentNullException(nameof(authService));
+            _authSession = authSession ?? throw new ArgumentNullException(nameof(authSession));
             _runner = runner ?? throw new ArgumentNullException(nameof(runner));
             _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
             _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
             _tickCoroutine = _runner.StartCoroutine(TickCoroutine());
-        }
-
-        private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
-
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<RestAuthResult> onComplete)
-        {
-            string url = RestUri(AuthPath).ToString();
-            string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
-            using var request = new UnityWebRequest(url, "POST");
-            byte[] body = Encoding.UTF8.GetBytes(json);
-            request.uploadHandler = new UploadHandlerRaw(body);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-            request.timeout = Configuration.Instance.requestTimeoutSeconds;
-            yield return request.SendWebRequest();
-
-            string responseBody = request.downloadHandler?.text ?? "";
-            long statusCode = request.responseCode;
-
-            bool responseShapeIsValid = AuthResponseParser.TryParseSuccess(
-                responseBody,
-                out AuthResponse parsedResponse,
-                out _);
-
-            bool httpSuccess = request.result == UnityWebRequest.Result.Success;
-            bool success = httpSuccess && responseShapeIsValid;
-            bool authRejected = !success && (statusCode == 401 || statusCode == 403);
-            bool retryable = !success && IsRetryableAuthFailure(request, responseBody);
-
-            if (!success)
-            {
-                string detail = string.IsNullOrEmpty(responseBody)
-                    ? $"HTTP {statusCode}: {request.error ?? "No response body."}"
-                    : responseBody;
-                Logcat.Warning($"AuthRequest failed: {detail}");
-            }
-
-            onComplete?.Invoke(new RestAuthResult
-            {
-                Success = success,
-                Body = responseBody,
-                StatusCode = statusCode,
-                Retryable = retryable,
-                AuthRejected = authRejected,
-                Response = success ? parsedResponse : null
-            });
-        }
-
-        private static bool IsRetryableAuthFailure(UnityWebRequest request, string responseBody)
-        {
-            if (request.result == UnityWebRequest.Result.ConnectionError) return true;
-
-            long code = request.responseCode;
-            if (code == 408 || code == 429) return true;
-            if (code < 500 || code > 599) return false;
-
-            // Backend-provided detail/message/error bodies on 5xx responses are intentional
-            // failures; surface them instead of retrying the same rejected request.
-            return !HasExplicitBackendError(responseBody);
-        }
-
-        private static bool HasExplicitBackendError(string responseBody) =>
-            AuthResponseParser.HasExplicitBackendError(responseBody);
-
-        public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
-        {
-            string url = RestUri(ConfigPath).ToString();
-            UnityWebRequest request = null;
-            try
-            {
-                request = UnityWebRequest.Get(url);
-                request.SetRequestHeader("Accept", "application/json");
-                request.timeout = Configuration.Instance.requestTimeoutSeconds;
-                _authService.SetAuthHeaders(request);
-            }
-            catch (Exception ex)
-            {
-                Logcat.Error($"GetConfig request creation failed: {ex.Message}");
-                request?.Dispose();
-                onComplete?.Invoke(false, ex.Message);
-                yield break;
-            }
-
-            yield return request.SendWebRequest();
-
-            try
-            {
-                if (request.result != UnityWebRequest.Result.Success)
-                {
-                    string err = request.result switch
-                    {
-                        UnityWebRequest.Result.ConnectionError => $"Connection error: {request.error}",
-                        UnityWebRequest.Result.DataProcessingError => $"Data processing error: {request.error}",
-                        UnityWebRequest.Result.ProtocolError => $"Protocol error ({request.responseCode}): {request.error}",
-                        _ => $"Unknown error: {request.error}"
-                    };
-                    onComplete?.Invoke(false, err);
-                    yield break;
-                }
-                onComplete?.Invoke(true, request.downloadHandler?.text);
-            }
-            finally
-            {
-                request?.Dispose();
-            }
         }
 
         public void AddEvent(string name, Dictionary<string, string> meta)
@@ -241,13 +123,13 @@ namespace AbxrLib.Runtime.Services
 
         public IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)
         {
-            if (!_authService.Authenticated) { onComplete?.Invoke(null); yield break; }
+            if (!_authSession.Authenticated) { onComplete?.Invoke(null); yield break; }
             var queryParams = new Dictionary<string, string> { { "name", name }, { "scope", Utils.PascalToCamelCase(scope.ToString()) } };
             string url = Utils.BuildUrlWithParams(RestUri(StoragePath).ToString(), queryParams);
             using var request = UnityWebRequest.Get(url);
             request.SetRequestHeader("Accept", "application/json");
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
-            _authService.SetAuthHeaders(request);
+            AuthHeaderSigner.TrySetAuthHeaders(request, _authSession.ResponseData);
             yield return request.SendWebRequest();
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -274,14 +156,14 @@ namespace AbxrLib.Runtime.Services
 
         public IEnumerator StorageDeleteCoroutine(global::Abxr.StorageScope scope, string name, Action<bool> onComplete)
         {
-            if (!_authService.Authenticated) { onComplete?.Invoke(false); yield break; }
+            if (!_authSession.Authenticated) { onComplete?.Invoke(false); yield break; }
             var queryParams = new Dictionary<string, string> { { "scope", Utils.PascalToCamelCase(scope.ToString()) } };
             if (!string.IsNullOrEmpty(name)) queryParams.Add("name", name);
             string url = Utils.BuildUrlWithParams(RestUri(StoragePath).ToString(), queryParams);
             using var request = UnityWebRequest.Delete(url);
             request.SetRequestHeader("Accept", "application/json");
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
-            _authService.SetAuthHeaders(request);
+            AuthHeaderSigner.TrySetAuthHeaders(request, _authSession.ResponseData);
             yield return request.SendWebRequest();
             onComplete?.Invoke(request.result == UnityWebRequest.Result.Success);
         }
@@ -296,7 +178,7 @@ namespace AbxrLib.Runtime.Services
         /// <summary>Synchronously send any queued events/telemetry/logs. Used on quit so data is sent before the process exits (ForceSend only sets flags; the tick may never run again).</summary>
         private void FlushDataSync()
         {
-            if (!_authService.Authenticated) return;
+            if (!_authSession.Authenticated) return;
             List<EventPayload> events;
             List<TelemetryPayload> telemetries;
             List<LogPayload> logs;
@@ -322,7 +204,7 @@ namespace AbxrLib.Runtime.Services
                 string json = JsonConvert.SerializeObject(wrapper);
                 request = new UnityWebRequest(RestUri(DataPath), "POST");
                 Utils.BuildRequest(request, json);
-                _authService.SetAuthHeaders(request, json);
+                AuthHeaderSigner.TrySetAuthHeaders(request, _authSession.ResponseData, json);
                 request.timeout = Configuration.Instance.requestTimeoutSeconds;
                 var op = request.SendWebRequest();
                 while (!op.isDone) { Thread.Sleep(1); }
@@ -338,7 +220,7 @@ namespace AbxrLib.Runtime.Services
         /// <summary>Synchronously send any queued storage. Used on quit so data is sent before the process exits.</summary>
         private void FlushStorageSync()
         {
-            if (!_authService.Authenticated) return;
+            if (!_authSession.Authenticated) return;
             List<StoragePayload> toSend;
             lock (_lock)
             {
@@ -358,7 +240,7 @@ namespace AbxrLib.Runtime.Services
                 string json = JsonConvert.SerializeObject(wrapper);
                 request = new UnityWebRequest(RestUri(StoragePath), "POST");
                 Utils.BuildRequest(request, json);
-                _authService.SetAuthHeaders(request, json);
+                AuthHeaderSigner.TrySetAuthHeaders(request, _authSession.ResponseData, json);
                 request.timeout = Configuration.Instance.requestTimeoutSeconds;
                 var op = request.SendWebRequest();
                 while (!op.isDone) { Thread.Sleep(1); }
@@ -413,7 +295,7 @@ namespace AbxrLib.Runtime.Services
             if (Time.time - _lastDataCallTime < Configuration.Instance.maxCallFrequencySeconds) yield break;
             _lastDataCallTime = Time.time;
             _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
-            if (!_authService.Authenticated) yield break;
+            if (!_authSession.Authenticated) yield break;
             List<EventPayload> events;
             List<TelemetryPayload> telemetries;
             List<LogPayload> logs;
@@ -449,7 +331,7 @@ namespace AbxrLib.Runtime.Services
                 {
                     request = new UnityWebRequest(RestUri(DataPath), "POST");
                     Utils.BuildRequest(request, json);
-                    _authService.SetAuthHeaders(request, json);
+                    AuthHeaderSigner.TrySetAuthHeaders(request, _authSession.ResponseData, json);
                     request.timeout = Configuration.Instance.requestTimeoutSeconds;
                     created = true;
                 }
@@ -496,7 +378,7 @@ namespace AbxrLib.Runtime.Services
             if (Time.time - _lastStorageCallTime < Configuration.Instance.maxCallFrequencySeconds) yield break;
             _lastStorageCallTime = Time.time;
             _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
-            if (!_authService.Authenticated) yield break;
+            if (!_authSession.Authenticated) yield break;
             List<StoragePayload> toSend;
             lock (_lock)
             {
@@ -526,7 +408,7 @@ namespace AbxrLib.Runtime.Services
                 {
                     request = new UnityWebRequest(RestUri(StoragePath), "POST");
                     Utils.BuildRequest(request, json);
-                    _authService.SetAuthHeaders(request, json);
+                    AuthHeaderSigner.TrySetAuthHeaders(request, _authSession.ResponseData, json);
                     request.timeout = Configuration.Instance.requestTimeoutSeconds;
                     created = true;
                 }
