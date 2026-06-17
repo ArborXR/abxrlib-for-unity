@@ -146,8 +146,7 @@ namespace AbxrLib.Runtime.Services.Auth
             var validationError = _runtimeAuthContext.PrepareForAuthentication();
             if (validationError != null)
             {
-                _attemptActive = false;
-                OnFailed?.Invoke(validationError);
+                FinishAttemptFailure(validationError);
                 return;
             }
 
@@ -188,10 +187,13 @@ namespace AbxrLib.Runtime.Services.Auth
             KeyboardAuthenticate(input);
         }
         
-        private void RequestKeyboardInput(bool firstAttempt = true)
+        private void PromptForInput(string error = "") =>
+            PromptForInput(_authMechanism.type, _authMechanism.prompt, _authMechanism.domain, error);
+
+        private void PromptForInput(string type, string prompt, string domain, string error = "")
         {
             _inputRequestPending = true;
-            OnInputRequested?.Invoke(_authMechanism.type, _authMechanism.prompt, _authMechanism.domain, firstAttempt ? "" : GenericAuthenticationFailureMessage);
+            OnInputRequested?.Invoke(type, prompt, domain, error ?? "");
         }
         
         public void KeyboardAuthenticate(string input)
@@ -218,8 +220,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : GenericAuthenticationFailureMessage;
 
                     OnFailed?.Invoke(completedError);
-                    _inputRequestPending = true;
-                    OnInputRequested?.Invoke(configuredType, configuredPrompt, configuredDomain, GenericAuthenticationFailureMessage);
+                    PromptForInput(configuredType, configuredPrompt, configuredDomain, GenericAuthenticationFailureMessage);
                 }
             }, submittedAuthPrompt: submittedAuthPrompt));
         }
@@ -266,6 +267,24 @@ namespace AbxrLib.Runtime.Services.Auth
                 _runner.StopCoroutine(_reAuthCoroutine);
                 _reAuthCoroutine = null;
             }
+        }
+
+        private void FinishAttemptFailure(string message)
+        {
+            _attemptActive = false;
+            OnFailed?.Invoke(message);
+        }
+
+        private void FinishAttemptSuccess()
+        {
+            _attemptActive = false;
+            OnSucceeded?.Invoke();
+        }
+
+        private void FinishUserDataSyncAttempt(bool success, string errorMessage)
+        {
+            _attemptActive = false;
+            OnUserDataSyncCompleted?.Invoke(success, errorMessage ?? "");
         }
 
         public void Shutdown()
@@ -316,11 +335,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 }));
                 if (!authOk)
                 {
-                    _attemptActive = false;
                     string message = !string.IsNullOrEmpty(authError)
                         ? authError
                         : "Initial authentication request failed";
-                    OnFailed?.Invoke(message);
+                    FinishAttemptFailure(message);
                     yield break;
                 }
             }
@@ -351,8 +369,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
             if (_stopping || !_attemptActive)
             {
-                _attemptActive = false;
-                OnFailed?.Invoke("Auth stopped or attempt inactive");
+                FinishAttemptFailure("Auth stopped or attempt inactive");
                 yield break;
             }
             
@@ -369,7 +386,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (TryCompleteUserAuthUsingMdmSsoIdentity())
                         AuthSucceeded();
                     else
-                        RequestKeyboardInput();
+                        PromptForInput();
                 }
             }
             else
@@ -601,12 +618,11 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private void AuthSucceeded()
         {
-            _attemptActive = false;
             bool ssoUserDataChanged = _sessionState.MarkAuthenticatedAndMergeSsoUserData(
                 _ssoUserDataMergedBeforeAuthSucceeded, GetAuthenticatedAccessToken());
             _ssoUserDataMergedBeforeAuthSucceeded = false;
 
-            OnSucceeded?.Invoke();
+            FinishAttemptSuccess();
             Logcat.Info("Authenticated successfully");
             // Push merged MDM SSO claims to the API via the same REST auth path as SetUserData (custom re-auth); completion is OnUserDataSyncCompleted only.
             if (ssoUserDataChanged) SetUserData();
@@ -755,11 +771,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>Runs the re-auth for SetUserData; on completion invokes OnUserDataSyncCompleted only (not AuthSucceeded/OnAuthCompleted).</summary>
         private IEnumerator CoSetUserDataReAuth()
         {
-            yield return AuthRequestCoroutine(AuthRequestStage.UserDataSync, (success, errorMsg) =>
-            {
-                _attemptActive = false;
-                OnUserDataSyncCompleted?.Invoke(success, errorMsg ?? "");
-            });
+            yield return AuthRequestCoroutine(AuthRequestStage.UserDataSync, FinishUserDataSyncAttempt);
         }
         
         private Dictionary<string, string> BuildRequestAuthMechanism(AuthRequestStage stage, string submittedAuthPrompt = null)
