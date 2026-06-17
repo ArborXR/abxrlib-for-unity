@@ -94,7 +94,9 @@ namespace AbxrLib.Runtime.Services.Auth
             return PreparePayloadForAuth();
         }
 
-        internal string PreparePayloadForAuth() => RuntimeAuth.PreparePayloadForAuth(Payload);
+        internal string PreparePayloadForAuth() => PreparePayloadForAuth(Payload);
+
+        internal string PreparePayloadForAuth(AuthPayload requestPayload) => RuntimeAuth.PreparePayloadForAuth(requestPayload);
 
         internal void SetSessionId(string sessionId) => Payload.sessionId = sessionId;
 

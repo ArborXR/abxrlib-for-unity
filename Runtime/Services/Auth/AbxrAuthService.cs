@@ -381,15 +381,11 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
 
-            var validationError = _runtimeAuthContext.PreparePayloadForAuth();
-            if (validationError != null) { onComplete(false, validationError); yield break; }
-
             if (string.IsNullOrEmpty(payload.sessionId)) payload.sessionId = Guid.NewGuid().ToString();
-            var authMech = CreateAuthMechanismDict(stage, submittedAuthPrompt);
-            // Device authentication never sends authMechanism. User auth and SetUserData sync send only explicit supported request shapes.
-            payload.authMechanism = stage == AuthRequestStage.Device
-                ? null
-                : AuthMechanismResolver.IsRequestMeaningful(authMech) ? authMech : null;
+
+            var requestPayload = payload.CopyForRequest(BuildRequestAuthMechanism(stage, submittedAuthPrompt));
+            var validationError = _runtimeAuthContext.PreparePayloadForAuth(requestPayload);
+            if (validationError != null) { onComplete(false, validationError); yield break; }
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             int maxRetries = Math.Max(0, Configuration.Instance.sendRetriesOnFailure);
@@ -401,9 +397,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
                 string stageLabel = GetAuthRequestStageLabel(stage);
-                if (payload.authMechanism != null)
+                if (requestPayload.authMechanism != null)
                 {
-                    var authMechLog = string.Join(", ", payload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
+                    var authMechLog = string.Join(", ", requestPayload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
                     string configuredPrompt = _authMechanism?.prompt ?? "(null)";
                     Logcat.Debug($"Auth request ({stageLabel}): authMechanism=[{authMechLog}], configuredPrompt={configuredPrompt} (submittedPromptLength={submittedAuthPrompt?.Length ?? 0})");
                 }
@@ -411,7 +407,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
                 RestAuthResult result = null;
-                yield return restService.AuthRequestCoroutine(payload, r => result = r);
+                yield return restService.AuthRequestCoroutine(requestPayload, r => result = r);
 
                 if (result != null && result.Success && ApplyAuthResponse(result.Response, stageLabel))
                 {
@@ -825,6 +821,15 @@ namespace AbxrLib.Runtime.Services.Auth
             });
         }
         
+        private Dictionary<string, string> BuildRequestAuthMechanism(AuthRequestStage stage, string submittedAuthPrompt = null)
+        {
+            var authMech = CreateAuthMechanismDict(stage, submittedAuthPrompt);
+            // Device authentication never sends authMechanism. User auth and SetUserData sync send only explicit supported request shapes.
+            return stage == AuthRequestStage.Device
+                ? null
+                : AuthMechanismResolver.IsRequestMeaningful(authMech) ? authMech : null;
+        }
+
         private Dictionary<string, string> CreateAuthMechanismDict(AuthRequestStage stage, string submittedAuthPrompt = null)
         {
             var dict = new Dictionary<string, string>();
