@@ -41,6 +41,13 @@ namespace AbxrLib.Runtime.Services.Auth
         private const string GenericAuthenticationFailureMessage = "Authentication Failed";
         private static readonly WaitForSeconds ReAuthWait = new(ReAuthPollSeconds);
 
+        private enum AuthRequestStage
+        {
+            Device,
+            UserInput,
+            UserDataSync
+        }
+
         // ── Internal state ───────────────────────────────────────────
         private readonly AuthPayload _payload;
         /// <summary>Runtime auth values loaded from Configuration and updated by GetArborData, WebGL/desktop query data, intent, and SetOrgId/SetAuthSecret.</summary>
@@ -63,8 +70,6 @@ namespace AbxrLib.Runtime.Services.Auth
         internal bool HasAuthenticationStarted => _isAuthStarted;
         private Coroutine _reAuthCoroutine;
         private Dictionary<string, string> _userData;
-        /// <summary>True while the auth request is from SetUserData re-auth; ensures we send type=custom with userData instead of current _authMechanism (e.g. email).</summary>
-        private bool _setUserDataReAuthActive;
 
         /// <summary>Set when user auth was satisfied by MDM SSO + access token JWT before <see cref="AuthSucceeded"/> so JWT is not merged twice.</summary>
         private bool _ssoUserDataMergedBeforeAuthSucceeded;
@@ -234,7 +239,7 @@ namespace AbxrLib.Runtime.Services.Auth
             string configuredDomain = _authMechanism.domain;
             string submittedAuthPrompt = BuildSubmittedAuthPrompt(input) ?? "";
 
-            _runner.StartCoroutine(AuthRequestCoroutine((success, errorMessage) =>
+            _runner.StartCoroutine(AuthRequestCoroutine(AuthRequestStage.UserInput, (success, errorMessage) =>
             {
                 if (success)
                 {
@@ -254,7 +259,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     _inputRequestPending = true;
                     OnInputRequested?.Invoke(configuredType, configuredPrompt, configuredDomain, GenericAuthenticationFailureMessage);
                 }
-            }, withRetry: false, submittedAuthPrompt: submittedAuthPrompt));
+            }, submittedAuthPrompt: submittedAuthPrompt));
         }
 
         private string BuildSubmittedAuthPrompt(string input)
@@ -340,11 +345,11 @@ namespace AbxrLib.Runtime.Services.Auth
             else
             {
                 authOk = false;
-                yield return _runner.StartCoroutine(AuthRequestCoroutine((ok, err) =>
+                yield return _runner.StartCoroutine(AuthRequestCoroutine(AuthRequestStage.Device, (ok, err) =>
                 {
                     authOk = ok;
                     authError = err;
-                }, withRetry: true));
+                }));
                 if (!authOk)
                 {
                     _attemptActive = false;
@@ -416,7 +421,7 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). Device auth can retry transport/server transient failures; user-auth and SetUserData re-auth are one-shot.</summary>
-        private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true, string submittedAuthPrompt = null)
+        private IEnumerator AuthRequestCoroutine(AuthRequestStage stage, Action<bool, string> onComplete, string submittedAuthPrompt = null)
         {
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_restService == null) { onComplete(false, "REST service not set"); yield break; }
@@ -425,9 +430,11 @@ namespace AbxrLib.Runtime.Services.Auth
             if (validationError != null) { onComplete(false, validationError); yield break; }
 
             if (string.IsNullOrEmpty(_payload.sessionId)) _payload.sessionId = Guid.NewGuid().ToString();
-            var authMech = CreateAuthMechanismDict(submittedAuthPrompt);
-            // Device authentication (withRetry): never send authMechanism. User auth and SetUserData re-auth send only explicit supported request shapes.
-            _payload.authMechanism = withRetry ? null : AuthMechanismResolver.IsRequestMeaningful(authMech) ? authMech : null;
+            var authMech = CreateAuthMechanismDict(stage, submittedAuthPrompt);
+            // Device authentication never sends authMechanism. User auth and SetUserData sync send only explicit supported request shapes.
+            _payload.authMechanism = stage == AuthRequestStage.Device
+                ? null
+                : AuthMechanismResolver.IsRequestMeaningful(authMech) ? authMech : null;
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             int maxRetries = Math.Max(0, Configuration.Instance.sendRetriesOnFailure);
@@ -438,8 +445,7 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
-                bool isDeviceAuth = _payload.authMechanism == null;
-                string stageLabel = isDeviceAuth ? "device-auth" : "user-auth";
+                string stageLabel = GetAuthRequestStageLabel(stage);
                 if (_payload.authMechanism != null)
                 {
                     var authMechLog = string.Join(", ", _payload.authMechanism.Select(kvp => kvp.Key + "=" + (string.IsNullOrEmpty(kvp.Value) ? "(empty)" : kvp.Value)));
@@ -460,7 +466,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 string message = DescribeAuthFailure(result);
 
-                if (!withRetry)
+                if (stage != AuthRequestStage.Device)
                 {
                     onComplete(false, message);
                     yield break;
@@ -491,6 +497,14 @@ namespace AbxrLib.Runtime.Services.Auth
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
         }
+
+        private static string GetAuthRequestStageLabel(AuthRequestStage stage) => stage switch
+        {
+            AuthRequestStage.Device => "device-auth",
+            AuthRequestStage.UserInput => "user-auth",
+            AuthRequestStage.UserDataSync => "user-data-sync",
+            _ => "auth"
+        };
 
         /// <summary>
         /// When <see cref="Abxr.GetIsAuthenticated"/> is true and <see cref="Abxr.GetAccessToken"/> is a JWT with usable identity claims,
@@ -929,22 +943,21 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>Runs the re-auth for SetUserData; on completion invokes OnUserDataSyncCompleted only (not AuthSucceeded/OnAuthCompleted).</summary>
         private IEnumerator CoSetUserDataReAuth()
         {
-            _setUserDataReAuthActive = true;
-            yield return AuthRequestCoroutine((success, errorMsg) =>
+            yield return AuthRequestCoroutine(AuthRequestStage.UserDataSync, (success, errorMsg) =>
             {
-                _setUserDataReAuthActive = false;
                 _attemptActive = false;
                 OnUserDataSyncCompleted?.Invoke(success, errorMsg ?? "");
-            }, withRetry: false);
+            });
         }
         
-        private Dictionary<string, string> CreateAuthMechanismDict(string submittedAuthPrompt = null)
+        private Dictionary<string, string> CreateAuthMechanismDict(AuthRequestStage stage, string submittedAuthPrompt = null)
         {
             var dict = new Dictionary<string, string>();
+            if (stage == AuthRequestStage.Device) return dict;
 
-            // SetUserData re-auth is the only client-originated custom auth path
-            if (_setUserDataReAuthActive)
+            if (stage == AuthRequestStage.UserDataSync)
             {
+                // SetUserData sync is the only client-originated custom auth path.
                 dict["type"] = "custom";
                 dict["inputSource"] = AuthMechanismResolver.UserInputSource;
                 if (_userData == null) return dict;
@@ -957,8 +970,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 return dict;
             }
 
-            // User-input auth supports only the backend-defined types returned by config
-            if (!AuthMechanismResolver.NeedsUserAuthentication(_authMechanism)) return dict;
+            // User-input auth supports only the backend-defined types returned by config.
+            if (stage != AuthRequestStage.UserInput || !AuthMechanismResolver.NeedsUserAuthentication(_authMechanism)) return dict;
 
             dict["type"] = _authMechanism.type;
             dict["prompt"] = submittedAuthPrompt ?? _authMechanism.prompt ?? "";
