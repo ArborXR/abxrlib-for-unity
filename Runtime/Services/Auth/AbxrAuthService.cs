@@ -32,8 +32,16 @@ namespace AbxrLib.Runtime.Services.Auth
         internal Action<bool, string> OnUserDataSyncCompleted;
 
         // ── Public state ─────────────────────────────────────────────
-        public bool Authenticated { get; private set; }
-        public AuthResponse ResponseData { get; private set; } = new();
+        public bool Authenticated
+        {
+            get => _sessionState.Authenticated;
+            private set => _sessionState.SetAuthenticated(value);
+        }
+        public AuthResponse ResponseData
+        {
+            get => _sessionState.ResponseData;
+            private set => _sessionState.SetResponseData(value);
+        }
 
         // ── Constants ────────────────────────────────────────────────
         private const float ReAuthPollSeconds = 60f;
@@ -50,10 +58,10 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Internal state ───────────────────────────────────────────
         private readonly RuntimeAuthContext _runtimeAuthContext;
+        private readonly AuthSessionState _sessionState = new();
         private AuthPayload payload => _runtimeAuthContext.Payload;
         /// <summary>Working copy of the runtime auth mechanism for this session. Its prompt remains the configured UI prompt; submitted user input is passed per request.</summary>
         private AuthMechanism _authMechanism;
-        private DateTime _tokenExpiry = DateTime.MinValue;
         private bool _inputRequestPending;
         /// <summary>True when the API rejected our credentials (401/403 or explicit error). No further auth attempts this session; Authenticate() will no-op and report failure.</summary>
         private bool _credentialsRejectedByApi;
@@ -68,7 +76,6 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>True after <see cref="Authenticate"/> has scheduled <c>AuthenticateCoroutine</c> at least once this process. Use to gate one-time configuration before auth.</summary>
         internal bool HasAuthenticationStarted => _isAuthStarted;
         private Coroutine _reAuthCoroutine;
-        private Dictionary<string, string> _userData;
 
         /// <summary>Set when user auth was satisfied by MDM SSO + access token JWT before <see cref="AuthSucceeded"/> so JWT is not merged twice.</summary>
         private bool _ssoUserDataMergedBeforeAuthSucceeded;
@@ -284,6 +291,8 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         internal string GetAuthMechanismPromptForTest() => _authMechanism?.prompt;
+
+        internal void SetTokenExpiryForTest(DateTime tokenExpiryUtc) => _sessionState.SetTokenExpiryUtc(tokenExpiryUtc);
 #endif
         
         // ── Core auth flow (coroutine) ───────────────────────────────
@@ -470,9 +479,7 @@ namespace AbxrLib.Runtime.Services.Auth
             string token = GetAuthenticatedAccessToken();
             if (!SsoUserDataMerger.AccessTokenHasUsableIdentity(token)) return false;
 
-            if (ResponseData == null) return false;
-            ResponseData.UserData ??= new Dictionary<string, string>();
-            if (!SsoUserDataMerger.TryMergeAccessTokenIntoUserData(token, ResponseData.UserData))
+            if (!_sessionState.TryMergeAccessTokenIntoUserData(token))
             {
                 Logcat.Warning("MDM SSO: access token did not merge into userData; continuing with auth mechanism prompt.");
                 return false;
@@ -501,14 +508,9 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <param name="handoff">When true, marks the session as supplied by an external handoff after validation.</param>
         private bool ApplyAuthResponse(string responseText, string stageLabel = null, bool handoff = false)
         {
-            if (!AuthResponseParser.TryParseSuccess(responseText, out AuthResponse postResponse, out string parseError))
-            {
-                if (AuthResponseParser.IsParseFailure(parseError))
-                    Logcat.Error($"Authentication response handling failed: {parseError}");
-                return false;
-            }
-
-            return ApplyAuthResponse(postResponse, stageLabel, handoff);
+            if (!_sessionState.TryApply(responseText, stageLabel)) return false;
+            if (handoff) ApplyAuthHandoffSessionState();
+            return true;
         }
 
         /// <summary>
@@ -517,65 +519,17 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         private bool ApplyAuthResponse(AuthResponse postResponse, string stageLabel = null, bool handoff = false)
         {
-            if (!AuthResponse.IsValidSuccess(postResponse)) return false;
-
-            try
-            {
-                if (!TrySetTokenExpiryFromJwt(postResponse.Token))
-                    return false;
-
-                ResponseData = postResponse;
-                if (ResponseData.Modules?.Count > 1)
-                    ResponseData.Modules = ResponseData.Modules.OrderBy(m => m.Order).ToList();
-                ResponseData.UserData ??= new Dictionary<string, string>();
-                _userData = new Dictionary<string, string>(ResponseData.UserData);
-
-                string stagePrefix = !string.IsNullOrEmpty(stageLabel) ? $" ({stageLabel})" : "";
-                var userDataLog = ResponseData.UserData == null
-                    ? "(null)"
-                    : string.Join(", ", ResponseData.UserData.Select(kvp => kvp.Key + "=" + kvp.Value));
-                Logcat.Debug($"Auth response{stagePrefix}: userId={ResponseData.UserId ?? "(null)"}, userData=[{userDataLog}], token={(!string.IsNullOrEmpty(ResponseData.Token) ? "present" : "(null)")}, appId={ResponseData.AppId ?? "(null)"}, modules={ResponseData.Modules?.Count ?? 0}");
-
-                if (handoff)
-                {
-                    Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
-                    _sessionUsedAuthHandoff = true;
-                    _returnToPackage = ResponseData.ReturnToPackage;
-                    _deviceAuthDeferredByHandoff = true;
-                }
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Logcat.Error($"Authentication response handling failed: {ex.Message}");
-                return false;
-            }
+            if (!_sessionState.TryApply(postResponse, stageLabel)) return false;
+            if (handoff) ApplyAuthHandoffSessionState();
+            return true;
         }
 
-        private bool TrySetTokenExpiryFromJwt(string token)
+        private void ApplyAuthHandoffSessionState()
         {
-            Dictionary<string, object> decodedJwt = Utils.DecodeJwt(token);
-            if (decodedJwt == null)
-            {
-                Logcat.Error("Failed to decode JWT token");
-                return false;
-            }
-            if (!decodedJwt.TryGetValue("exp", out var expValue) || expValue == null)
-            {
-                Logcat.Error("JWT token missing expiration field");
-                return false;
-            }
-            try
-            {
-                _tokenExpiry = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(expValue)).UtcDateTime;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Logcat.Error($"Invalid JWT token expiration: {ex.Message}");
-                return false;
-            }
+            Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
+            _sessionUsedAuthHandoff = true;
+            _returnToPackage = ResponseData.ReturnToPackage;
+            _deviceAuthDeferredByHandoff = true;
         }
 
         // ── GET /v1/storage/config ───
@@ -637,8 +591,8 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 yield return ReAuthWait;
 
-                if (_tokenExpiry == DateTime.MinValue || _attemptActive) continue;
-                if (_tokenExpiry - DateTime.UtcNow <= TimeSpan.FromSeconds(ReAuthThresholdSeconds))
+                if (_sessionState.TokenExpiryUtc == DateTime.MinValue || _attemptActive) continue;
+                if (_sessionState.TokenExpiryUtc - DateTime.UtcNow <= TimeSpan.FromSeconds(ReAuthThresholdSeconds))
                 {
                     Authenticate();
                 }
@@ -648,20 +602,10 @@ namespace AbxrLib.Runtime.Services.Auth
         private void AuthSucceeded()
         {
             _attemptActive = false;
-            Authenticated = true;
-            bool ssoUserDataChanged = false;
-            if (ResponseData != null)
-            {
-                ResponseData.UserData ??= new Dictionary<string, string>();
-                if (_ssoUserDataMergedBeforeAuthSucceeded)
-                {
-                    _ssoUserDataMergedBeforeAuthSucceeded = false;
-                    ssoUserDataChanged = true;
-                }
-                else
-                    ssoUserDataChanged = SsoUserDataMerger.TryMergeAccessTokenIntoUserData(GetAuthenticatedAccessToken(), ResponseData.UserData);
-                _userData = new Dictionary<string, string>(ResponseData.UserData);
-            }
+            bool ssoUserDataChanged = _sessionState.MarkAuthenticatedAndMergeSsoUserData(
+                _ssoUserDataMergedBeforeAuthSucceeded, GetAuthenticatedAccessToken());
+            _ssoUserDataMergedBeforeAuthSucceeded = false;
+
             OnSucceeded?.Invoke();
             Logcat.Info("Authenticated successfully");
             // Push merged MDM SSO claims to the API via the same REST auth path as SetUserData (custom re-auth); completion is OnUserDataSyncCompleted only.
@@ -689,15 +633,12 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private void ClearAuthenticationState()
         {
-            Authenticated = false;
-            ResponseData = new AuthResponse();
-            _tokenExpiry = DateTime.MinValue;
+            _sessionState.Clear();
             _runtimeAuthContext.ClearAuthenticationState();
             _authMechanism = null;
             _sessionUsedAuthHandoff = false;
             _returnToPackage = null;
             _inputRequestPending = false;
-            _userData = null;
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;
             _ssoUserDataMergedBeforeAuthSucceeded = false;
@@ -755,7 +696,7 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             if (ResponseData == null || !Authenticated) return null;
 
-            return AuthHandoffPayload.Build(ResponseData, payload, _tokenExpiry,
+            return AuthHandoffPayload.Build(ResponseData, payload, _sessionState.TokenExpiryUtc,
                 includeReturnToPackage ? Application.identifier ?? "" : null);
         }
 
@@ -803,7 +744,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     merged[kvp.Key] = kvp.Value;
             }
 
-            _userData = merged;
+            _sessionState.SetUserDataSnapshot(merged);
 
             // Reauthenticate to sync with server. Do not fire OnSucceeded/OnAuthCompleted (users think they are just updating user reference).
             // Completion is reported via OnUserDataSyncCompleted only; optional app code can subscribe there.
@@ -840,9 +781,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 // SetUserData sync is the only client-originated custom auth path.
                 dict["type"] = "custom";
                 dict["inputSource"] = AuthMechanismResolver.UserInputSource;
-                if (_userData == null) return dict;
+                var userData = _sessionState.UserDataSnapshot;
+                if (userData == null) return dict;
 
-                foreach (var item in _userData)
+                foreach (var item in userData)
                 {
                     if (item.Key != "type" && item.Key != "prompt" && item.Key != "inputSource")
                         dict[item.Key] = item.Value;
@@ -869,7 +811,6 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             if (_authMechanism != null) _authMechanism.inputSource = inputSource;
         }
-
 
         /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration/runtime sources).</summary>
         internal bool GetEffectiveEnableAutoStartModules() => _runtimeAuthContext.GetEffectiveEnableAutoStartModules();

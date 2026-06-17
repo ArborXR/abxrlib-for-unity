@@ -1,6 +1,4 @@
 using System;
-using System.Reflection;
-using System.Runtime.Serialization;
 using System.Text;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Services.Auth;
@@ -11,8 +9,7 @@ using UnityEngine.TestTools;
 namespace AbxrLib.Tests.Editor
 {
     /// <summary>
-    /// Unit tests for JWT expiration handling in <see cref="AbxrAuthService"/>.
-    /// These use reflection because the production method is intentionally private, and they avoid PlayMode/backend setup.
+    /// Unit tests for JWT expiration handling in <see cref="AuthSessionState"/>.
     /// </summary>
     [TestFixture]
     public class AuthTokenExpiryTests
@@ -48,32 +45,15 @@ namespace AbxrLib.Tests.Editor
         [Test]
         public void TrySetTokenExpiryFromJwt_ReturnsTrue_WhenExpirationIsValid()
         {
-            var service = NewUninitializedAuthServiceForTokenExpiryTests();
+            var sessionState = new AuthSessionState();
             string token = JwtWithPayloadJson("{\"exp\":4102444800}");
 
-            Assert.IsTrue(InvokeTrySetTokenExpiryFromJwt(service, token));
-            Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(4102444800).UtcDateTime, GetTokenExpiry(service));
+            Assert.IsTrue(sessionState.TrySetTokenExpiryFromJwt(token));
+            Assert.AreEqual(DateTimeOffset.FromUnixTimeSeconds(4102444800).UtcDateTime, sessionState.TokenExpiryUtc);
         }
 
         private static bool InvokeTrySetTokenExpiryFromJwt(string token) =>
-            InvokeTrySetTokenExpiryFromJwt(NewUninitializedAuthServiceForTokenExpiryTests(), token);
-
-        private static bool InvokeTrySetTokenExpiryFromJwt(AbxrAuthService service, string token)
-        {
-            MethodInfo method = typeof(AbxrAuthService).GetMethod("TrySetTokenExpiryFromJwt", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.IsNotNull(method, "Expected AbxrAuthService.TrySetTokenExpiryFromJwt to exist.");
-            return (bool)method.Invoke(service, new object[] { token });
-        }
-
-        private static DateTime GetTokenExpiry(AbxrAuthService service)
-        {
-            FieldInfo field = typeof(AbxrAuthService).GetField("_tokenExpiry", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.IsNotNull(field, "Expected AbxrAuthService._tokenExpiry to exist.");
-            return (DateTime)field.GetValue(service);
-        }
-
-        private static AbxrAuthService NewUninitializedAuthServiceForTokenExpiryTests() =>
-            (AbxrAuthService)FormatterServices.GetUninitializedObject(typeof(AbxrAuthService));
+            new AuthSessionState().TrySetTokenExpiryFromJwt(token);
 
         private static string JwtWithPayloadJson(string payloadJson)
         {

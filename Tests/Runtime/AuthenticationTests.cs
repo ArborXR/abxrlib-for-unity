@@ -320,7 +320,7 @@ namespace AbxrLib.Tests.Runtime
             Assert.IsFalse(service.IsAuthenticationAttemptActive,
                 "the re-auth poll should only trigger after the initial auth attempt is idle.");
 
-            SetPrivateDateTimeForTest(service, "_tokenExpiry", DateTime.UtcNow.AddSeconds(30));
+            service.SetTokenExpiryForTest(DateTime.UtcNow.AddSeconds(30));
 
             bool reauthDone = false;
             bool reauthSuccess = false;
@@ -376,7 +376,7 @@ namespace AbxrLib.Tests.Runtime
 
             var service = AbxrTestHooks.GetAuthServiceForTest();
             Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
-            SetPrivateDateTimeForTest(service, "_tokenExpiry", DateTime.UtcNow.AddMinutes(10));
+            service.SetTokenExpiryForTest(DateTime.UtcNow.AddMinutes(10));
 
             int authRequestsBeforePoll = FakeBackend.GetRequests("/v1/auth/token").Count;
             int configRequestsBeforePoll = FakeBackend.GetRequests("/v1/storage/config").Count;
@@ -1775,15 +1775,6 @@ namespace AbxrLib.Tests.Runtime
             Assert.IsNotNull(field, $"Expected {target.GetType().Name}.{fieldName} to exist for test setup.");
             Assert.AreEqual(typeof(bool), field.FieldType,
                 $"Expected {target.GetType().Name}.{fieldName} to be a bool field.");
-            field.SetValue(target, value);
-        }
-
-        private static void SetPrivateDateTimeForTest(object target, string fieldName, DateTime value)
-        {
-            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.IsNotNull(field, $"Expected {target.GetType().Name}.{fieldName} to exist for test setup.");
-            Assert.AreEqual(typeof(DateTime), field.FieldType,
-                $"Expected {target.GetType().Name}.{fieldName} to be a DateTime field.");
             field.SetValue(target, value);
         }
 
