@@ -5,7 +5,6 @@ using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
-using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -42,16 +41,17 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         // ── Constants ────────────────────────────────────────────────
-        private const float ReAuthPollSeconds = 60f;
-        private const int ReAuthThresholdSeconds = 120;
         private const string GenericAuthenticationFailureMessage = "Authentication Failed";
         private const string SkipUserAuthenticationInput = "**skip**";
-        private static readonly WaitForSeconds ReAuthWait = new(ReAuthPollSeconds);
 
         // ── Internal state ───────────────────────────────────────────
         private readonly RuntimeAuthContext _runtimeAuthContext;
         private readonly AuthSessionState _sessionState = new();
         private readonly AuthHandoffCoordinator _authHandoff;
+        private readonly AuthRequestRunner _authRequestRunner;
+        private readonly AuthConfigurationLoader _configurationLoader;
+        private readonly ReAuthPoller _reAuthPoller;
+        private readonly UserDataSyncCoordinator _userDataSyncCoordinator;
         private AuthPayload payload => _runtimeAuthContext.Payload;
         /// <summary>Working copy of the runtime auth mechanism for this session. Its prompt remains the configured UI prompt; submitted user input is passed per request.</summary>
         private AuthMechanism _authMechanism;
@@ -68,14 +68,11 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _isAuthStarted;
         /// <summary>True after <see cref="Authenticate"/> has scheduled <c>AuthenticateCoroutine</c> at least once this process. Use to gate one-time configuration before auth.</summary>
         internal bool HasAuthenticationStarted => _isAuthStarted;
-        private Coroutine _reAuthCoroutine;
-
         /// <summary>Set when user auth was satisfied by MDM SSO + access token JWT before <see cref="AuthSucceeded"/> so JWT is not merged twice.</summary>
         private bool _ssoUserDataMergedBeforeAuthSucceeded;
 
         private readonly MonoBehaviour _runner;
         private readonly IAuthPlatformSource _platformSource;
-        private readonly IAuthApiClient _authApiClient;
         
         // Auth handoff for external launcher apps
 #if UNITY_INCLUDE_TESTS
@@ -111,10 +108,19 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _runner = coroutineRunner;
             _platformSource = platformSource ?? UnityAuthPlatformSource.Instance;
-            _authApiClient = authApiClient ?? new AuthApiClient();
+            var apiClient = authApiClient ?? new AuthApiClient();
 
             _runtimeAuthContext = new RuntimeAuthContext(arborMdmClient, _platformSource);
             _authHandoff = new AuthHandoffCoordinator(_platformSource);
+            _authRequestRunner = new AuthRequestRunner(_runtimeAuthContext, _sessionState, apiClient,
+                () => _authMechanism, CanContinueAuthAttempt, _ => _credentialsRejectedByApi = true);
+            _configurationLoader = new AuthConfigurationLoader(
+                apiClient, _runtimeAuthContext, _sessionState, CanContinueAuthAttempt);
+            _reAuthPoller = new ReAuthPoller(_runner, _sessionState,
+                () => _stopping, () => _attemptActive, () => Authenticate());
+            _userDataSyncCoordinator = new UserDataSyncCoordinator(_runner, _sessionState, _authRequestRunner,
+                () => _stopping, () => _attemptActive, value => _attemptActive = value,
+                (success, errorMessage) => OnUserDataSyncCompleted?.Invoke(success, errorMessage));
         }
 
         // ── Public API ───────────────────────────────────────────────
@@ -231,14 +237,9 @@ namespace AbxrLib.Runtime.Services.Auth
         public void SetAuthHeaders(UnityWebRequest request, string json = null) =>
             AuthHeaderSigner.TrySetAuthHeaders(request, ResponseData, json);
 
-        private void StopReAuthPolling()
-        {
-            if (_reAuthCoroutine != null && _runner != null)
-            {
-                _runner.StopCoroutine(_reAuthCoroutine);
-                _reAuthCoroutine = null;
-            }
-        }
+        private void StopReAuthPolling() => _reAuthPoller.Stop();
+
+        private bool CanContinueAuthAttempt() => !_stopping && _attemptActive;
 
         private void FinishAttemptFailure(string message)
         {
@@ -250,12 +251,6 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _attemptActive = false;
             OnSucceeded?.Invoke();
-        }
-
-        private void FinishUserDataSyncAttempt(bool success, string errorMessage)
-        {
-            _attemptActive = false;
-            OnUserDataSyncCompleted?.Invoke(success, errorMessage ?? "");
         }
 
         public void Shutdown()
@@ -283,6 +278,8 @@ namespace AbxrLib.Runtime.Services.Auth
         internal string GetAuthMechanismPromptForTest() => _authMechanism?.prompt;
 
         internal void SetTokenExpiryForTest(DateTime tokenExpiryUtc) => _sessionState.SetTokenExpiryUtc(tokenExpiryUtc);
+
+        internal ReAuthPoller ReAuthPollerForTest => _reAuthPoller;
 #endif
         
         // ── Core auth flow (coroutine) ───────────────────────────────
@@ -365,86 +362,9 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        private static string DescribeAuthFailure(RestAuthResult result)
-        {
-            if (result == null) return "Authentication request failed.";
-            return AuthResponseParser.DescribeFailure(result.Body, result.StatusCode);
-        }
-
         /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). Device auth can retry transport/server transient failures; user-auth and SetUserData re-auth are one-shot.</summary>
-        private IEnumerator AuthRequestCoroutine(AuthRequestStage stage, Action<bool, string> onComplete, string submittedAuthPrompt = null, string submittedInputSource = null)
-        {
-            if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
-            if (_authApiClient == null) { onComplete(false, "Auth API client not set"); yield break; }
-
-            if (string.IsNullOrEmpty(payload.sessionId)) payload.sessionId = Guid.NewGuid().ToString();
-
-            var requestPayload = AuthRequestBuilder.BuildPayload(
-                payload, stage, _authMechanism, _sessionState.UserDataSnapshot, submittedAuthPrompt, submittedInputSource);
-            var validationError = _runtimeAuthContext.PreparePayloadForAuth(requestPayload);
-            if (validationError != null) { onComplete(false, validationError); yield break; }
-
-            int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
-            int maxRetries = Math.Max(0, Configuration.Instance.sendRetriesOnFailure);
-            int retriesAttempted = 0;
-            var authApiClient = _authApiClient;
-
-            while (true)
-            {
-                if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
-
-                string stageLabel = AuthRequestBuilder.GetStageLabel(stage);
-                if (requestPayload.authMechanism != null)
-                {
-                    string authMechLog = AuthRequestBuilder.FormatAuthMechanismForLog(requestPayload.authMechanism);
-                    string configuredPrompt = _authMechanism?.prompt ?? "(null)";
-                    Logcat.Debug($"Auth request ({stageLabel}): authMechanism=[{authMechLog}], configuredPrompt={configuredPrompt} (submittedPromptLength={submittedAuthPrompt?.Length ?? 0})");
-                }
-                else
-                    Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
-
-                RestAuthResult result = null;
-                yield return authApiClient.AuthRequestCoroutine(requestPayload, r => result = r);
-
-                if (result != null && result.Success && ApplyAuthResponse(result.Response, stageLabel))
-                {
-                    onComplete(true, null);
-                    yield break;
-                }
-
-                string message = DescribeAuthFailure(result);
-
-                if (stage != AuthRequestStage.Device)
-                {
-                    onComplete(false, message);
-                    yield break;
-                }
-
-                if (result != null && result.AuthRejected)
-                {
-                    _credentialsRejectedByApi = true;
-                    Logcat.Warning($"AuthRequest failed: {message} No further auth attempts will be made this session.");
-                    onComplete(false, message);
-                    yield break;
-                }
-
-                if (result == null || !result.Retryable)
-                {
-                    onComplete(false, message);
-                    yield break;
-                }
-
-                if (retriesAttempted >= maxRetries)
-                {
-                    onComplete(false, message);
-                    yield break;
-                }
-
-                retriesAttempted++;
-                Logcat.Warning($"AuthRequest failed: {message} Retrying in {retryIntervalSeconds} seconds...");
-                yield return new WaitForSeconds(retryIntervalSeconds);
-            }
-        }
+        private IEnumerator AuthRequestCoroutine(AuthRequestStage stage, Action<bool, string> onComplete, string submittedAuthPrompt = null, string submittedInputSource = null) =>
+            _authRequestRunner.Run(stage, onComplete, submittedAuthPrompt, submittedInputSource);
 
         /// <summary>
         /// When <see cref="Abxr.GetIsAuthenticated"/> is true and <see cref="Abxr.GetAccessToken"/> is a JWT with usable identity claims,
@@ -493,83 +413,18 @@ namespace AbxrLib.Runtime.Services.Auth
             return true;
         }
 
-        /// <summary>
-        /// Applies an already-parsed auth response. REST transport parses normal responses before invoking
-        /// this method, so successful REST auth does not deserialize the same body twice.
-        /// </summary>
-        private bool ApplyAuthResponse(AuthResponse postResponse, string stageLabel = null, bool handoff = false)
-        {
-            if (!_sessionState.TryApply(postResponse, stageLabel)) return false;
-            if (handoff) _authHandoff.MarkApplied(ResponseData);
-            return true;
-        }
-
         // ── GET /v1/storage/config ───
 
         private IEnumerator GetConfigurationCoroutine(Action<bool, string> onComplete)
         {
-            if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
-            if (_authApiClient == null) { onComplete(false, "Auth API client not set"); yield break; }
-
-            string configJson = null;
-            string failureDetail = null;
-            yield return _authApiClient.GetConfigCoroutine(ResponseData, (ok, json) =>
+            yield return _configurationLoader.Load((ok, detail, authMechanism) =>
             {
-                if (ok) configJson = json; else failureDetail = json;
+                if (ok) _authMechanism = authMechanism;
+                onComplete(ok, detail);
             });
-
-            if (!string.IsNullOrEmpty(configJson))
-            {
-                try
-                {
-                    var config = JsonConvert.DeserializeObject<ConfigPayload>(configJson);
-                    if (config != null)
-                    {
-                        Configuration.Instance.ApplyConfigPayload(config);
-
-                        _authMechanism = _runtimeAuthContext.ResolveConfigAuthMechanism(config.authMechanism,
-                            Configuration.Instance.enableLearnerLauncherMode);
-                        if (AuthMechanismResolver.NeedsUserAuthentication(_authMechanism))
-                        {
-                            string authType = _authMechanism?.type ?? "";
-                            Logcat.Info("User Authentication Required.");
-                            Logcat.Debug($" - Type: {authType} & Prompt: {(_authMechanism?.prompt ?? "")}");
-                        }
-                        else
-                            Logcat.Info("User authentication not required. Using anonymous session.");
-                        onComplete(true, null);
-                        yield break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    failureDetail = ex.Message;
-                    Logcat.Error($"GetConfiguration response handling failed: {ex.Message}");
-                }
-            }
-
-            onComplete(false, failureDetail ?? "no config returned");
         }
 
-        private void StartReAuthPolling()
-        {
-            StopReAuthPolling();
-            _reAuthCoroutine = _runner.StartCoroutine(ReAuthPollCoroutine());
-        }
-
-        private IEnumerator ReAuthPollCoroutine()
-        {
-            while (!_stopping)
-            {
-                yield return ReAuthWait;
-
-                if (_sessionState.TokenExpiryUtc == DateTime.MinValue || _attemptActive) continue;
-                if (_sessionState.TokenExpiryUtc - DateTime.UtcNow <= TimeSpan.FromSeconds(ReAuthThresholdSeconds))
-                {
-                    Authenticate();
-                }
-            }
-        }
+        private void StartReAuthPolling() => _reAuthPoller.Start();
 
         private void AuthSucceeded()
         {
@@ -656,49 +511,8 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         /// <param name="id">Optional primary user identifier (maps to userData.id); can be null to clear or when only updating additional fields.</param>
         /// <param name="additionalUserData">Optional key-value pairs to merge with existing UserData (overwrites existing keys). May be empty to clear all userData.</param>
-        public void SetUserData(string id = null, Dictionary<string, string> additionalUserData = null)
-        {
-            if (!Authenticated)
-            {
-                Logcat.Warning("Cannot set user data - not authenticated. Call Authenticate() first.");
-                return;
-            }
-
-            if (_stopping || _attemptActive)
-            {
-                Logcat.Warning("Authentication in progress. Unable to sync user data.");
-                return;
-            }
-
-            // Build merged user data: start from current response, then apply id (userData.id) and additionalUserData. Do not set session userId (read-only, set by backend).
-            var merged = ResponseData?.UserData != null
-                ? new Dictionary<string, string>(ResponseData.UserData)
-                : new Dictionary<string, string>();
-
-            // Do not send id when it equals the session userId (anonymizedUserId); that would cause the server to hash an already-hashed value.
-            string anonymizedUserId = ResponseData?.UserId?.ToString();
-            if (!string.IsNullOrEmpty(id) && id != anonymizedUserId)
-                merged["id"] = id;
-
-            if (additionalUserData != null)
-            {
-                foreach (var kvp in additionalUserData)
-                    merged[kvp.Key] = kvp.Value;
-            }
-
-            _sessionState.SetUserDataSnapshot(merged);
-
-            // Reauthenticate to sync with server. Do not fire OnSucceeded/OnAuthCompleted (users think they are just updating user reference).
-            // Completion is reported via OnUserDataSyncCompleted only; optional app code can subscribe there.
-            _attemptActive = true;
-            _runner.StartCoroutine(CoSetUserDataReAuth());
-        }
-
-        /// <summary>Runs the re-auth for SetUserData; on completion invokes OnUserDataSyncCompleted only (not AuthSucceeded/OnAuthCompleted).</summary>
-        private IEnumerator CoSetUserDataReAuth()
-        {
-            yield return AuthRequestCoroutine(AuthRequestStage.UserDataSync, FinishUserDataSyncAttempt);
-        }
+        public void SetUserData(string id = null, Dictionary<string, string> additionalUserData = null) =>
+            _userDataSyncCoordinator.SetUserData(id, additionalUserData);
         
         /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration/runtime sources).</summary>
         internal bool GetEffectiveEnableAutoStartModules() => _runtimeAuthContext.GetEffectiveEnableAutoStartModules();

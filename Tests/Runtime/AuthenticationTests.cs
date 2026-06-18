@@ -335,14 +335,8 @@ namespace AbxrLib.Tests.Runtime
             Abxr.OnAuthCompleted += reauthCompletedHandler;
             try
             {
-                var poll = GetPrivateCoroutineForTest(service, "ReAuthPollCoroutine");
-                Assert.IsTrue(poll.MoveNext(),
-                    "the re-auth poll coroutine should first yield its polling interval.");
-                Assert.IsInstanceOf<WaitForSeconds>(poll.Current,
-                    "the first re-auth poll step should wait before checking token expiry.");
-
-                Assert.IsTrue(poll.MoveNext(),
-                    "manually advancing past the wait should execute one re-auth poll iteration.");
+                Assert.IsTrue(service.ReAuthPollerForTest.TryTriggerReAuthIfNeeded(),
+                    "near-expiry tokens should trigger a re-auth attempt.");
 
                 yield return WaitUntil(() => reauthDone, 5f, "re-auth poll triggered authentication completed");
             }
@@ -381,13 +375,8 @@ namespace AbxrLib.Tests.Runtime
             int authRequestsBeforePoll = FakeBackend.GetRequests("/v1/auth/token").Count;
             int configRequestsBeforePoll = FakeBackend.GetRequests("/v1/storage/config").Count;
 
-            var poll = GetPrivateCoroutineForTest(service, "ReAuthPollCoroutine");
-            Assert.IsTrue(poll.MoveNext(),
-                "the re-auth poll coroutine should first yield its polling interval.");
-            Assert.IsInstanceOf<WaitForSeconds>(poll.Current,
-                "the first re-auth poll step should wait before checking token expiry.");
-            Assert.IsTrue(poll.MoveNext(),
-                "manually advancing past the wait should execute one re-auth poll iteration.");
+            Assert.IsFalse(service.ReAuthPollerForTest.TryTriggerReAuthIfNeeded(),
+                "tokens outside the re-auth threshold should not trigger a re-auth attempt.");
 
             yield return null;
 
@@ -1800,17 +1789,6 @@ namespace AbxrLib.Tests.Runtime
             Assert.AreEqual(typeof(bool), field.FieldType,
                 $"Expected {target.GetType().Name}.{fieldName} to be a bool field.");
             field.SetValue(target, value);
-        }
-
-        private static IEnumerator GetPrivateCoroutineForTest(object target, string methodName)
-        {
-            var method = target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.IsNotNull(method, $"Expected {target.GetType().Name}.{methodName} to exist for test setup.");
-
-            var result = method.Invoke(target, null);
-            Assert.IsInstanceOf<IEnumerator>(result,
-                $"Expected {target.GetType().Name}.{methodName} to return IEnumerator.");
-            return (IEnumerator)result;
         }
 
         private static void SetAuthResponseForTest(object authService, AuthResponse response)
