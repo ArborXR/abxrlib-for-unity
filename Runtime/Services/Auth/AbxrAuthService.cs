@@ -46,6 +46,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Internal state ───────────────────────────────────────────
         private readonly RuntimeAuthContext _runtimeAuthContext;
+        private readonly RuntimeAuthResolver _runtimeAuthResolver;
         private readonly AuthSessionState _sessionState = new();
         private readonly AuthHandoffCoordinator _authHandoff;
         private readonly AuthRequestRunner _authRequestRunner;
@@ -110,7 +111,9 @@ namespace AbxrLib.Runtime.Services.Auth
             _platformSource = platformSource ?? UnityAuthPlatformSource.Instance;
             var apiClient = authApiClient ?? new AuthApiClient();
 
-            _runtimeAuthContext = new RuntimeAuthContext(arborMdmClient, _platformSource);
+            _runtimeAuthContext = new RuntimeAuthContext();
+            _runtimeAuthResolver = new RuntimeAuthResolver(_runtimeAuthContext, arborMdmClient, _platformSource);
+            _runtimeAuthResolver.LoadStartupData();
             _authHandoff = new AuthHandoffCoordinator(_platformSource);
             _authRequestRunner = new AuthRequestRunner(_runtimeAuthContext, _sessionState, apiClient,
                 () => _authMechanism, CanContinueAuthAttempt, _ => _credentialsRejectedByApi = true);
@@ -141,7 +144,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 ClearAuthenticationState();
 
             // Resolve Configuration + platform credentials/device metadata for this auth attempt.
-            var validationError = _runtimeAuthContext.PrepareForAuthentication();
+            var validationError = _runtimeAuthResolver.PrepareForAuthentication();
             if (validationError != null)
             {
                 FinishAttemptFailure(validationError);
