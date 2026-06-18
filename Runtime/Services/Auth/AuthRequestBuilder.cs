@@ -4,6 +4,13 @@ using AbxrLib.Runtime.Types;
 
 namespace AbxrLib.Runtime.Services.Auth
 {
+    internal enum AuthRequestStage
+    {
+        Device,
+        UserInput,
+        UserDataSync
+    }
+
     internal static class AuthRequestBuilder
     {
         private const string TypeKey = "type";

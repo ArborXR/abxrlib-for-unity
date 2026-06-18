@@ -54,7 +54,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private readonly AuthConfigurationLoader _configurationLoader;
         private readonly ReAuthPoller _reAuthPoller;
         private readonly UserDataSyncCoordinator _userDataSyncCoordinator;
-        private AuthPayload payload => _runtimeAuthContext.Payload;
+        private AuthPayload Payload => _runtimeAuthContext.Payload;
         /// <summary>Working copy of the runtime auth mechanism for this session. Its prompt remains the configured UI prompt; submitted user input is passed per request.</summary>
         private AuthMechanism _authMechanism;
         private bool _inputRequestPending;
@@ -503,7 +503,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// Includes all session credentials plus re-auth fields so the receiving app can adopt the authenticated session.
         /// </summary>
         internal string GetHandoffJson(bool includeReturnToPackage = false) =>
-            AuthHandoffCoordinator.BuildOutgoingPayload(ResponseData, payload, _sessionState.TokenExpiryUtc, Authenticated,
+            AuthHandoffCoordinator.BuildOutgoingPayload(ResponseData, Payload, _sessionState.TokenExpiryUtc, Authenticated,
                 includeReturnToPackage ? Application.identifier ?? "" : null);
 
         /// <summary>Returns the stored returnToPackage from the handoff (so the assessment app can launch back to the launcher), then clears it so it is only used once.</summary>

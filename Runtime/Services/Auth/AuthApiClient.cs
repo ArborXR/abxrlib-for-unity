@@ -8,6 +8,12 @@ using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Services.Auth
 {
+    internal interface IAuthApiClient
+    {
+        IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<RestAuthResult> onComplete);
+        IEnumerator GetConfigCoroutine(AuthResponse authResponse, Action<bool, string> onComplete);
+    }
+
     /// <summary>Sends authentication-only HTTP requests so the auth flow does not depend on the data/storage REST queue.</summary>
     internal sealed class AuthApiClient : IAuthApiClient
     {
@@ -119,5 +125,15 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private static bool HasExplicitBackendError(string responseBody) =>
             AuthResponseParser.HasExplicitBackendError(responseBody);
+    }
+
+    internal sealed class RestAuthResult
+    {
+        internal bool Success;
+        internal string Body;
+        internal long StatusCode;
+        internal bool Retryable;
+        internal bool AuthRejected;
+        internal AuthResponse Response;
     }
 }
