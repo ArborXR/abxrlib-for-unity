@@ -42,7 +42,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
         // ── Constants ────────────────────────────────────────────────
         private const string GenericAuthenticationFailureMessage = "Authentication Failed";
-        private const string SkipUserAuthenticationInput = "**skip**";
 
         // ── Internal state ───────────────────────────────────────────
         private readonly RuntimeAuthContext _runtimeAuthContext;
@@ -181,18 +180,21 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
 
-            if (input == SkipUserAuthenticationInput)
-            {
-                SkipUserAuthentication();
-                return;
-            }
-
             _inputRequestPending = false;
             AuthenticateUserInput(input, AuthMechanismResolver.NormalizeInputSource(inputSource));
         }
 
-        private void SkipUserAuthentication()
+        /// <summary>
+        /// Completes the current auth attempt without submitting a user-auth request, preserving the device-authenticated session.
+        /// </summary>
+        internal void SkipUserAuthentication()
         {
+            if (!_inputRequestPending)
+            {
+                Logcat.Warning("Skipping user authentication was ignored: no input request is pending.");
+                return;
+            }
+
             _inputRequestPending = false;
             Logcat.Warning("Skipping user authentication.");
             KeyboardHandler.Destroy();

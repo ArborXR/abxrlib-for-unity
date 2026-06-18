@@ -1018,7 +1018,7 @@ namespace AbxrLib.Tests.Runtime
                 Assert.IsTrue(Abxr.IsAuthInputRequestPending(),
                     "input should be marked pending while the app's OnInputRequested handler is running");
 
-                Abxr.OnInputSubmitted("**skip**");
+                AbxrTestHooks.SkipUserAuthenticationForTest();
             };
 
             yield return RunAuthAndWait();
@@ -1033,11 +1033,11 @@ namespace AbxrLib.Tests.Runtime
             Assert.IsTrue(LastAuthSuccess, LastAuthError);
             Assert.IsNull(LastAuthError);
             Assert.IsFalse(Abxr.IsAuthInputRequestPending(),
-                "submitting **skip** should clear the pending-input state");
+                "skipping user authentication should clear the pending-input state");
 
             var requests = FakeBackend.GetRequests("/v1/auth/token");
             Assert.AreEqual(1, requests.Count,
-                "**skip** should accept the device-authenticated session and avoid the follow-up user-auth POST.");
+                "skipping user authentication should accept the device-authenticated session and avoid the follow-up user-auth POST.");
             Assert.IsNull(requests[0].BodyJson["authMechanism"],
                 "device auth must not send authMechanism; skip should not create a user-auth request.");
 

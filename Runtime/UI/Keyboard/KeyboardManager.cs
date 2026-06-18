@@ -183,7 +183,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
         }
         
-        private static void Skip() => AbxrSubsystem.Instance.SubmitInput("**skip**");
+        private static void Skip() => AbxrSubsystem.Instance.SkipUserAuthentication();
 
         private void QRCode()
         {

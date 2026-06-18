@@ -59,6 +59,8 @@ namespace AbxrLib.Tests.Runtime
         internal static string GetHandoffJsonForTest(bool includeReturnToPackage = false) =>
             GetAuthServiceForTest()?.GetHandoffJson(includeReturnToPackage);
 
+        internal static void SkipUserAuthenticationForTest() => AbxrSubsystem.Instance?.SkipUserAuthentication();
+
         /// <summary>
         /// Destroy the current test-owned subsystem.
         /// This is the normal per-test runtime reset path: tests configure first,

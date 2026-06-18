@@ -303,6 +303,8 @@ namespace AbxrLib.Runtime
 
         internal void SubmitInput(string input) => _authService.SubmitInput(input);
 
+        internal void SkipUserAuthentication() => _authService.SkipUserAuthentication();
+
         internal bool IsQRScanForAuthAvailable()
         {
 	        if (_authService == null || !_authService.IsInputRequestPending) return false;
