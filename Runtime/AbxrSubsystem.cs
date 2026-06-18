@@ -109,11 +109,12 @@ namespace AbxrLib.Runtime
             }
 #endif
             _authService = new AbxrAuthService(this, _arborMdmClient);
-            _restService = new AbxrRestService(new AuthSessionProvider(_authService), this);
+            var authSession = _authService.SessionProvider;
+            _restService = new AbxrRestService(authSession, this);
             _dataService = new AbxrDataService(_restService);
             _telemetryService = new AbxrTelemetryService(this);
-            _aiProxyApi = new AIProxyApi(_authService);
-            _storageService = new AbxrStorageService(_authService, _restService);
+            _aiProxyApi = new AIProxyApi(authSession);
+            _storageService = new AbxrStorageService(authSession, _restService);
             
             // Subscribe to OnAuthCompleted to start delayed DEFAULT assessment timer
             Abxr.OnAuthCompleted += OnAuthCompletedHandler;

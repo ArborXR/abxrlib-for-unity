@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
@@ -553,28 +554,26 @@ namespace AbxrLib.Tests.Runtime
 
 
         [UnityTest]
-        public IEnumerator Auth_SetAuthHeaders_MissingTokenOrResponseData_DoesNotSetHeaders()
+        public IEnumerator AuthHeaderSigner_MissingTokenOrResponseData_DoesNotSetHeaders()
         {
-            var service = AbxrTestHooks.GetAuthServiceForTest();
-            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
-
-            SetAuthResponseForTest(service, new AuthResponse { Secret = "secret-without-token" });
             LogAssert.Expect(LogType.Error, new Regex(
                 @"\[AbxrLib\] Cannot set auth headers - authentication tokens are missing"));
 
             using (var request = UnityWebRequest.Get(FakeBackend.BaseUrl + "/headers-missing-token"))
             {
-                service.SetAuthHeaders(request, "{\"event\":\"test\"}");
+                bool signed = AuthHeaderSigner.TrySetAuthHeaders(request,
+                    new AuthResponse { Secret = "secret-without-token" }, "{\"event\":\"test\"}");
+                Assert.IsFalse(signed);
                 AssertAuthHeadersNotSet(request);
             }
 
-            SetAuthResponseForTest(service, null);
             LogAssert.Expect(LogType.Error, new Regex(
                 @"\[AbxrLib\] Cannot set auth headers - authentication tokens are missing"));
 
             using (var request = UnityWebRequest.Get(FakeBackend.BaseUrl + "/headers-null-response"))
             {
-                service.SetAuthHeaders(request);
+                bool signed = AuthHeaderSigner.TrySetAuthHeaders(request, null);
+                Assert.IsFalse(signed);
                 AssertAuthHeadersNotSet(request);
             }
 
@@ -583,24 +582,20 @@ namespace AbxrLib.Tests.Runtime
 
 
         [UnityTest]
-        public IEnumerator Auth_SetAuthHeaders_WithJson_IncludesJsonCrcInHash()
+        public IEnumerator AuthHeaderSigner_WithJson_IncludesJsonCrcInHash()
         {
             const string token = "header-token";
             const string secret = "header-secret";
             const string json = "{\"event\":\"test\",\"value\":42}";
 
-            var service = AbxrTestHooks.GetAuthServiceForTest();
-            Assert.IsNotNull(service, "Auth service should exist after fixture setup.");
-
-            SetAuthResponseForTest(service, new AuthResponse
-            {
-                Token = token,
-                Secret = secret
-            });
-
             using (var request = UnityWebRequest.Get(FakeBackend.BaseUrl + "/headers-with-json"))
             {
-                service.SetAuthHeaders(request, json);
+                bool signed = AuthHeaderSigner.TrySetAuthHeaders(request, new AuthResponse
+                {
+                    Token = token,
+                    Secret = secret
+                }, json);
+                Assert.IsTrue(signed);
 
                 string timestamp = request.GetRequestHeader("x-abxrlib-timestamp");
                 string actualHash = request.GetRequestHeader("x-abxrlib-hash");
@@ -609,9 +604,9 @@ namespace AbxrLib.Tests.Runtime
                 string hashWithoutJsonCrc = Utils.ComputeSha256Hash(token + secret + timestamp);
 
                 Assert.AreEqual("Bearer " + token, request.GetRequestHeader("Authorization"));
-                Assert.IsFalse(string.IsNullOrEmpty(timestamp), "SetAuthHeaders should set a timestamp before computing the hash.");
+                Assert.IsFalse(string.IsNullOrEmpty(timestamp), "AuthHeaderSigner should set a timestamp before computing the hash.");
                 Assert.AreEqual(expectedHash, actualHash,
-                    "SetAuthHeaders should append the CRC of the supplied JSON to the hash string.");
+                    "AuthHeaderSigner should append the CRC of the supplied JSON to the hash string.");
                 Assert.AreNotEqual(hashWithoutJsonCrc, actualHash,
                     "Passing JSON should produce a different hash than token + secret + timestamp alone.");
             }
@@ -1791,24 +1786,14 @@ namespace AbxrLib.Tests.Runtime
             field.SetValue(target, value);
         }
 
-        private static void SetAuthResponseForTest(object authService, AuthResponse response)
-        {
-            var responseDataSetter = authService.GetType()
-                .GetProperty("ResponseData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                ?.GetSetMethod(nonPublic: true);
-
-            Assert.IsNotNull(responseDataSetter, "Expected AbxrAuthService.ResponseData to have a private setter for test setup.");
-            responseDataSetter.Invoke(authService, new object[] { response });
-        }
-
         private static void AssertAuthHeadersNotSet(UnityWebRequest request)
         {
             Assert.IsTrue(string.IsNullOrEmpty(request.GetRequestHeader("Authorization")),
-                "SetAuthHeaders should not set Authorization when tokens are unavailable.");
+                "AuthHeaderSigner should not set Authorization when tokens are unavailable.");
             Assert.IsTrue(string.IsNullOrEmpty(request.GetRequestHeader("x-abxrlib-timestamp")),
-                "SetAuthHeaders should not set x-abxrlib-timestamp when tokens are unavailable.");
+                "AuthHeaderSigner should not set x-abxrlib-timestamp when tokens are unavailable.");
             Assert.IsTrue(string.IsNullOrEmpty(request.GetRequestHeader("x-abxrlib-hash")),
-                "SetAuthHeaders should not set x-abxrlib-hash when tokens are unavailable.");
+                "AuthHeaderSigner should not set x-abxrlib-hash when tokens are unavailable.");
         }
 
         [UnityTest]

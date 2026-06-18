@@ -23,16 +23,16 @@ namespace AbxrLib.Runtime.Services.AI
         {
             PastMessages.Clear();
         }
-        private readonly AbxrAuthService _authService;
+        private readonly IAuthSessionProvider _authSession;
 
-        public AIProxyApi(AbxrAuthService authService)
+        internal AIProxyApi(IAuthSessionProvider authSession)
         {
-            _authService = authService;
+            _authSession = authSession ?? throw new ArgumentNullException(nameof(authSession));
         }
     
         public IEnumerator SendPrompt(string prompt, string llmProvider, List<string> pastMessages, Action<string> callback)
         {
-            if (!_authService.Authenticated) 
+            if (!_authSession.Authenticated) 
             {
                 callback?.Invoke(null);
                 yield break;
@@ -76,7 +76,7 @@ namespace AbxrLib.Runtime.Services.AI
                 {
                     request = new UnityWebRequest(_uri, "POST");
                     Utils.BuildRequest(request, json);
-                    _authService.SetAuthHeaders(request, json);
+                    AuthHeaderSigner.TrySetAuthHeaders(request, _authSession.ResponseData, json);
 
                     // Set timeout to prevent hanging requests
                     request.timeout = Configuration.Instance.requestTimeoutSeconds;

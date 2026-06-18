@@ -8,13 +8,17 @@ namespace AbxrLib.Runtime.Services.Auth
 {
     /// <summary>
     /// Owns the authenticated session response, token expiry, and local user-data snapshot.
+    /// Also exposes the minimal session view used by services that sign requests.
     /// </summary>
-    internal sealed class AuthSessionState
+    internal sealed class AuthSessionState : IAuthSessionProvider
     {
         internal bool Authenticated { get; private set; }
         internal AuthResponse ResponseData { get; private set; } = new();
         internal DateTime TokenExpiryUtc { get; private set; } = DateTime.MinValue;
         internal Dictionary<string, string> UserDataSnapshot { get; private set; }
+
+        bool IAuthSessionProvider.Authenticated => Authenticated;
+        AuthResponse IAuthSessionProvider.ResponseData => ResponseData;
 
         internal void Clear()
         {

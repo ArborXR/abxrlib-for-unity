@@ -6,7 +6,6 @@ using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
-using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Services.Auth
 {
@@ -39,6 +38,9 @@ namespace AbxrLib.Runtime.Services.Auth
             get => _sessionState.ResponseData;
             private set => _sessionState.SetResponseData(value);
         }
+
+        /// <summary>Minimal session view for services that need auth state/signing data without depending on the auth coordinator.</summary>
+        internal IAuthSessionProvider SessionProvider => _sessionState;
 
         // ── Constants ────────────────────────────────────────────────
         private const string GenericAuthenticationFailureMessage = "Authentication Failed";
@@ -239,9 +241,6 @@ namespace AbxrLib.Runtime.Services.Auth
             }, submittedAuthPrompt: submittedAuthPrompt, submittedInputSource: submittedInputSource));
         }
         
-        public void SetAuthHeaders(UnityWebRequest request, string json = null) =>
-            AuthHeaderSigner.TrySetAuthHeaders(request, ResponseData, json);
-
         private void StopReAuthPolling() => _reAuthPoller.Stop();
 
         private bool CanContinueAuthAttempt() => !_stopping && _attemptActive;
