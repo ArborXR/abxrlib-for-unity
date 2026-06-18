@@ -47,6 +47,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (config != null)
                     {
                         Configuration.Instance.ApplyConfigPayload(config);
+                        _runtimeAuthContext.ApplyRuntimeFlagsFromConfiguration(Configuration.Instance);
 
                         AuthMechanism authMechanism = _runtimeAuthContext.ResolveConfigAuthMechanism(
                             config.authMechanism, Configuration.Instance.enableLearnerLauncherMode);

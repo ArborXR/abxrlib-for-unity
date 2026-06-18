@@ -33,14 +33,14 @@ namespace AbxrLib.Runtime.Types
     /// </summary>
     public class RuntimeAuthConfig
     {
-        /// <summary>When set, overrides Configuration.enableAutoStartAuthentication so the asset is not modified. Null = use Configuration.</summary>
-        public bool? enableAutoStartAuthentication;
-        /// <summary>When set, overrides Configuration.enableReturnTo so the asset is not modified. Null = use Configuration.</summary>
-        public bool? enableReturnTo;
-        /// <summary>When set, overrides Configuration.enableAutoStartModules. Null = use Configuration.</summary>
-        public bool? enableAutoStartModules;
-        /// <summary>When set, overrides Configuration.enableAutoAdvanceModules. Null = use Configuration.</summary>
-        public bool? enableAutoAdvanceModules;
+        /// <summary>Resolved runtime value copied from Configuration after defaults and GET-config merges are applied.</summary>
+        public bool enableAutoStartAuthentication = true;
+        /// <summary>Resolved runtime value copied from Configuration after defaults and GET-config merges are applied.</summary>
+        public bool enableReturnTo = true;
+        /// <summary>Resolved runtime value copied from Configuration after defaults and GET-config merges are applied.</summary>
+        public bool enableAutoStartModules = true;
+        /// <summary>Resolved runtime value copied from Configuration after defaults and GET-config merges are applied.</summary>
+        public bool enableAutoAdvanceModules = true;
 
         public bool useAppTokens;
         public string appToken;

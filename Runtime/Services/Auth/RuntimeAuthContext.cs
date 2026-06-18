@@ -87,16 +87,21 @@ namespace AbxrLib.Runtime.Services.Auth
 
         internal bool HasWebGlAssessmentPin => !string.IsNullOrEmpty(WebGlAssessmentPin);
 
-        internal bool GetEffectiveEnableAutoStartModules() =>
-            RuntimeAuth.enableAutoStartModules ?? Configuration.Instance?.enableAutoStartModules ?? true;
+        internal void ApplyRuntimeFlagsFromConfiguration(Configuration config)
+        {
+            RuntimeAuth.enableAutoStartAuthentication = config?.enableAutoStartAuthentication ?? true;
+            RuntimeAuth.enableReturnTo = config?.enableReturnTo ?? true;
+            RuntimeAuth.enableAutoStartModules = config?.enableAutoStartModules ?? true;
+            RuntimeAuth.enableAutoAdvanceModules = config?.enableAutoAdvanceModules ?? true;
+        }
 
-        internal bool GetEffectiveEnableAutoAdvanceModules() =>
-            RuntimeAuth.enableAutoAdvanceModules ?? Configuration.Instance?.enableAutoAdvanceModules ?? true;
+        internal bool GetEffectiveEnableAutoStartModules() => RuntimeAuth.enableAutoStartModules;
 
-        internal bool GetEffectiveEnableReturnTo() =>
-            RuntimeAuth.enableReturnTo ?? Configuration.Instance?.enableReturnTo ?? true;
+        internal bool GetEffectiveEnableAutoAdvanceModules() => RuntimeAuth.enableAutoAdvanceModules;
 
-        internal bool GetEnableAutoStartAuthentication() => RuntimeAuth.enableAutoStartAuthentication ?? true;
+        internal bool GetEffectiveEnableReturnTo() => RuntimeAuth.enableReturnTo;
+
+        internal bool GetEnableAutoStartAuthentication() => RuntimeAuth.enableAutoStartAuthentication;
 
         internal void SetRuntimeAuthOrgId(string value) => RuntimeAuth.orgId = value ?? "";
 

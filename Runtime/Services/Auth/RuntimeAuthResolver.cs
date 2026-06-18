@@ -136,10 +136,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private void LoadConfigData()
         {
             var config = Configuration.Instance;
-            RuntimeAuth.enableAutoStartAuthentication = config?.enableAutoStartAuthentication ?? true;
-            RuntimeAuth.enableReturnTo = config?.enableReturnTo ?? true;
-            RuntimeAuth.enableAutoStartModules = config?.enableAutoStartModules ?? true;
-            RuntimeAuth.enableAutoAdvanceModules = config?.enableAutoAdvanceModules ?? true;
+            _context.ApplyRuntimeFlagsFromConfiguration(config);
 
             var configData = Utils.ExtractConfigData(config);
             if (!configData.isValid) return;
