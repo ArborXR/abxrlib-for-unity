@@ -47,7 +47,7 @@ namespace AbxrLib.Runtime.Services.Auth
         internal void ClearAuthenticationState()
         {
             Payload.sessionId = null;
-            RuntimeAuth.authMechanism = null;
+            RuntimeAuth.AuthMechanism = null;
             WebGlAssessmentPin = null;
         }
 
@@ -57,14 +57,14 @@ namespace AbxrLib.Runtime.Services.Auth
             Payload.sessionId = Guid.NewGuid().ToString();
         }
 
-        internal void ClearAuthMechanismForSession() => RuntimeAuth.authMechanism = null;
+        internal void ClearAuthMechanismForSession() => RuntimeAuth.AuthMechanism = null;
 
         internal AuthMechanism CopyAuthMechanismForSession() =>
-            AuthMechanismResolver.CopyForSession(RuntimeAuth.authMechanism);
+            AuthMechanismResolver.CopyForSession(RuntimeAuth.AuthMechanism);
 
         internal AuthMechanism ResolveConfigAuthMechanism(AuthMechanism configMechanism, bool learnerLauncherModeEnabled)
         {
-            RuntimeAuth.authMechanism = AuthMechanismResolver.ResolveConfigMechanism(configMechanism, learnerLauncherModeEnabled);
+            RuntimeAuth.AuthMechanism = AuthMechanismResolver.ResolveConfigMechanism(configMechanism, learnerLauncherModeEnabled);
             return CopyAuthMechanismForSession();
         }
 
@@ -73,7 +73,7 @@ namespace AbxrLib.Runtime.Services.Auth
             sessionMechanism = null;
             if (!HasWebGlAssessmentPin) return false;
 
-            RuntimeAuth.authMechanism = AuthMechanismResolver.ForceAssessmentPin(RuntimeAuth.authMechanism);
+            RuntimeAuth.AuthMechanism = AuthMechanismResolver.ForceAssessmentPin(RuntimeAuth.AuthMechanism);
             sessionMechanism = CopyAuthMechanismForSession();
             return true;
         }
@@ -86,24 +86,24 @@ namespace AbxrLib.Runtime.Services.Auth
 
         internal void ApplyRuntimeFlagsFromConfiguration(Configuration config)
         {
-            RuntimeAuth.enableAutoStartAuthentication = config?.enableAutoStartAuthentication ?? true;
-            RuntimeAuth.enableReturnTo = config?.enableReturnTo ?? true;
-            RuntimeAuth.enableAutoStartModules = config?.enableAutoStartModules ?? true;
-            RuntimeAuth.enableAutoAdvanceModules = config?.enableAutoAdvanceModules ?? true;
+            RuntimeAuth.EnableAutoStartAuthentication = config?.enableAutoStartAuthentication ?? true;
+            RuntimeAuth.EnableReturnTo = config?.enableReturnTo ?? true;
+            RuntimeAuth.EnableAutoStartModules = config?.enableAutoStartModules ?? true;
+            RuntimeAuth.EnableAutoAdvanceModules = config?.enableAutoAdvanceModules ?? true;
         }
 
-        internal bool GetEffectiveEnableAutoStartModules() => RuntimeAuth.enableAutoStartModules;
+        internal bool GetEffectiveEnableAutoStartModules() => RuntimeAuth.EnableAutoStartModules;
 
-        internal bool GetEffectiveEnableAutoAdvanceModules() => RuntimeAuth.enableAutoAdvanceModules;
+        internal bool GetEffectiveEnableAutoAdvanceModules() => RuntimeAuth.EnableAutoAdvanceModules;
 
-        internal bool GetEffectiveEnableReturnTo() => RuntimeAuth.enableReturnTo;
+        internal bool GetEffectiveEnableReturnTo() => RuntimeAuth.EnableReturnTo;
 
-        internal bool GetEnableAutoStartAuthentication() => RuntimeAuth.enableAutoStartAuthentication;
+        internal bool GetEnableAutoStartAuthentication() => RuntimeAuth.EnableAutoStartAuthentication;
 
-        internal void SetRuntimeAuthOrgId(string value) => RuntimeAuth.orgId = value ?? "";
+        internal void SetRuntimeAuthOrgId(string value) => RuntimeAuth.OrgId = value ?? "";
 
-        internal void SetRuntimeAuthAuthSecret(string value) => RuntimeAuth.authSecret = value ?? "";
+        internal void SetRuntimeAuthAuthSecret(string value) => RuntimeAuth.AuthSecret = value ?? "";
 
-        internal void SetRuntimeAuthDeviceId(string value) => RuntimeAuth.deviceId = value ?? "";
+        internal void SetRuntimeAuthDeviceId(string value) => RuntimeAuth.DeviceId = value ?? "";
     }
 }

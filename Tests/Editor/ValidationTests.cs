@@ -117,10 +117,10 @@ namespace AbxrLib.Tests.Editor
         {
             var runtime = new RuntimeAuthConfig
             {
-                useAppTokens = true,
-                buildType = buildType,
-                appToken = FakeJwt,
-                orgToken = null,
+                UseAppTokens = true,
+                BuildType = buildType,
+                AppToken = FakeJwt,
+                OrgToken = null,
             };
 
             var error = runtime.PreparePayloadForAuth(new AuthPayload());
@@ -136,11 +136,11 @@ namespace AbxrLib.Tests.Editor
         {
             var runtime = new RuntimeAuthConfig
             {
-                useAppTokens = false,
-                buildType = buildType,
-                appId = FakeUuid,
-                orgId = null,
-                authSecret = null,
+                UseAppTokens = false,
+                BuildType = buildType,
+                AppId = FakeUuid,
+                OrgId = null,
+                AuthSecret = null,
             };
 
             var error = runtime.PreparePayloadForAuth(new AuthPayload());
@@ -156,16 +156,16 @@ namespace AbxrLib.Tests.Editor
         {
             var runtime = new RuntimeAuthConfig
             {
-                useAppTokens = true,
-                buildType = "production_custom",
-                appToken = FakeJwt,
-                orgToken = FakeJwt,
-                appId = FakeUuid,
-                orgId = "00000000-0000-0000-0000-000000000002",
-                authSecret = "legacy-secret",
-                deviceId = "device-1",
-                partner = null,
-                tags = new[] { "tag-a" },
+                UseAppTokens = true,
+                BuildType = "production_custom",
+                AppToken = FakeJwt,
+                OrgToken = FakeJwt,
+                AppId = FakeUuid,
+                OrgId = "00000000-0000-0000-0000-000000000002",
+                AuthSecret = "legacy-secret",
+                DeviceId = "device-1",
+                Partner = null,
+                Tags = new[] { "tag-a" },
             };
 
             var payload = new AuthPayload
@@ -192,16 +192,16 @@ namespace AbxrLib.Tests.Editor
         {
             var runtime = new RuntimeAuthConfig
             {
-                useAppTokens = false,
-                buildType = "production_custom",
-                appToken = FakeJwt,
-                orgToken = FakeJwt,
-                appId = FakeUuid,
-                orgId = "00000000-0000-0000-0000-000000000002",
-                authSecret = "legacy-secret",
-                deviceId = "device-1",
-                partner = "arborxr",
-                tags = new[] { "tag-b" },
+                UseAppTokens = false,
+                BuildType = "production_custom",
+                AppToken = FakeJwt,
+                OrgToken = FakeJwt,
+                AppId = FakeUuid,
+                OrgId = "00000000-0000-0000-0000-000000000002",
+                AuthSecret = "legacy-secret",
+                DeviceId = "device-1",
+                Partner = "arborxr",
+                Tags = new[] { "tag-b" },
             };
 
             var payload = new AuthPayload
@@ -227,10 +227,10 @@ namespace AbxrLib.Tests.Editor
         {
             var runtime = new RuntimeAuthConfig
             {
-                useAppTokens = true,
-                buildType = "production_custom",
-                appToken = FakeJwt,
-                orgToken = null,
+                UseAppTokens = true,
+                BuildType = "production_custom",
+                AppToken = FakeJwt,
+                OrgToken = null,
             };
             var payload = new AuthPayload { appToken = "old-app-token" };
 
@@ -246,13 +246,13 @@ namespace AbxrLib.Tests.Editor
         {
             var runtime = new RuntimeAuthConfig
             {
-                useAppTokens = false,
-                buildType = "production_custom",
-                appToken = FakeJwt,
-                orgToken = FakeJwt,
-                appId = FakeUuid,
-                orgId = "00000000-0000-0000-0000-000000000002",
-                authSecret = "legacy-secret",
+                UseAppTokens = false,
+                BuildType = "production_custom",
+                AppToken = FakeJwt,
+                OrgToken = FakeJwt,
+                AppId = FakeUuid,
+                OrgId = "00000000-0000-0000-0000-000000000002",
+                AuthSecret = "legacy-secret",
             };
             var payload = new AuthPayload { appToken = "old-app-token", orgToken = "old-org-token" };
 

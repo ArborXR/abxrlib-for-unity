@@ -63,7 +63,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
             // When app-token auth has orgId/authSecret but not an orgToken, build a dynamic org token from
             // Abxr overrides or MDM data.
-            TrySetDynamicOrgToken(RuntimeAuth.orgId, RuntimeAuth.authSecret);
+            TrySetDynamicOrgToken(RuntimeAuth.OrgId, RuntimeAuth.AuthSecret);
 
             if (_platformSource.IsAndroidPlayer) ApplyAndroidIntentOrgTokenIfAvailable(copyToPayload: false);
             else if (_platformSource.IsWebGlPlayer) ApplyWebGlQueryData();
@@ -76,27 +76,27 @@ namespace AbxrLib.Runtime.Services.Auth
         private void LoadRuntimeAuthFromConfig()
         {
             var s = Configuration.Instance;
-            RuntimeAuth.useAppTokens = s.useAppTokens;
-            RuntimeAuth.buildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : ProductionBuildType;
+            RuntimeAuth.UseAppTokens = s.useAppTokens;
+            RuntimeAuth.BuildType = !string.IsNullOrEmpty(s.buildType) ? s.buildType : ProductionBuildType;
             if (s.useAppTokens)
             {
-                RuntimeAuth.appToken = s.appToken;
-                RuntimeAuth.orgToken = string.Equals(s.buildType, ProductionBuildType, StringComparison.OrdinalIgnoreCase)
+                RuntimeAuth.AppToken = s.appToken;
+                RuntimeAuth.OrgToken = string.Equals(s.buildType, ProductionBuildType, StringComparison.OrdinalIgnoreCase)
                     ? null
                     : s.orgToken;
             }
             else
             {
-                RuntimeAuth.appId = s.appID;
+                RuntimeAuth.AppId = s.appID;
                 if (string.Equals(s.buildType, ProductionBuildType, StringComparison.OrdinalIgnoreCase))
                 {
-                    RuntimeAuth.orgId = null;
-                    RuntimeAuth.authSecret = null;
+                    RuntimeAuth.OrgId = null;
+                    RuntimeAuth.AuthSecret = null;
                 }
                 else
                 {
-                    RuntimeAuth.orgId = s.orgID;
-                    RuntimeAuth.authSecret = s.authSecret;
+                    RuntimeAuth.OrgId = s.orgID;
+                    RuntimeAuth.AuthSecret = s.authSecret;
                 }
             }
 
@@ -106,9 +106,9 @@ namespace AbxrLib.Runtime.Services.Auth
         private void SetDefaultRuntimeDeviceContext()
         {
             string deviceIdFromSubsystem = _platformSource.GetCurrentDeviceId();
-            RuntimeAuth.deviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : Payload.deviceId;
-            RuntimeAuth.partner = PartnerNone;
-            RuntimeAuth.tags = null;
+            RuntimeAuth.DeviceId = !string.IsNullOrEmpty(deviceIdFromSubsystem) ? deviceIdFromSubsystem : Payload.deviceId;
+            RuntimeAuth.Partner = PartnerNone;
+            RuntimeAuth.Tags = null;
         }
 
         private void ApplyWebGlDeviceIdFromPlatform()
@@ -117,19 +117,19 @@ namespace AbxrLib.Runtime.Services.Auth
             if (string.IsNullOrEmpty(webGlDeviceId)) return;
 
             Payload.deviceId = webGlDeviceId;
-            RuntimeAuth.deviceId = webGlDeviceId;
+            RuntimeAuth.DeviceId = webGlDeviceId;
         }
 
         private bool TrySetDynamicOrgToken(string orgId, string authSecret, bool overwriteExisting = false)
         {
-            if (!RuntimeAuth.useAppTokens) return false;
-            if (!overwriteExisting && !string.IsNullOrEmpty(RuntimeAuth.orgToken)) return false;
+            if (!RuntimeAuth.UseAppTokens) return false;
+            if (!overwriteExisting && !string.IsNullOrEmpty(RuntimeAuth.OrgToken)) return false;
             if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(authSecret)) return false;
 
             string dynamicToken = Utils.BuildOrgTokenDynamic(orgId, authSecret);
             if (string.IsNullOrEmpty(dynamicToken)) return false;
 
-            RuntimeAuth.orgToken = dynamicToken;
+            RuntimeAuth.OrgToken = dynamicToken;
             return true;
         }
 
@@ -143,18 +143,18 @@ namespace AbxrLib.Runtime.Services.Auth
 
             SetDefaultRuntimeDeviceContext();
 
-            RuntimeAuth.useAppTokens = configData.useAppTokens;
-            RuntimeAuth.buildType = configData.buildType ?? ProductionBuildType;
+            RuntimeAuth.UseAppTokens = configData.useAppTokens;
+            RuntimeAuth.BuildType = configData.buildType ?? ProductionBuildType;
             if (configData.useAppTokens)
             {
-                RuntimeAuth.appToken = configData.appToken;
-                RuntimeAuth.orgToken = configData.orgToken;
+                RuntimeAuth.AppToken = configData.appToken;
+                RuntimeAuth.OrgToken = configData.orgToken;
             }
             else
             {
-                RuntimeAuth.appId = configData.appId;
-                RuntimeAuth.orgId = configData.orgId;
-                RuntimeAuth.authSecret = configData.authSecret;
+                RuntimeAuth.AppId = configData.appId;
+                RuntimeAuth.OrgId = configData.orgId;
+                RuntimeAuth.AuthSecret = configData.authSecret;
             }
 
             RuntimeAuth.CopyAuthFieldsTo(Payload);
@@ -163,12 +163,12 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>Applies an Android org_token intent extra when app-token auth has no org token yet.</summary>
         private void ApplyAndroidIntentOrgTokenIfAvailable(bool copyToPayload = true)
         {
-            if (!RuntimeAuth.useAppTokens || !string.IsNullOrEmpty(RuntimeAuth.orgToken)) return;
+            if (!RuntimeAuth.UseAppTokens || !string.IsNullOrEmpty(RuntimeAuth.OrgToken)) return;
 
             string orgTokenIntent = _platformSource.GetAndroidIntentParam("org_token");
             if (string.IsNullOrEmpty(orgTokenIntent)) return;
 
-            RuntimeAuth.orgToken = orgTokenIntent;
+            RuntimeAuth.OrgToken = orgTokenIntent;
             if (copyToPayload) RuntimeAuth.CopyAuthFieldsTo(Payload);
         }
 
@@ -182,26 +182,26 @@ namespace AbxrLib.Runtime.Services.Auth
             if (!_platformSource.IsArborMdmConnected(_arborMdmClient)) return;
 
             // MDM available: always accept deviceId, partner, tags from Arbor.
-            RuntimeAuth.partner = PartnerArborXr;
-            RuntimeAuth.deviceId = _platformSource.GetCurrentDeviceId();
-            RuntimeAuth.tags = _platformSource.GetCurrentDeviceTags();
+            RuntimeAuth.Partner = PartnerArborXr;
+            RuntimeAuth.DeviceId = _platformSource.GetCurrentDeviceId();
+            RuntimeAuth.Tags = _platformSource.GetCurrentDeviceTags();
 
             // production_custom: only deviceId/partner/tags from MDM; org credentials stay from config.
-            if (RuntimeAuth.buildType == ProductionCustomBuildType)
+            if (RuntimeAuth.BuildType == ProductionCustomBuildType)
             {
                 RuntimeAuth.CopyAuthFieldsTo(Payload);
                 return;
             }
 
             // Non-production_custom: update auth from MDM (dynamic org token or orgId/authSecret).
-            if (RuntimeAuth.useAppTokens)
+            if (RuntimeAuth.UseAppTokens)
             {
                 TrySetDynamicOrgToken(_platformSource.GetCurrentOrgId(), _platformSource.GetCurrentFingerprint(), overwriteExisting: true);
             }
             else
             {
-                RuntimeAuth.orgId = _platformSource.GetCurrentOrgId();
-                RuntimeAuth.authSecret = _platformSource.GetCurrentFingerprint();
+                RuntimeAuth.OrgId = _platformSource.GetCurrentOrgId();
+                RuntimeAuth.AuthSecret = _platformSource.GetCurrentFingerprint();
             }
 
             RuntimeAuth.CopyAuthFieldsTo(Payload);
@@ -209,18 +209,18 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private void ApplyWebGlQueryData()
         {
-            if (RuntimeAuth.buildType == ProductionCustomBuildType) return;
+            if (RuntimeAuth.BuildType == ProductionCustomBuildType) return;
 
             string absoluteUrl = _platformSource.AbsoluteUrl ?? "";
             string orgTokenQuery = Utils.GetQueryParam("org_token", absoluteUrl);
             if (!string.IsNullOrEmpty(orgTokenQuery))
             {
-                RuntimeAuth.orgToken = orgTokenQuery;
+                RuntimeAuth.OrgToken = orgTokenQuery;
                 RuntimeAuth.CopyAuthFieldsTo(Payload);
             }
 
             _context.SetWebGlAssessmentPin(null);
-            string pinFromOrgJwt = TryGetAssessmentPinFromOrgTokenPayload(RuntimeAuth.orgToken);
+            string pinFromOrgJwt = TryGetAssessmentPinFromOrgTokenPayload(RuntimeAuth.OrgToken);
             if (!string.IsNullOrEmpty(pinFromOrgJwt))
             {
                 _context.SetWebGlAssessmentPin(pinFromOrgJwt);
@@ -234,12 +234,12 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private void ApplyDesktopQueryData()
         {
-            if (RuntimeAuth.buildType == ProductionCustomBuildType) return;
+            if (RuntimeAuth.BuildType == ProductionCustomBuildType) return;
 
             string orgToken = _platformSource.GetDesktopOrgToken();
             if (!string.IsNullOrEmpty(orgToken))
             {
-                RuntimeAuth.orgToken = orgToken;
+                RuntimeAuth.OrgToken = orgToken;
                 RuntimeAuth.CopyAuthFieldsTo(Payload);
             }
         }
@@ -281,16 +281,16 @@ namespace AbxrLib.Runtime.Services.Auth
         private void ApplyAbxrOverridesToRuntimeAuth()
         {
             string orgId = _platformSource.GetCurrentOrgId();
-            if (!string.IsNullOrEmpty(orgId)) RuntimeAuth.orgId = orgId;
+            if (!string.IsNullOrEmpty(orgId)) RuntimeAuth.OrgId = orgId;
 
             string authSecret = _platformSource.GetCurrentFingerprint();
-            if (!string.IsNullOrEmpty(authSecret)) RuntimeAuth.authSecret = authSecret;
+            if (!string.IsNullOrEmpty(authSecret)) RuntimeAuth.AuthSecret = authSecret;
 
             string deviceId = _platformSource.GetCurrentDeviceId();
-            if (!string.IsNullOrEmpty(deviceId)) RuntimeAuth.deviceId = deviceId;
+            if (!string.IsNullOrEmpty(deviceId)) RuntimeAuth.DeviceId = deviceId;
 
             string[] tags = _platformSource.GetCurrentDeviceTags();
-            if (tags != null && tags.Length > 0) RuntimeAuth.tags = tags;
+            if (tags != null && tags.Length > 0) RuntimeAuth.Tags = tags;
         }
     }
 }

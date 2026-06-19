@@ -6,53 +6,52 @@ namespace AbxrLib.Runtime.Types
     /// Runtime auth configuration: auth-related values copied from Configuration and updated by GetArborData, GetQueryData, intent, and Abxr.SetOrgId/SetAuthSecret/SetDeviceId.
     /// Validated via IsValid() before building the auth request; does not touch the Configuration asset.
     /// </summary>
-    public class RuntimeAuthConfig
+    internal sealed class RuntimeAuthConfig
     {
         /// <summary>Resolved runtime value copied from Configuration after defaults and GET-config merges are applied.</summary>
-        public bool enableAutoStartAuthentication = true;
+        public bool EnableAutoStartAuthentication = true;
         /// <summary>Resolved runtime value copied from Configuration after defaults and GET-config merges are applied.</summary>
-        public bool enableReturnTo = true;
+        public bool EnableReturnTo = true;
         /// <summary>Resolved runtime value copied from Configuration after defaults and GET-config merges are applied.</summary>
-        public bool enableAutoStartModules = true;
+        public bool EnableAutoStartModules = true;
         /// <summary>Resolved runtime value copied from Configuration after defaults and GET-config merges are applied.</summary>
-        public bool enableAutoAdvanceModules = true;
+        public bool EnableAutoAdvanceModules = true;
 
-        public bool useAppTokens;
-        public string appToken;
-        public string orgToken;
-        public string appId;
-        public string orgId;
-        public string authSecret;
-        public string buildType;
+        public bool UseAppTokens;
+        public string AppToken;
+        public string OrgToken;
+        public string AppId;
+        public string OrgId;
+        public string AuthSecret;
+        public string BuildType;
         /// <summary>Device id from subsystem (GetDeviceId) or MDM when connected.</summary>
-        public string deviceId;
+        public string DeviceId;
         /// <summary>Partner identifier; "none" when not from MDM, "arborxr" when from ArborMdmClient.</summary>
-        public string partner;
+        public string Partner;
         /// <summary>Device tags from MDM when connected; otherwise null/empty.</summary>
-        public string[] tags;
+        public string[] Tags;
 
         /// <summary>Auth mechanism (type, prompt, domain). When null or empty type, filled from GET config when received.</summary>
-        public AuthMechanism authMechanism;
+        public AuthMechanism AuthMechanism;
 
         /// <summary>
         /// Validates the current runtime auth values. Returns null if valid, or an error message if invalid.
         /// Call after loading from Configuration and applying GetArborData/GetQueryData/overrides.
         /// </summary>
-        public string IsValid()
-        {
-            return ValidateAuthFields(useAppTokens, buildType, appId, orgId, authSecret, appToken, orgToken);
-        }
+        private string IsValid() =>
+            ValidateAuthFields(UseAppTokens, BuildType, AppId, OrgId, AuthSecret, AppToken, OrgToken);
 
         /// <summary>
-        /// Call when about to send an auth request. Runs IsValid(), then enforces that credentials are complete (orgToken for app tokens, orgId/authSecret for legacy) so we never send without them. Use this after GetArborData/overrides have run; IsValid() alone allows empty org for non-production_custom because Configuration asset validation does not require them.
+        /// Call when about to send an auth request. Runs IsValid(), then enforces that credentials are complete (orgToken for app tokens, orgId/authSecret for legacy)
+        /// so we never send without them. Use this after GetArborData/overrides have run; IsValid() alone allows empty org for non-production_custom because Configuration asset validation does not require them.
         /// </summary>
-        public string IsValidToSend()
+        private string IsValidToSend()
         {
             var err = IsValid();
             if (err != null) return err;
-            if (useAppTokens && string.IsNullOrEmpty(orgToken))
+            if (UseAppTokens && string.IsNullOrEmpty(OrgToken))
                 return "Organization identification unavailable.";
-            if (!useAppTokens && (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(authSecret)))
+            if (!UseAppTokens && (string.IsNullOrEmpty(OrgId) || string.IsNullOrEmpty(AuthSecret)))
                 return "Organization identification unavailable.";
             return null;
         }
@@ -121,22 +120,22 @@ namespace AbxrLib.Runtime.Types
         public void CopyAuthFieldsTo(AuthPayload payload)
         {
             if (payload == null) return;
-            payload.deviceId = deviceId;
-            payload.partner = partner ?? "none";
-            payload.tags = tags;
-            if (useAppTokens)
+            payload.deviceId = DeviceId;
+            payload.partner = Partner ?? "none";
+            payload.tags = Tags;
+            if (UseAppTokens)
             {
-                payload.appToken = appToken;
-                payload.orgToken = orgToken;
+                payload.appToken = AppToken;
+                payload.orgToken = OrgToken;
                 payload.appId = null;
                 payload.orgId = null;
                 payload.authSecret = null;
             }
             else
             {
-                payload.appId = appId;
-                payload.orgId = orgId;
-                payload.authSecret = authSecret;
+                payload.appId = AppId;
+                payload.orgId = OrgId;
+                payload.authSecret = AuthSecret;
                 payload.appToken = null;
                 payload.orgToken = null;
             }
