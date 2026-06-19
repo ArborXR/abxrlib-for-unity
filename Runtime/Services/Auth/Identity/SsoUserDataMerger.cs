@@ -52,7 +52,7 @@ namespace AbxrLib.Runtime.Services.Auth
             return MergePayloadIntoUserData(payload, userData);
         }
 
-        internal static bool PayloadHasUsableIdentity(Dictionary<string, object> payload)
+        private static bool PayloadHasUsableIdentity(Dictionary<string, object> payload)
         {
             if (payload == null || payload.Count == 0) return false;
 
@@ -73,7 +73,7 @@ namespace AbxrLib.Runtime.Services.Auth
             return false;
         }
 
-        internal static bool MergePayloadIntoUserData(Dictionary<string, object> payload, Dictionary<string, string> userData)
+        private static bool MergePayloadIntoUserData(Dictionary<string, object> payload, Dictionary<string, string> userData)
         {
             if (payload == null || payload.Count == 0 || userData == null) return false;
 
@@ -98,7 +98,7 @@ namespace AbxrLib.Runtime.Services.Auth
             return changed;
         }
 
-        internal static bool EnsureEmailFromJwtClaims(Dictionary<string, string> userData, Dictionary<string, object> payload)
+        private static bool EnsureEmailFromJwtClaims(Dictionary<string, string> userData, Dictionary<string, object> payload)
         {
             if (userData == null || payload == null) return false;
             if (userData.TryGetValue("email", out var existing) && !string.IsNullOrWhiteSpace(existing)) return false;

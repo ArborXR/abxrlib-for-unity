@@ -19,9 +19,9 @@ namespace AbxrLib.Runtime.Services.Auth
     {
         private const string AuthPath = "/v1/auth/token";
         private const string ConfigPath = "/v1/storage/config";
-        private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
+        private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new() { NullValueHandling = NullValueHandling.Ignore };
 
-        private static Uri RestUri(string path) => new Uri(new Uri(Configuration.Instance.restUrl), path);
+        private static Uri RestUri(string path) => new(new Uri(Configuration.Instance.restUrl), path);
 
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<RestAuthResult> onComplete)
         {
@@ -38,10 +38,7 @@ namespace AbxrLib.Runtime.Services.Auth
             string responseBody = request.downloadHandler?.text ?? "";
             long statusCode = request.responseCode;
 
-            bool responseShapeIsValid = AuthResponseParser.TryParseSuccess(
-                responseBody,
-                out AuthResponse parsedResponse,
-                out _);
+            bool responseShapeIsValid = AuthResponseParser.TryParseSuccess(responseBody, out AuthResponse parsedResponse, out _);
 
             bool httpSuccess = request.result == UnityWebRequest.Result.Success;
             bool success = httpSuccess && responseShapeIsValid;

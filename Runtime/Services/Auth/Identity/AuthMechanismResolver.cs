@@ -7,7 +7,6 @@ namespace AbxrLib.Runtime.Services.Auth
 {
     /// <summary>
     /// Normalizes backend-provided auth mechanisms into the small set of user-auth shapes
-    /// AbxrAuthService knows how to prompt for and submit.
     /// </summary>
     internal static class AuthMechanismResolver
     {
@@ -75,13 +74,13 @@ namespace AbxrLib.Runtime.Services.Auth
         internal static bool NeedsUserAuthentication(AuthMechanism mechanism) =>
             mechanism != null && IsSupportedUserAuthType(mechanism.type);
 
-        internal static bool IsType(AuthMechanism mechanism, string type) =>
+        private static bool IsType(AuthMechanism mechanism, string type) =>
             mechanism != null && string.Equals(mechanism.type, type, StringComparison.OrdinalIgnoreCase);
 
         internal static bool IsRequestMeaningful(Dictionary<string, string> dict) =>
             dict != null && dict.TryGetValue("type", out var type) && !string.IsNullOrEmpty(type);
 
-        internal static string NormalizeUserAuthType(string type)
+        private static string NormalizeUserAuthType(string type)
         {
             if (string.Equals(type, AssessmentPin, StringComparison.OrdinalIgnoreCase)) return AssessmentPin;
             if (string.Equals(type, Email, StringComparison.OrdinalIgnoreCase)) return Email;

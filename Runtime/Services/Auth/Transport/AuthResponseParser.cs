@@ -9,12 +9,6 @@ namespace AbxrLib.Runtime.Services.Auth
     internal static class AuthResponseParser
     {
         /// <summary>
-        /// Parses a successful auth response. A success response must deserialize and contain both token and secret.
-        /// </summary>
-        internal static bool TryParseSuccess(string responseBody, out AuthResponse response) =>
-            TryParseSuccess(responseBody, out response, out _);
-
-        /// <summary>
         /// Parses a successful auth response and returns a diagnostic reason when the success shape is invalid.
         /// </summary>
         internal static bool TryParseSuccess(string responseBody, out AuthResponse response, out string parseError)

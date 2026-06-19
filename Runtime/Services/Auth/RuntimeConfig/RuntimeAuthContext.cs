@@ -21,10 +21,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         internal string WebGlAssessmentPin { get; private set; }
 
-        internal RuntimeAuthContext()
-        {
-            Payload = CreateBasePayload();
-        }
+        internal RuntimeAuthContext() => Payload = CreateBasePayload();
 
         private static AuthPayload CreateBasePayload()
         {
