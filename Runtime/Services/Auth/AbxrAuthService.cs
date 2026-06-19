@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Types;
-using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Services.Auth
@@ -20,6 +19,9 @@ namespace AbxrLib.Runtime.Services.Auth
         public Action<string, string, string, string> OnInputRequested;
         public Action OnSucceeded;
         public Action<string> OnFailed;
+        
+        internal Action OnInputRequestCompleted;
+        internal Action OnInputSubmissionRejected;
 
         /// <summary>
         /// Fired only when the re-auth triggered by SetUserData (authMechanism type=custom) completes. Not fired for normal session auth.
@@ -199,7 +201,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
             _inputRequestPending = false;
             Logcat.Warning("Skipping user authentication.");
-            KeyboardHandler.Destroy();
+            OnInputRequestCompleted?.Invoke();
             AuthSucceeded();
         }
         
@@ -225,14 +227,12 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (success)
                 {
                     _runtimeAuthContext.ClearWebGlAssessmentPin();
-                    KeyboardHandler.Destroy();
+                    OnInputRequestCompleted?.Invoke();
                     AuthSucceeded();
                 }
                 else
                 {
-                    KeyboardHandler.StopProcessing();
-                    KeyboardHandler.ShowPinPad();
-
+                    OnInputSubmissionRejected?.Invoke();
                     string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : GenericAuthenticationFailureMessage;
 
                     OnFailed?.Invoke(completedError);

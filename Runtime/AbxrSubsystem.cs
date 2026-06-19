@@ -121,6 +121,8 @@ namespace AbxrLib.Runtime
 
             // Wire auth callbacks. Auth always invokes our dispatcher; we never call PresentKeyboard when the app has set OnInputRequested.
             _authService.OnInputRequested = OnInputRequestedDispatch;
+            _authService.OnInputRequestCompleted = DismissAuthInputUi;
+            _authService.OnInputSubmissionRejected = RestoreAuthInputUiForRetry;
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
             {
@@ -305,6 +307,14 @@ namespace AbxrLib.Runtime
         internal void SubmitInput(string input) => _authService.SubmitInput(input);
 
         internal void SkipUserAuthentication() => _authService.SkipUserAuthentication();
+
+        private static void DismissAuthInputUi() => KeyboardHandler.Destroy();
+
+        private static void RestoreAuthInputUiForRetry()
+        {
+            KeyboardHandler.StopProcessing();
+            KeyboardHandler.ShowPinPad();
+        }
 
         internal bool IsQRScanForAuthAvailable()
         {
@@ -1311,6 +1321,9 @@ namespace AbxrLib.Runtime
 			}
 			else if (type == "assessmentPin")
 			{
+				// QR scanning can temporarily hide the PIN pad. Restore an existing instance before Create(),
+				// because Create() intentionally no-ops when the instance already exists.
+				KeyboardHandler.ShowPinPad();
 				KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
 				displayPrompt = string.IsNullOrEmpty(prompt) ? "Enter Your 6-digit PIN" : $"Enter Your {prompt} PIN";
 			}
