@@ -30,22 +30,15 @@ namespace AbxrLib.Runtime.Services.Auth
         internal Action<bool, string> OnUserDataSyncCompleted;
 
         // ── Public state ─────────────────────────────────────────────
-        public bool Authenticated
-        {
-            get => _sessionState.Authenticated;
-            private set => _sessionState.SetAuthenticated(value);
-        }
-        public AuthResponse ResponseData
-        {
-            get => _sessionState.ResponseData;
-            private set => _sessionState.SetResponseData(value);
-        }
+        public bool Authenticated => _sessionState.Authenticated;
+
+        public AuthResponse ResponseData => _sessionState.ResponseData;
 
         /// <summary>Minimal session view for services that need auth state/signing data without depending on the auth coordinator.</summary>
         internal IAuthSessionProvider SessionProvider => _sessionState;
 
         // ── Constants ────────────────────────────────────────────────
-        private const string GenericAuthenticationFailureMessage = "Authentication Failed";
+        private const string GenericAuthFailureMessage = "Authentication Failed";
 
         // ── Internal state ───────────────────────────────────────────
         private readonly RuntimeAuthContext _runtimeAuthContext;
@@ -85,7 +78,6 @@ namespace AbxrLib.Runtime.Services.Auth
         /// </summary>
         internal static string TestAuthHandoffPayload
         {
-            get => AuthHandoffCoordinator.TestPayload;
             set => AuthHandoffCoordinator.TestPayload = value;
         }
 
@@ -108,7 +100,7 @@ namespace AbxrLib.Runtime.Services.Auth
         public AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient)
             : this(coroutineRunner, arborMdmClient, ResolvePlatformSourceForRuntime(), new AuthApiClient()) { }
 
-        internal AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient, IAuthPlatformSource platformSource, IAuthApiClient authApiClient = null)
+        private AbxrAuthService(MonoBehaviour coroutineRunner, ArborMdmClient arborMdmClient, IAuthPlatformSource platformSource, IAuthApiClient authApiClient = null)
         {
             _runner = coroutineRunner;
             _platformSource = platformSource ?? UnityAuthPlatformSource.Instance;
@@ -163,18 +155,12 @@ namespace AbxrLib.Runtime.Services.Auth
             _isAuthStarted = true;
             _runner.StartCoroutine(AuthenticateCoroutine());
         }
-        
-        public void SetSessionId(string sessionId) => _runtimeAuthContext.SetSessionId(sessionId);
+
+        /// <summary>Submit user input when there is an outstanding OnInputRequested</summary>
+        public void SubmitInput(string input) => SubmitUserAuthInput(input, AuthMechanismResolver.UserInputSource);
 
         /// <summary>
-        /// Submit user input when there is an outstanding OnInputRequested. Called by subsystem (Abxr.OnInputSubmitted).
-        /// </summary>
-        public void SubmitInput(string input) =>
-            SubmitUserAuthInput(input, AuthMechanismResolver.UserInputSource);
-
-        /// <summary>
-        /// Submit user input when there is an outstanding OnInputRequested, together with the source that produced it (for example, "user" or "QRlms").
-        /// This keeps the source scoped to one auth request instead of mutating the session auth mechanism.
+        /// Submit user input when there is an outstanding OnInputRequested, together with the source that produced it (for example, "user" or "QRlms")
         /// </summary>
         public void SubmitUserAuthInput(string input, string inputSource = null)
         {
@@ -233,10 +219,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                 {
                     OnInputSubmissionRejected?.Invoke();
-                    string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : GenericAuthenticationFailureMessage;
+                    string completedError = !string.IsNullOrWhiteSpace(errorMessage) ? errorMessage : GenericAuthFailureMessage;
 
                     OnFailed?.Invoke(completedError);
-                    PromptForInput(configuredType, configuredPrompt, configuredDomain, GenericAuthenticationFailureMessage);
+                    PromptForInput(configuredType, configuredPrompt, configuredDomain, GenericAuthFailureMessage);
                 }
             }, submittedAuthPrompt: submittedAuthPrompt, submittedInputSource: submittedInputSource));
         }
@@ -290,15 +276,10 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private IEnumerator AuthenticateCoroutine()
         {
-            bool authOk;
             string authError = null;
-            if (_authHandoff.TryConsumeDeferredDeviceAuth())
+            if (!_authHandoff.TryConsumeDeferredDeviceAuth())
             {
-                authOk = true;
-            }
-            else
-            {
-                authOk = false;
+                bool authOk = false;
                 yield return _runner.StartCoroutine(AuthRequestCoroutine(AuthRequestStage.Device, (ok, err) =>
                 {
                     authOk = ok;
@@ -313,8 +294,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield break;
                 }
             }
-
-            // Start re-auth polling
+            
             StartReAuthPolling();
 
             // Fetch config (non-auth fields + optional authMechanism). Handoff and config-failure paths treat user auth as not required.
@@ -355,9 +335,13 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                 {
                     if (TryCompleteUserAuthUsingMdmSsoIdentity())
+                    {
                         AuthSucceeded();
+                    }
                     else
+                    {
                         PromptForInput();
+                    }
                 }
             }
             else
@@ -366,19 +350,18 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        /// <summary>Attempts auth via REST. Invokes onComplete(success, errorMessage). Device auth can retry transport/server transient failures; user-auth and SetUserData re-auth are one-shot.</summary>
+        /// <summary>Invokes onComplete(success, errorMessage). Device auth can retry transport/server transient failures; user-auth and SetUserData re-auth are one-shot.</summary>
         private IEnumerator AuthRequestCoroutine(AuthRequestStage stage, Action<bool, string> onComplete, string submittedAuthPrompt = null, string submittedInputSource = null) =>
             _authRequestRunner.Run(stage, onComplete, submittedAuthPrompt, submittedInputSource);
 
         /// <summary>
         /// When <see cref="Abxr.GetIsAuthenticated"/> is true and <see cref="Abxr.GetAccessToken"/> is a JWT with usable identity claims,
-        /// merges SSO claims into <see cref="ResponseData"/>, clears the auth mechanism for this step, and returns true so the caller can call <see cref="AuthSucceeded"/> without prompting.
+        /// merges SSO claims into ResponseData, clears the auth mechanism for this step, and returns true so the caller can call <see cref="AuthSucceeded"/> without prompting.
         /// Skipped when <see cref="Configuration.enableLearnerLauncherMode"/> is on so assessment PIN / <see cref="Abxr.OnInputSubmitted"/> is not bypassed.
         /// </summary>
         private bool TryCompleteUserAuthUsingMdmSsoIdentity()
         {
-            if (Configuration.Instance != null && Configuration.Instance.enableLearnerLauncherMode)
-                return false;
+            if (Configuration.Instance != null && Configuration.Instance.enableLearnerLauncherMode) return false;
 
             string token = GetAuthenticatedAccessToken();
             if (!SsoUserDataMerger.AccessTokenHasUsableIdentity(token)) return false;
@@ -417,8 +400,6 @@ namespace AbxrLib.Runtime.Services.Auth
             return true;
         }
 
-        // ── GET /v1/storage/config ───
-
         private IEnumerator GetConfigurationCoroutine(Action<bool, string> onComplete)
         {
             yield return _configurationLoader.Load((ok, detail, authMechanism) =>
@@ -438,7 +419,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
             FinishAttemptSuccess();
             Logcat.Info("Authenticated successfully");
-            // Push merged MDM SSO claims to the API via the same REST auth path as SetUserData (custom re-auth); completion is OnUserDataSyncCompleted only.
+            
+            // Push merged MDM SSO claims; completion is OnUserDataSyncCompleted only.
             if (ssoUserDataChanged) SetUserData();
         }
 
@@ -450,8 +432,9 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>
-        /// WebGL: when a pre-filled PIN was resolved (org token JWT <c>pin</c> claim, or <c>assessment_pin</c>/<c>assessmentPin</c> in the page URL), force user authentication to type <c>assessmentPin</c> after GET config succeeds (non-handoff).
-        /// Skipped for production_custom by the runtime auth context.</summary>
+        /// WebGL: when a pre-filled PIN was resolved (org token JWT <c>pin</c> claim, or <c>assessment_pin</c>/<c>assessmentPin</c> in the page URL),
+        /// force user authentication to type <c>assessmentPin</c> after GET config succeeds (non-handoff).
+        /// </summary>
         private void ApplyAssessmentPinFromUrlQueryIfPresent()
         {
             if (!_runtimeAuthContext.TryForceWebGlAssessmentPinAuthMechanism(out var sessionMechanism)) return;
@@ -518,27 +501,13 @@ namespace AbxrLib.Runtime.Services.Auth
         public void SetUserData(string id = null, Dictionary<string, string> additionalUserData = null) =>
             _userDataSyncCoordinator.SetUserData(id, additionalUserData);
         
-        /// <summary>Returns enableAutoStartModules from runtime auth (loaded from Configuration/runtime sources).</summary>
         internal bool GetEffectiveEnableAutoStartModules() => _runtimeAuthContext.GetEffectiveEnableAutoStartModules();
-
-        /// <summary>Returns enableAutoAdvanceModules from runtime auth (loaded from Configuration/runtime sources).</summary>
         internal bool GetEffectiveEnableAutoAdvanceModules() => _runtimeAuthContext.GetEffectiveEnableAutoAdvanceModules();
-
-        /// <summary>Returns enableReturnTo from runtime auth (loaded from Configuration/runtime sources).</summary>
         internal bool GetEffectiveEnableReturnTo() => _runtimeAuthContext.GetEffectiveEnableReturnTo();
-
-        /// <summary>Returns enableAutoStartAuthentication from runtime auth.</summary>
         internal bool GetEnableAutoStartAuthentication() => _runtimeAuthContext.GetEnableAutoStartAuthentication();
-
-        // ── Runtime auth overrides (Abxr.SetOrgId / SetAuthSecret / SetDeviceId) ─────
-
-        /// <summary>Updates runtime auth orgId. Called by subsystem when Abxr.SetOrgId() is used.</summary>
+        
         internal void SetRuntimeAuthOrgId(string value) => _runtimeAuthContext.SetRuntimeAuthOrgId(value);
-
-        /// <summary>Updates runtime auth authSecret. Called by subsystem when Abxr.SetAuthSecret() is used.</summary>
         internal void SetRuntimeAuthAuthSecret(string value) => _runtimeAuthContext.SetRuntimeAuthAuthSecret(value);
-
-        /// <summary>Updates runtime auth deviceId. Called by subsystem when Abxr.SetDeviceId() is used.</summary>
         internal void SetRuntimeAuthDeviceId(string value) => _runtimeAuthContext.SetRuntimeAuthDeviceId(value);
     }
 }
