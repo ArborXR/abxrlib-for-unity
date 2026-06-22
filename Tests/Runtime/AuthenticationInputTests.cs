@@ -83,7 +83,7 @@ namespace AbxrLib.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator Auth_SubmitUserAuthInput_Sends_PerRequestInputSource()
+        public IEnumerator Auth_SubmitInput_Sends_PerRequestInputSource()
         {
             QueueAssessmentPinConfig();
 
@@ -91,7 +91,7 @@ namespace AbxrLib.Tests.Runtime
             {
                 var service = AbxrTestHooks.GetAuthServiceForTest();
                 Assert.IsNotNull(service, "auth service should exist while auth input is pending");
-                service.SubmitUserAuthInput("123456", "QRlms");
+                service.SubmitInput("123456", "QRlms");
             };
 
             yield return RunAuthAndWait();

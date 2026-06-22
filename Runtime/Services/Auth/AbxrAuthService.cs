@@ -156,13 +156,10 @@ namespace AbxrLib.Runtime.Services.Auth
             _runner.StartCoroutine(AuthenticateCoroutine(authSatisfiedByHandoff));
         }
 
-        /// <summary>Submit user input when there is an outstanding OnInputRequested</summary>
-        public void SubmitInput(string input) => SubmitUserAuthInput(input, AuthMechanismResolver.UserInputSource);
-
         /// <summary>
-        /// Submit user input when there is an outstanding OnInputRequested, together with the source that produced it (for example, "user" or "QRlms")
+        /// Submit user input when there is an outstanding OnInputRequested, together with the source that produced it (for example, "user" or "QRlms").
         /// </summary>
-        public void SubmitUserAuthInput(string input, string inputSource = null)
+        public void SubmitInput(string input, string inputSource = null)
         {
             if (!_inputRequestPending)
             {
@@ -171,7 +168,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             _inputRequestPending = false;
-            AuthenticateUserInput(input, AuthMechanismResolver.NormalizeInputSource(inputSource));
+            AuthenticateUserInput(input, inputSource);
         }
 
         /// <summary>

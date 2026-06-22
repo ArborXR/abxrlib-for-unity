@@ -216,7 +216,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
                 return;
             }
 
-            AuthService.SubmitUserAuthInput(pin, AuthMechanismResolver.QrLmsInputSource);
+            AuthService.SubmitInput(pin, AuthMechanismResolver.QrLmsInputSource);
         }
 
         protected void InvokeAndClearCallback(string value)

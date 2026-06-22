@@ -304,7 +304,7 @@ namespace AbxrLib.Runtime
             DoAuthenticate();
         }
 
-        internal void SubmitInput(string input) => _authService.SubmitInput(input);
+        internal void SubmitInput(string input, string inputSource = null) => _authService.SubmitInput(input, inputSource);
 
         internal void SkipUserAuthentication() => _authService.SkipUserAuthentication();
 
