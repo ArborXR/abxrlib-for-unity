@@ -20,7 +20,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
         internal bool SessionUsedHandoff { get; private set; }
         private string _returnToPackage;
-        private bool _deviceAuthDeferred;
 
         internal AuthHandoffCoordinator(IAuthPlatformSource platformSource) =>
             _platformSource = platformSource ?? UnityAuthPlatformSource.Instance;
@@ -29,15 +28,6 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             SessionUsedHandoff = false;
             _returnToPackage = null;
-            _deviceAuthDeferred = false;
-        }
-
-        internal bool TryConsumeDeferredDeviceAuth()
-        {
-            if (!_deviceAuthDeferred) return false;
-
-            _deviceAuthDeferred = false;
-            return true;
         }
 
         /// <summary>
@@ -72,7 +62,6 @@ namespace AbxrLib.Runtime.Services.Auth
             Logcat.Info($"Auth handoff applied. Modules: {response?.Modules?.Count ?? 0}");
             SessionUsedHandoff = true;
             _returnToPackage = response?.ReturnToPackage;
-            _deviceAuthDeferred = true;
         }
 
         internal static string BuildOutgoingPayload(AuthResponse response, AuthPayload payload,

@@ -147,13 +147,13 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             // Auth handoff (intent / CLI): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
-            CheckAuthHandoff();
+            bool authSatisfiedByHandoff = TryApplyAuthHandoff();
 
             // Use the runtime auth mechanism for the user-auth stage after config is fetched
             _authMechanism = _runtimeAuthContext.CopyAuthMechanismForSession();
 
             _isAuthStarted = true;
-            _runner.StartCoroutine(AuthenticateCoroutine());
+            _runner.StartCoroutine(AuthenticateCoroutine(authSatisfiedByHandoff));
         }
 
         /// <summary>Submit user input when there is an outstanding OnInputRequested</summary>
@@ -274,10 +274,10 @@ namespace AbxrLib.Runtime.Services.Auth
         
         // ── Core auth flow (coroutine) ───────────────────────────────
 
-        private IEnumerator AuthenticateCoroutine()
+        private IEnumerator AuthenticateCoroutine(bool authSatisfiedByHandoff)
         {
             string authError = null;
-            if (!_authHandoff.TryConsumeDeferredDeviceAuth())
+            if (!authSatisfiedByHandoff)
             {
                 bool authOk = false;
                 yield return _runner.StartCoroutine(AuthRequestCoroutine(AuthRequestStage.Device, (ok, err) =>
@@ -308,7 +308,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     : $"GET config failed ({configFailureDetail}); continuing with Configuration defaults and no user auth prompt (authMechanism cleared).");
                 ClearUserAuthMechanismForSession();
             }
-            else if (_authHandoff.SessionUsedHandoff)
+            else if (authSatisfiedByHandoff)
             {
                 // Session identity came from the launcher; do not require a second PIN/email step from GET config.
                 ClearUserAuthMechanismForSession();
@@ -467,16 +467,18 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         /// <summary>
-        /// Check for authentication handoff from external launcher apps.
-        /// Invalid payload: logs and returns (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
+        /// Tries to apply authentication handoff from external launcher apps.
+        /// Invalid payload: logs and returns false; normal device authentication runs in AuthenticateCoroutine.
         /// </summary>
-        private void CheckAuthHandoff()
+        private bool TryApplyAuthHandoff()
         {
-            if (!_authHandoff.TryReadIncomingPayload(out string normalized)) return;
+            if (!_authHandoff.TryReadIncomingPayload(out string normalized)) return false;
 
             Logcat.Info("Processing authentication handoff from external launcher");
-            if (!ApplyAuthResponse(normalized, AuthHandoffPayload.StageLabel, handoff: true))
-                Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+            if (ApplyAuthResponse(normalized, AuthHandoffPayload.StageLabel, handoff: true)) return true;
+
+            Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+            return false;
         }
 
         public bool SessionUsedAuthHandoff() => _authHandoff.SessionUsedHandoff;

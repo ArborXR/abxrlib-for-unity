@@ -44,7 +44,7 @@ namespace AbxrLib.Tests.Editor
         }
 
         [Test]
-        public void MarkApplied_SetsSessionStateAndDefersDeviceAuthOnce()
+        public void MarkApplied_SetsSessionStateAndStoresReturnPackageOnce()
         {
             var coordinator = new AuthHandoffCoordinator(new FakePlatformSource());
             var response = new AuthResponse { ReturnToPackage = "com.example.launcher" };
@@ -52,8 +52,6 @@ namespace AbxrLib.Tests.Editor
             coordinator.MarkApplied(response);
 
             Assert.IsTrue(coordinator.SessionUsedHandoff);
-            Assert.IsTrue(coordinator.TryConsumeDeferredDeviceAuth());
-            Assert.IsFalse(coordinator.TryConsumeDeferredDeviceAuth());
             Assert.AreEqual("com.example.launcher", coordinator.GetAndClearReturnToPackage());
             Assert.IsNull(coordinator.GetAndClearReturnToPackage());
         }
