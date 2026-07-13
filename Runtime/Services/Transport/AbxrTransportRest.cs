@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using System.Threading;
 using AbxrLib.Runtime.Core;
@@ -147,7 +148,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public void AddEvent(string name, Dictionary<string, string> meta)
         {
             long t = Utils.GetUnityTime();
-            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
             var p = new EventPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
             lock (_lock)
             {
@@ -160,7 +161,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public void AddTelemetry(string name, Dictionary<string, string> meta)
         {
             long t = Utils.GetUnityTime();
-            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
             var p = new TelemetryPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
             lock (_lock)
             {
@@ -173,7 +174,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public void AddLog(string logLevel, string text, Dictionary<string, string> meta)
         {
             long t = Utils.GetUnityTime();
-            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
             var p = new LogPayload { timestamp = iso, preciseTimestamp = t, logLevel = logLevel, text = text, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
             lock (_lock)
             {
@@ -192,7 +193,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public void StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy)
         {
             long t = Utils.GetUnityTime();
-            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
             var p = new StoragePayload
             {
                 timestamp = iso,

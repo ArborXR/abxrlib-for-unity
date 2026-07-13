@@ -150,7 +150,7 @@ namespace AbxrLib.Runtime.Core
             try
             {
                 // Check if this is a PICO headset by name or manufacturer
-                string deviceName = headset.name.ToLower();
+                string deviceName = headset.name.ToLowerInvariant();
                 return deviceName.Contains("pico") || deviceName.Contains("neo");
             }
             catch (System.Exception ex)
