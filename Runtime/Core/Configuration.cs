@@ -113,7 +113,9 @@ namespace AbxrLib.Runtime.Core
         [HideInInspector]
         public int maxDictionarySize = 50;
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        // Test-only fields, but always compiled: conditionally-compiled serialized fields change the
+        // asset's serialization layout between editor/dev and release builds, which corrupts the baked
+        // Resources asset on scripts-only/patch builds ("different serialization layout when loading").
         [HideInInspector] public bool unitTestConfigEnabled = false;
         [HideInInspector] public string unitTestAuthPin = "";
         [HideInInspector] public string unitTestAuthBadPin = "";
@@ -124,7 +126,6 @@ namespace AbxrLib.Runtime.Core
         [HideInInspector] public string unitTestFingerprint = "";
         /// <summary>Fake MDM SSO access token (JWT) for PlayMode tests of the MDM identity skip path. Requires <see cref="unitTestConfigEnabled"/>.</summary>
         [HideInInspector] public string unitTestSsoAccessToken = "";
-#endif
 
         /// <summary>Edit-mode and unit tests: validates this asset in memory (Inspector / EditMode tests).</summary>
         public bool IsValid() => Configuration.ValidateAppConfig(this);
