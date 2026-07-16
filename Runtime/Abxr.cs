@@ -467,7 +467,7 @@ public static partial class Abxr
 	public static void EventInteractionComplete(string interactionName, string result, string response, InteractionType interactionType, Dictionary<string, string> meta = null)
 	{
 		// Convert string result to InteractionResult enum
-		InteractionResult interactionResult = result?.ToLower() switch
+		InteractionResult interactionResult = result?.ToLowerInvariant() switch
 		{
 			"true" or "correct" or "pass" => InteractionResult.Correct,
 			"false" or "incorrect" or "fail" => InteractionResult.Incorrect,

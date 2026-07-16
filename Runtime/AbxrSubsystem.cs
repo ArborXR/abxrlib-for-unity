@@ -800,9 +800,9 @@ internal void StartNewSession()
         internal void Event(string eventName, Vector3 position, Dictionary<string, string> metadata)
         {
             metadata ??= new Dictionary<string, string>();
-            metadata["position_x"] = position.x.ToString();
-            metadata["position_y"] = position.y.ToString();
-            metadata["position_z"] = position.z.ToString();
+            metadata["position_x"] = position.x.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            metadata["position_y"] = position.y.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            metadata["position_z"] = position.z.ToString(System.Globalization.CultureInfo.InvariantCulture);
             Event(eventName, metadata);
         }
         
@@ -900,7 +900,7 @@ internal void StartNewSession()
 			meta["score"] = clampedScore.ToString();
 			meta["score_min"] = minScore.ToString();
 			meta["score_max"] = maxScore.ToString();
-			meta["status"] = status.ToString().ToLower();
+			meta["status"] = status.ToString().ToLowerInvariant();
 			lock (_assessmentStartTimesLock)
 			{
 				// If user is completing their own assessment (not the default), silently remove the default assessment
@@ -1016,7 +1016,7 @@ internal void StartNewSession()
 			meta["score"] = clampedScore.ToString();
 			meta["score_min"] = minScore.ToString();
 			meta["score_max"] = maxScore.ToString();
-			meta["status"] = status.ToString().ToLower();
+			meta["status"] = status.ToString().ToLowerInvariant();
 			AddDuration(_objectiveStartTimes, objectiveName, meta);
 			Event(objectiveName, meta);
 		}
@@ -1035,8 +1035,8 @@ internal void StartNewSession()
 			meta ??= new Dictionary<string, string>();
 			meta["type"] = "interaction";
 			meta["verb"] = "completed";
-			meta["interaction"] = type.ToString().ToLower();
-			meta["result"] = result.ToString().ToLower();
+			meta["interaction"] = type.ToString().ToLowerInvariant();
+			meta["result"] = result.ToString().ToLowerInvariant();
 			if (!string.IsNullOrEmpty(response)) meta["response"] = response;
 			AddDuration(_interactionStartTimes, interactionName, meta);
 			Event(interactionName, meta);

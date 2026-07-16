@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Types;
@@ -107,7 +108,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public void StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy)
         {
             long t = Utils.GetUnityTime();
-            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+            string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
             var p = new StoragePayload
             {
                 timestamp = iso,

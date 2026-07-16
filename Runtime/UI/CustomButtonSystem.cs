@@ -146,7 +146,7 @@ namespace AbxrLib.Runtime.UI
             }
             
             string buttonName = customButtons[buttonIndex].name;
-            string eventName = $"{analyticsPrefix}_{buttonName.ToLower().Replace(" ", "_")}";
+            string eventName = $"{analyticsPrefix}_{buttonName.ToLowerInvariant().Replace(" ", "_")}";
             
             // Log interaction for analytics
             Abxr.EventInteractionComplete(eventName, 

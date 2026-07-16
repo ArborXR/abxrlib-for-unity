@@ -157,7 +157,7 @@ namespace AbxrLib.Runtime.UI
                 return;
             }
             
-            string eventName = $"{analyticsPrefix}_{buttonName.ToLower().Replace(" ", "_")}";
+            string eventName = $"{analyticsPrefix}_{buttonName.ToLowerInvariant().Replace(" ", "_")}";
             
             // Log interaction for analytics
             Abxr.EventInteractionComplete(eventName, 

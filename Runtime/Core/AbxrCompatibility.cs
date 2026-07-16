@@ -200,7 +200,7 @@ public static partial class Abxr
 		EventStatus eventStatus = EventStatus.Complete;
 		if (eventResult != null)
 		{
-			string resultString = eventResult.ToString().ToLower();
+			string resultString = eventResult.ToString().ToLowerInvariant();
 			if (resultString.Contains("pass") || resultString.Contains("success") || resultString.Contains("complete") || resultString == "true" || resultString == "1")
 			{
 				eventStatus = EventStatus.Pass;
@@ -241,7 +241,7 @@ public static partial class Abxr
 		{
 			foreach (var keyValuePair in eventProperties)
 			{
-				string propertyKey = keyValuePair.Key.ToLower();
+				string propertyKey = keyValuePair.Key.ToLowerInvariant();
 				string propertyValue = keyValuePair.Value?.ToString() ?? string.Empty;
 				
 				// Extract score if provided
@@ -252,15 +252,15 @@ public static partial class Abxr
 				// Extract status/result if provided
 				else if (propertyKey == "result" || propertyKey == "status" || propertyKey == "success")
 				{
-					if (propertyValue.ToLower().Contains("pass") || propertyValue.ToLower().Contains("success") || propertyValue == "true" || propertyValue == "1")
+					if (propertyValue.ToLowerInvariant().Contains("pass") || propertyValue.ToLowerInvariant().Contains("success") || propertyValue == "true" || propertyValue == "1")
 					{
 						eventStatus = EventStatus.Pass;
 					}
-					else if (propertyValue.ToLower().Contains("fail") || propertyValue.ToLower().Contains("error") || propertyValue == "false" || propertyValue == "0")
+					else if (propertyValue.ToLowerInvariant().Contains("fail") || propertyValue.ToLowerInvariant().Contains("error") || propertyValue == "false" || propertyValue == "0")
 					{
 						eventStatus = EventStatus.Fail;
 					}
-					else if (propertyValue.ToLower().Contains("incomplete"))
+					else if (propertyValue.ToLowerInvariant().Contains("incomplete"))
 					{
 						eventStatus = EventStatus.Incomplete;
 					}
