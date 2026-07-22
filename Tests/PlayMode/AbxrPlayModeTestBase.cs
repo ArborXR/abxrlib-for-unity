@@ -126,6 +126,9 @@ public class AbxrPlayModeTestBase
     /// <summary>Creates the test subsystem GameObject and AbxrSubsystem. Called from SetUp by default; device authentication tests call after setting config.</summary>
     protected void CreateSubsystem()
     {
+        // Keep the ArborInsightsClient service out of tests unless a fixture opts in; restored in TearDown via _savedConfig.
+        if (!AllowArborInsightsClientInTests)
+            ModifyConfig("enableArborInsightsClient", false);
         SubsystemGO = new GameObject("[Test] AbxrSubsystem");
         SubsystemGO.AddComponent<AbxrSubsystem>();
     }

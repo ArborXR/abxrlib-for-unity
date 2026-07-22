@@ -373,6 +373,13 @@ namespace AbxrLib.Runtime.Services.Platform
 		{
 			try
 			{
+				// Skip Init/Bind entirely when the service APK is not on the device; binding anyway makes the
+				// AAR/Android layer log an unsuppressable error about the missing app.xrdi.client service.
+				if (!ArborInsightsClientBridge.IsServicePackageInstalled())
+				{
+					Logcat.Info("[ArborInsightsClient] Service APK (app.xrdi.client) not installed; skipping Init/Bind.");
+					return;
+				}
 				ArborInsightsClientBridge.Init();
 				if (!ArborInsightsClientBridge.IsInitialized())
 				{
