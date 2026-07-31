@@ -1,8 +1,11 @@
 using UnityEngine;
+using UnityEngine.Scripting;
 using AbxrLib.Runtime.Core;
 
 namespace AbxrLib.Runtime.UI
 {
+    // Only ever instantiated by loading a shipped prefab, so the managed linker cannot see it referenced.
+    [Preserve]
     public class FaceCamera : MonoBehaviour
     {
         [Tooltip("Should the panel face the camera all the time?")]

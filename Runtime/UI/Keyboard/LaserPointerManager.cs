@@ -13,7 +13,7 @@ using XRRayInteractor = UnityEngine.XR.Interaction.Toolkit.XRRayInteractor;
 
 namespace AbxrLib.Runtime.UI.Keyboard
 {
-#if XR_TOOLKIT_AVAILABLE && UNITY_2022_3_OR_NEWER
+#if XR_TOOLKIT_AVAILABLE
     /// <summary>
     /// Manages XR ray interactors (laser pointers) to ensure they are enabled during keyboard/PIN pad interactions.
     /// Automatically detects and restores the original state when interactions are complete.

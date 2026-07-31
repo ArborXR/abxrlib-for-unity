@@ -1,10 +1,12 @@
 using UnityEngine;
+using UnityEngine.Scripting;
 using UnityEngine.UI;
 
 namespace AbxrLib.UiRoundedCorners {
 	[ExecuteInEditMode]                             //Required to check the OnEnable function
 	[DisallowMultipleComponent]                     //You can only have one of these in every object.
 	[RequireComponent(typeof(RectTransform))]
+	[Preserve]                                      //Only instantiated from shipped prefabs; keep the linker from stripping it.
 	public class ImageWithRoundedCorners : MonoBehaviour {
 		private static readonly int Props = Shader.PropertyToID("_WidthHeightRadius");
 		private static readonly int prop_OuterUV = Shader.PropertyToID("_OuterUV");

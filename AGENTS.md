@@ -61,7 +61,7 @@ AIDL → ArborInsightsClient (separate APK)
 
 ## Key Files
 
-- **Entry / config:** `Runtime/Core/Initialize.cs`, `Runtime/Core/Configuration.cs`, `Runtime/Abxr.cs`, `Runtime/AbxrManager.cs`
+- **Entry / config:** `Runtime/Core/Initialize.cs`, `Runtime/Core/AppConfig.cs`, `Runtime/Abxr.cs`, `Runtime/AbxrManager.cs`
 - **Auth:** `Runtime/Services/Auth/AbxrAuthService.cs` (device/user auth, session, GetConfigData/GetArborData, appToken/orgToken, optional keyboard UI; uses current transport for auth/config)
 - **Transport:** `Runtime/Services/Transport/IAbxrTransport.cs`, `AbxrTransportRest.cs`, `AbxrTransportArborInsights.cs` (abstraction for REST vs ArborInsightsClient)
 - **Service client (Android):** `Runtime/Services/Platform/ArborInsightsClient.cs` (ArborInsightsServiceBridge in same file), `Runtime/Services/Platform/ArborMdmClient.cs`

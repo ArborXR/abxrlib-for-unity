@@ -1,10 +1,13 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.Scripting;
 using UnityEngine.UI;
 
 namespace AbxrLib.Runtime.UI.Keyboard
 {
+    // Only ever instantiated by loading a shipped prefab, so the managed linker cannot see it referenced.
+    [Preserve]
     public class KeyboardKey : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerExitHandler
     {
         public string character;
