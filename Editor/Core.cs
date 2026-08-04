@@ -268,6 +268,15 @@ namespace AbxrLib.Editor
                 return true;
             }
 
+            // Unity writes enums as their numeric value, so read the number back and convert it to the enum type.
+            if (type.IsEnum && long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out long e))
+            {
+                // A number too large for the enum's underlying type throws, so treat that as unrecoverable.
+                try { value = Enum.ToObject(type, e); }
+                catch (OverflowException) { return false; }
+                return true;
+            }
+
             if (type == typeof(int) && int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int i))
             {
                 value = i;
@@ -283,6 +292,12 @@ namespace AbxrLib.Editor
             if (type == typeof(float) && float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float f))
             {
                 value = f;
+                return true;
+            }
+
+            if (type == typeof(double) && double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double d))
+            {
+                value = d;
                 return true;
             }
 
