@@ -1,10 +1,13 @@
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Scripting;
 using UnityEngine.UI;
 
 namespace AbxrLib.Runtime.UI.DebugWindow
 {
+    // Only ever instantiated by loading a shipped prefab, so the managed linker cannot see it referenced.
+    [Preserve]
     public class DebugWindow : MonoBehaviour
     {
         public TMP_Text logText;

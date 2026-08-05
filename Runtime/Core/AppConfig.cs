@@ -1,8 +1,11 @@
 /*
  * Copyright (c) 2024 ArborXR. All rights reserved.
  *
- * Serialized AbxrLib settings (Resources/AbxrLib.asset). This file keeps the original script GUID so
- * existing projects' assets deserialize as <see cref="AppConfig"/>. Editor and custom inspectors
+ * Serialized AbxrLib settings (Resources/AbxrLib.asset). This file keeps the original script GUID
+ * (90064ff7e10a4fe4b6ccb224c9cf8250) so existing projects' assets deserialize as <see cref="AppConfig"/>.
+ * The file name must stay in sync with the class name: Unity resolves an asset's m_Script reference via
+ * the file/class association, and a mismatch leaves the reference unresolvable ("The referenced script on
+ * this Behaviour is missing!" plus a serialization-layout error on load). Editor and custom inspectors
  * edit this type only. At runtime, values are copied into <see cref="Configuration"/> (see RuntimeConfiguration.cs).
  */
 

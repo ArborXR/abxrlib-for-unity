@@ -3,7 +3,7 @@
  *
  * Runtime configuration POCO: <see cref="Instance"/> is populated from Resources/AbxrLib.asset (<see cref="AppConfig"/>).
  * GET /v1/storage/config merges into this instance only; the serialized asset is not modified at runtime.
- * The ScriptableObject type <see cref="AppConfig"/> lives in Configuration.cs (same GUID as legacy Configuration assets).
+ * The ScriptableObject type <see cref="AppConfig"/> lives in AppConfig.cs (same GUID as legacy Configuration assets).
  */
 
 using System;
