@@ -409,7 +409,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 yield break;
             }
             
-            if (!string.IsNullOrEmpty(_authMechanism?.type))  // Need user input
+            if (!string.IsNullOrEmpty(_authMechanism?.type) &&
+                !string.Equals(_authMechanism.type, "none", StringComparison.OrdinalIgnoreCase))  // Need user input
             {
 #if UNITY_WEBGL && !UNITY_EDITOR
                 if (!_webglUrlPinAutoSubmitAttempted && !string.IsNullOrEmpty(_webglQueryAssessmentPin))
