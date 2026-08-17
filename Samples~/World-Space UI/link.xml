@@ -1,0 +1,19 @@
+<!--
+  AbxrLib world-space objects: IL2CPP managed-code-stripping preservation.
+
+  The MonoBehaviours on the keyboard, PIN pad, exit-poll, and QR-scan prefabs are only ever
+  reached through those serialized assets, never from code, so IL2CPP with managed stripping at
+  Medium or higher prunes them. In a player that shows up as "The referenced script ... is
+  missing!" and sign-in UI that instantiates as blank panels.
+
+  This reproduces on Unity 2021.3; Unity 6 auto-preserves asset-referenced types, which masks it.
+  Preserving both assemblies keeps every type regardless of the project's Managed Stripping Level.
+
+  This file ships with the sample rather than with the core package: once imported, these
+  assemblies are compiled from the project's own Assets folder, so core's link.xml no longer
+  covers them.
+-->
+<linker>
+  <assembly fullname="AbxrLib.WorldSpace" preserve="all" />
+  <assembly fullname="AbxrLib.UiRoundedCorners" preserve="all" />
+</linker>

@@ -2,8 +2,14 @@
 using TMPro;
 using UnityEditor;
 
-namespace AbxrLib.Editor
+namespace AbxrLib.WorldSpace.Editor
 {
+    /// <summary>
+    /// Nudges Unity into showing its own "import TMP essential resources" prompt.
+    ///
+    /// Ships with the world-space objects rather than with the core package: the fonts and shaders are only needed
+    /// to draw the keyboard, PIN pad, and exit poll, so a core-only project should never be asked for them.
+    /// </summary>
     [InitializeOnLoad]
     public static class TMPSetupPrompt
     {

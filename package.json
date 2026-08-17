@@ -9,9 +9,20 @@
       "url": "https://arborxr.com"
     },
     "dependencies": {
-      "com.unity.textmeshpro": "3.0.6",
       "com.unity.inputsystem": "1.8.1",
       "com.unity.nuget.newtonsoft-json": "3.2.1",
       "com.unity.test-framework": "1.1.33"
-    }
+    },
+    "samples": [
+      {
+        "displayName": "World-Space UI",
+        "description": "AbxrLib's built-in sign-in UI: world-space keyboard, PIN pad, exit poll, debug window, and QR-code scanning. Import this to have AbxrLib draw its own authentication UI. Not needed if your app collects user input itself through Abxr.OnInputRequested.\n<i>Dependencies:</i>\n • <a href=\"com.unity3d.kharma:upmpackage/com.unity.textmeshpro\">TextMeshPro</a> (part of com.unity.ugui on Unity 2023.2 and newer)",
+        "path": "Samples~/World-Space UI"
+      },
+      {
+        "displayName": "Examples",
+        "description": "Example scripts for custom world-space buttons, hand-tracking interaction, and driving the keyboard yourself. Requires the World-Space UI sample.",
+        "path": "Samples~/Examples"
+      }
+    ]
 }

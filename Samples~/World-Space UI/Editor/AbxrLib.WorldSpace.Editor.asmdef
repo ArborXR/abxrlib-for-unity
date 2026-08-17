@@ -1,10 +1,13 @@
 {
-    "name": "AbxrLib.Runtime",
-    "rootNamespace": "AbxrLib.Runtime",
+    "name": "AbxrLib.WorldSpace.Editor",
+    "rootNamespace": "AbxrLib.WorldSpace.Editor",
     "references": [
-        "Unity.InputSystem"
+        "AbxrLib.WorldSpace",
+        "Unity.TextMeshPro"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
