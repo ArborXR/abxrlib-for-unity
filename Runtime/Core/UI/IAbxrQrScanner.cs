@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
 
-namespace AbxrLib.Runtime.Core.QRScanner
+namespace AbxrLib.Runtime.Core.UI
 {
-    internal interface IQrScanner
+    public interface IAbxrQrScanner
     {
         bool IsAvailable { get; }
         bool IsScanning { get; }

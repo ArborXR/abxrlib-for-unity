@@ -369,4 +369,15 @@ namespace AbxrLib.Runtime.Types
     {
         public List<StoragePayload> data;
     }
+
+    /// <summary>
+    /// Which exit poll to show. Lives here rather than on the poll UI so that Abxr.PollUser stays callable in a
+    /// project that does not include the world-space objects (the call queues a poll; the UI shows it when present).
+    /// </summary>
+    public enum PollType
+    {
+        Thumbs,
+        Rating,
+        MultipleChoice
+    }
 }

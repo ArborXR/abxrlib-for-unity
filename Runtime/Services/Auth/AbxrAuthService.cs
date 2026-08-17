@@ -5,17 +5,17 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
-using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Services.Auth
 {
-    public class AbxrAuthService
+    public class AbxrAuthService : IAbxrAuthBridge
     {
         // ── Callbacks ────────────────────────────────────────────────
         /// <summary>
@@ -246,7 +246,7 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 _inputRequestPending = false;
                 Logcat.Warning("Skipping user authentication.");
-                KeyboardHandler.Destroy();
+                AbxrUi.AuthUi?.Hide();
                 AuthSucceeded();
                 return;
             }
@@ -261,6 +261,12 @@ namespace AbxrLib.Runtime.Services.Auth
             OnInputRequested?.Invoke(_authMechanism.type, _authMechanism.prompt, _authMechanism.domain, firstAttempt ? "" : "Authentication Failed");
         }
         
+        /// <summary>
+        /// <see cref="IAbxrAuthBridge"/>: what the world-space UI calls when the user submits a value. Named for the
+        /// caller's world rather than the keyboard's, since the UI is optional and may not be a keyboard at all.
+        /// </summary>
+        public void SubmitAuthInput(string input) => KeyboardAuthenticate(input);
+
         public void KeyboardAuthenticate(string input)
         {
             string originalPrompt = _authMechanism.prompt;
@@ -286,13 +292,13 @@ namespace AbxrLib.Runtime.Services.Auth
 #if UNITY_WEBGL && !UNITY_EDITOR
                     _webglQueryAssessmentPin = null;
 #endif
-                    KeyboardHandler.Destroy();
+                    AbxrUi.AuthUi?.Hide();
                     AuthSucceeded();
                 }
                 else
                 {
-                    KeyboardHandler.StopProcessing();
-                    KeyboardHandler.ShowPinPad();
+                    AbxrUi.AuthUi?.StopProcessing();
+                    AbxrUi.AuthUi?.ShowPinPad();
                     SetInputSource("user");  // In case it was changed by QR Scanner
 
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.

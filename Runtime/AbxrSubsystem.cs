@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using AbxrLib.Runtime.Core;
-using AbxrLib.Runtime.Core.QRScanner;
 using AbxrLib.Runtime.Services.AI;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.Services.Data;
@@ -12,8 +11,7 @@ using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Services.Telemetry;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Services.Transport;
-using AbxrLib.Runtime.UI.ExitPoll;
-using AbxrLib.Runtime.UI.Keyboard;
+using AbxrLib.Runtime.Core.UI;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -223,11 +221,9 @@ namespace AbxrLib.Runtime
             _headsetDetector = new HeadsetDetector(_authService, this);
             _headsetDetector.Start();
             
-            KeyboardManager.AuthService = _authService;
-            
-#if UNITY_ANDROID && !UNITY_EDITOR
-            QrScannerBase.AuthService = _authService;
-#endif
+            // Publish authentication for the world-space UI to read. The UI is optional, so this is a one-way
+            // hand-off through the registry rather than core assigning fields on UI types.
+            AbxrUi.AuthBridge = _authService;
 
             // Log version/init result first so it always appears before any auth failure from the coroutine.
             var settings = Configuration.Instance;
@@ -391,14 +387,14 @@ namespace AbxrLib.Runtime
         internal bool IsQRScanForAuthAvailable()
         {
 	        if (_authService == null || !_authService.IsInputRequestPending) return false;
-	        return QrScannerCoordinator.GetActiveScanner() != null;
+	        return AbxrUi.QrScanner != null;
         }
         
         internal void StartQRScanForAuthInput(Action<string> onResult)
         {
 	        if (onResult == null) return;
 	        
-		    IQrScanner scanner = QrScannerCoordinator.GetActiveScanner();
+		    IAbxrQrScanner scanner = AbxrUi.QrScanner;
 		    if (scanner != null)
 		    {
 		        scanner.SetScanResultCallback(onResult);
@@ -409,13 +405,13 @@ namespace AbxrLib.Runtime
 	        onResult(null);
         }
         
-        internal void CancelQRScanForAuthInput() => QrScannerCoordinator.GetActiveScanner()?.CancelScan();
+        internal void CancelQRScanForAuthInput() => AbxrUi.QrScanner?.CancelScan();
 
         /// True when the app can choose where to display the QR camera feed (non-Pico).
         /// When true, use GetQRScanCameraTexture() and assign to your own RawImage. When false (Pico), the platform shows its own scanner UI.
-        internal bool IsQRScanCameraTexturePlaceable() => QrScannerCoordinator.GetActiveScanner() != null;
+        internal bool IsQRScanCameraTexturePlaceable() => AbxrUi.QrScanner != null;
 
-        internal Texture GetQRScanCameraTexture() => QrScannerCoordinator.GetActiveScanner()?.GetCameraTexture();
+        internal Texture GetQRScanCameraTexture() => AbxrUi.QrScanner?.GetCameraTexture();
 
         private void HandleAuthCompleted(bool success, string errorMessage = null)
         {
@@ -1226,7 +1222,7 @@ internal void StartNewSession()
 			yield return _aiProxyApi.SendPrompt(prompt, llmProvider, pastMessages, callback);
 		}
 		
-		internal void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses, Action<string> callback)
+		internal void PollUser(string prompt, PollType pollType, List<string> responses, Action<string> callback)
 		{
 			// Validate prompt
 			if (string.IsNullOrWhiteSpace(prompt))
@@ -1235,7 +1231,7 @@ internal void StartNewSession()
 				return;
 			}
 
-			if (pollType == ExitPollHandler.PollType.MultipleChoice)
+			if (pollType == PollType.MultipleChoice)
 			{
 				if (responses == null)
 				{
@@ -1260,7 +1256,7 @@ internal void StartNewSession()
 				}
 			}
 
-			ExitPollHandler.AddPoll(prompt, pollType, responses, callback);
+			AbxrUi.PollUi?.AddPoll(prompt, pollType, responses, callback);
 		}
 		
 		/// <summary>
@@ -1470,28 +1466,37 @@ internal void StartNewSession()
 
 		private void PresentKeyboard(string type, string prompt, string domain, string error)
 		{
+			// No world-space UI in this project and no app handler either: say so once, actionably, instead of
+			// leaving authentication waiting for input that can never arrive.
+			IAbxrAuthUi authUi = AbxrUi.AuthUi;
+			if (authUi == null)
+			{
+				AbxrUi.WarnNoAuthUi(type);
+				return;
+			}
+
 			// When showing an error (e.g. invalid PIN), stop the Processing animation so the message is visible.
-			if (!string.IsNullOrEmpty(error)) KeyboardHandler.StopProcessing();
+			if (!string.IsNullOrEmpty(error)) authUi.StopProcessing();
 
 			string displayPrompt = "";
 			if (type is "text" or null or "")
 			{
-				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+				authUi.Show(AuthUiKind.FullKeyboard);
 				displayPrompt = string.IsNullOrEmpty(prompt) ? "Enter Your Login" : $"Enter Your {prompt}";
 			}
 			else if (type == "assessmentPin")
 			{
-				KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+				authUi.Show(AuthUiKind.PinPad);
 				displayPrompt = string.IsNullOrEmpty(prompt) ? "Enter Your 6-digit PIN" : $"Enter Your {prompt} PIN";
 			}
 			else if (type == "email")
 			{
-				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+				authUi.Show(AuthUiKind.FullKeyboard);
 				displayPrompt = $"Enter your email username\n(<u>username</u>@{domain})";
 			}
 
 			if (!string.IsNullOrEmpty(error)) displayPrompt = $"{error}\n{displayPrompt}";
-			KeyboardHandler.SetPrompt(displayPrompt);
+			authUi.SetPrompt(displayPrompt);
 		}
 		
 		/// <summary>

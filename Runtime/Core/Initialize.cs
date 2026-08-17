@@ -1,6 +1,4 @@
-using AbxrLib.Runtime.UI.ExitPoll;
-using AbxrLib.Runtime.UI.Keyboard;
-using AbxrLib.Runtime.Core.QRScanner;
+using AbxrLib.Runtime.Core.UI;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Core
@@ -16,15 +14,11 @@ namespace AbxrLib.Runtime.Core
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void OnBeforeSceneLoad()
         {
-            ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler");
-            ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
-#if UNITY_ANDROID && !UNITY_EDITOR
-#if PICO_SDK_3_4_OR_NEWER
-            ObjectAttacher.Attach<QRCodeReaderPico>("QRCodeReaderPico");
-#else
-            ObjectAttacher.Attach<QRCodeReaderMeta>("QRCodeReaderMeta");
-#endif
-#endif
+            // Creates the keyboard, PIN pad, exit poll, and QR reader when the world-space objects are installed.
+            // Does nothing in a core-only project, where the app supplies its own input UI via
+            // Abxr.OnInputRequested.
+            AbxrUi.AttachSceneObjects();
+
             bool skip = SkipCreatingSubsystemInInitialize || AbxrSubsystem.Instance != null;
 #if ABXR_TEST_RUNNER_PLAYER
             skip = true; // Test Runner Player build: tests create their own subsystem; avoid redundant init.

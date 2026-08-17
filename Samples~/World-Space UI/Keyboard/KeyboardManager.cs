@@ -1,5 +1,6 @@
 using TMPro;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.Core.QRScanner;
 using AbxrLib.Runtime.Services.Auth;
 using UnityEngine;
@@ -14,7 +15,6 @@ namespace AbxrLib.Runtime.UI.Keyboard
     public class KeyboardManager : MonoBehaviour
     {
         public static KeyboardManager Instance;
-        public static AbxrAuthService AuthService;
         public Button shiftButton1;
         public Button shiftButton2;
         public Button deleteButton;
@@ -104,7 +104,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (qrCodeButton == null) return;
 #if UNITY_ANDROID && !UNITY_EDITOR
-            bool isAvailable = QrScannerCoordinator.GetActiveScanner() != null;
+            bool isAvailable = AbxrUi.QrScanner != null;
             if (_lastQRButtonState != isAvailable)
             {
                 qrCodeButton.gameObject.SetActive(isAvailable);
@@ -176,7 +176,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             {
                 StartCoroutine(KeyboardHandler.ProcessingVisual());
                 // Ensure inputSource is set to "user" for manual keyboard input
-                AuthService.SetInputSource("user");
+                AbxrUi.AuthBridge?.SetInputSource("user");
                 AbxrSubsystem.Instance.SubmitInput(inputField.text);
                 inputField.text = "";
             }
@@ -193,7 +193,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private void QRCode()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
-            IQrScanner scanner = QrScannerCoordinator.GetActiveScanner();
+            IAbxrQrScanner scanner = AbxrUi.QrScanner;
             if (scanner != null)
             {
                 if (scanner.IsScanning || scanner.IsInitializing)
@@ -208,7 +208,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private void HandleShift()
         {
             // Notify all KeyboardKey instances to toggle their shift state
-            KeyboardKey[] allKeys = FindObjectsOfType<KeyboardKey>();
+            KeyboardKey[] allKeys = Utils.FindObjects<KeyboardKey>();
             foreach (KeyboardKey key in allKeys)
             {
                 key.ToggleShift();

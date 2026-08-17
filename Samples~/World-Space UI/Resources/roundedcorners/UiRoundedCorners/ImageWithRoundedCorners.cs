@@ -53,17 +53,16 @@ namespace AbxrLib.UiRoundedCorners {
 
 		public void Validate() {
 			if (material == null) {
-				var shader = Shader.Find("AbxrLib/UI/RoundedCorners/RoundedCorners");
-				// Fallback to original shader name if new one not found (during compilation)
+				var shader = FindShader();
 				if (shader == null) {
-					shader = Shader.Find("UI/RoundedCorners/RoundedCorners");
-				}
-				if (shader != null) {
-					material = new Material(shader);
-				} else {
-					Debug.LogError("[AbxrLib] Could not find rounded corners shader. Make sure the shader is compiled.");
+					// A miss here is expected on a fresh install: the prefabs carrying this component can be
+					// imported before the shader asset is, and OnValidate runs during that import. Retry once the
+					// import queue drains, and only report a problem if the shader is still missing then.
+					ReportOrRetryMissingShader();
 					return;
 				}
+
+				material = new Material(shader);
 			}
 
 			if (image == null) {
@@ -79,9 +78,52 @@ namespace AbxrLib.UiRoundedCorners {
 			}
 		}
 
+		/// <summary>The shader, by its current name and by the name it shipped under before AbxrLib prefixed it.</summary>
+		private static Shader FindShader() =>
+			Shader.Find("AbxrLib/UI/RoundedCorners/RoundedCorners") ??
+			Shader.Find("UI/RoundedCorners/RoundedCorners");
+
+		/// <summary>
+		/// Handles a shader lookup that came back empty. In the Editor this is usually just import ordering, so it
+		/// schedules one retry and stays quiet; outside the Editor a miss is real and is reported immediately.
+		/// </summary>
+		private void ReportOrRetryMissingShader() {
+#if UNITY_EDITOR
+			if (retryScheduled) return;
+
+			retryScheduled = true;
+			UnityEditor.EditorApplication.delayCall += RetryValidateAfterImport;
+#else
+			Debug.LogError("[AbxrLib] Could not find the rounded corners shader, so rounded UI corners will not render.");
+#endif
+		}
+
+#if UNITY_EDITOR
+		private bool retryScheduled;
+
+		private void RetryValidateAfterImport() {
+			retryScheduled = false;
+
+			// The component can be destroyed between scheduling and running (the import replaced the object, or the
+			// user deleted it). Unity's null check covers that case for a destroyed MonoBehaviour.
+			if (this == null) return;
+
+			if (FindShader() == null) {
+				Debug.LogError("[AbxrLib] Could not find the rounded corners shader, so rounded UI corners will not " +
+				               "render.\nWHAT TO DO: check that RoundedCorners.shader imported without errors " +
+				               "(Resources/roundedcorners/UiRoundedCorners/). Reimporting the AbxrLib package fixes a " +
+				               "partial import.");
+				return;
+			}
+
+			Validate();
+			Refresh();
+		}
+#endif
+
 		public void Refresh() {
 			if (material == null) return;
-			
+
 			var rect = ((RectTransform)transform).rect;
 
 			//Multiply radius value by 2 to make the radius value appear consistent with ImageWithIndependentRoundedCorners script.

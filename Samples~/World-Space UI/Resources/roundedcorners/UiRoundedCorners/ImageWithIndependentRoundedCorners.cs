@@ -1,7 +1,9 @@
 using AbxrLib.UiRoundedCorners;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace AbxrLib.UiRoundedCorners {
 	[ExecuteInEditMode]                             //Required to do validation with OnEnable()
@@ -63,17 +65,14 @@ namespace AbxrLib.UiRoundedCorners {
 
 		public void Validate() {
 			if (material == null) {
-				var shader = Shader.Find("AbxrLib/UI/RoundedCorners/IndependentRoundedCorners");
-				// Fallback to original shader name if new one not found (during compilation)
+				var shader = FindShader();
 				if (shader == null) {
-					shader = Shader.Find("UI/RoundedCorners/IndependentRoundedCorners");
-				}
-				if (shader != null) {
-					material = new Material(shader);
-				} else {
-					Debug.LogError("[AbxrLib] Could not find independent rounded corners shader. Make sure the shader is compiled.");
+					// Expected on a fresh install - see ImageWithRoundedCorners.ReportOrRetryMissingShader.
+					ReportOrRetryMissingShader();
 					return;
 				}
+
+				material = new Material(shader);
 			}
 
 			if (image == null) {
@@ -89,9 +88,47 @@ namespace AbxrLib.UiRoundedCorners {
 			}
 		}
 
+		/// <summary>The shader, by its current name and by the name it shipped under before AbxrLib prefixed it.</summary>
+		private static Shader FindShader() =>
+			Shader.Find("AbxrLib/UI/RoundedCorners/IndependentRoundedCorners") ??
+			Shader.Find("UI/RoundedCorners/IndependentRoundedCorners");
+
+		/// <summary>Quiet retry in the Editor (import ordering), immediate report in a player. </summary>
+		private void ReportOrRetryMissingShader() {
+#if UNITY_EDITOR
+			if (retryScheduled) return;
+
+			retryScheduled = true;
+			EditorApplication.delayCall += RetryValidateAfterImport;
+#else
+			Debug.LogError("[AbxrLib] Could not find the independent rounded corners shader, so rounded UI corners " +
+			               "will not render.");
+#endif
+		}
+
+#if UNITY_EDITOR
+		private bool retryScheduled;
+
+		private void RetryValidateAfterImport() {
+			retryScheduled = false;
+			if (this == null) return;
+
+			if (FindShader() == null) {
+				Debug.LogError("[AbxrLib] Could not find the independent rounded corners shader, so rounded UI " +
+				               "corners will not render.\nWHAT TO DO: check that IndependentRoundedCorners.shader " +
+				               "imported without errors (Resources/roundedcorners/UiRoundedCorners/). Reimporting the " +
+				               "AbxrLib package fixes a partial import.");
+				return;
+			}
+
+			Validate();
+			Refresh();
+		}
+#endif
+
 		public void Refresh() {
 			if (material == null) return;
-			
+
 			var rect = ((RectTransform)transform).rect;
 			RecalculateProps(rect.size);
 			material.SetVector(prop_rect2props, rect2props);

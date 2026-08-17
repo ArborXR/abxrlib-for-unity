@@ -23,7 +23,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
         private PicoEnterpriseCameraFrameProvider _cameraProvider;
         private Texture2D _latestPreviewTexture;
 
-        // ── IQrScanner / QrScannerBase overrides ─────────────────────────────────────
+        // ── IAbxrQrScanner / QrScannerBase overrides ─────────────────────────────────────
 
         public static bool IsAvailable => Instance != null && Instance.IsOfferedOnThisDevice;
 

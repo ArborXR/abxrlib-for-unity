@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
 using TMPro;
 using UnityEngine;
@@ -23,13 +24,6 @@ namespace AbxrLib.Runtime.UI.ExitPoll
         private const string PollQuestionString = "prompt";
 
         private static string _prompt;
-    
-        public enum PollType
-        {
-            Thumbs,
-            Rating,
-            MultipleChoice
-        }
     
         private static readonly List<Tuple<string, PollType>> Polls = new();
         private static readonly Dictionary<string, List<string>> Responses = new();

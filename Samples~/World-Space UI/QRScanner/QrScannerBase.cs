@@ -11,15 +11,14 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
 using System.Collections;
-using AbxrLib.Runtime.Services.Auth;
+using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
 namespace AbxrLib.Runtime.Core.QRScanner
 {
-    public abstract class QrScannerBase : MonoBehaviour, IQrScanner
+    public abstract class QrScannerBase : MonoBehaviour, IAbxrQrScanner
     {
-        public static AbxrAuthService AuthService;
 
         // ── Shared state ────────────────────────────────────────────────────────────
         protected bool IsOfferedOnThisDevice;
@@ -33,13 +32,13 @@ namespace AbxrLib.Runtime.Core.QRScanner
         protected QrScanPanel Panel;
         protected ZXing.BarcodeReader BarcodeReader;
 
-        // ── IQrScanner ──────────────────────────────────────────────────────────────
-        bool IQrScanner.IsAvailable => IsOfferedOnThisDevice;
-        bool IQrScanner.IsScanning => IsScanning;
-        bool IQrScanner.IsInitializing => IsInitializing;
-        bool IQrScanner.ArePermissionsDenied => AreCameraPermissionsDenied();
-        Texture IQrScanner.GetCameraTexture() => GetCameraTexture();
-        void IQrScanner.CancelScan() => CancelScanning();
+        // ── IAbxrQrScanner ──────────────────────────────────────────────────────────────
+        bool IAbxrQrScanner.IsAvailable => IsOfferedOnThisDevice;
+        bool IAbxrQrScanner.IsScanning => IsScanning;
+        bool IAbxrQrScanner.IsInitializing => IsInitializing;
+        bool IAbxrQrScanner.ArePermissionsDenied => AreCameraPermissionsDenied();
+        Texture IAbxrQrScanner.GetCameraTexture() => GetCameraTexture();
+        void IAbxrQrScanner.CancelScan() => CancelScanning();
 
         // ── Abstract surface ────────────────────────────────────────────────────────
 
@@ -191,7 +190,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
         /// <summary>
         /// Identical in both original readers. Parses the scanned payload and either
-        /// fires the optional callback or authenticates via AuthService.
+        /// fires the optional callback or authenticates through AbxrUi.AuthBridge.
         /// </summary>
         protected void ProcessQrScanResult(string scanResult)
         {
@@ -209,13 +208,13 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
             if (string.IsNullOrEmpty(scanResult)) return;
 
-            AuthService.SetInputSource("QRlms");
+            AbxrUi.AuthBridge?.SetInputSource("QRlms");
             if (!QrCodeScanCommon.TryExtractPinFromQrPayload(scanResult, out string pin))
             {
                 Logcat.Warning("Invalid QR code format (expected ABXR:XXXXXX or 6 digits): " + scanResult);
             }
 
-            AuthService.KeyboardAuthenticate(pin);
+            AbxrUi.AuthBridge?.SubmitAuthInput(pin);
         }
 
         protected void InvokeAndClearCallback(string value)
