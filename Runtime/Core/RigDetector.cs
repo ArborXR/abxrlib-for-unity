@@ -134,12 +134,12 @@ namespace AbxrLib.Runtime.Core
         {
             try
             {
-                var gameObjects = UnityEngine.Object.FindObjectsOfType(typeof(GameObject));
+                var gameObjects = Utils.FindObjects<GameObject>();
                 foreach (var gameObject in gameObjects)
                 {
                     try
                     {
-                        var components = ((GameObject)gameObject).GetComponents<Component>();
+                        var components = gameObject.GetComponents<Component>();
                         if (components.Any(component => component && component.GetType() == targetType))
                         {
                             return true;

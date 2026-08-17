@@ -35,7 +35,7 @@ public class AbxrPlayModeTestBase
         // Remove any subsystem created by Initialize.OnBeforeSceneLoad so only our test subsystem runs.
         // That one starts auth with project config and would request input before we set OnInputRequested;
         // its OnAuthCompleted(false) can fire later and overwrite our success. Find by type so we never miss it.
-        foreach (var existing in UnityEngine.Object.FindObjectsOfType<AbxrSubsystem>())
+        foreach (var existing in Utils.FindObjects<AbxrSubsystem>())
             UnityEngine.Object.DestroyImmediate(existing.gameObject);
 
         // Clear any static event subscriptions left by previous tests.
@@ -185,7 +185,7 @@ public class AbxrPlayModeTestBase
     /// </summary>
     protected void BaseSetUpForAppSwitch()
     {
-        foreach (var existing in UnityEngine.Object.FindObjectsOfType<AbxrSubsystem>())
+        foreach (var existing in Utils.FindObjects<AbxrSubsystem>())
             UnityEngine.Object.DestroyImmediate(existing.gameObject);
         Abxr.OnAuthCompleted = null;
         Abxr.OnUserDataSyncCompleted = null;

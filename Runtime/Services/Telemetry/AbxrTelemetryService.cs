@@ -23,10 +23,6 @@ namespace AbxrLib.Runtime.Services.Telemetry
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _rightTriggerValues = new();
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _leftTriggerValues = new();
 
-        // Cached once at class load: avoids reflection overhead every 10 s
-        private static readonly bool _hasLongMemoryApi =
-            typeof(UnityEngine.Profiling.Profiler).GetMethod("GetTotalAllocatedMemoryLong") != null;
-
         // Reused to avoid allocations in telemetry hot paths
         private readonly Dictionary<string, string> _batteryData = new Dictionary<string, string>(2);
         private readonly Dictionary<string, string> _memoryData = new Dictionary<string, string>(4);
@@ -121,19 +117,12 @@ namespace AbxrLib.Runtime.Services.Telemetry
             _memoryData.Clear();
             try
             {
-                if (_hasLongMemoryApi)
-                {
-                    // Unity 2020.1+
-                    _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
-                    _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
-                    _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
-                }
-                else
-                {
-                    // Unity 2019.x and earlier
-                    _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemory() / 1000000 + " MB";
-                    _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemory() / 1000000 + " MB";
-                }
+                // The Long variants exist from Unity 2020.1, below AbxrLib's minimum Editor version, so they are the
+                // only path. The 32-bit originals they replaced are deprecated (capped at 4 GB) and were only ever
+                // reached on Unity 2019 and earlier, which AbxrLib does not support.
+                _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
+                _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
+                _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
             }
             catch (System.Exception ex)
             {

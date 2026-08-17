@@ -118,7 +118,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
 
             // Cache is invalid or null, find new ray interactors
-            _cachedRayInteractors = Object.FindObjectsOfType<XRRayInteractor>();
+            _cachedRayInteractors = Utils.FindObjects<XRRayInteractor>();
             _cacheValid = true;
 
             return _cachedRayInteractors;

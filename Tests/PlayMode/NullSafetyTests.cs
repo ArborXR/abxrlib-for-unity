@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
+using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
@@ -18,7 +19,7 @@ public class NullSafetyTests
     [SetUp]
     public void SetUp()
     {
-        foreach (var existing in UnityEngine.Object.FindObjectsOfType<AbxrSubsystem>())
+        foreach (var existing in Utils.FindObjects<AbxrSubsystem>())
             UnityEngine.Object.DestroyImmediate(existing.gameObject);
         AbxrSubsystem.ResetStaticStateForTesting();
     }

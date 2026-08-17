@@ -184,12 +184,14 @@ namespace AbxrLib.Editor
             EditorGUILayout.LabelField("• Custom prefabs must have the same components as the default ones", EditorStyles.wordWrappedLabel);
             EditorGUILayout.EndVertical();
             
+            // allowSceneObjects is false because this is a ScriptableObject asset: a scene object assigned here could
+            // not be serialized and would come back null. Only prefabs are valid.
             config.KeyboardPrefab = (GameObject)EditorGUILayout.ObjectField(new GUIContent(
-                "Keyboard Prefab", "Custom keyboard prefab. Leave empty to use default AbxrKeyboard prefab."), 
-                config.KeyboardPrefab, typeof(GameObject));
+                "Keyboard Prefab", "Custom keyboard prefab. Leave empty to use default AbxrKeyboard prefab."),
+                config.KeyboardPrefab, typeof(GameObject), allowSceneObjects: false);
             config.PinPrefab = (GameObject)EditorGUILayout.ObjectField(new GUIContent(
-                "Pin Prefab", "Custom PIN pad prefab. Leave empty to use default AbxrPinPad prefab."), 
-                config.PinPrefab, typeof(GameObject));
+                "Pin Prefab", "Custom PIN pad prefab. Leave empty to use default AbxrPinPad prefab."),
+                config.PinPrefab, typeof(GameObject), allowSceneObjects: false);
 
             EditorGUILayout.Space();
 
