@@ -31,6 +31,7 @@ namespace AbxrLib.Editor
         private AppConfig _config;
         private List<SetupWizardChecks.Check> _checks;
         private bool _worldSpaceInstalled;
+        private bool _worldSpaceFilesImported;
         private Vector2 _scroll;
         private Styles _styles;
 
@@ -68,6 +69,7 @@ namespace AbxrLib.Editor
             _config = Core.GetConfig();
             _checks = SetupWizardChecks.Run();
             _worldSpaceInstalled = SetupWizardChecks.WorldSpaceUiIsInstalled();
+            _worldSpaceFilesImported = SetupWizardChecks.WorldSpaceUiFilesImported();
             Repaint();
         }
 
@@ -425,7 +427,9 @@ namespace AbxrLib.Editor
                 problems == 0 ? "Nothing blocking" : $"{problems} item{(problems == 1 ? "" : "s")} to fix", Step.Project);
 
             DrawStatusLine("Sign-in UI", _worldSpaceInstalled,
-                _worldSpaceInstalled ? "Installed" : "Not installed (optional)", Step.Project);
+                _worldSpaceInstalled ? "Installed"
+                    : _worldSpaceFilesImported ? "Imported, not compiling"
+                    : "Not installed (optional)", Step.Project);
 
 
             EditorGUILayout.EndVertical();
@@ -440,6 +444,9 @@ namespace AbxrLib.Editor
         private void DrawWorldSpaceCallout()
         {
             if (_worldSpaceInstalled) return;
+
+            // Imported but not compiling is a different problem with a different fix; Project Setup covers it.
+            if (_worldSpaceFilesImported) return;
 
             bool looksLikeUpgrade = SetupWizardChecks.CredentialsAreValid(_config);
 

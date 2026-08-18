@@ -38,6 +38,7 @@ namespace AbxrLib.Editor
             var checks = new List<Check>
             {
                 CheckUnityVersion(),
+                CheckDuplicateWorldSpaceImports(),
                 CheckWorldSpaceUi(),
                 CheckTextMeshPro(),
                 CheckRequiredPackages(),
@@ -280,22 +281,110 @@ namespace AbxrLib.Editor
         internal static bool WorldSpaceUiIsInstalled() => Type.GetType(WorldSpaceBootstrapType) != null;
 
         /// <summary>
+        /// True when the sample's files are in the project, whether or not they compiled. Package Manager's own
+        /// Samples list imports without installing anything, so a project can end up with the scripts present and the
+        /// assembly missing - a different problem from never having imported them.
+        /// </summary>
+        internal static bool WorldSpaceUiFilesImported() => ImportedBootstrapPath() != null;
+
+        /// <summary>Asset path of the imported bootstrap script, or null when the sample is not in the project.</summary>
+        private static string ImportedBootstrapPath() => ImportedBootstrapPaths().FirstOrDefault();
+
+        /// <summary>
+        /// Every imported copy of the sample. Normally one - but Package Manager's Samples list imports into a folder
+        /// named after the package version, so importing again after an upgrade leaves the old copy in place and the
+        /// project ends up with two.
+        /// </summary>
+        private static List<string> ImportedBootstrapPaths()
+        {
+            var paths = new List<string>();
+            foreach (string guid in AssetDatabase.FindAssets("AbxrWorldSpaceBootstrap"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (path.Contains("/Samples/")) paths.Add(path);
+            }
+
+            return paths;
+        }
+
+        /// <summary>
+        /// The version folders holding imported copies, e.g. "Assets/Samples/AbxrLib for Unity/2.0.11". Deleting one
+        /// of these removes that entire copy.
+        /// </summary>
+        internal static List<string> ImportedWorldSpaceCopies()
+        {
+            var copies = new List<string>();
+            foreach (string path in ImportedBootstrapPaths())
+            {
+                // .../Samples/<display name>/<version>/<sample name>/AbxrWorldSpaceBootstrap.cs
+                string[] parts = path.Split('/');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    if (parts[i] != "Samples" || i + 2 >= parts.Length) continue;
+
+                    string copy = string.Join("/", parts.Take(i + 3));
+                    if (!copies.Contains(copy)) copies.Add(copy);
+                    break;
+                }
+            }
+
+            return copies;
+        }
+
+        /// <summary>
+        /// Two imported copies means two asmdefs declaring the same assembly names, which Unity reports as
+        /// "Assembly with name 'AbxrLib.WorldSpace' already exists" - once per assembly, for both copies - and then
+        /// refuses to compile anything. Deleting the stale copy is the whole fix, so name it plainly.
+        /// </summary>
+        private static Check CheckDuplicateWorldSpaceImports()
+        {
+            var copies = ImportedWorldSpaceCopies();
+            if (copies.Count < 2) return null;
+
+            string keep = copies.FirstOrDefault(c => c.EndsWith("/" + AbxrLibVersion.Version)) ?? copies.Last();
+
+            return new Check
+            {
+                Title = "The world-space UI is imported more than once",
+                Detail = "Each copy declares the same assembly names, so Unity reports \"Assembly with name " +
+                         "'AbxrLib.WorldSpace' already exists\" and stops compiling until only one is left.\n" +
+                         "Copies found: " + string.Join(", ", copies) + ".\n" +
+                         $"Keeping {keep} and deleting the rest fixes it. Package Manager's Samples list imports into " +
+                         "a folder named after the package version, so importing again after an upgrade adds a copy " +
+                         "instead of replacing one - the wizard's own import replaces in place.",
+                Severity = Severity.Problem,
+                FixLabel = "Delete the older copies",
+                Fix = () => DeleteWorldSpaceCopiesExcept(keep)
+            };
+        }
+
+        private static void DeleteWorldSpaceCopiesExcept(string keep)
+        {
+            foreach (string copy in ImportedWorldSpaceCopies())
+            {
+                if (copy == keep) continue;
+
+                if (AssetDatabase.DeleteAsset(copy)) Logcat.Info($"Deleted the duplicate world-space UI copy {copy}.");
+                else Logcat.Warning($"Could not delete {copy}.\nWHAT TO DO: delete that folder in the Project window.");
+            }
+
+            AssetDatabase.Refresh();
+        }
+
+        /// <summary>
         /// The version of the imported world-space objects, read from the constant they compile against. Because they
         /// are imported into Assets/ rather than resolved as a package, updating AbxrLib leaves the old copy in place -
         /// so this is compared against the running version to catch a stale import.
         /// </summary>
         private static string ImportedWorldSpaceVersion()
         {
-            foreach (string guid in AssetDatabase.FindAssets("AbxrWorldSpaceBootstrap"))
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (!path.Contains("/Samples/")) continue;
+            string path = ImportedBootstrapPath();
+            if (path == null) return null;
 
-                // .../Samples/<display name>/<version>/<sample name>/AbxrWorldSpaceBootstrap.cs
-                string[] parts = path.Split('/');
-                for (int i = 0; i < parts.Length; i++)
-                    if (parts[i] == "Samples" && i + 2 < parts.Length) return parts[i + 2];
-            }
+            // .../Samples/<display name>/<version>/<sample name>/AbxrWorldSpaceBootstrap.cs
+            string[] parts = path.Split('/');
+            for (int i = 0; i < parts.Length; i++)
+                if (parts[i] == "Samples" && i + 2 < parts.Length) return parts[i + 2];
 
             return null;
         }
@@ -308,6 +397,10 @@ namespace AbxrLib.Editor
         {
             if (!WorldSpaceUiIsInstalled())
             {
+                // Files there but no assembly: the import happened without its dependencies, which is what Package
+                // Manager's own Samples > Import does - it copies files and installs nothing.
+                if (WorldSpaceUiFilesImported()) return CheckImportedButNotCompiling();
+
                 return new Check
                 {
                     Title = "World-space UI not installed",
@@ -359,6 +452,49 @@ namespace AbxrLib.Editor
         /// <summary>Which package supplies TextMeshPro on this Editor: uGUI absorbed it in 2023.2.</summary>
         private static string TmpPackageForThisEditor() =>
             TmpIsPartOfUgui() ? "com.unity.ugui" : "com.unity.textmeshpro";
+
+        /// <summary>
+        /// The sample's files are in the project but its assembly is not, so something stopped it compiling. The
+        /// usual cause is importing from Package Manager's own Samples list, which copies files and installs nothing:
+        /// without TextMeshPro (and the uGUI that comes with it) the UI cannot build, and the Console fills with
+        /// errors naming TMPro and UnityEngine.UI.
+        /// </summary>
+        private static Check CheckImportedButNotCompiling()
+        {
+            if (!TmpAssemblyAvailable())
+            {
+                string package = TmpPackageForThisEditor();
+                return new Check
+                {
+                    Title = "World-space UI is imported but cannot compile",
+                    Detail = "Its scripts are in this project, but TextMeshPro is not - so the UI assembly is not " +
+                             $"built and the Console shows missing TMPro and UnityEngine.UI types. Adding {package} " +
+                             "fixes it.\nImporting from Package Manager > Samples copies the files without installing " +
+                             "what they need; the wizard's own import adds it for you.",
+                    Severity = Severity.Problem,
+                    FixLabel = "Add TextMeshPro",
+                    Fix = AddTmpPackage
+                };
+            }
+
+            return new Check
+            {
+                Title = "World-space UI is imported but not compiling",
+                Detail = "Its scripts are in this project and TextMeshPro is present, so something else is stopping " +
+                         "the AbxrLib.WorldSpace assembly from building.\nWHAT TO DO: check the Console for the first " +
+                         "compile error. Re-importing the sample replaces the files with a clean copy.",
+                Severity = Severity.Problem,
+                FixLabel = "Re-import world-space UI",
+                Fix = ImportWorldSpaceUi
+            };
+        }
+
+        private static void AddTmpPackage()
+        {
+            string package = TmpPackageForThisEditor();
+            Logcat.Info($"Adding {package} so AbxrLib's imported world-space UI can compile.");
+            Client.Add(package);
+        }
 
         /// <summary>
         /// Imports the world-space sample. The UI does not compile without TextMeshPro, so that is installed first

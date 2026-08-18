@@ -1,7 +1,12 @@
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEngine;
 using AbxrLib.Runtime.Core;
+// UnityEditor also has a legacy PackageInfo, so name the Package Manager one explicitly.
+using PackageInfo = UnityEditor.PackageManager.PackageInfo;
 
 namespace AbxrLib.Editor
 {
@@ -10,14 +15,20 @@ namespace AbxrLib.Editor
     {
         private const string PackageName = "com.arborxr.unity";
 
-        /// <summary>Frames to wait for the Editor to settle before opening anything. ~10 seconds at 30 fps.</summary>
-        private const int MaxFramesToWaitForEditor = 300;
+        /// <summary>
+        /// How long to keep waiting for the Editor to go idle before giving up, in update ticks - roughly five
+        /// minutes. Installing a package is followed by an import and a full compile, which routinely takes longer
+        /// than a few seconds; a short budget here meant the wizard quietly never opened on the installs that needed
+        /// it most.
+        /// </summary>
+        private const int MaxFramesToWaitForEditor = 9000;
 
         private static int _framesWaited;
 
         static SetupWizardLauncher()
         {
-            // Catches an install/upgrade that happens without a domain reload afterwards.
+            // Catches an install/upgrade that happens without a domain reload afterwards, and is also the only
+            // moment this assembly is still loaded while AbxrLib is being uninstalled.
             Events.registeredPackages += OnRegisteredPackages;
 
             // The normal path: this runs on the reload that follows the install.
@@ -26,6 +37,27 @@ namespace AbxrLib.Editor
             // Finishes a world-space UI import that was waiting on TextMeshPro; installing that package reloaded the
             // domain, so the import has to be picked back up here.
             EditorApplication.delayCall += SetupWizardChecks.ResumePendingWorldSpaceImport;
+
+            EditorApplication.delayCall += WarnAboutDuplicateImports;
+        }
+
+        /// <summary>
+        /// Names the duplicate imported copies in one line, because Unity's own report of this state is sixteen
+        /// "Assembly with name 'X' already exists" errors that never mention the folders involved. Logged at load
+        /// rather than only in the wizard: with duplicate assembly names Unity stops compiling, so the wizard may not
+        /// be reachable at all.
+        /// </summary>
+        private static void WarnAboutDuplicateImports()
+        {
+            var copies = SetupWizardChecks.ImportedWorldSpaceCopies();
+            if (copies.Count < 2) return;
+
+            Logcat.Error("AbxrLib's world-space UI is imported " + copies.Count + " times: " +
+                         string.Join(", ", copies) + ".\n" +
+                         "Each copy declares the same assembly names, which is what the \"Assembly with name " +
+                         "'AbxrLib.WorldSpace' already exists\" errors mean, and Unity will not compile until one is " +
+                         "left.\nWHAT TO DO: delete all but one of those folders, then let Unity recompile. " +
+                         "Analytics for XR > Setup Wizard can do it if the Editor still has the menu.");
         }
 
         // -------------------------------------------------------------------------------------------------------------
@@ -48,6 +80,20 @@ namespace AbxrLib.Editor
             set => EditorPrefs.SetString(PrefKey("ShownForVersion"), value);
         }
 
+        /// <summary>
+        /// Set once the wizard is owed to this project and cleared when it actually opens.
+        ///
+        /// Installing a package can reload the domain more than once, and each reload discards the delayCall and
+        /// update handlers that were waiting to open the window. Persisting the intent means a reload - or quitting
+        /// and reopening the Editor - resumes it rather than losing it, which is why an install could previously
+        /// finish with no wizard and no explanation.
+        /// </summary>
+        private static bool WizardIsOwed
+        {
+            get => EditorPrefs.GetBool(PrefKey("WizardIsOwed"), false);
+            set => EditorPrefs.SetBool(PrefKey("WizardIsOwed"), value);
+        }
+
         // -------------------------------------------------------------------------------------------------------------
         // Auto-open
         // -------------------------------------------------------------------------------------------------------------
@@ -61,6 +107,179 @@ namespace AbxrLib.Editor
                 if (package.name == PackageName) involvesAbxrLib = true;
 
             if (involvesAbxrLib) BeginAutoOpen();
+
+            PackageInfo removed = FindAbxrLib(args.removed);
+            if (removed == null) return;
+
+            // Removed and re-added in the same operation is a reinstall, not an uninstall - leave it alone.
+            if (FindAbxrLib(args.added) != null || FindAbxrLib(args.changedTo) != null) return;
+
+            // The "already shown for this version" stamp lives in EditorPrefs, which outlives the package. Without
+            // clearing it, uninstalling and installing the same version again left the stamp in place and the wizard
+            // never opened for what the developer experiences as a fresh install.
+            EditorPrefs.DeleteKey(PrefKey("ShownForVersion"));
+            EditorPrefs.DeleteKey(PrefKey("WizardIsOwed"));
+
+            OfferToRemoveImportedSamples(removed);
+            OfferToRemoveConfiguration();
+            OfferToRestartAfterRemoval();
+        }
+
+        private static PackageInfo FindAbxrLib(IEnumerable<PackageInfo> packages)
+        {
+            foreach (var package in packages)
+                if (package.name == PackageName) return package;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Offers to delete the imported samples when AbxrLib is uninstalled.
+        ///
+        /// Package Manager copies samples into Assets/, so Unity leaves them behind - and without the package they no
+        /// longer compile, because AbxrLib.WorldSpace references AbxrLib.Runtime. This event is the last moment this
+        /// assembly is loaded during an uninstall, so it is the only chance to say anything.
+        ///
+        /// It asks rather than deletes: the imported copy is the developer's own project files and may have been
+        /// edited, which is one of the reasons for shipping it as a sample. Nothing is deleted unattended.
+        /// </summary>
+        private static void OfferToRemoveImportedSamples(PackageInfo removed)
+        {
+            // Package Manager copies samples to Assets/Samples/<package display name>/<version>/<sample>.
+            string importRoot = $"Assets/Samples/{removed.displayName}";
+            if (!Directory.Exists(importRoot)) return;
+
+            // Nothing left inside - typically the files were removed by hand and only the folders remain. There is
+            // nothing to lose, so tidy up without asking.
+            if (!Directory.EnumerateFileSystemEntries(importRoot).Any())
+            {
+                DeleteFolderAndEmptyParents(importRoot);
+                return;
+            }
+
+            // Never prompt or delete unattended: a command-line build removing the package must not block on a dialog
+            // or quietly delete project files.
+            if (Application.isBatchMode)
+            {
+                Logcat.Info($"AbxrLib was removed, but its imported samples are still in {importRoot}. They will not " +
+                            "compile without the package.\nWHAT TO DO: delete that folder, or reinstall AbxrLib.");
+                return;
+            }
+
+            bool delete = EditorUtility.DisplayDialog("AbxrLib removed",
+                $"AbxrLib's imported samples are still in your project:\n\n{importRoot}\n\n" +
+                "They will not compile without the package, because the world-space UI references AbxrLib's runtime " +
+                "assembly.\n\nDelete them? Any changes you made to those files will be lost.",
+                "Delete", "Keep");
+
+            if (!delete)
+            {
+                Logcat.Info($"Kept {importRoot}. It will not compile until AbxrLib is reinstalled.");
+                return;
+            }
+
+            DeleteFolderAndEmptyParents(importRoot);
+        }
+
+        /// <summary>
+        /// Deletes a folder and then any parent it leaves empty. Unity's DeleteAsset only removes what it is given,
+        /// so deleting the import folder used to leave an empty "Assets/Samples" (and its .meta) sitting in the
+        /// project looking like something failed.
+        /// </summary>
+        private static void DeleteFolderAndEmptyParents(string folder)
+        {
+            if (!AssetDatabase.DeleteAsset(folder))
+            {
+                Logcat.Warning($"Could not delete {folder}.\nWHAT TO DO: delete the folder in the Project window.");
+                return;
+            }
+
+            Logcat.Info($"Deleted {folder}.");
+
+            // Walk up while each parent is empty, stopping before Assets itself.
+            string parent = Path.GetDirectoryName(folder)?.Replace('\\', '/');
+            while (!string.IsNullOrEmpty(parent) && parent != "Assets")
+            {
+                if (!Directory.Exists(parent) || Directory.EnumerateFileSystemEntries(parent).Any()) break;
+                if (!AssetDatabase.DeleteAsset(parent)) break;
+
+                Logcat.Info($"Removed the empty folder {parent}.");
+                parent = Path.GetDirectoryName(parent)?.Replace('\\', '/');
+            }
+
+            AssetDatabase.Refresh();
+        }
+
+        /// <summary>
+        /// Points out the configuration asset, which is a project asset and so survives uninstalling.
+        ///
+        /// Keeping it is usually right - it holds the App Token - but it is also why installing AbxrLib again reports
+        /// the project as already configured instead of starting fresh, which is confusing if the uninstall was meant
+        /// to be a clean slate. Keep is the default: credentials are not something to delete on a guess.
+        /// </summary>
+        private static void OfferToRemoveConfiguration()
+        {
+            const string configPath = "Assets/Resources/AbxrLib.asset";
+            if (!File.Exists(configPath)) return;
+
+            if (Application.isBatchMode)
+            {
+                Logcat.Info($"AbxrLib was removed. Its configuration is still at {configPath}, so installing AbxrLib " +
+                            "again will pick up the existing settings.");
+                return;
+            }
+
+            bool keep = EditorUtility.DisplayDialog("AbxrLib removed",
+                $"AbxrLib's configuration is still in your project:\n\n{configPath}\n\n" +
+                "It holds your App Token and settings. Keeping it means installing AbxrLib again picks up this " +
+                "configuration, and the setup wizard will report the project as already configured.\n\n" +
+                "Delete it only if you want a clean slate - the App Token would have to be entered again.",
+                "Keep configuration", "Delete it");
+
+            if (keep)
+            {
+                Logcat.Info($"Kept {configPath}. Installing AbxrLib again will use these settings.");
+                return;
+            }
+
+            if (AssetDatabase.DeleteAsset(configPath))
+            {
+                AssetDatabase.Refresh();
+                Logcat.Info($"Deleted {configPath}.");
+            }
+            else
+            {
+                Logcat.Warning($"Could not delete {configPath}.\nWHAT TO DO: delete it in the Project window.");
+            }
+        }
+
+        /// <summary>
+        /// Offers to reopen the project once AbxrLib has been uninstalled.
+        ///
+        /// Removing the package unloads its assemblies but leaves the Editor holding a half-removed state: stale
+        /// compile errors from anything that referenced it, and no AbxrLib code left to clean up after itself.
+        /// Reopening starts the next install from a clean domain, which is what makes the wizard reliably appear when
+        /// the library is added back.
+        /// </summary>
+        private static void OfferToRestartAfterRemoval()
+        {
+            if (Application.isBatchMode) return;
+
+            if (!EditorUtility.DisplayDialog("AbxrLib removed",
+                    "Reopen the project to finish removing AbxrLib?\n\n" +
+                    "Until the project is reopened the Editor keeps stale state from the removed package, and adding " +
+                    "AbxrLib again may not start its setup wizard.\n\n" +
+                    "Unity will prompt you to save any unsaved scenes.",
+                    "Reopen now", "Later"))
+            {
+                Logcat.Info("AbxrLib was removed. Reopen the project when convenient - until then the Editor keeps " +
+                            "state from the removed package.");
+                return;
+            }
+
+            // Deferred: reopening from inside the package-registration callback would run while the Package Manager
+            // is still finishing.
+            EditorApplication.delayCall += () => EditorApplication.OpenProject(Directory.GetCurrentDirectory());
         }
 
         /// <summary>
@@ -70,6 +289,9 @@ namespace AbxrLib.Editor
         private static void BeginAutoOpen()
         {
             if (!ShouldAutoOpen()) return;
+
+            // Record the decision before waiting for the Editor, so a reload in the meantime does not lose it.
+            WizardIsOwed = true;
 
             _framesWaited = 0;
             EditorApplication.update -= WaitForEditorThenOpen;
@@ -85,6 +307,8 @@ namespace AbxrLib.Editor
                 // is mid-task, and a window that appears then is an interruption. The menu item is still there.
                 if (++_framesWaited <= MaxFramesToWaitForEditor) return;
 
+                // Give up waiting, but leave WizardIsOwed set: the next Editor load picks it up instead of the
+                // install silently ending with nothing shown.
                 EditorApplication.update -= WaitForEditorThenOpen;
                 return;
             }
@@ -93,8 +317,13 @@ namespace AbxrLib.Editor
 
             // Re-check: the project may have finished importing into a state that no longer needs the wizard, and the
             // configuration can only be read now that the Editor is idle.
-            if (!ShouldAutoOpen()) return;
+            if (!ShouldAutoOpen())
+            {
+                WizardIsOwed = false;
+                return;
+            }
 
+            WizardIsOwed = false;
             ShownForVersion = AbxrLibVersion.Version;
             SetupWizard.Open(true);
         }
@@ -108,6 +337,9 @@ namespace AbxrLib.Editor
             // Command-line builds and CI must never open a window or block on one.
             if (Application.isBatchMode) return false;
             if (!AutoOpenEnabled) return false;
+
+            // A decision already taken on an earlier load that never got as far as opening the window.
+            if (WizardIsOwed) return true;
 
             string installedVersion = AbxrLibVersion.Version;
             string shownVersion = ShownForVersion;
