@@ -242,15 +242,18 @@ namespace AbxrLib.Editor
 
             string[] values = { "production", "development", "production_custom" };
             string[] labels = { "Production", "Development", "Production (Custom APK)" };
-            int selected = _config.buildType == "production" ? 0 : _config.buildType == "development" ? 1 : 2;
-            selected = EditorGUILayout.Popup(new GUIContent("Build Type",
+            // An unrecognized stored value shows as Production, matching how the runtime normalizes it, and the
+            // value is only written back when the popup actually changes - drawing this page must never edit the
+            // configuration on its own.
+            int current = _config.buildType == "development" ? 1 : _config.buildType == "production_custom" ? 2 : 0;
+            int selected = EditorGUILayout.Popup(new GUIContent("Build Type",
                 "Production: shared builds, including ArborXR-managed fleets; each device's org comes from the " +
                 "device at runtime.\n" +
                 "Development: for your own test builds.\n" +
                 "Production (Custom APK): one customer per build; the Organization Token is required and the MDM is " +
                 "not consulted for it."),
-                selected, labels);
-            _config.buildType = values[selected];
+                current, labels);
+            if (selected != current) _config.buildType = values[selected];
 
             EditorGUILayout.LabelField(selected switch
             {
