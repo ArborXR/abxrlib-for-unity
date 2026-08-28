@@ -37,7 +37,6 @@ namespace AbxrLib.Runtime.UI
         {
             AbxrUi.RegisterAuthUi(new KeyboardAuthUi());
             AbxrUi.RegisterPollUi(new ExitPollUi());
-            AbxrUi.RegisterVersion(AbxrLibVersion.Version);
             AbxrUi.RegisterSceneObjectAttacher(AttachSceneObjects);
             AbxrUi.RegisterSceneChangedHandler(LaserPointerManager.OnSceneChanged);
         }

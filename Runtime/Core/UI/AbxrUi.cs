@@ -30,13 +30,6 @@ namespace AbxrLib.Runtime.Core.UI
         /// </summary>
         public static IAbxrAuthBridge AuthBridge { get; internal set; }
 
-        /// <summary>
-        /// Version of the registered world-space objects, or null when none registered. The world-space objects
-        /// are imported into the project rather than resolved as a package dependency, so they can be left behind
-        /// when core is updated; this is what lets the setup wizard notice that and offer a re-import.
-        /// </summary>
-        public static string RegisteredVersion { get; private set; }
-
         public static void RegisterAuthUi(IAbxrAuthUi authUi) => AuthUi = authUi;
 
         /// <summary>
@@ -61,9 +54,6 @@ namespace AbxrLib.Runtime.Core.UI
         public static void RegisterPollUi(IAbxrPollUi pollUi) => PollUi = pollUi;
 
         public static void RegisterQrScanner(IAbxrQrScanner qrScanner) => _qrScanner = qrScanner;
-
-        /// <summary>Called once by the world-space bootstrap so core can compare versions.</summary>
-        public static void RegisterVersion(string version) => RegisteredVersion = version;
 
         /// <summary>
         /// Explains the one situation where a core-only install goes quiet: the backend asked for user input,
@@ -109,7 +99,6 @@ namespace AbxrLib.Runtime.Core.UI
             PollUi = null;
             _qrScanner = null;
             AuthBridge = null;
-            RegisteredVersion = null;
             _sceneObjectAttacher = null;
             _sceneChangedHandler = null;
             _warnedNoAuthUi = false;
