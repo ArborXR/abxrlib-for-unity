@@ -1256,7 +1256,16 @@ internal void StartNewSession()
 				}
 			}
 
-			AbxrUi.PollUi?.AddPoll(prompt, pollType, responses, callback);
+			IAbxrPollUi pollUi = AbxrUi.PollUi;
+			if (pollUi == null)
+			{
+				// A valid poll with nowhere to go. Every invalid poll above logs an error, so without this the
+				// one silent case would be the valid call - dropped, with a callback that never fires.
+				AbxrUi.WarnNoPollUi();
+				return;
+			}
+
+			pollUi.AddPoll(prompt, pollType, responses, callback);
 		}
 		
 		/// <summary>

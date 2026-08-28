@@ -9,6 +9,7 @@ namespace AbxrLib.Runtime.Core.UI
         private static Action _sceneObjectAttacher;
         private static Action _sceneChangedHandler;
         private static bool _warnedNoAuthUi;
+        private static bool _warnedNoPollUi;
 
         /// <summary>The registered sign-in UI, or null when this project does not include the world-space objects.</summary>
         public static IAbxrAuthUi AuthUi { get; private set; }
@@ -83,6 +84,24 @@ namespace AbxrLib.Runtime.Core.UI
                            "Abxr.OnInputSubmitted.");
         }
 
+        /// <summary>
+        /// The poll counterpart of <see cref="WarnNoAuthUi"/>: Abxr.PollUser was called with a valid poll, but no
+        /// poll UI is registered, so the poll is dropped and its callback will never be invoked. Without this the
+        /// drop is completely silent - invalid polls log errors, so the valid ones were the only quiet case.
+        /// </summary>
+        internal static void WarnNoPollUi()
+        {
+            if (_warnedNoPollUi) return;
+            _warnedNoPollUi = true;
+
+            Logcat.Warning("AbxrLib was asked to show a poll (Abxr.PollUser), but this project has no way to show " +
+                           "it: the world-space objects are not installed and no poll UI is registered. The poll " +
+                           "was dropped and its callback will not be invoked.\n" +
+                           "WHAT TO DO: either install the AbxrLib world-space objects (Analytics for XR > Setup " +
+                           "Wizard > Project Setup) to use the built-in poll UI, or register your own with " +
+                           "AbxrUi.RegisterPollUi.");
+        }
+
         /// <summary>Test hook: drops every registration so a test can exercise the core-only path.</summary>
         internal static void ResetForTesting()
         {
@@ -94,6 +113,7 @@ namespace AbxrLib.Runtime.Core.UI
             _sceneObjectAttacher = null;
             _sceneChangedHandler = null;
             _warnedNoAuthUi = false;
+            _warnedNoPollUi = false;
         }
     }
 }
