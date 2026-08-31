@@ -30,7 +30,11 @@ namespace AbxrLib.Runtime.Core.UI
         /// </summary>
         public static IAbxrAuthBridge AuthBridge { get; internal set; }
 
-        public static void RegisterAuthUi(IAbxrAuthUi authUi) => AuthUi = authUi;
+        public static void RegisterAuthUi(IAbxrAuthUi authUi)
+        {
+            WarnIfReplacing("sign-in UI", AuthUi, authUi);
+            AuthUi = authUi;
+        }
 
         /// <summary>
         /// Registers the callback that creates the world-space scene objects. Kept separate from the interface
@@ -51,9 +55,33 @@ namespace AbxrLib.Runtime.Core.UI
 
         internal static void RaiseSceneChanged() => _sceneChangedHandler?.Invoke();
 
-        public static void RegisterPollUi(IAbxrPollUi pollUi) => PollUi = pollUi;
+        public static void RegisterPollUi(IAbxrPollUi pollUi)
+        {
+            WarnIfReplacing("poll UI", PollUi, pollUi);
+            PollUi = pollUi;
+        }
 
-        public static void RegisterQrScanner(IAbxrQrScanner qrScanner) => _qrScanner = qrScanner;
+        public static void RegisterQrScanner(IAbxrQrScanner qrScanner)
+        {
+            WarnIfReplacing("QR scanner", _qrScanner, qrScanner);
+            _qrScanner = qrScanner;
+        }
+
+        /// <summary>
+        /// Registration is last-write-wins, and the order registrants load in is not guaranteed - so when both
+        /// the world-space objects and the app register an implementation, which one wins is arbitrary and
+        /// otherwise invisible. Saying so in the log is what turns "the wrong keyboard appeared" into a
+        /// diagnosable state.
+        /// </summary>
+        private static void WarnIfReplacing(string what, object current, object incoming)
+        {
+            if (current == null || incoming == null || ReferenceEquals(current, incoming)) return;
+
+            Logcat.Warning($"AbxrUi: replacing the registered {what} ({current.GetType().Name}) with " +
+                           $"{incoming.GetType().Name}. Registration is last-write-wins and registration order is " +
+                           "not guaranteed - if this project should use only one of these, remove the other " +
+                           "registration.");
+        }
 
         /// <summary>
         /// Explains the one situation where a core-only install goes quiet: the backend asked for user input,
