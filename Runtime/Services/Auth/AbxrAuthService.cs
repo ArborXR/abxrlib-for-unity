@@ -298,7 +298,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                 {
                     AbxrUi.AuthUi?.StopProcessing();
-                    AbxrUi.AuthUi?.ShowPinPad();
+                    // Show rather than assume the pad is still up: a QR scan hides the PIN pad and does not
+                    // restore it on a successful read, so a scanned-but-rejected PIN arrives here with it hidden.
+                    AbxrUi.AuthUi?.Show(AuthUiKind.PinPad);
                     SetInputSource("user");  // In case it was changed by QR Scanner
 
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.

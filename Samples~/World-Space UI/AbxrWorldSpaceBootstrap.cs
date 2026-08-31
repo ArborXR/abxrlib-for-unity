@@ -59,17 +59,27 @@ namespace AbxrLib.Runtime.UI
     /// <summary>Adapts the shipped keyboard and PIN pad, whose API is static, to the interface core calls.</summary>
     internal sealed class KeyboardAuthUi : IAbxrAuthUi
     {
-        public void Show(AuthUiKind kind) => KeyboardHandler.Create(kind == AuthUiKind.PinPad
-            ? KeyboardHandler.KeyboardType.PinPad
-            : KeyboardHandler.KeyboardType.FullKeyboard);
+        public void Show(AuthUiKind kind)
+        {
+            if (kind == AuthUiKind.PinPad)
+            {
+                // Create early-returns when an instance already exists, even one the QR scanner hid while
+                // scanning - ShowPinPad is what re-activates it. Together they cover both halves of the
+                // interface's contract: create if missing, reveal if hidden.
+                KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+                KeyboardHandler.ShowPinPad();
+            }
+            else
+            {
+                KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+            }
+        }
 
         public void SetPrompt(string prompt) => KeyboardHandler.SetPrompt(prompt);
 
         public void Hide() => KeyboardHandler.Destroy();
 
         public void StopProcessing() => KeyboardHandler.StopProcessing();
-
-        public void ShowPinPad() => KeyboardHandler.ShowPinPad();
     }
 
     /// <summary>Adapts the shipped exit poll to the interface core calls.</summary>
