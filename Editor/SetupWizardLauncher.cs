@@ -27,9 +27,15 @@ namespace AbxrLib.Editor
 
         static SetupWizardLauncher()
         {
-            // Catches an install/upgrade that happens without a domain reload afterwards, and is also the only
-            // moment this assembly is still loaded while AbxrLib is being uninstalled.
+            // Install and upgrade: raised after the reload that applies the change, when the new version of this
+            // assembly is loaded and able to receive it.
             Events.registeredPackages += OnRegisteredPackages;
+
+            // Removal: raised before the Package Manager applies changes, while AbxrLib is still present and this
+            // assembly is still loaded. registeredPackages cannot serve here - it fires after the domain reload,
+            // and an uninstalled package has no assembly left to receive it, so a handler there never observes
+            // its own package's removal.
+            Events.registeringPackages += OnRegisteringPackages;
 
             // The normal path: this runs on the reload that follows the install.
             EditorApplication.delayCall += BeginAutoOpen;
@@ -100,14 +106,11 @@ namespace AbxrLib.Editor
 
         private static void OnRegisteredPackages(PackageRegistrationEventArgs args)
         {
-            bool involvesAbxrLib = false;
-            foreach (var package in args.added)
-                if (package.name == PackageName) involvesAbxrLib = true;
-            foreach (var package in args.changedTo)
-                if (package.name == PackageName) involvesAbxrLib = true;
+            if (FindAbxrLib(args.added) != null || FindAbxrLib(args.changedTo) != null) BeginAutoOpen();
+        }
 
-            if (involvesAbxrLib) BeginAutoOpen();
-
+        private static void OnRegisteringPackages(PackageRegistrationEventArgs args)
+        {
             PackageInfo removed = FindAbxrLib(args.removed);
             if (removed == null) return;
 
@@ -122,7 +125,14 @@ namespace AbxrLib.Editor
 
             OfferToRemoveImportedSamples(removed);
             OfferToRemoveConfiguration();
-            OfferToRestartAfterRemoval();
+
+            // A "reopen the project?" dialog used to follow, for the stale state a removal leaves behind (compile
+            // errors from anything that referenced the package, cached inspectors). It cannot work from this event:
+            // the reopen has to happen after the removal completes, and a deferred callback waiting for that is
+            // discarded by the domain reload the removal triggers. The wizard reopening on reinstall never needed
+            // the restart anyway - clearing the prefs above is what does that - so a log line is what remains.
+            Logcat.Info("AbxrLib is being removed. If the Editor is left showing stale errors from the removed " +
+                        "package, reopening the project clears them.");
         }
 
         private static PackageInfo FindAbxrLib(IEnumerable<PackageInfo> packages)
@@ -251,35 +261,6 @@ namespace AbxrLib.Editor
             {
                 Logcat.Warning($"Could not delete {configPath}.\nWHAT TO DO: delete it in the Project window.");
             }
-        }
-
-        /// <summary>
-        /// Offers to reopen the project once AbxrLib has been uninstalled.
-        ///
-        /// Removing the package unloads its assemblies but leaves the Editor holding a half-removed state: stale
-        /// compile errors from anything that referenced it, and no AbxrLib code left to clean up after itself.
-        /// Reopening starts the next install from a clean domain, which is what makes the wizard reliably appear when
-        /// the library is added back.
-        /// </summary>
-        private static void OfferToRestartAfterRemoval()
-        {
-            if (Application.isBatchMode) return;
-
-            if (!EditorUtility.DisplayDialog("AbxrLib removed",
-                    "Reopen the project to finish removing AbxrLib?\n\n" +
-                    "Until the project is reopened the Editor keeps stale state from the removed package, and adding " +
-                    "AbxrLib again may not start its setup wizard.\n\n" +
-                    "Unity will prompt you to save any unsaved scenes.",
-                    "Reopen now", "Later"))
-            {
-                Logcat.Info("AbxrLib was removed. Reopen the project when convenient - until then the Editor keeps " +
-                            "state from the removed package.");
-                return;
-            }
-
-            // Deferred: reopening from inside the package-registration callback would run while the Package Manager
-            // is still finishing.
-            EditorApplication.delayCall += () => EditorApplication.OpenProject(Directory.GetCurrentDirectory());
         }
 
         /// <summary>
