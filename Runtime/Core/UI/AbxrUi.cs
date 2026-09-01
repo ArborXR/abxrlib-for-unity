@@ -38,9 +38,11 @@ namespace AbxrLib.Runtime.Core.UI
 
         /// <summary>
         /// Authentication, as the UI sees it. Set by the subsystem once the auth service exists; the UI reads it
-        /// when the user submits input.
+        /// when the user submits input. Internal, like the two scene-plumbing registrations below: they exist to
+        /// serve the shipped sample, which has InternalsVisibleTo - an app registers its UI through the public
+        /// Register methods and submits input through Abxr.OnInputSubmitted.
         /// </summary>
-        public static IAbxrAuthBridge AuthBridge { get; internal set; }
+        internal static IAbxrAuthBridge AuthBridge { get; set; }
 
         public static void RegisterAuthUi(IAbxrAuthUi authUi)
         {
@@ -54,7 +56,7 @@ namespace AbxrLib.Runtime.Core.UI
         /// while creating GameObjects has to wait for <see cref="Initialize"/> at BeforeSceneLoad - the same point
         /// they were created before they became optional.
         /// </summary>
-        public static void RegisterSceneObjectAttacher(Action attach) => _sceneObjectAttacher = attach;
+        internal static void RegisterSceneObjectAttacher(Action attach) => _sceneObjectAttacher = attach;
 
         /// <summary>Creates the world-space scene objects, or does nothing in a core-only project.</summary>
         internal static void AttachSceneObjects() => _sceneObjectAttacher?.Invoke();
@@ -63,7 +65,7 @@ namespace AbxrLib.Runtime.Core.UI
         /// Registers a handler to be told when the active scene changes, so the world-space objects can drop
         /// references to objects that went away with the old scene.
         /// </summary>
-        public static void RegisterSceneChangedHandler(Action onSceneChanged) => _sceneChangedHandler = onSceneChanged;
+        internal static void RegisterSceneChangedHandler(Action onSceneChanged) => _sceneChangedHandler = onSceneChanged;
 
         internal static void RaiseSceneChanged() => _sceneChangedHandler?.Invoke();
 
