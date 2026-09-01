@@ -85,7 +85,7 @@ The package itself contains no user interface. AbxrLib's built-in sign-in UI —
 
 It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`, and TextMeshPro is added for you if the project does not have it. Because it is imported into your project rather than resolved as a package, **updating AbxrLib does not update it** — the wizard flags the mismatch and offers a re-import (which overwrites, so keep your own changes elsewhere).
 
-**Skip it** if your app collects input itself. Handle `Abxr.OnInputRequested` and pass the value to `Abxr.OnInputSubmitted`; AbxrLib will not try to draw anything. Events, telemetry, logs, storage, and authentication all work without the UI.
+**Skip it** if your app collects input itself. Handle `Abxr.OnInputRequested` and pass the value to `Abxr.OnInputSubmitted`; AbxrLib will not try to draw anything. Events, telemetry, logs, storage, and authentication all work without the UI. Two things do not: `Abxr.PollUser` drops its poll with a warning unless you register your own UI via `AbxrUi.RegisterPollUi`, and the headset-removal "same user?" prompt (`Abxr.OnHeadsetPutOnNewSession`) is asked through that same poll UI — so without one, that callback never fires.
 
 > **Upgrading from 2.0.10 or earlier?** Two changes to know about:
 >
