@@ -8,6 +8,7 @@
 using System;
 using System.Collections;
 using Unity.XR.PXR;
+using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
@@ -123,6 +124,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            AbxrUi.UnregisterQrScanner(this);
             StopScanningInternal(false);
         }
 

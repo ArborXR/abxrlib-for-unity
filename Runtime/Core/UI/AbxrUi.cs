@@ -80,6 +80,29 @@ namespace AbxrLib.Runtime.Core.UI
         }
 
         /// <summary>
+        /// Removes a registration, but only the caller's own - a late teardown must never clobber whatever
+        /// registered after it. A MonoBehaviour-backed implementation should call this from OnDestroy: the
+        /// registry treats a destroyed Unity object as absent on its own, but only the implementation can
+        /// release the slot deliberately, for example when it is replaced mid-scene rather than destroyed.
+        /// </summary>
+        public static void UnregisterAuthUi(IAbxrAuthUi authUi)
+        {
+            if (ReferenceEquals(_authUi, authUi)) _authUi = null;
+        }
+
+        /// <summary>See <see cref="UnregisterAuthUi"/>: removes only the caller's own registration.</summary>
+        public static void UnregisterPollUi(IAbxrPollUi pollUi)
+        {
+            if (ReferenceEquals(_pollUi, pollUi)) _pollUi = null;
+        }
+
+        /// <summary>See <see cref="UnregisterAuthUi"/>: removes only the caller's own registration.</summary>
+        public static void UnregisterQrScanner(IAbxrQrScanner qrScanner)
+        {
+            if (ReferenceEquals(_qrScanner, qrScanner)) _qrScanner = null;
+        }
+
+        /// <summary>
         /// Registration is last-write-wins, and the order registrants load in is not guaranteed - so when both
         /// the world-space objects and the app register an implementation, which one wins is arbitrary and
         /// otherwise invisible. Saying so in the log is what turns "the wrong keyboard appeared" into a

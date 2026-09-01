@@ -10,6 +10,7 @@ using System.Collections;
 using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
+using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 
@@ -216,6 +217,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
         private void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            AbxrUi.UnregisterQrScanner(this);
             StopScanningInternal(false);
             ShutdownCameraBackend();
         }
