@@ -77,6 +77,11 @@ namespace AbxrLib.Runtime.Core.UI
         {
             if (current == null || incoming == null || ReferenceEquals(current, incoming)) return;
 
+            // The same type re-registering is not a conflict - it is the domain-reload-disabled Editor case:
+            // statics survive between plays while the registrant runs again with a fresh instance. A real
+            // sample-vs-app conflict always involves two different types.
+            if (current.GetType() == incoming.GetType()) return;
+
             Logcat.Warning($"AbxrUi: replacing the registered {what} ({current.GetType().Name}) with " +
                            $"{incoming.GetType().Name}. Registration is last-write-wins and registration order is " +
                            "not guaranteed - if this project should use only one of these, remove the other " +
