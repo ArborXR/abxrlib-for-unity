@@ -16,14 +16,16 @@ namespace AbxrLib.Editor
         private const string PackageName = "com.arborxr.unity";
 
         /// <summary>
-        /// How long to keep waiting for the Editor to go idle before giving up, in update ticks - roughly five
-        /// minutes. Installing a package is followed by an import and a full compile, which routinely takes longer
-        /// than a few seconds; a short budget here meant the wizard quietly never opened on the installs that needed
-        /// it most.
+        /// How long to keep waiting for the Editor to go idle before giving up. A wall-clock deadline, not a tick
+        /// count: EditorApplication.update runs an order of magnitude slower in an unfocused Editor - the common
+        /// case, since people start an install and switch apps - so a tick budget meant anywhere from ninety
+        /// seconds to a quarter hour. Installing a package is followed by an import and a full compile, which
+        /// routinely takes minutes; a short budget here meant the wizard quietly never opened on the installs that
+        /// needed it most.
         /// </summary>
-        private const int MaxFramesToWaitForEditor = 9000;
+        private const double MaxSecondsToWaitForEditor = 300.0;
 
-        private static int _framesWaited;
+        private static double _waitDeadline;
 
         static SetupWizardLauncher()
         {
@@ -282,7 +284,7 @@ namespace AbxrLib.Editor
             // Record the decision before waiting for the Editor, so a reload in the meantime does not lose it.
             WizardIsOwed = true;
 
-            _framesWaited = 0;
+            _waitDeadline = EditorApplication.timeSinceStartup + MaxSecondsToWaitForEditor;
             EditorApplication.update -= WaitForEditorThenOpen;
             EditorApplication.update += WaitForEditorThenOpen;
         }
@@ -294,7 +296,7 @@ namespace AbxrLib.Editor
             {
                 // Give up rather than wait forever: a developer who spends the whole timeout compiling or in Play Mode
                 // is mid-task, and a window that appears then is an interruption. The menu item is still there.
-                if (++_framesWaited <= MaxFramesToWaitForEditor) return;
+                if (EditorApplication.timeSinceStartup <= _waitDeadline) return;
 
                 // Give up waiting, but leave WizardIsOwed set: the next Editor load picks it up instead of the
                 // install silently ending with nothing shown.
