@@ -354,10 +354,13 @@ namespace AbxrLib.Editor
             foreach (string path in ImportedBootstrapPaths())
             {
                 // .../Samples/<display name>/<version>/<sample name>/AbxrWorldSpaceBootstrap.cs
+                // A real copy has at least one path segment below the version folder - without requiring that,
+                // a bootstrap sitting two levels under Samples makes Take(i + 3) return the script file itself,
+                // and "delete the stale copy" deletes one file while the duplicate assembly error stays.
                 string[] parts = path.Split('/');
                 for (int i = 0; i < parts.Length; i++)
                 {
-                    if (parts[i] != "Samples" || i + 2 >= parts.Length) continue;
+                    if (parts[i] != "Samples" || i + 3 >= parts.Length) continue;
 
                     string copy = string.Join("/", parts.Take(i + 3));
                     if (!copies.Contains(copy)) copies.Add(copy);
@@ -476,9 +479,12 @@ namespace AbxrLib.Editor
             if (path == null) return null;
 
             // .../Samples/<display name>/<version>/<sample name>/AbxrWorldSpaceBootstrap.cs
+            // Same depth rule as ImportedWorldSpaceCopies: the segment two below "Samples" is only a version
+            // when something sits beneath it. In a shallower layout it would be the script's own file name,
+            // which then reads as a bogus "older AbxrLib" and arms a re-import nobody needs.
             string[] parts = path.Split('/');
             for (int i = 0; i < parts.Length; i++)
-                if (parts[i] == "Samples" && i + 2 < parts.Length) return parts[i + 2];
+                if (parts[i] == "Samples" && i + 3 < parts.Length) return parts[i + 2];
 
             return null;
         }
