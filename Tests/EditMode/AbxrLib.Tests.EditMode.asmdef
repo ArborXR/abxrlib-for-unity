@@ -1,7 +1,8 @@
 {
     "name": "AbxrLib.Tests.EditMode",
     "references": [
-        "AbxrLib.Runtime"
+        "AbxrLib.Runtime",
+        "AbxrLib.Editor"
     ],
     "includePlatforms": [
         "Editor"

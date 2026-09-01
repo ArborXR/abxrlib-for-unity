@@ -397,7 +397,7 @@ namespace AbxrLib.Editor
         /// the newest by its version folder. FindAssets order says nothing about age, so "last one found" could
         /// keep the stale copy and delete the current one.
         /// </summary>
-        private static string CopyToKeep(List<string> copies)
+        internal static string CopyToKeep(List<string> copies)
         {
             string current = copies.FirstOrDefault(c => c.EndsWith("/" + InstalledPackageVersion()));
             if (current != null) return current;
@@ -894,7 +894,7 @@ namespace AbxrLib.Editor
         /// suffixes are compared only as far as their leading digits, which is enough to tell "older than required"
         /// from "at or above".
         /// </summary>
-        private static int CompareVersions(string left, string right)
+        internal static int CompareVersions(string left, string right)
         {
             string[] a = (left ?? "").Split('.');
             string[] b = (right ?? "").Split('.');
