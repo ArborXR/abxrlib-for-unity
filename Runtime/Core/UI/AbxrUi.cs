@@ -5,6 +5,8 @@ namespace AbxrLib.Runtime.Core.UI
 {
     public static class AbxrUi
     {
+        private static IAbxrAuthUi _authUi;
+        private static IAbxrPollUi _pollUi;
         private static IAbxrQrScanner _qrScanner;
         private static Action _sceneObjectAttacher;
         private static Action _sceneChangedHandler;
@@ -12,17 +14,27 @@ namespace AbxrLib.Runtime.Core.UI
         private static bool _warnedNoPollUi;
 
         /// <summary>The registered sign-in UI, or null when this project does not include the world-space objects.</summary>
-        public static IAbxrAuthUi AuthUi { get; private set; }
+        public static IAbxrAuthUi AuthUi => Alive(_authUi) ? _authUi : null;
 
         /// <summary>The registered exit-poll UI, or null when this project does not include the world-space objects.</summary>
-        public static IAbxrPollUi PollUi { get; private set; }
+        public static IAbxrPollUi PollUi => Alive(_pollUi) ? _pollUi : null;
 
         /// <summary>
         /// The registered scanner, but only while it reports itself usable: availability depends on the device,
         /// its permissions, and initialization, all of which change after registration. Null means "no QR right
         /// now", which is what every caller needs to know.
         /// </summary>
-        public static IAbxrQrScanner QrScanner => _qrScanner != null && _qrScanner.IsAvailable ? _qrScanner : null;
+        public static IAbxrQrScanner QrScanner => Alive(_qrScanner) && _qrScanner.IsAvailable ? _qrScanner : null;
+
+        /// <summary>
+        /// Whether a registration can still be used. The fields are interface-typed, and an interface-typed null
+        /// check never reaches UnityEngine.Object's overloaded equality - so a destroyed MonoBehaviour registrant
+        /// would read as present, get handed to callers dead, and suppress the no-UI warnings because its slot
+        /// looks occupied. Unwrapping to the Unity null check makes a destroyed registrant read as absent, which
+        /// is both safe and what turns the warnings back on.
+        /// </summary>
+        private static bool Alive(object registration) =>
+            registration != null && (!(registration is UnityEngine.Object obj) || obj != null);
 
         /// <summary>
         /// Authentication, as the UI sees it. Set by the subsystem once the auth service exists; the UI reads it
@@ -33,7 +45,7 @@ namespace AbxrLib.Runtime.Core.UI
         public static void RegisterAuthUi(IAbxrAuthUi authUi)
         {
             WarnIfReplacing("sign-in UI", AuthUi, authUi);
-            AuthUi = authUi;
+            _authUi = authUi;
         }
 
         /// <summary>
@@ -58,7 +70,7 @@ namespace AbxrLib.Runtime.Core.UI
         public static void RegisterPollUi(IAbxrPollUi pollUi)
         {
             WarnIfReplacing("poll UI", PollUi, pollUi);
-            PollUi = pollUi;
+            _pollUi = pollUi;
         }
 
         public static void RegisterQrScanner(IAbxrQrScanner qrScanner)
@@ -128,8 +140,8 @@ namespace AbxrLib.Runtime.Core.UI
         /// <summary>Test hook: drops every registration so a test can exercise the core-only path.</summary>
         internal static void ResetForTesting()
         {
-            AuthUi = null;
-            PollUi = null;
+            _authUi = null;
+            _pollUi = null;
             _qrScanner = null;
             AuthBridge = null;
             _sceneObjectAttacher = null;
