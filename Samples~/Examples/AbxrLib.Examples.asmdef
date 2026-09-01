@@ -3,7 +3,8 @@
     "rootNamespace": "AbxrLib.Runtime.UI.Examples",
     "references": [
         "AbxrLib.Runtime",
-        "AbxrLib.WorldSpace"
+        "AbxrLib.WorldSpace",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
