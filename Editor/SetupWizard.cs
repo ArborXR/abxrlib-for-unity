@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using AbxrLib.Runtime.Core;
 using UnityEditor;
 using UnityEngine;
+// UnityEditor also has a legacy PackageInfo, so name the Package Manager one explicitly.
+using PackageInfo = UnityEditor.PackageManager.PackageInfo;
 
 namespace AbxrLib.Editor
 {
@@ -91,11 +93,32 @@ namespace AbxrLib.Editor
         // Chrome
         // ---------------------------------------------------------------------------------------------------------
 
+        private Texture2D _headerIcon;
+        private bool _headerIconLookedUp;
+
+        /// <summary>
+        /// The header icon lives in the package's Editor folder rather than a Resources folder: Resources content
+        /// ships in every consumer's build, and the sample's copy of this art only exists once the sample is
+        /// imported - while the wizard's primary audience is the core-only project that never imports it.
+        /// </summary>
+        private Texture2D HeaderIcon()
+        {
+            if (_headerIconLookedUp) return _headerIcon;
+            _headerIconLookedUp = true;
+
+            var self = PackageInfo.FindForAssembly(typeof(SetupWizard).Assembly);
+            if (self != null)
+                _headerIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    $"{self.assetPath}/Editor/Images/ArborXR_Org_Icon.png");
+
+            return _headerIcon;
+        }
+
         private void DrawHeader()
         {
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
-            var icon = Resources.Load<Texture2D>("Images/ArborXR_Org_Icon");
+            var icon = HeaderIcon();
             if (icon) GUILayout.Label(icon, GUILayout.Width(38f), GUILayout.Height(38f));
 
             EditorGUILayout.BeginVertical();
