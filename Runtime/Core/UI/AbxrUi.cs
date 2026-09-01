@@ -75,7 +75,10 @@ namespace AbxrLib.Runtime.Core.UI
 
         public static void RegisterQrScanner(IAbxrQrScanner qrScanner)
         {
-            WarnIfReplacing("QR scanner", _qrScanner, qrScanner);
+            // Liveness-filtered like the other two registrations (dead current = silent replace), but NOT the
+            // QrScanner property: that also gates on IsAvailable, and a still-initializing scanner being
+            // replaced is exactly the conflict worth warning about.
+            WarnIfReplacing("QR scanner", Alive(_qrScanner) ? _qrScanner : null, qrScanner);
             _qrScanner = qrScanner;
         }
 
