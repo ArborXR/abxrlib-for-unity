@@ -340,12 +340,32 @@ namespace AbxrLib.Editor
         /// "Assembly with name 'AbxrLib.WorldSpace' already exists" - once per assembly, for both copies - and then
         /// refuses to compile anything. Deleting the stale copy is the whole fix, so name it plainly.
         /// </summary>
+        /// <summary>
+        /// The copy the duplicate fix preserves: the one matching the running version when there is one, otherwise
+        /// the newest by its version folder. FindAssets order says nothing about age, so "last one found" could
+        /// keep the stale copy and delete the current one.
+        /// </summary>
+        private static string CopyToKeep(List<string> copies)
+        {
+            string current = copies.FirstOrDefault(c => c.EndsWith("/" + AbxrLibVersion.Version));
+            if (current != null) return current;
+
+            string newest = copies[0];
+            foreach (string copy in copies.Skip(1))
+                if (CompareVersions(VersionFolder(copy), VersionFolder(newest)) > 0) newest = copy;
+
+            return newest;
+        }
+
+        /// <summary>The version segment of a copy path ("Assets/Samples/(display name)/2.0.11" -> "2.0.11").</summary>
+        private static string VersionFolder(string copy) => copy.Substring(copy.LastIndexOf('/') + 1);
+
         private static Check CheckDuplicateWorldSpaceImports()
         {
             var copies = ImportedWorldSpaceCopies();
             if (copies.Count < 2) return null;
 
-            string keep = copies.FirstOrDefault(c => c.EndsWith("/" + AbxrLibVersion.Version)) ?? copies.Last();
+            string keep = CopyToKeep(copies);
 
             return new Check
             {
@@ -358,13 +378,20 @@ namespace AbxrLib.Editor
                          "instead of replacing one - the wizard's own import replaces in place.",
                 Severity = Severity.Problem,
                 FixLabel = "Delete the older copies",
-                Fix = () => DeleteWorldSpaceCopiesExcept(keep)
+                Fix = DeleteStaleWorldSpaceCopies
             };
         }
 
-        private static void DeleteWorldSpaceCopiesExcept(string keep)
+        private static void DeleteStaleWorldSpaceCopies()
         {
-            List<string> stale = ImportedWorldSpaceCopies().Where(copy => copy != keep).ToList();
+            // Everything is recomputed at click time, not captured when the check ran: the copy set can change in
+            // between (a re-import, a manual delete), and a keep chosen from the old set could put every current
+            // copy on the delete list.
+            List<string> copies = ImportedWorldSpaceCopies();
+            if (copies.Count < 2) return;
+
+            string keep = CopyToKeep(copies);
+            List<string> stale = copies.Where(copy => copy != keep).ToList();
             if (stale.Count == 0) return;
 
             // DeleteAsset skips the OS trash, and the stale copy may hold edits the developer made to the sample.
