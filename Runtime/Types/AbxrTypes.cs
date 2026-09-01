@@ -372,7 +372,8 @@ namespace AbxrLib.Runtime.Types
 
     /// <summary>
     /// Which exit poll to show. Lives here rather than on the poll UI so that Abxr.PollUser stays callable in a
-    /// project that does not include the world-space objects (the call queues a poll; the UI shows it when present).
+    /// project that does not include the world-space objects (with no poll UI registered, the call logs a warning
+    /// and drops the poll).
     /// </summary>
     public enum PollType
     {
