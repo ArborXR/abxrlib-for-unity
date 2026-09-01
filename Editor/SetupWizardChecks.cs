@@ -992,10 +992,11 @@ namespace AbxrLib.Editor
                 return new Check
                 {
                     Title = "QR-code sign-in is not enabled for this build target",
-                    Detail = $"{detected} support is in the project, but the define that compiles QR scanning in is " +
-                             "not set for the active build target. It is set automatically once the headset SDK is " +
-                             "detected for that target - switching to Android usually does it. PIN and email sign-in " +
-                             "work either way.",
+                    Detail = $"{detected} support is in the project, but the define that marks QR support ready is " +
+                             "not set for the active build target. (On PICO it also compiles the scanner in; on " +
+                             "Meta the scanner reaches the SDK by reflection and the define is only the readiness " +
+                             "marker.) It is set automatically once the headset SDK is detected for that target - " +
+                             "switching to Android usually does it. PIN and email sign-in work either way.",
                     Severity = Severity.Info
                 };
             }
