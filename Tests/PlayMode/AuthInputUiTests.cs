@@ -40,4 +40,26 @@ public class AuthInputUiTests : AbxrPlayModeTestBase
         LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("no way to ask")));
         Assert.DoesNotThrow(() => RequestInputWithNothingToShowIt("text"));
     }
+
+    [Test]
+    public void AuthInputRequest_HandlerAssignedAfterDroppedRequest_ReceivesTheRequest()
+    {
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("no way to ask")));
+        RequestInputWithNothingToShowIt("assessmentPin");
+
+        // Invoking the wired callback above bypassed the service's own request bookkeeping, so mark the
+        // request pending the way a real RequestInput would have - the replay is gated on it.
+        AbxrSubsystem.Instance.AuthServiceForTesting.SetInputRequestPendingForTesting(true);
+
+        int calls = 0;
+        string receivedType = null;
+        Abxr.OnInputRequested = (type, prompt, domain, error) => { calls++; receivedType = type; };
+
+        Assert.AreEqual(1, calls, "Assigning a handler while a dropped request is still pending must replay it.");
+        Assert.AreEqual("assessmentPin", receivedType);
+
+        // The stash is consumed by the replay: a later handler assignment must not receive it again.
+        Abxr.OnInputRequested = (type, prompt, domain, error) => { calls++; };
+        Assert.AreEqual(1, calls, "A replayed request must not replay a second time.");
+    }
 }

@@ -583,21 +583,51 @@ namespace AbxrLib.Runtime
 		internal bool IsAuthInputRequestPending() => _authService != null && _authService.IsInputRequestPending;
 
 		/// <summary>
+		/// The last input request that reached neither an app handler nor a UI, kept so a handler assigned
+		/// after the request can still receive it. Cleared whenever a request is actually delivered.
+		/// </summary>
+		private (string type, string prompt, string domain, string error)? _droppedInputRequest;
+
+		/// <summary>
 		/// Get or set the single OnInputRequested handler. When set, auth input requests go to this handler; when null, PresentKeyboard is used.
 		/// Auth service always invokes OnInputRequestedDispatch, which never calls PresentKeyboard if the app handler is set.
 		/// </summary>
 		internal Action<string, string, string, string> OnInputRequested
 		{
 			get => _appOnInputRequested;
-			set => _appOnInputRequested = value;
+			set
+			{
+				_appOnInputRequested = value;
+
+				// Replay a request that previously went nowhere: the backend asked for input before the app
+				// assigned its handler (a login hosted in a later scene, say), and with no UI either, the
+				// request was dropped with a warning - previously ending in a stuck sign-in. Only a
+				// still-pending request replays, and never one a UI presented, so assigning a handler while
+				// the built-in keyboard is up stays a no-op, as it was before the UI became optional.
+				if (value == null || _droppedInputRequest == null) return;
+				if (_authService == null || !_authService.IsInputRequestPending) return;
+
+				var request = _droppedInputRequest.Value;
+				_droppedInputRequest = null;
+				value(request.type, request.prompt, request.domain, request.error);
+			}
 		}
 
 		private void OnInputRequestedDispatch(string type, string prompt, string domain, string error)
 		{
 			if (_appOnInputRequested != null)
+			{
+				_droppedInputRequest = null;
 				_appOnInputRequested(type, prompt, domain, error);
+			}
+			else if (PresentKeyboard(type, prompt, domain, error))
+			{
+				_droppedInputRequest = null;
+			}
 			else
-				PresentKeyboard(type, prompt, domain, error);
+			{
+				_droppedInputRequest = (type, prompt, domain, error);
+			}
 		}
 		
 		/// <summary>
@@ -1473,7 +1503,8 @@ internal void StartNewSession()
 			return result.ToString();
 		}
 
-		private void PresentKeyboard(string type, string prompt, string domain, string error)
+		/// <summary>False when there was no UI to present on, so the dispatcher can keep the request for replay.</summary>
+		private bool PresentKeyboard(string type, string prompt, string domain, string error)
 		{
 			// No world-space UI in this project and no app handler either: say so once, actionably, instead of
 			// leaving authentication waiting for input that can never arrive.
@@ -1481,7 +1512,7 @@ internal void StartNewSession()
 			if (authUi == null)
 			{
 				AbxrUi.WarnNoAuthUi(type);
-				return;
+				return false;
 			}
 
 			// When showing an error (e.g. invalid PIN), stop the Processing animation so the message is visible.
@@ -1506,6 +1537,7 @@ internal void StartNewSession()
 
 			if (!string.IsNullOrEmpty(error)) displayPrompt = $"{error}\n{displayPrompt}";
 			authUi.SetPrompt(displayPrompt);
+			return true;
 		}
 		
 		/// <summary>

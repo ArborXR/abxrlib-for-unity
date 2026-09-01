@@ -64,6 +64,8 @@ namespace AbxrLib.Runtime.Services.Auth
         internal bool HasAuthenticationStarted => _isAuthStarted;
         /// <summary>Testing only. Clears <see cref="HasAuthenticationStarted"/> so tests can run multiple auth scenarios in one session.</summary>
         internal void ResetAuthStartedForTesting() => _isAuthStarted = false;
+        /// <summary>Testing only. Tests that invoke <see cref="OnInputRequested"/> directly bypass the request bookkeeping; this restores it.</summary>
+        internal void SetInputRequestPendingForTesting(bool pending) => _inputRequestPending = pending;
         private Coroutine _reAuthCoroutine;
         private Coroutine _retryCoroutine;
         private Dictionary<string, string> _userData;
