@@ -239,14 +239,17 @@ namespace AbxrLib.Editor
                 return;
             }
 
-            bool keep = EditorUtility.DisplayDialog("AbxrLib removed",
+            // The destructive choice must be the ok button: DisplayDialog returns false for the cancel button AND
+            // for Escape or closing the window, so whatever cancel means is also what a dismissal does. With the
+            // buttons the other way around, dismissing this dialog deleted the App Token.
+            bool delete = EditorUtility.DisplayDialog("AbxrLib removed",
                 $"AbxrLib's configuration is still in your project:\n\n{configPath}\n\n" +
                 "It holds your App Token and settings. Keeping it means installing AbxrLib again picks up this " +
                 "configuration, and the setup wizard will report the project as already configured.\n\n" +
                 "Delete it only if you want a clean slate - the App Token would have to be entered again.",
-                "Keep configuration", "Delete it");
+                "Delete it", "Keep configuration");
 
-            if (keep)
+            if (!delete)
             {
                 Logcat.Info($"Kept {configPath}. Installing AbxrLib again will use these settings.");
                 return;
