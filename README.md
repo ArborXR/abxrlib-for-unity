@@ -90,7 +90,7 @@ It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`, and Te
 > **Upgrading from 2.0.10 or earlier?** Two changes to know about:
 >
 > 1. The sign-in UI used to ship inside the package. After updating, import it as above — otherwise an authentication request that needs a PIN or email has nothing to show unless your app handles `Abxr.OnInputRequested`. The wizard says so on its first page.
-> 2. `Abxr.PollUser()` now takes `PollType` from `AbxrLib.Runtime.Types` instead of `ExitPollHandler.PollType`. If you call it, add `using AbxrLib.Runtime.Types;` and drop the `ExitPollHandler.` prefix — the enum values are unchanged. This is the only public API change.
+> 2. `Abxr.PollUser()` now takes `PollType` from `AbxrLib.Runtime.Types` instead of `ExitPollHandler.PollType`. If you call it, add `using AbxrLib.Runtime.Types;` and drop the `ExitPollHandler.` prefix — the enum values are unchanged. This is the only change you need to make to existing code; 3.0 also adds new public API (the `AbxrUi` registry and its interfaces) without touching anything else you already call.
 
 ---
 
