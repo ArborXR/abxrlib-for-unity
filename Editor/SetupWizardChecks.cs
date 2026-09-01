@@ -585,6 +585,23 @@ namespace AbxrLib.Editor
                 };
             }
 
+            // Re-import only helps a canonical import: Sample.Import overrides previous imports under
+            // Assets/Samples and nothing else, so for a copy living elsewhere it would ADD a second copy - and
+            // with it the duplicate assembly names that stop the whole compile.
+            if (ImportedWorldSpaceCopies().Count == 0)
+            {
+                return new Check
+                {
+                    Title = "World-space UI is in this project but not compiling",
+                    Detail = "Its scripts are in this project (outside the Assets/Samples import root) and " +
+                             "TextMeshPro is present, so something else is stopping the AbxrLib.WorldSpace assembly " +
+                             "from building.\nWHAT TO DO: check the Console for the first compile error. If that " +
+                             "copy is beyond repair, delete it first, then import the sample fresh from here or " +
+                             "from Package Manager.",
+                    Severity = Severity.Problem
+                };
+            }
+
             return new Check
             {
                 Title = "World-space UI is imported but not compiling",
