@@ -272,7 +272,12 @@ namespace AbxrLib.Editor
         /// </summary>
         private static void BeginAutoOpen()
         {
-            if (!ShouldAutoOpen()) return;
+            // Command-line builds and CI must never open a window or block on one, and a developer who switched
+            // auto-open off is not second-guessed. Checked here, outside WizardIsWanted, so an owed flag stranded
+            // by an earlier load survives a batch-mode run untouched and reaches the next interactive one.
+            if (Application.isBatchMode || !AutoOpenEnabled) return;
+
+            if (!WizardIsOwed && !WizardIsWanted()) return;
 
             // Record the decision before waiting for the Editor, so a reload in the meantime does not lose it.
             WizardIsOwed = true;
@@ -299,9 +304,11 @@ namespace AbxrLib.Editor
 
             EditorApplication.update -= WaitForEditorThenOpen;
 
-            // Re-check: the project may have finished importing into a state that no longer needs the wizard, and the
-            // configuration can only be read now that the Editor is idle.
-            if (!ShouldAutoOpen())
+            // Re-check on the project's merits, never the owed flag: the first check usually runs mid-import, when
+            // the configuration reads as null and the sample assembly is not compiled yet, so "not set up" was the
+            // only answer available then. The flag records that a look is owed - it must not pre-decide the answer,
+            // or an already-configured project gets this window on every upgrade.
+            if (!AutoOpenEnabled || !WizardIsWanted())
             {
                 WizardIsOwed = false;
                 return;
@@ -313,18 +320,13 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// Whether the wizard should open by itself right now. Kept in one place so every entry point agrees, and so
-        /// the reasons it declines are all visible together.
+        /// Whether this project's state calls for the wizard: not shown for this version yet, and not already fully
+        /// set up. Deliberately silent on batch mode, the auto-open preference, and the owed flag - those belong to
+        /// the callers, because this is also the post-wait re-check, and a flag consulted here would answer it
+        /// before the project state got a say.
         /// </summary>
-        private static bool ShouldAutoOpen()
+        private static bool WizardIsWanted()
         {
-            // Command-line builds and CI must never open a window or block on one.
-            if (Application.isBatchMode) return false;
-            if (!AutoOpenEnabled) return false;
-
-            // A decision already taken on an earlier load that never got as far as opening the window.
-            if (WizardIsOwed) return true;
-
             string installedVersion = AbxrLibVersion.Version;
             string shownVersion = ShownForVersion;
 
