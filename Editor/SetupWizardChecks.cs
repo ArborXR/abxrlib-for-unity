@@ -968,10 +968,11 @@ namespace AbxrLib.Editor
             bool hasPico = names.Any(n => n == "Unity.XR.PICO");
             bool hasOpenXr = names.Any(n => n.Contains("OpenXR"));
 
-            string androidDefines = BuildDefines.Get(BuildTargetGroup.Android);
-            string selectedDefines = BuildDefines.Get(EditorUserBuildSettings.selectedBuildTargetGroup);
-            bool metaQr = androidDefines.Contains("META_QR_AVAILABLE") || selectedDefines.Contains("META_QR_AVAILABLE");
-            bool picoQr = androidDefines.Contains("PICO_SDK_3_4_OR_NEWER") || selectedDefines.Contains("PICO_SDK_3_4_OR_NEWER");
+            BuildTargetGroup selected = EditorUserBuildSettings.selectedBuildTargetGroup;
+            bool metaQr = BuildDefines.Has("META_QR_AVAILABLE", BuildTargetGroup.Android) ||
+                          BuildDefines.Has("META_QR_AVAILABLE", selected);
+            bool picoQr = BuildDefines.Has("PICO_SDK_3_4_OR_NEWER", BuildTargetGroup.Android) ||
+                          BuildDefines.Has("PICO_SDK_3_4_OR_NEWER", selected);
 
             // QR is compiled in, so there is nothing to report.
             if (picoQr || metaQr) return null;

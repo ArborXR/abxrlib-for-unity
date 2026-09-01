@@ -12,6 +12,7 @@
  */
 
 using System;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.Build;
 
@@ -31,6 +32,13 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// True when the define is set for the group, matched as a whole symbol. A substring test cannot serve
+        /// here: a project carrying META_QR_AVAILABLE_OVERRIDE would read as already having META_QR_AVAILABLE.
+        /// </summary>
+        internal static bool Has(string define, BuildTargetGroup group) =>
+            Get(group).Split(';').Contains(define);
+
+        /// <summary>
         /// Adds a define to a build target group unless it is already there. Returns true only when the define was
         /// actually added, so callers can log that they changed the project without logging on every Editor load.
         /// </summary>
@@ -40,7 +48,7 @@ namespace AbxrLib.Editor
             if (!TryGetNamedTarget(group, out NamedBuildTarget target)) return false;
 
             string defines = PlayerSettings.GetScriptingDefineSymbols(target) ?? "";
-            if (defines.Contains(define)) return false;
+            if (defines.Split(';').Contains(define)) return false;
 
             PlayerSettings.SetScriptingDefineSymbols(target,
                 string.IsNullOrEmpty(defines) ? define : defines + ";" + define);
