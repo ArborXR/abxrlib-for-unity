@@ -283,9 +283,11 @@ namespace AbxrLib.Editor
         /// <summary>
         /// True when the sample's files are in the project, whether or not they compiled. Package Manager's own
         /// Samples list imports without installing anything, so a project can end up with the scripts present and the
-        /// assembly missing - a different problem from never having imported them.
+        /// assembly missing - a different problem from never having imported them. Scanned broadly on purpose: a
+        /// copy that was moved or vendored outside Assets/Samples has the same symptom, and answering "not imported"
+        /// for it offers an import that would create a duplicate.
         /// </summary>
-        internal static bool WorldSpaceUiFilesImported() => ImportedBootstrapPath() != null;
+        internal static bool WorldSpaceUiFilesImported() => AllBootstrapPathsInProject().Count > 0;
 
         /// <summary>Asset path of the imported bootstrap script, or null when the sample is not in the project.</summary>
         private static string ImportedBootstrapPath() => ImportedBootstrapPaths().FirstOrDefault();
@@ -309,6 +311,37 @@ namespace AbxrLib.Editor
             }
 
             return paths;
+        }
+
+        /// <summary>
+        /// Every copy of the sample's files anywhere under Assets/, for detection only. Broader than
+        /// <see cref="ImportedBootstrapPaths"/> on purpose: a copy that was moved or vendored outside Assets/Samples
+        /// still means "the files are in this project" when diagnosing a missing assembly, and still collides on
+        /// assembly names when counting duplicates. Nothing this scan finds is ever deleted or version-classified.
+        /// </summary>
+        private static List<string> AllBootstrapPathsInProject()
+        {
+            var paths = new List<string>();
+            foreach (string guid in AssetDatabase.FindAssets("AbxrWorldSpaceBootstrap"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (path.StartsWith("Assets/")) paths.Add(path);
+            }
+
+            return paths;
+        }
+
+        /// <summary>One folder per copy of the sample found anywhere under Assets/, for duplicate reporting.</summary>
+        internal static List<string> SampleCopyFolders()
+        {
+            var folders = new List<string>();
+            foreach (string path in AllBootstrapPathsInProject())
+            {
+                string folder = path.Substring(0, path.LastIndexOf('/'));
+                if (!folders.Contains(folder)) folders.Add(folder);
+            }
+
+            return folders;
         }
 
         /// <summary>
@@ -362,20 +395,39 @@ namespace AbxrLib.Editor
 
         private static Check CheckDuplicateWorldSpaceImports()
         {
-            var copies = ImportedWorldSpaceCopies();
-            if (copies.Count < 2) return null;
+            List<string> folders = SampleCopyFolders();
+            if (folders.Count < 2) return null;
 
-            string keep = CopyToKeep(copies);
+            List<string> canonical = ImportedWorldSpaceCopies();
+            int deletable = canonical.Count > 0 ? canonical.Count - 1 : 0;
+
+            string problem =
+                "Each copy declares the same assembly names, so Unity reports \"Assembly with name " +
+                "'AbxrLib.WorldSpace' already exists\" and stops compiling until only one is left.\n" +
+                "Copies found: " + string.Join(", ", folders) + ".\n";
+
+            // The one-click fix only ever deletes canonical imports under Assets/Samples. A copy living anywhere
+            // else is the developer's own file - possibly vendored on purpose, possibly edited - so when deleting
+            // the stale canonical copies would not get the project down to one, this row can only explain.
+            if (folders.Count - deletable > 1)
+            {
+                return new Check
+                {
+                    Title = "The world-space UI is in this project more than once",
+                    Detail = problem +
+                             "WHAT TO DO: delete all but one copy, then let Unity recompile. Copies outside " +
+                             "Assets/Samples are yours to choose between - the wizard does not delete those.",
+                    Severity = Severity.Problem
+                };
+            }
 
             return new Check
             {
                 Title = "The world-space UI is imported more than once",
-                Detail = "Each copy declares the same assembly names, so Unity reports \"Assembly with name " +
-                         "'AbxrLib.WorldSpace' already exists\" and stops compiling until only one is left.\n" +
-                         "Copies found: " + string.Join(", ", copies) + ".\n" +
-                         $"Keeping {keep} and deleting the rest fixes it. Package Manager's Samples list imports into " +
-                         "a folder named after the package version, so importing again after an upgrade adds a copy " +
-                         "instead of replacing one - the wizard's own import replaces in place.",
+                Detail = problem +
+                         $"Keeping {CopyToKeep(canonical)} and deleting the rest fixes it. Package Manager's Samples " +
+                         "list imports into a folder named after the package version, so importing again after an " +
+                         "upgrade adds a copy instead of replacing one - the wizard's own import replaces in place.",
                 Severity = Severity.Problem,
                 FixLabel = "Delete the older copies",
                 Fix = DeleteStaleWorldSpaceCopies

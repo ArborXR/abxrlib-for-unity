@@ -57,7 +57,10 @@ namespace AbxrLib.Editor
         /// </summary>
         private static void WarnAboutDuplicateImports()
         {
-            var copies = SetupWizardChecks.ImportedWorldSpaceCopies();
+            // The broad scan, not the canonical-imports one: a vendored copy colliding with a canonical import is
+            // exactly the duplicate this load-time warning exists for, since the compile stop keeps the wizard
+            // from diagnosing it.
+            var copies = SetupWizardChecks.SampleCopyFolders();
             if (copies.Count < 2) return;
 
             Logcat.Error("AbxrLib's world-space UI is imported " + copies.Count + " times: " +
