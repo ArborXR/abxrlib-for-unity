@@ -106,10 +106,19 @@ namespace AbxrLib.Editor
             if (_headerIconLookedUp) return _headerIcon;
             _headerIconLookedUp = true;
 
-            var self = PackageInfo.FindForAssembly(typeof(SetupWizard).Assembly);
-            if (self != null)
-                _headerIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                    $"{self.assetPath}/Editor/Images/ArborXR_Org_Icon.png");
+            // Wrapped like SetupWizardChecks.SelfPackage wraps the same query: a throw here would land mid-layout
+            // inside OnGUI, and a missing icon is not worth that.
+            try
+            {
+                var self = PackageInfo.FindForAssembly(typeof(SetupWizard).Assembly);
+                if (self != null)
+                    _headerIcon = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                        $"{self.assetPath}/Editor/Images/ArborXR_Org_Icon.png");
+            }
+            catch (System.Exception)
+            {
+                _headerIcon = null;
+            }
 
             return _headerIcon;
         }
