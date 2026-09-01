@@ -162,10 +162,11 @@ namespace AbxrLib.Editor
             if (!Directory.Exists(importRoot)) return;
 
             // Nothing left inside - typically the files were removed by hand and only the folders remain. There is
-            // nothing to lose, so tidy up without asking.
+            // nothing to lose, so tidy up without asking - though still not in batch mode: "never delete
+            // unattended" covers empty folders too, and CI has no business mutating assets mid-resolve.
             if (!Directory.EnumerateFileSystemEntries(importRoot).Any())
             {
-                DeleteFolderAndEmptyParents(importRoot);
+                if (!Application.isBatchMode) DeleteFolderAndEmptyParents(importRoot);
                 return;
             }
 
