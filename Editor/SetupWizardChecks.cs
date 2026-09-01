@@ -293,15 +293,19 @@ namespace AbxrLib.Editor
         /// <summary>
         /// Every imported copy of the sample. Normally one - but Package Manager's Samples list imports into a folder
         /// named after the package version, so importing again after an upgrade leaves the old copy in place and the
-        /// project ends up with two.
+        /// project ends up with two. Only the canonical import root counts: what this list finds feeds the
+        /// duplicate-copy delete and the stale-version re-import, and a copy someone moved or vendored elsewhere is
+        /// theirs - it must never be classified as stale or deleted by a path coincidence.
         /// </summary>
+        private const string SampleImportRoot = "Assets/Samples/";
+
         private static List<string> ImportedBootstrapPaths()
         {
             var paths = new List<string>();
             foreach (string guid in AssetDatabase.FindAssets("AbxrWorldSpaceBootstrap"))
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (path.Contains("/Samples/")) paths.Add(path);
+                if (path.StartsWith(SampleImportRoot)) paths.Add(path);
             }
 
             return paths;
