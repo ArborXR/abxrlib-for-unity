@@ -81,6 +81,14 @@ namespace AbxrLib.Editor
             catch (Exception) { return null; }
         }
 
+        /// <summary>
+        /// The version the Package Manager knows this install as - the same value it names sample import folders
+        /// with. <see cref="AbxrLibVersion.Version"/> is only the fallback for a source copy with no manifest:
+        /// the constant and package.json are synced by hand, and comparing a folder name against the constant
+        /// turns any drift between them into a permanent "stale import" warning that re-importing cannot clear.
+        /// </summary>
+        private static string InstalledPackageVersion() => SelfPackage()?.version ?? AbxrLibVersion.Version;
+
         /// <summary>Only the two fields needed out of package.json; JsonUtility ignores the rest of the manifest.</summary>
         [Serializable]
         private class UnityRequirement
@@ -391,7 +399,7 @@ namespace AbxrLib.Editor
         /// </summary>
         private static string CopyToKeep(List<string> copies)
         {
-            string current = copies.FirstOrDefault(c => c.EndsWith("/" + AbxrLibVersion.Version));
+            string current = copies.FirstOrDefault(c => c.EndsWith("/" + InstalledPackageVersion()));
             if (current != null) return current;
 
             string newest = copies[0];
@@ -477,9 +485,10 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// The version of the imported world-space objects, read from the constant they compile against. Because they
-        /// are imported into Assets/ rather than resolved as a package, updating AbxrLib leaves the old copy in place -
-        /// so this is compared against the running version to catch a stale import.
+        /// The version of the imported world-space objects, read from the import folder's name - which Package
+        /// Manager takes from the manifest version of the package that was installed when the import happened.
+        /// Because samples are imported into Assets/ rather than resolved as a package, updating AbxrLib leaves the
+        /// old copy in place - so this is compared against the installed version to catch a stale import.
         /// </summary>
         private static string ImportedWorldSpaceVersion()
         {
@@ -524,12 +533,12 @@ namespace AbxrLib.Editor
             }
 
             string imported = ImportedWorldSpaceVersion();
-            if (!string.IsNullOrEmpty(imported) && imported != AbxrLibVersion.Version)
+            if (!string.IsNullOrEmpty(imported) && imported != InstalledPackageVersion())
             {
                 return new Check
                 {
                     Title = "World-space UI is from an older AbxrLib",
-                    Detail = $"AbxrLib is {AbxrLibVersion.Version} but the imported world-space UI came from " +
+                    Detail = $"AbxrLib is {InstalledPackageVersion()} but the imported world-space UI came from " +
                              $"{imported}. Because it is imported into Assets/ rather than resolved as a package, " +
                              "updating AbxrLib leaves the old copy behind.\nRe-importing overwrites it - any edits you " +
                              "made to those files will be replaced.",
