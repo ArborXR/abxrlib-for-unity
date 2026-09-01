@@ -360,10 +360,21 @@ namespace AbxrLib.Editor
 
         private static void DeleteWorldSpaceCopiesExcept(string keep)
         {
-            foreach (string copy in ImportedWorldSpaceCopies())
-            {
-                if (copy == keep) continue;
+            List<string> stale = ImportedWorldSpaceCopies().Where(copy => copy != keep).ToList();
+            if (stale.Count == 0) return;
 
+            // DeleteAsset skips the OS trash, and the stale copy may hold edits the developer made to the sample.
+            // Same rule as the uninstall cleanup: show exactly what goes away, delete nothing unattended.
+            bool confirmed = EditorUtility.DisplayDialog("AbxrLib Setup",
+                "Delete the older world-space UI copies?\n\n" +
+                string.Join("\n", stale) + "\n\n" +
+                $"Keeping {keep}.\n\n" +
+                "Deleted folders do not go to the system trash - any edits made inside them are lost.",
+                "Delete", "Cancel");
+            if (!confirmed) return;
+
+            foreach (string copy in stale)
+            {
                 if (AssetDatabase.DeleteAsset(copy)) Logcat.Info($"Deleted the duplicate world-space UI copy {copy}.");
                 else Logcat.Warning($"Could not delete {copy}.\nWHAT TO DO: delete that folder in the Project window.");
             }
