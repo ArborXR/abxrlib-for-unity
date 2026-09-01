@@ -14,12 +14,16 @@ namespace AbxrLib.Editor
             
             string[] buildTypeValues = { "production", "development", "production_custom" };
             string[] buildTypeDisplayNames = { "Production", "Development", "Production (Custom APK)" };
-            int currentSelection = config.buildType == "production" ? 0 : (config.buildType == "development" ? 1 : 2);
+            // Unknown stored values display as Production - the same normalization the runtime and the setup
+            // wizard apply - and the write-back only happens on an actual change. Anything else lets merely
+            // selecting the asset rewrite buildType, and the old fallback rewrote it to production_custom, the
+            // one type that ships single-customer org credentials.
+            int currentSelection = config.buildType == "development" ? 1 : (config.buildType == "production_custom" ? 2 : 0);
             int newSelection = EditorGUILayout.Popup(new GUIContent(
                 "Build Type", "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only).\nProduction (Custom APK): For single-customer builds; requires Organization Token; API receives buildType Production."),
                 currentSelection, buildTypeDisplayNames);
-            
-            config.buildType = buildTypeValues[newSelection];
+
+            if (newSelection != currentSelection) config.buildType = buildTypeValues[newSelection];
                         
             EditorGUILayout.Space();
             
