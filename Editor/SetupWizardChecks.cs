@@ -301,13 +301,21 @@ namespace AbxrLib.Editor
         /// </summary>
         private const string SampleImportRoot = "Assets/Samples/";
 
+        /// <summary>
+        /// FindAssets matches asset names by substring, so a duplicated "AbxrWorldSpaceBootstrap 1", a
+        /// "AbxrWorldSpaceBootstrap.cs.bak", or anything else carrying the token comes back too. Only the script
+        /// itself marks a copy of the sample - anything looser turns stray files into phantom duplicates.
+        /// </summary>
+        private static bool IsBootstrapScript(string path) =>
+            Path.GetFileName(path) == "AbxrWorldSpaceBootstrap.cs";
+
         private static List<string> ImportedBootstrapPaths()
         {
             var paths = new List<string>();
             foreach (string guid in AssetDatabase.FindAssets("AbxrWorldSpaceBootstrap"))
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (path.StartsWith(SampleImportRoot)) paths.Add(path);
+                if (path.StartsWith(SampleImportRoot) && IsBootstrapScript(path)) paths.Add(path);
             }
 
             return paths;
@@ -325,7 +333,7 @@ namespace AbxrLib.Editor
             foreach (string guid in AssetDatabase.FindAssets("AbxrWorldSpaceBootstrap"))
             {
                 string path = AssetDatabase.GUIDToAssetPath(guid);
-                if (path.StartsWith("Assets/")) paths.Add(path);
+                if (path.StartsWith("Assets/") && IsBootstrapScript(path)) paths.Add(path);
             }
 
             return paths;
