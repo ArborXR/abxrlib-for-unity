@@ -46,6 +46,11 @@ namespace AbxrLib.Editor
         /// </summary>
         internal static void Open(bool openedAutomatically)
         {
+            // Every open counts as "shown for this version", the menu-item ones included - otherwise a developer
+            // who opens the wizard by hand while the post-install auto-open is still waiting for the Editor to go
+            // idle gets the window they just finished with reopened on top of them.
+            SetupWizardLauncher.MarkWizardShown();
+
             var window = GetWindow<SetupWizard>(false, "AbxrLib Setup", true);
             window.minSize = new Vector2(640f, 560f);
             window._step = Step.Welcome;

@@ -320,9 +320,18 @@ namespace AbxrLib.Editor
                 return;
             }
 
+            SetupWizard.Open(true);
+        }
+
+        /// <summary>
+        /// Records that the wizard has been seen for the running version, whichever door it came through. Called
+        /// from SetupWizard.Open itself so a developer who opens the wizard from the menu while an auto-open is
+        /// still waiting out a compile is not shown the same window a second time when the Editor goes idle.
+        /// </summary>
+        internal static void MarkWizardShown()
+        {
             WizardIsOwed = false;
             ShownForVersion = AbxrLibVersion.Version;
-            SetupWizard.Open(true);
         }
 
         /// <summary>
