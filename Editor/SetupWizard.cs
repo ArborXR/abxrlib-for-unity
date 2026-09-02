@@ -471,6 +471,18 @@ namespace AbxrLib.Editor
                     : _worldSpaceFilesImported ? "Imported, not compiling"
                     : "Not installed (optional)", Step.Project);
 
+            GUILayout.Space(8f);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Copy diagnostics", GUILayout.Width(140f)))
+            {
+                SetupDiagnostics.CopyToClipboard();
+                ShowNotification(new GUIContent("Copied"));
+            }
+            SetupDiagnostics.IncludeAllConfig = EditorGUILayout.ToggleLeft(
+                "All config values", SetupDiagnostics.IncludeAllConfig, GUILayout.Width(150f));
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.LabelField(
+                "Paste into a support request. Tokens and secrets are never included.", _styles.Body);
 
             EditorGUILayout.EndVertical();
         }
