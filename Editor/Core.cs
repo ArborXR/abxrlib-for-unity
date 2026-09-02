@@ -22,6 +22,12 @@ namespace AbxrLib.Editor
         }
     
         /// <summary>
+        /// Points <see cref="GetConfig"/> at a fixture (or clears it with null) so EditMode tests can exercise code that
+        /// reads the configuration without touching the project's own asset.
+        /// </summary>
+        internal static void SetConfigForTesting(AppConfig config) => _config = config;
+
+        /// <summary>
         /// Gets the configuration, creating a new default configuration only when none exists yet.
         /// Returns null when a configuration file exists but cannot be loaded as <see cref="AppConfig"/>, so a
         /// broken asset is reported instead of silently overwritten.
