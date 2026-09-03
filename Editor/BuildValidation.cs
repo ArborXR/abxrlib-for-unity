@@ -24,8 +24,18 @@ namespace AbxrLib.Editor
         {
             try
             {
-                AppConfig config = Core.GetConfig();
-                if (config != null && !SetupWizardChecks.CredentialsAreValid(config))
+                // Read-only on purpose: GetConfig can create, migrate, or quarantine an asset, none of which belongs in
+                // a build callback. Without a configuration there is nothing to check, and the checks themselves
+                // would reach GetConfig, so stop here with the one warning that matters.
+                AppConfig config = Core.TryGetLoadedConfig();
+                if (config == null)
+                {
+                    Logcat.Warning("AbxrLib setup: no configuration asset was found (Assets/Resources/AbxrLib.asset), so " +
+                                   "AbxrLib cannot authenticate in this build. Open Analytics for XR > Setup Wizard to create one.");
+                    return;
+                }
+
+                if (!SetupWizardChecks.CredentialsAreValid(config))
                     Logcat.Warning("AbxrLib setup: " + SetupWizardChecks.DescribeCredentialProblem(config));
 
                 foreach (SetupWizardChecks.Check check in SetupWizardChecks.Run())
