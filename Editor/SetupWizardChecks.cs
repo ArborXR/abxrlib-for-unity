@@ -75,7 +75,7 @@ namespace AbxrLib.Editor
         private const int TmpMergedMinor = 2;
 
         /// <summary>AbxrLib's own package manifest, or null when it is not installed as a package.</summary>
-        private static PackageInfo SelfPackage()
+        internal static PackageInfo SelfPackage()
         {
             try { return PackageInfo.FindForAssembly(typeof(SetupWizardChecks).Assembly); }
             catch (Exception) { return null; }
@@ -87,7 +87,7 @@ namespace AbxrLib.Editor
         /// the constant and package.json are synced by hand, and comparing a folder name against the constant
         /// turns any drift between them into a permanent "stale import" warning that re-importing cannot clear.
         /// </summary>
-        private static string InstalledPackageVersion() => SelfPackage()?.version ?? AbxrLibVersion.Version;
+        internal static string InstalledPackageVersion() => SelfPackage()?.version ?? AbxrLibVersion.Version;
 
         /// <summary>Only the two fields needed out of package.json; JsonUtility ignores the rest of the manifest.</summary>
         [Serializable]
@@ -258,7 +258,7 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>Shape check only - matches how the runtime recognizes a token, so the wizard agrees with it.</summary>
-        private static bool LooksLikeJwt(string value) =>
+        internal static bool LooksLikeJwt(string value) =>
             !string.IsNullOrEmpty(value) && value.Split('.').Length == 3;
 
         private static bool LooksLikeUuid(string value) =>
