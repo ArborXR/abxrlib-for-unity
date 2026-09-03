@@ -78,7 +78,7 @@ Reopen it any time from `Analytics for XR > Setup Wizard`. It edits the same `As
 
 When something is not working, `Analytics for XR > Diagnostics > Copy report` (or **Copy diagnostics** on the wizard's last page) puts a plain-text report on the clipboard to paste into a support request: AbxrLib and Unity versions, install source, Android player settings, detected headset SDKs, the configuration, the state of the sign-in UI, and the result of every wizard check. Tokens and the auth secret are never included; the report only says whether they are set and, for tokens, whether they look like one. By default only settings changed from their defaults are listed; tick **Include all config values** in the same menu (or the toggle next to the wizard button) to list every setting.
 
-Building also repeats any blocking wizard finding as a Console warning. It never fails the build.
+Building also repeats any blocking wizard finding as a Console warning. These warnings never fail a build. (Android builds still stop on an App or Organization Token that is set but malformed, as they did before.)
 
 ### Sign-in UI (optional)
 

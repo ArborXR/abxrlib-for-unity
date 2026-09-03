@@ -8,9 +8,10 @@ namespace AbxrLib.Editor
 {
     /// <summary>
     /// Repeats the setup wizard's blocking findings as Console warnings when a build starts, for the developer who
-    /// closed the wizard and moved on. Warnings only: the build is never failed or cancelled from here. A project
-    /// that builds without AbxrLib working is a support conversation; a project that cannot build at all is a
-    /// blocked release, and the QoL project already ruled that kind of block out.
+    /// closed the wizard and moved on. Warnings only: nothing here fails or cancels a build. A project that builds
+    /// without AbxrLib working is a support conversation; a project that cannot build at all is a blocked release.
+    /// (The Android post-processor keeps its own hard stop for a token that is set but malformed - a typo guard on
+    /// the Custom APK build itself, unchanged by this hook.)
     ///
     /// Only Problem-severity checks are repeated. Warning-severity items (Android settings, ArborMdmClient off) can
     /// be deliberate, and a deliberately configured project should build quietly.
