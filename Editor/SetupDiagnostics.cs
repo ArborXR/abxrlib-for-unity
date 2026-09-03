@@ -36,14 +36,15 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// Builds the report in the current config mode, puts it on the clipboard, and echoes it to the Console so
-        /// it survives a clipboard that did not take (headless Editors, some remote desktops).
+        /// Builds the report in the current config mode, echoes it to the Console, then puts it on the clipboard. The
+        /// Console copy comes first so the report is already somewhere readable if the clipboard write is what fails
+        /// (headless Editors, some remote desktops).
         /// </summary>
         internal static void CopyToClipboard()
         {
             string report = Build(IncludeAllConfig);
-            EditorGUIUtility.systemCopyBuffer = report;
             Logcat.Info("AbxrLib diagnostics\n" + report);
+            EditorGUIUtility.systemCopyBuffer = report;
         }
 
         internal static string Build(bool includeAllConfig)
@@ -51,13 +52,14 @@ namespace AbxrLib.Editor
             var sb = new StringBuilder();
             sb.AppendLine("AbxrLib diagnostics");
 
-            PackageSection(sb);
-            EditorSection(sb);
-            AndroidSection(sb);
-            HeadsetSection(sb);
-            ConfigSection(sb, Core.GetConfig(), includeAllConfig);
-            SignInUiSection(sb);
-            ChecksSection(sb);
+            Section(sb, "Package", PackageSection);
+            Section(sb, "Editor", EditorSection);
+            Section(sb, "Android player settings", AndroidSection);
+            Section(sb, "Headset support", HeadsetSection);
+            Section(sb, includeAllConfig ? "Config (all values)" : "Config (changed from default)",
+                s => ConfigSection(s, Core.GetConfig(), includeAllConfig));
+            Section(sb, "Sign-in UI", SignInUiSection);
+            Section(sb, "Setup checks", ChecksSection);
 
             return sb.ToString();
         }
@@ -68,7 +70,6 @@ namespace AbxrLib.Editor
 
         private static void PackageSection(StringBuilder sb)
         {
-            Header(sb, "Package");
             PackageInfo self = SetupWizardChecks.SelfPackage();
             string installed = SetupWizardChecks.InstalledPackageVersion();
             Line(sb, "version", installed);
@@ -96,7 +97,6 @@ namespace AbxrLib.Editor
 
         private static void EditorSection(StringBuilder sb)
         {
-            Header(sb, "Editor");
             Line(sb, "unity", Application.unityVersion);
             Line(sb, "os", SystemInfo.operatingSystem);
             Line(sb, "build target", EditorUserBuildSettings.activeBuildTarget.ToString());
@@ -106,7 +106,6 @@ namespace AbxrLib.Editor
         {
             // Printed for every project, not only when Android is active: a desktop-target project that is about
             // to build for a headset is exactly the one whose Android settings support wants to see.
-            Header(sb, "Android player settings");
             Line(sb, "min sdk", ((int)PlayerSettings.Android.minSdkVersion).ToString(CultureInfo.InvariantCulture));
             int targetSdk = (int)PlayerSettings.Android.targetSdkVersion;
             Line(sb, "target sdk", targetSdk == 0 ? "auto (highest installed)" : targetSdk.ToString(CultureInfo.InvariantCulture));
@@ -116,8 +115,6 @@ namespace AbxrLib.Editor
 
         private static void HeadsetSection(StringBuilder sb)
         {
-            Header(sb, "Headset support");
-
             // The same assembly probes CheckHeadsetSdk uses, repeated here because that check only speaks up when
             // the world-space UI is installed and support wants this line for every project.
             var names = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).ToList();
@@ -139,8 +136,6 @@ namespace AbxrLib.Editor
 
         private static void ConfigSection(StringBuilder sb, AppConfig config, bool includeAll)
         {
-            Header(sb, includeAll ? "Config (all values)" : "Config (changed from default)");
-
             if (config == null)
             {
                 Line(sb, "config", "not loaded (Unity is still compiling or importing, or the asset cannot be loaded)");
@@ -214,7 +209,6 @@ namespace AbxrLib.Editor
 
         private static void SignInUiSection(StringBuilder sb)
         {
-            Header(sb, "Sign-in UI");
             bool installed = SetupWizardChecks.WorldSpaceUiIsInstalled();
             bool imported = SetupWizardChecks.WorldSpaceUiFilesImported();
             Line(sb, "world-space ui", installed ? "installed" : imported ? "imported, not compiling" : "not installed (optional)");
@@ -226,7 +220,6 @@ namespace AbxrLib.Editor
 
         private static void ChecksSection(StringBuilder sb)
         {
-            Header(sb, "Setup checks");
             foreach (SetupWizardChecks.Check check in SetupWizardChecks.Run())
                 sb.Append("  [").Append(check.Severity).Append("] ").AppendLine(check.Title);
         }
@@ -244,6 +237,23 @@ namespace AbxrLib.Editor
             if (string.IsNullOrEmpty(value)) return "not set";
             if (!expectJwt) return "set";
             return SetupWizardChecks.LooksLikeJwt(value) ? "set (JWT)" : "set (not a JWT)";
+        }
+
+        /// <summary>
+        /// Writes one section, keeping a probe that throws from taking the rest of the report with it. The report is
+        /// for environments where something is already wrong, which is exactly where a probe is likeliest to fail.
+        /// </summary>
+        private static void Section(StringBuilder sb, string title, Action<StringBuilder> write)
+        {
+            Header(sb, title);
+            try
+            {
+                write(sb);
+            }
+            catch (Exception e)
+            {
+                Line(sb, "unavailable", e.GetType().Name + ": " + e.Message);
+            }
         }
 
         private static void Header(StringBuilder sb, string title)
