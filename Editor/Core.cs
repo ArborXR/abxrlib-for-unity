@@ -28,6 +28,29 @@ namespace AbxrLib.Editor
         internal static void SetConfigForTesting(AppConfig config) => _config = config;
 
         /// <summary>
+        /// The configuration if an asset already exists, or null. Unlike <see cref="GetConfig"/> this never creates,
+        /// migrates, or quarantines anything, so it is safe from places that must not write to the project, such as
+        /// build callbacks. A find under the current name is cached for <see cref="GetConfig"/>; a legacy-named asset
+        /// is returned uncached so the next <see cref="GetConfig"/> still runs its migration.
+        /// </summary>
+        internal static AppConfig TryGetLoadedConfig()
+        {
+            if (_config) return _config;
+
+            AppConfig current = Resources.Load<AppConfig>(NEW_CONFIG_NAME);
+            if (!current) current = AssetDatabase.LoadAssetAtPath<AppConfig>("Assets/Resources/" + NEW_CONFIG_NAME + ".asset");
+            if (current)
+            {
+                _config = current;
+                return _config;
+            }
+
+            AppConfig legacy = Resources.Load<AppConfig>(OLD_CONFIG_NAME);
+            if (!legacy) legacy = AssetDatabase.LoadAssetAtPath<AppConfig>("Assets/Resources/" + OLD_CONFIG_NAME + ".asset");
+            return legacy ? legacy : null;
+        }
+
+        /// <summary>
         /// Gets the configuration, creating a new default configuration only when none exists yet.
         /// Returns null when a configuration file exists but cannot be loaded as <see cref="AppConfig"/>, so a
         /// broken asset is reported instead of silently overwritten.
