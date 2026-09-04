@@ -128,8 +128,6 @@ Do **not** use `Production (Custom APK)` for a managed fleet. It takes the organ
 
 On the legacy scheme, the MDM supplies Org ID and Auth Secret at runtime, so only **App ID** needs setting.
 
-`Enable ArborInsightsClient` (Advanced, on by default) routes auth and data through the ArborInsightsClient APK when it is installed on the device, and falls back to REST when it is not — see [Android + ArborInsightsClient](INTEGRATION_INSTRUCTIONS.md#23-optional-android--arborinsightsclient) for the matching AAR.
-
 #### Legacy (App ID / Org ID / Auth Secret)
 
 If your project still uses the legacy scheme: in Configuration, leave **Use App Tokens** off and set App ID, Org ID, and Auth Secret from the app’s credential or details views in the portal where your organization still exposes them. On ArborXR-managed devices, only App ID may be required; Org ID and Auth Secret can auto-fill. New integrations should use app token and org token.

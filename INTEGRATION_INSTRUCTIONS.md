@@ -56,10 +56,7 @@ Use **app token** and **org token** for authentication. In **Analytics for XR �
 
 ### 2.3 Optional: Android + ArborInsightsClient
 
-For Android VR builds that use the device-side ArborInsightsClient service:
-
-- Install the **ArborInsightsClient** APK on the device.
-- Add the **matching client AAR** (e.g. `insights-client-service.aar`) to the project’s `Plugins/Android/`. The AAR is supplied separately (e.g. from your distribution channel), not built in this repo.
+The **Enable ArborInsightsClient** setting (Analytics for XR → Configuration → Advanced, on by default) routes authentication and data through the device-side ArborInsightsClient service where that service is present, and falls back to REST everywhere else — so the setting is safe to leave on. The ArborInsightsClient APK and its client AAR are **not yet generally available**; there is nothing to install today, and this section will gain setup steps when they ship.
 
 ---
 
