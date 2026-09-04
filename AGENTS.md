@@ -55,18 +55,20 @@ AIDL → ArborInsightsClient (separate APK)
 
 ### Initialization (this package)
 
-- **Runtime:** `Initialize.cs` uses `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]` to attach core components including `AbxrManager`, `AbxrAuthService`, data/telemetry services, `DeviceModel`, UI (ExitPoll, Keyboard, etc.); on Android build, also `ArborMdmClient`, `ArborInsightsClient`, `HeadsetDetector`, and optionally platform QR readers (Pico/Meta).
+- **Runtime:** `Initialize.cs` uses `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]` to attach core components including `AbxrManager`, `AbxrAuthService`, data/telemetry services, `DeviceModel`; on Android build, also `ArborMdmClient`, `ArborInsightsClient`, `HeadsetDetector`.
+- **World-space UI (optional, not in the package):** the keyboard, PIN pad, exit poll, debug window, and QR readers live in the **World-Space UI sample** (`Samples~/World-Space UI`, imported into the consuming project's `Assets/`). They are **not** part of `AbxrLib.Runtime`; core reaches them only through the interfaces in `Runtime/Core/UI/` (`IAbxrAuthUi`, `IAbxrPollUi`, `IAbxrQrScanner`, `IAbxrAuthBridge`) and the `AbxrUi` registry. The sample registers implementations at `SubsystemRegistration`, and `Initialize` calls `AbxrUi.AttachSceneObjects()` to create them - a no-op when the sample is not imported. **Never add a core reference to a type under `AbxrLib.Runtime.UI`**; that is what allows core to ship without TextMeshPro, uGUI, XR Interaction Toolkit, or ZXing.
 - **Transport selection:** In `AbxrSubsystem.Awake`, `_transport` is set to `AbxrTransportRest`. On Android when `enableArborInsightsClient`, a coroutine waits for `ServiceIsFullyInitialized()` (up to 40 × 0.25 s); when ready, the subsystem switches to `AbxrTransportArborInsights`. Auto-start auth is gated on this selection so device authentication always uses the chosen transport.
 - **Service readiness:** On Android, bind is started early in Awake (before creating the auth service). Init and readiness are handled by the client AAR and the service APK.
 
 ## Key Files
 
 - **Entry / config:** `Runtime/Core/Initialize.cs`, `Runtime/Core/AppConfig.cs`, `Runtime/Abxr.cs`, `Runtime/AbxrManager.cs`
-- **Auth:** `Runtime/Services/Auth/AbxrAuthService.cs` (device/user auth, session, GetConfigData/GetArborData, appToken/orgToken, optional keyboard UI; uses current transport for auth/config)
+- **Auth:** `Runtime/Services/Auth/AbxrAuthService.cs` (device/user auth, session, GetConfigData/GetArborData, appToken/orgToken; drives sign-in UI through `AbxrUi.AuthUi` when registered, otherwise `OnInputRequested`; implements `IAbxrAuthBridge`; uses current transport for auth/config)
 - **Transport:** `Runtime/Services/Transport/IAbxrTransport.cs`, `AbxrTransportRest.cs`, `AbxrTransportArborInsights.cs` (abstraction for REST vs ArborInsightsClient)
 - **Service client (Android):** `Runtime/Services/Platform/ArborInsightsClient.cs` (ArborInsightsServiceBridge in same file), `Runtime/Services/Platform/ArborMdmClient.cs`
 - **Data / storage / telemetry:** `Runtime/Services/Data/AbxrDataService.cs`, `Runtime/Services/Data/AbxrStorageService.cs` (forward to current transport), `Runtime/Services/Telemetry/AbxrTelemetryService.cs`, `Runtime/Services/Telemetry/TrackObject.cs`
-- **UI:** `Runtime/UI/` (ExitPoll, Keyboard, DebugWindow, HandTrackingButtonSystem, etc.)
+- **UI contracts (core):** `Runtime/Core/UI/` (`AbxrUi` registry + `IAbxrAuthUi`, `IAbxrPollUi`, `IAbxrQrScanner`, `IAbxrAuthBridge`); `PollType` is in `Runtime/Types/AbxrTypes.cs`
+- **UI implementations (optional sample):** `Samples~/World-Space UI/` (Keyboard, ExitPoll, DebugWindow, HandTrackingButtonSystem, QRScanner, ThirdParty/ZXing, Resources/ prefabs and shaders, its own `link.xml` and `AbxrLib.WorldSpace` asmdef)
 - **Plugins:** `Plugins/Android/` (client AAR, e.g. `insights-client-service.aar`, containing the client bridge used by ArborInsightsClient; supplied separately, not built in this repo)
 
 ## Configuration and Data Sources

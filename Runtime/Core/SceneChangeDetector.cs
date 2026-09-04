@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using AbxrLib.Runtime.UI.Keyboard;
+using AbxrLib.Runtime.Core.UI;
 using UnityEngine.SceneManagement;
 
 namespace AbxrLib.Runtime.Core
@@ -28,8 +28,9 @@ namespace AbxrLib.Runtime.Core
         {
             CurrentSceneName = newScene.name;
             
-            // Clean up laser pointer manager to prevent memory leaks from destroyed objects
-            LaserPointerManager.OnSceneChanged();
+            // Let the world-space objects drop references that died with the old scene (laser pointers
+            // cache ray interactors). No-op in a core-only project.
+            AbxrUi.RaiseSceneChanged();
             
             // Clear RigDetector cache since scene objects have changed
             RigDetector.ClearCache();

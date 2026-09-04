@@ -68,12 +68,7 @@ namespace AbxrLib.Editor
 
         private static void AddDefine(string define)
         {
-            var target = EditorUserBuildSettings.selectedBuildTargetGroup;
-            var defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(target);
-            if (!defines.Contains(define))
-            {
-                PlayerSettings.SetScriptingDefineSymbolsForGroup(target, defines + ";" + define);
-            }
+            BuildDefines.Add(define, EditorUserBuildSettings.selectedBuildTargetGroup);
         }
     }
 }

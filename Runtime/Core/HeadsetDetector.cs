@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Services.Auth;
-using AbxrLib.Runtime.UI.ExitPoll;
+using AbxrLib.Runtime.Types;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -208,7 +208,7 @@ namespace AbxrLib.Runtime.Core
             if (_authService.IsAuthenticationAttemptActive) return;
 
             Abxr.PollUser("Welcome back.\nAre you the same person who was using this headset before?",
-                ExitPollHandler.PollType.MultipleChoice,
+                PollType.MultipleChoice,
                 new List<string>{ContinueSessionString, NewSessionString},
                 NewSessionCheck);
         }
