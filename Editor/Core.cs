@@ -15,6 +15,8 @@ namespace AbxrLib.Editor
         private static AppConfig _config;
         private const string NEW_CONFIG_NAME = "AbxrLib";
         private const string OLD_CONFIG_NAME = "ArborXR";
+        private const string NEW_CONFIG_PATH = "Assets/Resources/" + NEW_CONFIG_NAME + ".asset";
+        private const string OLD_CONFIG_PATH = "Assets/Resources/" + OLD_CONFIG_NAME + ".asset";
     
         static Core()
         {
@@ -43,16 +45,21 @@ namespace AbxrLib.Editor
             /// </summary>
             PresentButUnloadable,
             /// <summary>No configuration file at either path.</summary>
-            Absent
+            Absent,
+            /// <summary>
+            /// Nothing loaded while Unity is compiling or importing, when a typed load also returns null for a perfectly
+            /// healthy asset. Not a verdict about the project: callers should say so and try again once the Editor is idle.
+            /// </summary>
+            NotReady
         }
 
         /// <summary>
-        /// Finds the configuration without changing the project. Unlike <see cref="GetConfig"/> this never creates,
-        /// migrates, or quarantines anything, so it is safe from places that must not write, such as build callbacks
-        /// and the diagnostics report. A find under the current name is cached for <see cref="GetConfig"/>; a legacy
-        /// asset is returned uncached so the next <see cref="GetConfig"/> still runs its migration.
-        /// <paramref name="config"/> is set for <see cref="ConfigState.Loaded"/> and
-        /// <see cref="ConfigState.LegacyUnmigrated"/>, null otherwise.
+        /// Finds the configuration without changing the project. This is the only place that knows how to look: the
+        /// creating <see cref="GetConfig"/> starts here too and adds only its migrate, quarantine, and create tail.
+        /// Safe from places that must not write, such as build callbacks and the diagnostics report. A find under the
+        /// current name is cached for <see cref="GetConfig"/>; a legacy asset is returned uncached so the next
+        /// <see cref="GetConfig"/> still runs its migration. <paramref name="config"/> is set for
+        /// <see cref="ConfigState.Loaded"/> and <see cref="ConfigState.LegacyUnmigrated"/>, null otherwise.
         /// </summary>
         internal static ConfigState TryGetLoadedConfig(out AppConfig config)
         {
@@ -62,11 +69,10 @@ namespace AbxrLib.Editor
                 return ConfigState.Loaded;
             }
 
-            const string newPath = "Assets/Resources/" + NEW_CONFIG_NAME + ".asset";
-            const string oldPath = "Assets/Resources/" + OLD_CONFIG_NAME + ".asset";
-
+            // Resources.Load first, then a direct AssetDatabase load: the latter still finds the asset during Editor
+            // startup and compilation, when the Resources index can lag.
             AppConfig current = Resources.Load<AppConfig>(NEW_CONFIG_NAME);
-            if (!current) current = AssetDatabase.LoadAssetAtPath<AppConfig>(newPath);
+            if (!current) current = AssetDatabase.LoadAssetAtPath<AppConfig>(NEW_CONFIG_PATH);
             if (current)
             {
                 _config = current;
@@ -75,7 +81,7 @@ namespace AbxrLib.Editor
             }
 
             AppConfig legacy = Resources.Load<AppConfig>(OLD_CONFIG_NAME);
-            if (!legacy) legacy = AssetDatabase.LoadAssetAtPath<AppConfig>(oldPath);
+            if (!legacy) legacy = AssetDatabase.LoadAssetAtPath<AppConfig>(OLD_CONFIG_PATH);
             if (legacy)
             {
                 config = legacy;
@@ -83,9 +89,41 @@ namespace AbxrLib.Editor
             }
 
             config = null;
-            return AssetFileExists(newPath) || AssetFileExists(oldPath)
+
+            // A typed load also returns null for a perfectly healthy asset while the Editor is still settling -
+            // mid-compile or mid-import, the type or the imported asset simply is not available yet. Treating that as
+            // "broken" would misdiagnose a working project (or, in GetConfig, quarantine a working configuration), so
+            // say only that the answer is not available yet.
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating) return ConfigState.NotReady;
+
+            return AssetFileExists(NEW_CONFIG_PATH) || AssetFileExists(OLD_CONFIG_PATH)
                 ? ConfigState.PresentButUnloadable
                 : ConfigState.Absent;
+        }
+
+        /// <summary>
+        /// One sentence per state for the surfaces that report the configuration rather than repair it: what was found
+        /// and what to do about it. Shared so the build hook and the diagnostics report cannot describe the same state
+        /// differently. <see cref="ConfigState.Loaded"/> describes as the asset path.
+        /// </summary>
+        internal static string Describe(ConfigState state)
+        {
+            switch (state)
+            {
+                case ConfigState.Loaded:
+                    return NEW_CONFIG_PATH;
+                case ConfigState.LegacyUnmigrated:
+                    return $"legacy {OLD_CONFIG_PATH}, not yet migrated. The runtime loads {NEW_CONFIG_NAME}.asset only, so " +
+                           "AbxrLib cannot authenticate until Analytics for XR > Configuration is opened once to migrate it.";
+                case ConfigState.PresentButUnloadable:
+                    return "present but could not be loaded as AppConfig (a broken script reference, or two copies of AbxrLib " +
+                           "in the project), so AbxrLib cannot authenticate. Open Analytics for XR > Setup Wizard to repair it.";
+                case ConfigState.NotReady:
+                    return "not readable yet because Unity is still compiling or importing. Wait for it to finish and try again.";
+                default:
+                    return $"not found (no {NEW_CONFIG_PATH}), so AbxrLib cannot authenticate. Open Analytics for XR > Setup " +
+                           "Wizard to create one.";
+            }
         }
 
         /// <summary>The configuration when one loads under either name, else null. See the overload for the state.</summary>
@@ -102,59 +140,32 @@ namespace AbxrLib.Editor
         /// </summary>
         public static AppConfig GetConfig()
         {
-            if (_config) return _config;
-        
-            // First try to load the new config name using Resources.Load
-            _config = Resources.Load<AppConfig>(NEW_CONFIG_NAME);
-            if (_config) return _config;
-        
-            // If Resources.Load failed, try direct AssetDatabase load as fallback
-            // This prevents false negatives during Unity startup/compilation
-            const string newConfigPath = "Assets/Resources/" + NEW_CONFIG_NAME + ".asset";
-            _config = AssetDatabase.LoadAssetAtPath<AppConfig>(newConfigPath);
-            if (_config) 
+            ConfigState state = TryGetLoadedConfig(out AppConfig found);
+            switch (state)
             {
-                Logcat.Debug($"Loaded existing config via AssetDatabase fallback - {newConfigPath}");
-                return _config;
-            }
-        
-            // If new config doesn't exist, try the old config name
-            _config = Resources.Load<AppConfig>(OLD_CONFIG_NAME);
-            if (_config)
-            {
-                // If old config exists but new one doesn't, migrate it
-                MigrateConfigToNewName();
-                return _config;
-            }
-        
-            // Try old config via AssetDatabase as well
-            const string oldConfigPath = "Assets/Resources/" + OLD_CONFIG_NAME + ".asset";
-            _config = AssetDatabase.LoadAssetAtPath<AppConfig>(oldConfigPath);
-            if (_config)
-            {
-                // If old config exists but new one doesn't, migrate it
-                MigrateConfigToNewName();
-                return _config;
-            }
-        
-            // A typed load also returns null for a perfectly healthy asset while the Editor is still settling -
-            // mid-compile or mid-import, the type or the imported asset simply is not available yet. Treating that
-            // as "broken" would quarantine a working configuration, so do nothing and let the next call decide once
-            // the Editor is idle. _config is still null here, so nothing is cached and the retry re-runs the loads.
-            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
-            {
-                Logcat.Debug("AbxrLib skipped loading its configuration because Unity is still compiling or importing. " +
-                             "WHAT TO DO: wait for Unity to finish, then try again.");
-                return null;
+                case ConfigState.Loaded:
+                    return found;
+
+                case ConfigState.LegacyUnmigrated:
+                    // Cache first: the migration renames the asset in place and the loaded reference stays valid.
+                    _config = found;
+                    MigrateConfigToNewName();
+                    return _config;
+
+                case ConfigState.NotReady:
+                    // Nothing is cached, so the next call re-runs the loads once the Editor is idle.
+                    Logcat.Debug("AbxrLib skipped loading its configuration because Unity is still compiling or importing. " +
+                                 "WHAT TO DO: wait for Unity to finish, then try again.");
+                    return null;
             }
 
-            // The loads above are all typed, and a typed load returns null while the file is still on disk whenever
-            // the AppConfig type cannot be resolved: an unresolvable m_Script reference, or two copies of AbxrLib in
-            // the project. AssetDatabase.CreateAsset replaces whatever already occupies the path, so creating over an
+            // PresentButUnloadable or Absent. A typed load returns null while the file is still on disk whenever the
+            // AppConfig type cannot be resolved: an unresolvable m_Script reference, or two copies of AbxrLib in the
+            // project. AssetDatabase.CreateAsset replaces whatever already occupies the path, so creating over an
             // unloadable asset would silently destroy the configured identity. Move it aside instead: the values stay
             // recoverable from the quarantined copy and a usable default can still be created.
-            bool newPathClear = QuarantineUnloadableConfig(newConfigPath, out string quarantinedPath);
-            QuarantineUnloadableConfig(oldConfigPath, out string quarantinedOldPath);
+            bool newPathClear = QuarantineUnloadableConfig(NEW_CONFIG_PATH, out string quarantinedPath);
+            QuarantineUnloadableConfig(OLD_CONFIG_PATH, out string quarantinedOldPath);
             quarantinedPath ??= quarantinedOldPath;
 
             // If the unloadable asset could not be moved, do not create over it - that is the destructive case.
@@ -169,7 +180,7 @@ namespace AbxrLib.Editor
                 AssetDatabase.CreateFolder("Assets", "Resources");
             }
 
-            AssetDatabase.CreateAsset(_config, filepath + "/" + NEW_CONFIG_NAME + ".asset");
+            AssetDatabase.CreateAsset(_config, NEW_CONFIG_PATH);
 
             // The quarantined file is still readable text even though Unity could not bind it to a type, so the
             // settings can be carried over automatically instead of asking the developer to retype them.
