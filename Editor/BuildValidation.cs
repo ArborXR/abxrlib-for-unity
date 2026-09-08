@@ -46,8 +46,9 @@ namespace AbxrLib.Editor
             }
             catch (Exception e)
             {
-                // A diagnostic must never be the reason a build fails.
-                Logcat.Debug("AbxrLib build validation skipped: " + e.Message);
+                // A diagnostic must never be the reason a build fails. Warning, not Debug: Debug compiles out unless
+                // ENABLE_LOGS or a development build is defined, which would make this catch silent in a normal Editor.
+                Logcat.Warning("AbxrLib setup checks were skipped for this build: " + e.GetType().Name + ": " + e.Message);
             }
         }
     }
