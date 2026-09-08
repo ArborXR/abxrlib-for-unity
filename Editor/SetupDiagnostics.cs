@@ -57,7 +57,7 @@ namespace AbxrLib.Editor
             Section(sb, "Android player settings", AndroidSection);
             Section(sb, "Headset support", HeadsetSection);
             Section(sb, includeAllConfig ? "Config (all values)" : "Config (changed from default)",
-                s => ConfigSection(s, Core.GetConfig(), includeAllConfig));
+                s => ConfigSection(s, Core.TryGetLoadedConfig(), includeAllConfig));
             Section(sb, "Sign-in UI", SignInUiSection);
             Section(sb, "Setup checks", ChecksSection);
 
@@ -138,7 +138,10 @@ namespace AbxrLib.Editor
         {
             if (config == null)
             {
-                Line(sb, "config", "not loaded (Unity is still compiling or importing, or the asset cannot be loaded)");
+                // Read-only on purpose: a support report must describe the project as it is, and the creating accessor
+                // would quarantine an unloadable asset and create a default before the report could mention it.
+                Line(sb, "config", "not found (no Assets/Resources/AbxrLib.asset yet, or Unity is still compiling or " +
+                                   "importing). Open Analytics for XR > Setup Wizard to create one.");
                 return;
             }
 
