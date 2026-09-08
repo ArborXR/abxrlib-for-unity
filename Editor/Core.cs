@@ -104,14 +104,14 @@ namespace AbxrLib.Editor
         /// <summary>
         /// One sentence per state for the surfaces that report the configuration rather than repair it: what was found
         /// and what to do about it. Shared so the build hook and the diagnostics report cannot describe the same state
-        /// differently. <see cref="ConfigState.Loaded"/> describes as the asset path.
+        /// differently. Callers that hold the loaded asset should print its real path rather than describing Loaded.
         /// </summary>
         internal static string Describe(ConfigState state)
         {
             switch (state)
             {
                 case ConfigState.Loaded:
-                    return NEW_CONFIG_PATH;
+                    return "loaded";
                 case ConfigState.LegacyUnmigrated:
                     return $"legacy {OLD_CONFIG_PATH}, not yet migrated. The runtime loads {NEW_CONFIG_NAME}.asset only, so " +
                            "AbxrLib cannot authenticate until Analytics for XR > Configuration is opened once to migrate it.";

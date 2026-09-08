@@ -114,7 +114,7 @@ public class SetupDiagnosticsTests
 
         Assert.AreEqual(Core.ConfigState.Loaded, state);
         Assert.AreSame(_config, loaded);
-        Assert.That(SetupDiagnostics.Build(includeAllConfig: false), Does.Contain("config: Assets/Resources/AbxrLib.asset"));
+        Assert.That(SetupDiagnostics.Build(includeAllConfig: false), Does.Contain("config: loaded (not an asset on disk)"));
     }
 
     // ── Allowlist completeness ────────────────────────────────────────────

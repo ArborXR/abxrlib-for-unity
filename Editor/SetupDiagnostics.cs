@@ -218,7 +218,12 @@ namespace AbxrLib.Editor
             // would quarantine an unloadable asset and create a default before the report could mention it. The state
             // is worded by Core, shared with the build hook, so the two never describe the same state differently.
             Core.ConfigState state = Core.TryGetLoadedConfig(out AppConfig config);
-            Line(sb, "config", Core.Describe(state));
+            // Loaded prints the path the asset was actually found at, which is not always the canonical one: Resources.Load
+            // answers for any Resources folder. An in-memory instance (tests) has no path and is named as such.
+            string assetPath = state == Core.ConfigState.Loaded ? AssetDatabase.GetAssetPath(config) : null;
+            Line(sb, "config", state != Core.ConfigState.Loaded ? Core.Describe(state)
+                : string.IsNullOrEmpty(assetPath) ? "loaded (not an asset on disk)"
+                : assetPath);
             if (config == null) return;
 
             // Identity and credentials print in both modes. Secrets are described, never printed.
