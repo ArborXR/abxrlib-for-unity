@@ -115,21 +115,14 @@ namespace AbxrLib.Editor
 
         private static void HeadsetSection(StringBuilder sb)
         {
-            // The same assembly probes CheckHeadsetSdk uses, repeated here because that check only speaks up when
-            // the world-space UI is installed and support wants this line for every project.
-            var names = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).ToList();
-            var sdks = new List<string>();
-            if (names.Any(n => n == "Unity.XR.PICO")) sdks.Add("PICO");
-            if (names.Any(n => n.Contains("Oculus") || n.Contains("OVR"))) sdks.Add("Meta");
-            if (names.Any(n => n.Contains("OpenXR"))) sdks.Add("OpenXR");
+            // Always printed, even though CheckHeadsetSdk only speaks up when the world-space UI is installed: support
+            // wants this line for every project. Same detection as the check, so the two cannot disagree.
+            List<string> sdks = SetupWizardChecks.DetectedHeadsetSdks();
             Line(sb, "sdks in project", sdks.Count == 0 ? "none detected" : string.Join(", ", sdks));
 
-            BuildTargetGroup selected = EditorUserBuildSettings.selectedBuildTargetGroup;
             foreach (string define in new[] { "META_QR_AVAILABLE", "PICO_SDK_3_4_OR_NEWER" })
             {
-                var groups = new List<string>();
-                if (BuildDefines.Has(define, BuildTargetGroup.Android)) groups.Add("Android");
-                if (selected != BuildTargetGroup.Android && BuildDefines.Has(define, selected)) groups.Add(selected.ToString());
+                List<BuildTargetGroup> groups = SetupWizardChecks.GroupsWithDefine(define);
                 Line(sb, define, groups.Count == 0 ? "not set" : "set (" + string.Join(", ", groups) + ")");
             }
         }

@@ -962,6 +962,34 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// Headset SDKs present in the project, recognized by assembly name: "PICO", "Meta", "OpenXR". Shared with the
+        /// diagnostics report so the two never disagree about what is installed.
+        /// </summary>
+        internal static List<string> DetectedHeadsetSdks()
+        {
+            var names = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).ToList();
+            var sdks = new List<string>();
+            if (names.Any(n => n == "Unity.XR.PICO")) sdks.Add("PICO");
+            if (names.Any(n => n.Contains("Oculus") || n.Contains("OVR"))) sdks.Add("Meta");
+            if (names.Any(n => n.Contains("OpenXR"))) sdks.Add("OpenXR");
+            return sdks;
+        }
+
+        /// <summary>
+        /// The build target groups a scripting define is set for, out of Android (where headset builds live) and the
+        /// selected group when that is something else. Empty when the define is set for neither.
+        /// </summary>
+        internal static List<BuildTargetGroup> GroupsWithDefine(string define)
+        {
+            var groups = new List<BuildTargetGroup>();
+            if (BuildDefines.Has(define, BuildTargetGroup.Android)) groups.Add(BuildTargetGroup.Android);
+
+            BuildTargetGroup selected = EditorUserBuildSettings.selectedBuildTargetGroup;
+            if (selected != BuildTargetGroup.Android && BuildDefines.Has(define, selected)) groups.Add(selected);
+            return groups;
+        }
+
+        /// <summary>
         /// Reports when QR-code sign-in cannot work. QR is part of the world-space UI, so this says nothing at all in
         /// a core-only project, and nothing when QR is already available - only when the UI is installed and the
         /// headset support it needs is missing.
@@ -972,16 +1000,13 @@ namespace AbxrLib.Editor
         {
             if (!WorldSpaceUiIsInstalled()) return null;
 
-            var names = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).ToList();
-            bool hasMeta = names.Any(n => n.Contains("Oculus") || n.Contains("OVR"));
-            bool hasPico = names.Any(n => n == "Unity.XR.PICO");
-            bool hasOpenXr = names.Any(n => n.Contains("OpenXR"));
+            List<string> sdks = DetectedHeadsetSdks();
+            bool hasPico = sdks.Contains("PICO");
+            bool hasMeta = sdks.Contains("Meta");
+            bool hasOpenXr = sdks.Contains("OpenXR");
 
-            BuildTargetGroup selected = EditorUserBuildSettings.selectedBuildTargetGroup;
-            bool metaQr = BuildDefines.Has("META_QR_AVAILABLE", BuildTargetGroup.Android) ||
-                          BuildDefines.Has("META_QR_AVAILABLE", selected);
-            bool picoQr = BuildDefines.Has("PICO_SDK_3_4_OR_NEWER", BuildTargetGroup.Android) ||
-                          BuildDefines.Has("PICO_SDK_3_4_OR_NEWER", selected);
+            bool metaQr = GroupsWithDefine("META_QR_AVAILABLE").Count > 0;
+            bool picoQr = GroupsWithDefine("PICO_SDK_3_4_OR_NEWER").Count > 0;
 
             // QR is compiled in, so there is nothing to report.
             if (picoQr || metaQr) return null;
