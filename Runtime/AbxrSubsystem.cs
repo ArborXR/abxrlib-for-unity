@@ -233,10 +233,10 @@ namespace AbxrLib.Runtime
                 var reason = Configuration.LastValidationErrorMessage ?? "required configuration missing or invalid";
                 if (reason.StartsWith("Authentication error: ", StringComparison.Ordinal))
                     reason = reason.Substring("Authentication error: ".Length);
-                Logcat.Error($"Version {AbxrLibVersion.Version} Initialization Failed: {reason}");
+                Logcat.Error($"Version {AbxrLibVersion.Version} Initialization Failed: {reason} | {EnvironmentSummary.Describe(settings)}");
             }
             else
-                Logcat.Info($"Version {AbxrLibVersion.Version} Initialized.");
+                Logcat.Info($"Version {AbxrLibVersion.Version} Initialized. {EnvironmentSummary.Describe(settings)}");
 
             // Auto-start auth (gated on transport selection so first auth uses correct backend).
             //

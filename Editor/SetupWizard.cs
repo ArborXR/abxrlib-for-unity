@@ -471,6 +471,20 @@ namespace AbxrLib.Editor
                     : _worldSpaceFilesImported ? "Imported, not compiling"
                     : "Not installed (optional)", Step.Project);
 
+            GUILayout.Space(8f);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Copy diagnostics", GUILayout.Width(140f)))
+            {
+                SetupDiagnostics.CopyToClipboard();
+                ShowNotification(new GUIContent("Copied"));
+            }
+            // Assign only on change: the setter writes EditorPrefs, and OnGUI runs this several times per frame.
+            bool includeAll = SetupDiagnostics.IncludeAllConfig;
+            bool toggled = EditorGUILayout.ToggleLeft("All config values", includeAll, GUILayout.Width(150f));
+            if (toggled != includeAll) SetupDiagnostics.IncludeAllConfig = toggled;
+            EditorGUILayout.EndHorizontal();
+            EditorGUILayout.LabelField(
+                "Paste into a support request. Tokens and secrets are never included.", _styles.Body);
 
             EditorGUILayout.EndVertical();
         }
