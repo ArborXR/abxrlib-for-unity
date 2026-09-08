@@ -2,6 +2,9 @@
 // Pins the diagnostics report's redaction contract and its two config modes. The report is meant to be pasted
 // into support requests, so the one thing it must never do is carry a token, the auth secret, or a unit-test
 // PIN - in either mode.
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using AbxrLib.Editor;
 using AbxrLib.Runtime.Core;
 using NUnit.Framework;
@@ -102,6 +105,46 @@ public class SetupDiagnosticsTests
 
         foreach (string section in new[] { "Package", "Editor", "Android player settings", "Headset support", "Config", "Sign-in UI", "Setup checks" })
             Assert.That(report, Does.Contain("\n" + section), section);
+    }
+
+    // ── Allowlist completeness ────────────────────────────────────────────
+    // The report is fail-closed: a field not on a list never prints. These tests make sure "never prints" is a decision
+    // someone made, not a field nobody noticed.
+
+    private static IEnumerable<string> AppConfigFieldNames() =>
+        typeof(AppConfig).GetFields(BindingFlags.Public | BindingFlags.Instance).Select(f => f.Name);
+
+    private static IEnumerable<string> ListedFieldNames() =>
+        SetupDiagnostics.IdentityFields
+            .Concat(SetupDiagnostics.TuningFields.Select(f => f.Name))
+            .Concat(SetupDiagnostics.ExcludedFields);
+
+    [Test]
+    public void EveryAppConfigField_IsReportedOrExplicitlyExcluded()
+    {
+        var listed = new HashSet<string>(ListedFieldNames());
+        List<string> unaccounted = AppConfigFieldNames().Where(n => !listed.Contains(n)).ToList();
+
+        Assert.That(unaccounted, Is.Empty,
+            "Add each new AppConfig field to the diagnostics report (through DescribeSecret if it is a secret) or to " +
+            "SetupDiagnostics.ExcludedFields: " + string.Join(", ", unaccounted));
+    }
+
+    [Test]
+    public void ListedFields_AllStillExistOnAppConfig()
+    {
+        var actual = new HashSet<string>(AppConfigFieldNames());
+        List<string> stale = ListedFieldNames().Where(n => !actual.Contains(n)).ToList();
+
+        Assert.That(stale, Is.Empty, "Remove from SetupDiagnostics: " + string.Join(", ", stale));
+    }
+
+    [Test]
+    public void ListedFields_AppearInExactlyOneList()
+    {
+        List<string> all = ListedFieldNames().ToList();
+
+        Assert.AreEqual(all.Distinct().Count(), all.Count, "A field is in more than one SetupDiagnostics list.");
     }
 
     [TestCase(null, true, "not set")]

@@ -35,6 +35,83 @@ namespace AbxrLib.Editor
             set => EditorPrefs.SetBool(IncludeAllConfigPref, value);
         }
 
+        /// <summary>One tuning field the report can print, with the reader that fetches it from a configuration.</summary>
+        internal sealed class ReportedField
+        {
+            public readonly string Name;
+            public readonly Func<AppConfig, object> Read;
+
+            public ReportedField(string name, Func<AppConfig, object> read)
+            {
+                Name = name;
+                Read = read;
+            }
+        }
+
+        /// <summary>
+        /// Identity and credential fields. Printed in both modes with their own rendering in ConfigSection: identifiers
+        /// as they are, secrets through <see cref="DescribeSecret"/>. Listed so the allowlist test can account for them.
+        /// </summary>
+        internal static readonly string[] IdentityFields =
+        {
+            "buildType", "useAppTokens", "appID", "orgID", "launcherAppID", "appToken", "orgToken", "authSecret", "restUrl"
+        };
+
+        /// <summary>
+        /// Fields deliberately kept out of the report. Prefab references have nothing to say in text, and the unit-test
+        /// credentials are secrets with no support value. Every public AppConfig field must appear here or in one of
+        /// the two lists above, or SetupDiagnosticsTests fails - so adding a field forces a decision about how it prints.
+        /// </summary>
+        internal static readonly string[] ExcludedFields =
+        {
+            "KeyboardPrefab", "PinPrefab",
+            "unitTestAuthPin", "unitTestAuthBadPin", "unitTestAuthText", "unitTestAuthEmail", "unitTestAuthEmailDomain",
+            "unitTestDeviceId", "unitTestFingerprint", "unitTestSsoAccessToken"
+        };
+
+        /// <summary>
+        /// Tuning fields, in report order. Printed when changed from default, or always in all-values mode. Defaults are
+        /// read from a fresh AppConfig at report time, so this list carries no numbers to keep in sync.
+        /// </summary>
+        internal static readonly ReportedField[] TuningFields =
+        {
+            new ReportedField("authUIFollowCamera", c => c.authUIFollowCamera),
+            new ReportedField("enableDirectTouchInteraction", c => c.enableDirectTouchInteraction),
+            new ReportedField("authUIDistanceFromCamera", c => c.authUIDistanceFromCamera),
+            new ReportedField("headsetTracking", c => c.headsetTracking),
+            new ReportedField("positionTrackingPeriodSeconds", c => c.positionTrackingPeriodSeconds),
+            new ReportedField("defaultMaxDistanceLimit", c => c.defaultMaxDistanceLimit),
+            new ReportedField("defaultAutoCreateTriggerCollider", c => c.defaultAutoCreateTriggerCollider),
+            new ReportedField("enableAutoStartAuthentication", c => c.enableAutoStartAuthentication),
+            new ReportedField("authenticationStartDelay", c => c.authenticationStartDelay),
+            new ReportedField("enableAutoStartModules", c => c.enableAutoStartModules),
+            new ReportedField("enableAutoAdvanceModules", c => c.enableAutoAdvanceModules),
+            new ReportedField("enableReturnTo", c => c.enableReturnTo),
+            new ReportedField("enablePinPadGuestAccess", c => c.enablePinPadGuestAccess),
+            new ReportedField("recordIpAddress", c => c.recordIpAddress),
+            new ReportedField("telemetryTrackingPeriodSeconds", c => c.telemetryTrackingPeriodSeconds),
+            new ReportedField("frameRateTrackingPeriodSeconds", c => c.frameRateTrackingPeriodSeconds),
+            new ReportedField("sendRetriesOnFailure", c => c.sendRetriesOnFailure),
+            new ReportedField("sendRetryIntervalSeconds", c => c.sendRetryIntervalSeconds),
+            new ReportedField("sendNextBatchWaitSeconds", c => c.sendNextBatchWaitSeconds),
+            new ReportedField("requestTimeoutSeconds", c => c.requestTimeoutSeconds),
+            new ReportedField("stragglerTimeoutSeconds", c => c.stragglerTimeoutSeconds),
+            new ReportedField("maxCallFrequencySeconds", c => c.maxCallFrequencySeconds),
+            new ReportedField("dataEntriesPerSendAttempt", c => c.dataEntriesPerSendAttempt),
+            new ReportedField("storageEntriesPerSendAttempt", c => c.storageEntriesPerSendAttempt),
+            new ReportedField("pruneSentItemsOlderThanHours", c => c.pruneSentItemsOlderThanHours),
+            new ReportedField("maximumCachedItems", c => c.maximumCachedItems),
+            new ReportedField("retainLocalAfterSent", c => c.retainLocalAfterSent),
+            new ReportedField("enableArborInsightsClient", c => c.enableArborInsightsClient),
+            new ReportedField("enableArborMdmClient", c => c.enableArborMdmClient),
+            new ReportedField("enableLearnerLauncherMode", c => c.enableLearnerLauncherMode),
+            new ReportedField("enableAutomaticTelemetry", c => c.enableAutomaticTelemetry),
+            new ReportedField("enableSceneEvents", c => c.enableSceneEvents),
+            new ReportedField("maxDictionarySize", c => c.maxDictionarySize),
+            // The switch only; the unit-test PIN, email, and token fields it guards are in ExcludedFields.
+            new ReportedField("unitTestConfigEnabled", c => c.unitTestConfigEnabled)
+        };
+
         /// <summary>
         /// Builds the report in the current config mode, echoes it to the Console, then puts it on the clipboard. The
         /// Console copy comes first so the report is already somewhere readable if the clipboard write is what fails
@@ -158,42 +235,11 @@ namespace AbxrLib.Editor
             try
             {
                 int before = sb.Length;
-
-                Field(sb, "authUIFollowCamera", config, defaults, c => c.authUIFollowCamera, includeAll);
-                Field(sb, "enableDirectTouchInteraction", config, defaults, c => c.enableDirectTouchInteraction, includeAll);
-                Field(sb, "authUIDistanceFromCamera", config, defaults, c => c.authUIDistanceFromCamera, includeAll);
-                Field(sb, "headsetTracking", config, defaults, c => c.headsetTracking, includeAll);
-                Field(sb, "positionTrackingPeriodSeconds", config, defaults, c => c.positionTrackingPeriodSeconds, includeAll);
-                Field(sb, "defaultMaxDistanceLimit", config, defaults, c => c.defaultMaxDistanceLimit, includeAll);
-                Field(sb, "defaultAutoCreateTriggerCollider", config, defaults, c => c.defaultAutoCreateTriggerCollider, includeAll);
-                Field(sb, "enableAutoStartAuthentication", config, defaults, c => c.enableAutoStartAuthentication, includeAll);
-                Field(sb, "authenticationStartDelay", config, defaults, c => c.authenticationStartDelay, includeAll);
-                Field(sb, "enableAutoStartModules", config, defaults, c => c.enableAutoStartModules, includeAll);
-                Field(sb, "enableAutoAdvanceModules", config, defaults, c => c.enableAutoAdvanceModules, includeAll);
-                Field(sb, "enableReturnTo", config, defaults, c => c.enableReturnTo, includeAll);
-                Field(sb, "enablePinPadGuestAccess", config, defaults, c => c.enablePinPadGuestAccess, includeAll);
-                Field(sb, "recordIpAddress", config, defaults, c => c.recordIpAddress, includeAll);
-                Field(sb, "telemetryTrackingPeriodSeconds", config, defaults, c => c.telemetryTrackingPeriodSeconds, includeAll);
-                Field(sb, "frameRateTrackingPeriodSeconds", config, defaults, c => c.frameRateTrackingPeriodSeconds, includeAll);
-                Field(sb, "sendRetriesOnFailure", config, defaults, c => c.sendRetriesOnFailure, includeAll);
-                Field(sb, "sendRetryIntervalSeconds", config, defaults, c => c.sendRetryIntervalSeconds, includeAll);
-                Field(sb, "sendNextBatchWaitSeconds", config, defaults, c => c.sendNextBatchWaitSeconds, includeAll);
-                Field(sb, "requestTimeoutSeconds", config, defaults, c => c.requestTimeoutSeconds, includeAll);
-                Field(sb, "stragglerTimeoutSeconds", config, defaults, c => c.stragglerTimeoutSeconds, includeAll);
-                Field(sb, "maxCallFrequencySeconds", config, defaults, c => c.maxCallFrequencySeconds, includeAll);
-                Field(sb, "dataEntriesPerSendAttempt", config, defaults, c => c.dataEntriesPerSendAttempt, includeAll);
-                Field(sb, "storageEntriesPerSendAttempt", config, defaults, c => c.storageEntriesPerSendAttempt, includeAll);
-                Field(sb, "pruneSentItemsOlderThanHours", config, defaults, c => c.pruneSentItemsOlderThanHours, includeAll);
-                Field(sb, "maximumCachedItems", config, defaults, c => c.maximumCachedItems, includeAll);
-                Field(sb, "retainLocalAfterSent", config, defaults, c => c.retainLocalAfterSent, includeAll);
-                Field(sb, "enableArborInsightsClient", config, defaults, c => c.enableArborInsightsClient, includeAll);
-                Field(sb, "enableArborMdmClient", config, defaults, c => c.enableArborMdmClient, includeAll);
-                Field(sb, "enableLearnerLauncherMode", config, defaults, c => c.enableLearnerLauncherMode, includeAll);
-                Field(sb, "enableAutomaticTelemetry", config, defaults, c => c.enableAutomaticTelemetry, includeAll);
-                Field(sb, "enableSceneEvents", config, defaults, c => c.enableSceneEvents, includeAll);
-                Field(sb, "maxDictionarySize", config, defaults, c => c.maxDictionarySize, includeAll);
-                // The switch only; the unit-test PIN, email, and token fields it guards never print.
-                Field(sb, "unitTestConfigEnabled", config, defaults, c => c.unitTestConfigEnabled, includeAll);
+                foreach (ReportedField field in TuningFields)
+                {
+                    object value = field.Read(config);
+                    if (includeAll || !Equals(value, field.Read(defaults))) Line(sb, field.Name, Format(value));
+                }
 
                 if (!includeAll && sb.Length == before) Line(sb, "other settings", "all defaults");
             }
@@ -261,15 +307,7 @@ namespace AbxrLib.Editor
         private static void Line(StringBuilder sb, string name, string value) =>
             sb.Append("  ").Append(name).Append(": ").AppendLine(value);
 
-        private static void Field<T>(StringBuilder sb, string name, AppConfig config, AppConfig defaults,
-            Func<AppConfig, T> read, bool includeAll)
-        {
-            T value = read(config);
-            if (includeAll || !EqualityComparer<T>.Default.Equals(value, read(defaults)))
-                Line(sb, name, Format(value));
-        }
-
-        private static string Format<T>(T value)
+        private static string Format(object value)
         {
             if (value is bool b) return b ? "true" : "false";
             if (value is IFormattable f) return f.ToString(null, CultureInfo.InvariantCulture);
