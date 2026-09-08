@@ -49,12 +49,20 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// Identity and credential fields. Printed in both modes with their own rendering in ConfigSection: identifiers
-        /// as they are, secrets through <see cref="DescribeSecret"/>. Listed so the allowlist test can account for them.
+        /// Identity and credential fields, printed in both modes. Each reader returns the text to print: identifiers as
+        /// they are, secrets through <see cref="DescribeSecret"/> so the value itself never reaches the report.
         /// </summary>
-        internal static readonly string[] IdentityFields =
+        internal static readonly ReportedField[] IdentityFields =
         {
-            "buildType", "useAppTokens", "appID", "orgID", "launcherAppID", "appToken", "orgToken", "authSecret", "restUrl"
+            new ReportedField("buildType", c => c.buildType),
+            new ReportedField("useAppTokens", c => c.useAppTokens),
+            new ReportedField("appID", c => OrNotSet(c.appID)),
+            new ReportedField("orgID", c => OrNotSet(c.orgID)),
+            new ReportedField("launcherAppID", c => OrNotSet(c.launcherAppID)),
+            new ReportedField("appToken", c => DescribeSecret(c.appToken, expectJwt: true)),
+            new ReportedField("orgToken", c => DescribeSecret(c.orgToken, expectJwt: true)),
+            new ReportedField("authSecret", c => DescribeSecret(c.authSecret, expectJwt: false)),
+            new ReportedField("restUrl", c => OrNotSet(c.restUrl))
         };
 
         /// <summary>
@@ -231,15 +239,7 @@ namespace AbxrLib.Editor
             }
 
             // Identity and credentials print in both modes. Secrets are described, never printed.
-            Line(sb, "buildType", config.buildType);
-            Line(sb, "useAppTokens", Format(config.useAppTokens));
-            Line(sb, "appID", string.IsNullOrEmpty(config.appID) ? "not set" : config.appID);
-            Line(sb, "orgID", string.IsNullOrEmpty(config.orgID) ? "not set" : config.orgID);
-            if (!string.IsNullOrEmpty(config.launcherAppID)) Line(sb, "launcherAppID", config.launcherAppID);
-            Line(sb, "appToken", DescribeSecret(config.appToken, expectJwt: true));
-            Line(sb, "orgToken", DescribeSecret(config.orgToken, expectJwt: true));
-            Line(sb, "authSecret", DescribeSecret(config.authSecret, expectJwt: false));
-            Line(sb, "restUrl", string.IsNullOrEmpty(config.restUrl) ? "not set" : config.restUrl);
+            foreach (ReportedField field in IdentityFields) Line(sb, field.Name, Format(field.Read(config)));
             Line(sb, "credentials", SetupWizardChecks.CredentialsAreValid(config)
                 ? "valid"
                 : SetupWizardChecks.DescribeCredentialProblem(config));
@@ -321,6 +321,8 @@ namespace AbxrLib.Editor
 
         private static void Line(StringBuilder sb, string name, string value) =>
             sb.Append("  ").Append(name).Append(": ").AppendLine(value);
+
+        private static string OrNotSet(string value) => string.IsNullOrEmpty(value) ? "not set" : value;
 
         private static string Format(object value)
         {

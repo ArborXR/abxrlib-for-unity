@@ -125,9 +125,22 @@ public class SetupDiagnosticsTests
         typeof(AppConfig).GetFields(BindingFlags.Public | BindingFlags.Instance).Select(f => f.Name);
 
     private static IEnumerable<string> ListedFieldNames() =>
-        SetupDiagnostics.IdentityFields
+        SetupDiagnostics.IdentityFields.Select(f => f.Name)
             .Concat(SetupDiagnostics.TuningFields.Select(f => f.Name))
             .Concat(SetupDiagnostics.ExcludedFields);
+
+    [Test]
+    public void AllValuesMode_PrintsEveryReportedField()
+    {
+        string report = SetupDiagnostics.Build(includeAllConfig: true);
+
+        List<string> missing = SetupDiagnostics.IdentityFields.Concat(SetupDiagnostics.TuningFields)
+            .Select(f => f.Name)
+            .Where(n => !report.Contains("\n  " + n + ": "))
+            .ToList();
+
+        Assert.That(missing, Is.Empty, "Listed but never printed: " + string.Join(", ", missing));
+    }
 
     [Test]
     public void EveryAppConfigField_IsReportedOrExplicitlyExcluded()
