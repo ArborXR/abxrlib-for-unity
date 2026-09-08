@@ -5,17 +5,17 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
-using AbxrLib.Runtime.UI.Keyboard;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Networking;
 
 namespace AbxrLib.Runtime.Services.Auth
 {
-    public class AbxrAuthService
+    public class AbxrAuthService : IAbxrAuthBridge
     {
         // ── Callbacks ────────────────────────────────────────────────
         /// <summary>
@@ -64,6 +64,8 @@ namespace AbxrLib.Runtime.Services.Auth
         internal bool HasAuthenticationStarted => _isAuthStarted;
         /// <summary>Testing only. Clears <see cref="HasAuthenticationStarted"/> so tests can run multiple auth scenarios in one session.</summary>
         internal void ResetAuthStartedForTesting() => _isAuthStarted = false;
+        /// <summary>Testing only. Tests that invoke <see cref="OnInputRequested"/> directly bypass the request bookkeeping; this restores it.</summary>
+        internal void SetInputRequestPendingForTesting(bool pending) => _inputRequestPending = pending;
         private Coroutine _reAuthCoroutine;
         private Coroutine _retryCoroutine;
         private Dictionary<string, string> _userData;
@@ -246,7 +248,7 @@ namespace AbxrLib.Runtime.Services.Auth
             {
                 _inputRequestPending = false;
                 Logcat.Warning("Skipping user authentication.");
-                KeyboardHandler.Destroy();
+                AbxrUi.AuthUi?.Hide();
                 AuthSucceeded();
                 return;
             }
@@ -261,6 +263,12 @@ namespace AbxrLib.Runtime.Services.Auth
             OnInputRequested?.Invoke(_authMechanism.type, _authMechanism.prompt, _authMechanism.domain, firstAttempt ? "" : "Authentication Failed");
         }
         
+        /// <summary>
+        /// <see cref="IAbxrAuthBridge"/>: what the world-space UI calls when the user submits a value. Named for the
+        /// caller's world rather than the keyboard's, since the UI is optional and may not be a keyboard at all.
+        /// </summary>
+        public void SubmitAuthInput(string input) => KeyboardAuthenticate(input);
+
         public void KeyboardAuthenticate(string input)
         {
             string originalPrompt = _authMechanism.prompt;
@@ -286,13 +294,16 @@ namespace AbxrLib.Runtime.Services.Auth
 #if UNITY_WEBGL && !UNITY_EDITOR
                     _webglQueryAssessmentPin = null;
 #endif
-                    KeyboardHandler.Destroy();
+                    AbxrUi.AuthUi?.Hide();
                     AuthSucceeded();
                 }
                 else
                 {
-                    KeyboardHandler.StopProcessing();
-                    KeyboardHandler.ShowPinPad();
+                    AbxrUi.AuthUi?.StopProcessing();
+                    // No Show here: this failure path runs for every mechanism, and showing a PIN pad would
+                    // create one even when the user was typing an email. The OnInputRequested re-invoke below
+                    // re-presents the correct surface, and Show's reveal-if-hidden contract covers a pad the
+                    // QR scanner hid.
                     SetInputSource("user");  // In case it was changed by QR Scanner
 
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.

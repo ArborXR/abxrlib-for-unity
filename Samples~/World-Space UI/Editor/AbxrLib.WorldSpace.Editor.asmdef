@@ -1,0 +1,19 @@
+{
+    "name": "AbxrLib.WorldSpace.Editor",
+    "rootNamespace": "AbxrLib.WorldSpace.Editor",
+    "references": [
+        "AbxrLib.WorldSpace",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

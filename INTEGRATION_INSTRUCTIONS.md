@@ -25,6 +25,18 @@ Do not reference or rely on files outside this package or the Developer Portal. 
 1. In Unity: **Window → Package Manager → Add package from git URL**
 2. URL: `https://github.com/ArborXR/abxrlib-for-unity.git`
 3. After import, **Analytics for XR** appears in the menu; configuration is under **Analytics for XR → Configuration**.
+4. The **AbxrLib Setup** wizard opens automatically once the package finishes installing (credentials → project setup → first events). It writes to the same config asset as **Analytics for XR → Configuration**, so the steps below can be done in either place. Reopen it with **Analytics for XR → Setup Wizard**.
+
+### 2.1a Sign-in UI: import only if you need it
+
+The package ships **no UI**. AbxrLib's world-space keyboard, PIN pad, exit polls, and QR scanning are a separate import, which is what keeps TextMeshPro, uGUI, and XR Interaction Toolkit out of projects that do not draw them.
+
+- **Want AbxrLib to collect PIN / email?** Import it: wizard → **Import world-space UI**, or **Window → Package Manager → AbxrLib for Unity → Samples → World-Space UI → Import**. TextMeshPro is added automatically if missing. It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`.
+- **Collecting input in your own app?** Skip it. Assign `Abxr.OnInputRequested` and submit with `Abxr.OnInputSubmitted` (§ auth input below). Everything else — events, telemetry, logs, storage, auth — works without it.
+
+Because the UI is imported into `Assets/`, **updating AbxrLib does not update it**. The wizard detects a version mismatch and offers a re-import (it overwrites the imported copy).
+
+> **AI agents:** if a task involves the keyboard, PIN pad, exit poll, QR scanning, or their prefabs, first check whether `Assets/Samples/**/World-Space UI/` exists. If it does not, the project is core-only and those types are not in the compilation — do not add `using AbxrLib.Runtime.UI...` or reference `KeyboardHandler` / `ExitPollHandler`; use `Abxr.OnInputRequested` instead.
 
 ### 2.2 Configure credentials (app token / org token)
 
@@ -44,10 +56,7 @@ Use **app token** and **org token** for authentication. In **Analytics for XR �
 
 ### 2.3 Optional: Android + ArborInsightsClient
 
-For Android VR builds that use the device-side ArborInsightsClient service:
-
-- Install the **ArborInsightsClient** APK on the device.
-- Add the **matching client AAR** (e.g. `insights-client-service.aar`) to the project’s `Plugins/Android/`. The AAR is supplied separately (e.g. from your distribution channel), not built in this repo.
+The **Enable ArborInsightsClient** setting (Analytics for XR → Configuration → Advanced, on by default) routes authentication and data through the device-side ArborInsightsClient service where that service is present, and falls back to REST everywhere else — so the setting is safe to leave on. The ArborInsightsClient APK and its client AAR are **not yet generally available**; there is nothing to install today, and this section will gain setup steps when they ship.
 
 ---
 
@@ -223,6 +232,8 @@ Use this to implement or audit an integration.
 - [ ] Package added via git URL (or local path). Optionally pin to a tag for reproducible builds (e.g. `#v2.0.4` in the package URL).
 - [ ] **Analytics for XR → Configuration** uses **Use App Tokens** with **App Token** set; **Org Token** left empty for dynamic org token unless production_custom (or legacy credentials if still using app ID/org ID/auth secret).
 - [ ] Production builds do not embed org token or long-lived secrets unless required for a single-customer deployment.
+- [ ] Sign-in UI decided: **World-Space UI** sample imported, **or** `Abxr.OnInputRequested` handled by the app (§2.1a). One of the two is required for PIN or email auth to complete.
+- [ ] On ArborXR-managed devices: **Build Type = Production**, **Org Token** empty, **Enable ArborMdmClient** on. `Production (Custom APK)` is not for managed fleets — it ignores the MDM and pins every device to the configured org.
 
 ### Required events
 

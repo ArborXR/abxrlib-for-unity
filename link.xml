@@ -1,23 +1,23 @@
 <!--
   AbxrLib IL2CPP managed-code-stripping preservation.
 
-  Unity's IL2CPP linker strips managed types it cannot see referenced from code.
-  AbxrLib types that are only ever instantiated from serialized assets - the
-  AppConfig ScriptableObject loaded via Resources.Load, and the MonoBehaviours on
-  the keyboard / PIN pad / exit-poll prefabs - have no direct code reference, so on
-  IL2CPP builds with managed stripping enabled (Medium or higher) they get pruned.
-  At runtime that shows up as "The referenced script ... is missing!", the config
-  deserializes empty, and initialization fails with "App identification not set".
+  Unity's IL2CPP linker strips managed types it cannot see referenced from code. AbxrLib's
+  AppConfig ScriptableObject is loaded via Resources.Load and has no direct code reference, so on
+  IL2CPP builds with managed stripping enabled (Medium or higher) it gets pruned. At runtime that
+  shows up as "The referenced script ... is missing!", the config deserializes empty, and
+  initialization fails with "App identification not set".
 
-  This reproduces on Unity 2021.3 (Unity 6 auto-preserves asset-referenced types,
-  masking it). Preserving the two shipped runtime assemblies keeps every AbxrLib
-  type regardless of the consumer project's Managed Stripping Level. Editor and
-  Tests assemblies are excluded on purpose - they are never in player builds.
+  This reproduces on Unity 2021.3 (Unity 6 auto-preserves asset-referenced types, masking it).
+  Preserving the runtime assembly keeps every AbxrLib type regardless of the consumer project's
+  Managed Stripping Level. Editor and Tests assemblies are excluded on purpose - they are never in
+  player builds.
 
-  Unity automatically detects link.xml files inside a package, so no setup or
-  relocation is required by the consuming project.
+  The world-space objects (keyboard, PIN pad, exit poll, QR) ship their own link.xml, because once
+  imported they are compiled from the project's Assets folder and are not part of this package.
+
+  Unity automatically detects link.xml files inside a package, so no setup or relocation is
+  required by the consuming project.
 -->
 <linker>
   <assembly fullname="AbxrLib.Runtime" preserve="all" />
-  <assembly fullname="AbxrLib.UiRoundedCorners" preserve="all" />
 </linker>

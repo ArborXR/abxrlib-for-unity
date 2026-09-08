@@ -21,7 +21,6 @@ using AbxrLib.Runtime;
 using UnityEngine;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Types;
-using AbxrLib.Runtime.UI.ExitPoll;
 
 public static partial class Abxr
 {
@@ -181,7 +180,7 @@ public static partial class Abxr
 	/// <param name="pollType">What kind of poll would you like</param>
 	/// <param name="responses">If a multiple choice poll, you need to provide between 2 and 8 possible responses</param>
 	/// <param name="callback">Optional callback that will be called with the selected string value (Multiple-choice poll only)</param>
-	public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null) =>
+	public static void PollUser(string prompt, PollType pollType, List<string> responses = null, Action<string> callback = null) =>
 		X?.PollUser(prompt, pollType, responses, callback);
 	
 	/// <summary>

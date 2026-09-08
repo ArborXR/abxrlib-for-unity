@@ -64,6 +64,34 @@ Developers can implement their own backend services by following the ABXR protoc
    ```
 4. Once imported, you will see `Analytics for XR` in your Unity toolbar.
 
+### Setup Wizard
+
+When the package finishes installing, the **AbxrLib Setup** wizard opens on its own and walks through everything below:
+
+- **Credentials** — App Token / Org Token (or the legacy App ID scheme), with validation as you paste.
+- **Project setup** — Editor version, required packages, the optional sign-in UI, and the Android player settings a standalone headset build needs (each with a one-click fix).
+- **First events** — the assessment calls that turn on grading dashboards and LMS reporting.
+
+Reopen it any time from `Analytics for XR > Setup Wizard`. It edits the same `Assets/Resources/AbxrLib.asset` as `Analytics for XR > Configuration`, so either route works. Uncheck **Open automatically after install or update** in the wizard footer to stop it appearing on its own, and it never opens in batch mode or CI.
+
+### Sign-in UI (optional)
+
+The package itself contains no user interface. AbxrLib's built-in sign-in UI — world-space keyboard, PIN pad, exit polls, and QR-code scanning — is a **separate import**, so a project that does not use it never pulls in TextMeshPro, uGUI, or XR Interaction Toolkit.
+
+**Import it** if you want AbxrLib to ask the user for a PIN or email itself:
+
+- From the wizard: `Analytics for XR > Setup Wizard` → **Import world-space UI**, or
+- From `Window > Package Manager` → **AbxrLib for Unity** → **Samples** → **World-Space UI** → **Import**
+
+It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`, and TextMeshPro is added for you if the project does not have it. Because it is imported into your project rather than resolved as a package, **updating AbxrLib does not update it** — the wizard flags the mismatch and offers a re-import (which overwrites, so keep your own changes elsewhere).
+
+**Skip it** if your app collects input itself. Handle `Abxr.OnInputRequested` and pass the value to `Abxr.OnInputSubmitted`; AbxrLib will not try to draw anything. Events, telemetry, logs, storage, and authentication all work without the UI. Two things do not: `Abxr.PollUser` drops its poll with a warning unless you register your own UI via `AbxrUi.RegisterPollUi`, and the "same user?" prompt shown when the headset is put back on (`Abxr.OnHeadsetPutOnNewSession`) is asked through that same poll UI — so without one, that callback never fires.
+
+> **Upgrading from 2.0.10 or earlier?** Two changes to know about:
+>
+> 1. The sign-in UI used to ship inside the package. After updating, import it as above — otherwise an authentication request that needs a PIN or email has nothing to show unless your app handles `Abxr.OnInputRequested`. The wizard says so on its first page.
+> 2. `Abxr.PollUser()` now takes `PollType` from `AbxrLib.Runtime.Types` instead of `ExitPollHandler.PollType`. If you call it, add `using AbxrLib.Runtime.Types;` and drop the `ExitPollHandler.` prefix — the enum values are unchanged. This is the only change you need to make to existing code; 3.0 also adds new public API (the `AbxrUi` registry and its interfaces) without touching anything else you already call.
+
 ---
 
 ## Configuration
@@ -85,6 +113,20 @@ To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org 
 **Production builds:** Set App Token; use dynamic org token (empty org token in config) where the device or runtime provides org context.
 
 > **⚠️ Security Note:** Avoid compiling org tokens or long-lived secrets into builds distributed to third parties. For general distribution, use ArborXR-managed devices or dynamic org token. For single-customer deployments, follow your security guidelines.
+
+#### When ArborXR is the MDM
+
+On ArborXR-managed devices the organization is **not** configured — it is resolved at runtime from the device, and AbxrLib builds a dynamic org token from the device's org ID and fingerprint. Three settings matter:
+
+| Setting | Value | Why |
+|---|---|---|
+| **Build Type** | `Production` | Each device reports to its own organization. |
+| **Org Token** | leave empty | The device supplies it. Production ignores a configured org token anyway; in Development the runtime value replaces it. |
+| **Enable ArborMdmClient** (Advanced) | on (the default) | This is what reads the org ID and fingerprint. With it off there is no organization to authenticate against, and auth fails with *"Organization identification unavailable"* — the wizard warns if it has been turned off. |
+
+Do **not** use `Production (Custom APK)` for a managed fleet. It takes the organization from configuration by design and never consults the MDM, so every device in the build would report to the one org baked into it. That mode is for single-customer APKs, where ArborXR supplies the customer's org token (not self-serve).
+
+On the legacy scheme, the MDM supplies Org ID and Auth Secret at runtime, so only **App ID** needs setting.
 
 #### Legacy (App ID / Org ID / Auth Secret)
 
