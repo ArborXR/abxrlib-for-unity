@@ -215,28 +215,11 @@ namespace AbxrLib.Editor
         private static void ConfigSection(StringBuilder sb, bool includeAll)
         {
             // Read-only on purpose: a support report must describe the project as it is, and the creating accessor
-            // would quarantine an unloadable asset and create a default before the report could mention it. Each
-            // state is named, because "not found" and "found but broken" call for different fixes.
+            // would quarantine an unloadable asset and create a default before the report could mention it. The state
+            // is worded by Core, shared with the build hook, so the two never describe the same state differently.
             Core.ConfigState state = Core.TryGetLoadedConfig(out AppConfig config);
-            switch (state)
-            {
-                case Core.ConfigState.Absent:
-                    Line(sb, "config", "not found (no Assets/Resources/AbxrLib.asset). Open Analytics for XR > Setup Wizard " +
-                                       "to create one.");
-                    return;
-                case Core.ConfigState.PresentButUnloadable:
-                    Line(sb, "config", "present but could not be loaded as AppConfig (a broken script reference, two copies " +
-                                       "of AbxrLib in the project, or Unity still compiling or importing). Open Analytics for " +
-                                       "XR > Setup Wizard to repair it.");
-                    return;
-                case Core.ConfigState.LegacyUnmigrated:
-                    Line(sb, "config", "legacy Assets/Resources/ArborXR.asset, not yet migrated. The runtime loads AbxrLib.asset " +
-                                       "only, so builds cannot authenticate until Analytics for XR > Configuration is opened once.");
-                    break;
-                default:
-                    Line(sb, "config", "Assets/Resources/AbxrLib.asset");
-                    break;
-            }
+            Line(sb, "config", Core.Describe(state));
+            if (config == null) return;
 
             // Identity and credentials print in both modes. Secrets are described, never printed.
             foreach (ReportedField field in IdentityFields) Line(sb, field.Name, Format(field.Read(config)));
