@@ -27,27 +27,72 @@ namespace AbxrLib.Editor
         /// </summary>
         internal static void SetConfigForTesting(AppConfig config) => _config = config;
 
-        /// <summary>
-        /// The configuration if an asset already exists, or null. Unlike <see cref="GetConfig"/> this never creates,
-        /// migrates, or quarantines anything, so it is safe from places that must not write to the project, such as
-        /// build callbacks. A find under the current name is cached for <see cref="GetConfig"/>; a legacy-named asset
-        /// is returned uncached so the next <see cref="GetConfig"/> still runs its migration.
-        /// </summary>
-        internal static AppConfig TryGetLoadedConfig()
+        /// <summary>What <see cref="TryGetLoadedConfig(out AppConfig)"/> found, so callers can describe it accurately.</summary>
+        internal enum ConfigState
         {
-            if (_config) return _config;
+            /// <summary>Loaded from Assets/Resources/AbxrLib.asset, or already cached.</summary>
+            Loaded,
+            /// <summary>
+            /// Only the legacy Assets/Resources/ArborXR.asset exists. The runtime loads the AbxrLib name only, so builds
+            /// cannot authenticate until <see cref="GetConfig"/> migrates it (any wizard or Configuration open does).
+            /// </summary>
+            LegacyUnmigrated,
+            /// <summary>
+            /// A file is at one of the paths but cannot be loaded as <see cref="AppConfig"/>: an unresolvable script
+            /// reference, or two copies of AbxrLib in the project. <see cref="GetConfig"/> quarantines and recreates it.
+            /// </summary>
+            PresentButUnloadable,
+            /// <summary>No configuration file at either path.</summary>
+            Absent
+        }
+
+        /// <summary>
+        /// Finds the configuration without changing the project. Unlike <see cref="GetConfig"/> this never creates,
+        /// migrates, or quarantines anything, so it is safe from places that must not write, such as build callbacks
+        /// and the diagnostics report. A find under the current name is cached for <see cref="GetConfig"/>; a legacy
+        /// asset is returned uncached so the next <see cref="GetConfig"/> still runs its migration.
+        /// <paramref name="config"/> is set for <see cref="ConfigState.Loaded"/> and
+        /// <see cref="ConfigState.LegacyUnmigrated"/>, null otherwise.
+        /// </summary>
+        internal static ConfigState TryGetLoadedConfig(out AppConfig config)
+        {
+            if (_config)
+            {
+                config = _config;
+                return ConfigState.Loaded;
+            }
+
+            const string newPath = "Assets/Resources/" + NEW_CONFIG_NAME + ".asset";
+            const string oldPath = "Assets/Resources/" + OLD_CONFIG_NAME + ".asset";
 
             AppConfig current = Resources.Load<AppConfig>(NEW_CONFIG_NAME);
-            if (!current) current = AssetDatabase.LoadAssetAtPath<AppConfig>("Assets/Resources/" + NEW_CONFIG_NAME + ".asset");
+            if (!current) current = AssetDatabase.LoadAssetAtPath<AppConfig>(newPath);
             if (current)
             {
                 _config = current;
-                return _config;
+                config = current;
+                return ConfigState.Loaded;
             }
 
             AppConfig legacy = Resources.Load<AppConfig>(OLD_CONFIG_NAME);
-            if (!legacy) legacy = AssetDatabase.LoadAssetAtPath<AppConfig>("Assets/Resources/" + OLD_CONFIG_NAME + ".asset");
-            return legacy ? legacy : null;
+            if (!legacy) legacy = AssetDatabase.LoadAssetAtPath<AppConfig>(oldPath);
+            if (legacy)
+            {
+                config = legacy;
+                return ConfigState.LegacyUnmigrated;
+            }
+
+            config = null;
+            return AssetFileExists(newPath) || AssetFileExists(oldPath)
+                ? ConfigState.PresentButUnloadable
+                : ConfigState.Absent;
+        }
+
+        /// <summary>The configuration when one loads under either name, else null. See the overload for the state.</summary>
+        internal static AppConfig TryGetLoadedConfig()
+        {
+            TryGetLoadedConfig(out AppConfig config);
+            return config;
         }
 
         /// <summary>

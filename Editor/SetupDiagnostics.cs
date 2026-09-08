@@ -134,7 +134,7 @@ namespace AbxrLib.Editor
             Section(sb, "Android player settings", AndroidSection);
             Section(sb, "Headset support", HeadsetSection);
             Section(sb, includeAllConfig ? "Config (all values)" : "Config (changed from default)",
-                s => ConfigSection(s, Core.TryGetLoadedConfig(), includeAllConfig));
+                s => ConfigSection(s, includeAllConfig));
             Section(sb, "Sign-in UI", SignInUiSection);
             Section(sb, "Setup checks", ChecksSection);
 
@@ -204,15 +204,30 @@ namespace AbxrLib.Editor
             }
         }
 
-        private static void ConfigSection(StringBuilder sb, AppConfig config, bool includeAll)
+        private static void ConfigSection(StringBuilder sb, bool includeAll)
         {
-            if (config == null)
+            // Read-only on purpose: a support report must describe the project as it is, and the creating accessor
+            // would quarantine an unloadable asset and create a default before the report could mention it. Each
+            // state is named, because "not found" and "found but broken" call for different fixes.
+            Core.ConfigState state = Core.TryGetLoadedConfig(out AppConfig config);
+            switch (state)
             {
-                // Read-only on purpose: a support report must describe the project as it is, and the creating accessor
-                // would quarantine an unloadable asset and create a default before the report could mention it.
-                Line(sb, "config", "not found (no Assets/Resources/AbxrLib.asset yet, or Unity is still compiling or " +
-                                   "importing). Open Analytics for XR > Setup Wizard to create one.");
-                return;
+                case Core.ConfigState.Absent:
+                    Line(sb, "config", "not found (no Assets/Resources/AbxrLib.asset). Open Analytics for XR > Setup Wizard " +
+                                       "to create one.");
+                    return;
+                case Core.ConfigState.PresentButUnloadable:
+                    Line(sb, "config", "present but could not be loaded as AppConfig (a broken script reference, two copies " +
+                                       "of AbxrLib in the project, or Unity still compiling or importing). Open Analytics for " +
+                                       "XR > Setup Wizard to repair it.");
+                    return;
+                case Core.ConfigState.LegacyUnmigrated:
+                    Line(sb, "config", "legacy Assets/Resources/ArborXR.asset, not yet migrated. The runtime loads AbxrLib.asset " +
+                                       "only, so builds cannot authenticate until Analytics for XR > Configuration is opened once.");
+                    break;
+                default:
+                    Line(sb, "config", "Assets/Resources/AbxrLib.asset");
+                    break;
             }
 
             // Identity and credentials print in both modes. Secrets are described, never printed.

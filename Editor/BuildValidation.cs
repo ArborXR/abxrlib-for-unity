@@ -25,14 +25,25 @@ namespace AbxrLib.Editor
             try
             {
                 // Read-only on purpose: GetConfig can create, migrate, or quarantine an asset, none of which belongs in
-                // a build callback. Without a configuration there is nothing to check, and the checks themselves
-                // would reach GetConfig, so stop here with the one warning that matters.
-                AppConfig config = Core.TryGetLoadedConfig();
-                if (config == null)
+                // a build callback. Each way of not having a usable configuration gets its own warning, because the
+                // fix differs, and without one there is nothing further to check.
+                Core.ConfigState state = Core.TryGetLoadedConfig(out AppConfig config);
+                switch (state)
                 {
-                    Logcat.Warning("AbxrLib setup: no configuration asset was found (Assets/Resources/AbxrLib.asset), so " +
-                                   "AbxrLib cannot authenticate in this build. Open Analytics for XR > Setup Wizard to create one.");
-                    return;
+                    case Core.ConfigState.Absent:
+                        Logcat.Warning("AbxrLib setup: no configuration asset was found (Assets/Resources/AbxrLib.asset), so " +
+                                       "AbxrLib cannot authenticate in this build. Open Analytics for XR > Setup Wizard to create one.");
+                        return;
+                    case Core.ConfigState.PresentButUnloadable:
+                        Logcat.Warning("AbxrLib setup: a configuration asset exists but could not be loaded as AppConfig (a broken " +
+                                       "script reference, or two copies of AbxrLib in the project), so AbxrLib cannot authenticate " +
+                                       "in this build. Open Analytics for XR > Setup Wizard to repair it.");
+                        return;
+                    case Core.ConfigState.LegacyUnmigrated:
+                        Logcat.Warning("AbxrLib setup: the configuration is still the legacy Assets/Resources/ArborXR.asset, which " +
+                                       "the runtime does not load, so AbxrLib cannot authenticate in this build. Open Analytics for " +
+                                       "XR > Configuration once to migrate it.");
+                        break;
                 }
 
                 if (!SetupWizardChecks.CredentialsAreValid(config))

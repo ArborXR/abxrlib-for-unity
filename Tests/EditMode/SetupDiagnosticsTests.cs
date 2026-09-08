@@ -107,6 +107,16 @@ public class SetupDiagnosticsTests
             Assert.That(report, Does.Contain("\n" + section), section);
     }
 
+    [Test]
+    public void TryGetLoadedConfig_WithInjectedFixture_ReportsLoaded()
+    {
+        Core.ConfigState state = Core.TryGetLoadedConfig(out AppConfig loaded);
+
+        Assert.AreEqual(Core.ConfigState.Loaded, state);
+        Assert.AreSame(_config, loaded);
+        Assert.That(SetupDiagnostics.Build(includeAllConfig: false), Does.Contain("config: Assets/Resources/AbxrLib.asset"));
+    }
+
     // ── Allowlist completeness ────────────────────────────────────────────
     // The report is fail-closed: a field not on a list never prints. These tests make sure "never prints" is a decision
     // someone made, not a field nobody noticed.
