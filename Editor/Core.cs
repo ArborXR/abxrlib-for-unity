@@ -194,10 +194,12 @@ namespace AbxrLib.Editor
 
         /// <summary>
         /// True when a file exists at the given project-relative path, independent of whether its type resolves.
-        /// Used to tell "no configuration yet" apart from "configuration present but unloadable".
+        /// Used to tell "no configuration yet" apart from "configuration present but unloadable". Checked on disk
+        /// rather than through AssetPathToGUID, which by default still answers for an asset deleted earlier in the
+        /// same session and would report a just-deleted configuration as present but broken. The Editor runs with the
+        /// project root as its working directory, which the quarantine path below already relies on.
         /// </summary>
-        private static bool AssetFileExists(string projectRelativePath) =>
-            !string.IsNullOrEmpty(AssetDatabase.AssetPathToGUID(projectRelativePath));
+        private static bool AssetFileExists(string projectRelativePath) => File.Exists(projectRelativePath);
 
         /// <summary>
         /// Moves a configuration asset that exists but cannot be loaded as <see cref="AppConfig"/> out of the way so
