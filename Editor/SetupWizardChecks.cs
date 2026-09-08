@@ -929,9 +929,9 @@ namespace AbxrLib.Editor
         /// </summary>
         private static Check CheckArborMdmClient()
         {
-            var config = Core.GetConfig();
-
-            // Null while Unity is still settling; the wizard reports that separately.
+            // Read-only on purpose: this check also runs from the build hook, which must not create or migrate the
+            // asset. Null while Unity is still settling or when there is no asset yet; the wizard reports both separately.
+            var config = Core.TryGetLoadedConfig();
             if (config == null) return null;
             if (config.enableArborMdmClient) return null;
             if (config.buildType == "production_custom") return null;
