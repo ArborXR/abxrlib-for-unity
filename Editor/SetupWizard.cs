@@ -478,8 +478,10 @@ namespace AbxrLib.Editor
                 SetupDiagnostics.CopyToClipboard();
                 ShowNotification(new GUIContent("Copied"));
             }
-            SetupDiagnostics.IncludeAllConfig = EditorGUILayout.ToggleLeft(
-                "All config values", SetupDiagnostics.IncludeAllConfig, GUILayout.Width(150f));
+            // Assign only on change: the setter writes EditorPrefs, and OnGUI runs this several times per frame.
+            bool includeAll = SetupDiagnostics.IncludeAllConfig;
+            bool toggled = EditorGUILayout.ToggleLeft("All config values", includeAll, GUILayout.Width(150f));
+            if (toggled != includeAll) SetupDiagnostics.IncludeAllConfig = toggled;
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.LabelField(
                 "Paste into a support request. Tokens and secrets are never included.", _styles.Body);
