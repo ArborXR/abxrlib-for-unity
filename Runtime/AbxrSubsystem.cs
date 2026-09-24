@@ -246,13 +246,15 @@ namespace AbxrLib.Runtime
             //
             // When credentials cannot be sent, AbxrAuthService.Authenticate() fails at IsValidToSend() (before
             // AuthenticateCoroutine / device auth / HTTP). That invokes OnFailed → HandleAuthCompleted(false, …) →
-            // Abxr.OnAuthCompleted(false, error). Same pipeline as API/network terminal failure: Authenticated stays false,
+            // Abxr.OnAuthCompleted(false, error). Same pipeline as the API refusing the credentials: Authenticated stays false,
             // no session; apps that continue without analytics should handle success == false (as for any failed auth).
             // This is not success == true (unlike a completed session with authMechanism none from the backend).
+            // Network failures are not terminal: device auth retries them and OnAuthCompleted waits for an outcome.
             //
-            // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass; the transport may fail
-            // on first request. MDM/query overrides after LoadRuntimeAuthFromConfig may fix credentials; do not gate on
-            // Configuration.LastValidationErrorMessage alone inside Authenticate() (it can be stale after overrides).
+            // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass and the request fails in the
+            // transport (an unreachable host is retried like an offline one). MDM/query overrides after LoadRuntimeAuthFromConfig
+            // may fix credentials; do not gate on Configuration.LastValidationErrorMessage alone inside Authenticate() (it can
+            // be stale after overrides).
             bool enableAutoStart = _authService.GetEnableAutoStartAuthentication();
             if (enableAutoStart)
                 StartCoroutine(AuthStartAfterTransportSelectionCoroutine(settings.authenticationStartDelay));

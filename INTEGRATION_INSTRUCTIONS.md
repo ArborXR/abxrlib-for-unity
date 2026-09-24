@@ -174,6 +174,8 @@ Abxr.OnAuthCompleted += (success, errorMessage) => {
 
 Subscribe **before** auth runs (e.g. in `Start()` or earlier; with auto-start auth, that means as early as your scene allows).
 
+If the headset is offline or can't reach the ArborXR backend, **OnAuthCompleted** does not fire right away. The SDK keeps retrying in the background, waiting longer between attempts, and fires it once authentication succeeds or the backend refuses the credentials. Don't hold your whole app on it: let content that doesn't need the user's identity run while you wait.
+
 ### 6.2 Module target (LMS deep link)
 
 When the LMS (or backend) assigns specific modules, the SDK invokes **OnModuleTarget** with a target string (e.g. module or scenario id). Your app must **subscribe** and **navigate** the user to that module.
@@ -250,7 +252,7 @@ Use this to implement or audit an integration.
 
 ### Auth and navigation
 
-- [ ] If the app needs auth before proceeding, it subscribes to **OnAuthCompleted** and continues only when `success` is true.
+- [ ] If the app needs auth before proceeding, it subscribes to **OnAuthCompleted** and continues only when `success` is true, without assuming the event arrives quickly (offline, the SDK keeps retrying until it can reach the backend).
 - [ ] **OnModuleTarget** is subscribed (and unsubscribed in OnDisable/OnDestroy); the handler navigates to the requested module/scenario.
 - [ ] If the app has multi-module sequences, **OnAllModulesCompleted** is subscribed and used to e.g. go home and call **Abxr.StartNewSession()**.
 
