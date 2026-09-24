@@ -64,7 +64,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, bool> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
             string url = RestUri(AuthPath).ToString();
             string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
@@ -77,9 +77,15 @@ namespace AbxrLib.Runtime.Services.Transport
             yield return request.SendWebRequest();
 
             // Always pass response body when present so auth service gets the same error payload as service transport (ExtractAuthErrorMessage, OnFailed message).
-            string response = request.downloadHandler?.text;
-            long responseCode = request.responseCode;
+            var result = ToAuthResult(request.result, request.responseCode, request.downloadHandler?.text);
+            if (!result.Success)
+                Logcat.Warning($"AuthRequest failed: {result.Body}");
+            onComplete?.Invoke(result);
+        }
 
+        /// <summary>Maps a finished auth request to the result the auth service classifies. Takes the request's parts, not the request, so tests can pin the mapping.</summary>
+        internal static AuthTransportResult ToAuthResult(UnityWebRequest.Result requestResult, long responseCode, string response)
+        {
             // Same success rule as service transport (AuthResponse.IsValidSuccess) so auth service sees consistent behavior.
             bool success = false;
             if (!string.IsNullOrEmpty(response))
@@ -97,9 +103,8 @@ namespace AbxrLib.Runtime.Services.Transport
             string responseBody = response ?? "";
             if (string.IsNullOrEmpty(responseBody) && !success)
                 responseBody = "No response body.";
-            if (!success)
-                Logcat.Warning($"AuthRequest failed: {responseBody}");
-            onComplete?.Invoke(success, responseBody, isAuthRejectedByApi);
+            bool networkError = requestResult == UnityWebRequest.Result.ConnectionError;
+            return new AuthTransportResult(success, responseBody, isAuthRejectedByApi, responseCode, networkError);
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)

@@ -445,21 +445,22 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        private class AuthRequestResultHolder
+        /// <summary>Extract a user-facing error string from auth failure JSON, falling back to the raw (truncated) body. Same keys for REST and service so behavior is identical.</summary>
+        private static string ExtractAuthErrorMessage(string responseJson)
         {
-            public bool Success;
-            public string Response;
-            public bool IsAuthRejectedByApi;
+            if (string.IsNullOrEmpty(responseJson)) return null;
+            return ExtractExplicitApiError(responseJson)
+                ?? (responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...");
         }
 
-        /// <summary>Extract a user-facing error string from auth failure JSON. Same keys for REST and service so behavior is identical.</summary>
-        private static string ExtractAuthErrorMessage(string responseJson)
+        /// <summary>The API's own error string from a JSON failure body, or null when the body is not a JSON error (plain text, HTML, or JSON without an error key).</summary>
+        private static string ExtractExplicitApiError(string responseJson)
         {
             if (string.IsNullOrEmpty(responseJson)) return null;
             try
             {
                 var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
-                if (obj == null) return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
+                if (obj == null) return null;
                 // Backend (e.g. FastAPI) uses "detail" (string or array); other APIs use "message" or "error". Check all so REST and service behave the same.
                 string FromValue(object v)
                 {
@@ -475,8 +476,25 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (obj.TryGetValue("message", out var msg)) { var s = FromValue(msg); if (!string.IsNullOrEmpty(s)) return s; }
                 if (obj.TryGetValue("error", out var err)) { var s = FromValue(err); if (!string.IsNullOrEmpty(s)) return s; }
             }
-            catch { /* ignore */ }
-            return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
+            catch { /* not JSON */ }
+            return null;
+        }
+
+        /// <summary>
+        /// Device auth: true when the API refused these credentials, so retrying cannot help and the session latches.
+        /// A refusal is the transport's own verdict (REST 401/403, ArborInsightsClient getLastAuthRejected()) or an explicit
+        /// JSON error on a 4xx. Offline, timeouts, 408, 429, 5xx, and failures without an explicit error are transient.
+        /// </summary>
+        internal static bool IsCredentialRejection(AuthTransportResult result)
+        {
+            if (result.IsAuthRejectedByApi) return true;
+            if (result.NetworkError) return false;
+            long status = result.StatusCode;
+            if (status == 408 || status == 429 || status >= 500) return false;
+            // No HTTP status (ArborInsightsClient): an explicit JSON error is the only refusal signal besides
+            // getLastAuthRejected(), so it still latches as it always has.
+            bool refusalStatus = status == 0 || (status >= 400 && status < 500);
+            return refusalStatus && ExtractExplicitApiError(result.Body) != null;
         }
 
         /// <summary>Attempts auth via current transport. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure; when false (e.g. keyboard submit), one attempt only.</summary>
@@ -531,15 +549,10 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
-                var holder = new AuthRequestResultHolder();
-                yield return transport.AuthRequestCoroutine(_payload, (ok, json, isAuthRejectedByApi) =>
-                {
-                    holder.Success = ok;
-                    holder.Response = json;
-                    holder.IsAuthRejectedByApi = isAuthRejectedByApi;
-                });
+                AuthTransportResult result = default;
+                yield return transport.AuthRequestCoroutine(_payload, r => result = r);
 
-                if (ApplyAuthResponse(holder.Response, stageLabel))
+                if (ApplyAuthResponse(result.Body, stageLabel))
                 {
                     if (transport.IsServiceTransport)
                         _usedArborInsightsClientForSession = true;
@@ -551,25 +564,23 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (!withRetry)
                 {
                     _payload.buildType = savedBuildType;
-                    onComplete(false, ExtractAuthErrorMessage(holder.Response));
+                    onComplete(false, ExtractAuthErrorMessage(result.Body));
                     yield break;
                 }
 
-                // Device authentication (withRetry): do not retry when the transport reported auth rejected or response body contains an explicit error.
+                // Device authentication (withRetry): do not retry when the API refused these credentials.
                 // Retrying would keep hitting the same rejection; treat as permanent failure and no-op for the rest of the session.
-                string explicitError = ExtractAuthErrorMessage(holder.Response);
-                bool isAuthRejected = holder.IsAuthRejectedByApi || !string.IsNullOrEmpty(explicitError);
-                if (isAuthRejected)
+                if (IsCredentialRejection(result))
                 {
                     _credentialsRejectedByApi = true;
                     _payload.buildType = savedBuildType;
-                    string message = !string.IsNullOrEmpty(explicitError) ? explicitError : "Authentication was rejected by the API (credentials invalid or denied).";
+                    string message = ExtractAuthErrorMessage(result.Body) ?? "Authentication was rejected by the API (credentials invalid or denied).";
                     Logcat.Warning($"AuthRequest failed: {message} No further auth attempts will be made this session.");
                     onComplete(false, message);
                     yield break;
                 }
 
-                string logDetail = ExtractAuthErrorMessage(holder.Response) ?? "No response body.";
+                string logDetail = ExtractAuthErrorMessage(result.Body) ?? "No response body.";
                 Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
             }
