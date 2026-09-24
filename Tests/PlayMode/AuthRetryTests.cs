@@ -67,7 +67,8 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             useAppTokens = false,
             buildType = "development",
             appId = "12345678-1234-1234-1234-123456789012",
-            orgId = "test-org",
+            // Must be a UUID: validation rejects any other orgId before the request reaches the transport.
+            orgId = "87654321-4321-4321-4321-210987654321",
             authSecret = "test-secret"
         });
         ModifyConfig("sendRetryIntervalSeconds", 1);
