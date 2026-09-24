@@ -30,6 +30,8 @@ public static partial class Abxr
 	/// Event triggered when authentication completes
 	/// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
 	/// Subscribe to this event to handle authentication results
+	/// While the device is offline or the backend can't be reached, the SDK keeps retrying and this does not fire
+	/// until authentication succeeds or the credentials are refused, so don't block content that works without it.
 	/// </summary>
 	public static Action<bool, string> OnAuthCompleted;
 

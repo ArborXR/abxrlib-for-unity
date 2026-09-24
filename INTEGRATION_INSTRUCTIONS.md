@@ -167,7 +167,8 @@ Abxr.OnAuthCompleted += (success, errorMessage) => {
         // Safe to use GetUserId(), GetUserData(), GetModuleList(), etc.
         StartAppFlow();
     } else {
-        // Show error or fallback flow
+        // Auth failed (for example the credentials were refused): show an error or a fallback flow.
+        // Offline, neither branch runs yet: the SDK is still retrying (see below).
     }
 };
 ```
