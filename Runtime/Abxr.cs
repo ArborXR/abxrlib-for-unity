@@ -117,6 +117,76 @@ public static partial class Abxr
 		User
 	}
 
+	/// <summary>Where this app stands on passcode pairing. Read it with GetPairingState().</summary>
+	public enum PairingState
+	{
+		/// <summary>Startup. The SDK hasn't decided this app's organization identity yet, for example while it waits for the ArborXR client.</summary>
+		Resolving,
+		/// <summary>The ArborXR client or an org token identifies the organization, so pairing doesn't apply.</summary>
+		Managed,
+		/// <summary>No organization identity and no stored pairing. The app runs without sending data until it pairs.</summary>
+		Unpaired,
+		/// <summary>The pairing prompt is open, waiting for a passcode.</summary>
+		Prompting,
+		/// <summary>A passcode is being redeemed.</summary>
+		Redeeming,
+		/// <summary>A stored pairing identifies this app's organization.</summary>
+		Paired
+	}
+
+	/// <summary>Why the pairing state changed. OnPairingStateChanged carries it.</summary>
+	public enum PairingChangeReason
+	{
+		/// <summary>The SDK decided this app's identity at startup.</summary>
+		Startup,
+		/// <summary>A passcode was redeemed, or SetAppInstanceToken stored an app instance.</summary>
+		Paired,
+		/// <summary>The prompt closed without pairing. Nothing was stored.</summary>
+		Dismissed,
+		/// <summary>ClearPairing removed the stored pairing.</summary>
+		Cleared,
+		/// <summary>The backend no longer accepts the stored pairing, so the SDK removed it.</summary>
+		Revoked
+	}
+
+	/// <summary>Why a passcode redemption failed.</summary>
+	public enum PairingRedeemError
+	{
+		/// <summary>The redeem succeeded, or none has been attempted.</summary>
+		None,
+		/// <summary>The passcode is wrong, expired, or revoked. These can't be told apart, on purpose.</summary>
+		InvalidPasscode,
+		/// <summary>The pairing service didn't accept this build, for example its App Token. A problem for the app's developer, not the person pairing.</summary>
+		BuildRejected,
+		/// <summary>Too many failed attempts for this app. Wait RetryAfterSeconds before trying again.</summary>
+		RateLimited,
+		/// <summary>The pairing service couldn't be reached, or had a problem.</summary>
+		Unavailable,
+		/// <summary>The call isn't valid in the current pairing state, or on this platform. Nothing was sent.</summary>
+		InvalidState
+	}
+
+	/// <summary>
+	/// How a passcode redemption ended. Message is English display text; branch on Error, and localize from it.
+	/// A default value, with Error None and Success false, means no attempt has been made.
+	/// </summary>
+	public readonly struct PairingRedeemResult
+	{
+		public bool Success { get; }
+		public PairingRedeemError Error { get; }
+		/// <summary>For RateLimited, the seconds to wait before the next attempt. Zero otherwise.</summary>
+		public int RetryAfterSeconds { get; }
+		public string Message { get; }
+
+		internal PairingRedeemResult(bool success, PairingRedeemError error, int retryAfterSeconds, string message)
+		{
+			Success = success;
+			Error = error;
+			RetryAfterSeconds = retryAfterSeconds;
+			Message = message;
+		}
+	}
+
 	// ── Application quit / EndSession: auto-complete open assessment tree ─────────────────────────
 	/// <summary>
 	/// When the app quits or <see cref="EndSession"/> runs, the SDK completes any assessment, objective, or interaction
