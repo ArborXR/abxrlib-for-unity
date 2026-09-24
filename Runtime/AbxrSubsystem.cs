@@ -325,7 +325,7 @@ namespace AbxrLib.Runtime
 	        if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
 	        if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 	        CloseRunningEvents();
-	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync).
+	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync, except on WebGL, where it sends without waiting).
 	        SendAll();
             _transport?.OnQuit();
 	        _transport?.ClearAllPending();
