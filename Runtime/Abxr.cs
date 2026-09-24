@@ -30,8 +30,10 @@ public static partial class Abxr
 	/// Event triggered when authentication completes
 	/// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
 	/// Subscribe to this event to handle authentication results
-	/// While the device is offline or the backend can't be reached, the SDK keeps retrying and this does not fire
-	/// until authentication succeeds or the credentials are refused, so don't block content that works without it.
+	/// While device authentication can't reach the backend (offline, captive portal, outage), the SDK keeps retrying and
+	/// this does not fire until it succeeds or the credentials are refused, so don't block content that works without it.
+	/// At the PIN or email step, each failed submission fires 'false', even one that failed for lack of a connection,
+	/// and the SDK asks for the input again.
 	/// </summary>
 	public static Action<bool, string> OnAuthCompleted;
 

@@ -168,14 +168,14 @@ Abxr.OnAuthCompleted += (success, errorMessage) => {
         StartAppFlow();
     } else {
         // Auth failed (for example the credentials were refused): show an error or a fallback flow.
-        // Offline, neither branch runs yet: the SDK is still retrying (see below).
+        // While device auth can't reach the backend, neither branch runs yet: the SDK is still retrying (see below).
     }
 };
 ```
 
 Subscribe **before** auth runs (e.g. in `Start()` or earlier; with auto-start auth, that means as early as your scene allows).
 
-If the headset is offline or can't reach the ArborXR backend, **OnAuthCompleted** does not fire right away. The SDK keeps retrying in the background, waiting longer between attempts, and fires it once authentication succeeds or the backend refuses the credentials. Don't hold your whole app on it: let content that doesn't need the user's identity run while you wait.
+If the headset is offline or can't reach the ArborXR backend, **OnAuthCompleted** does not fire right away. The SDK keeps retrying in the background, waiting longer between attempts, and fires it once authentication succeeds or the backend refuses the credentials. Don't hold your whole app on it: let content that doesn't need the user's identity run while you wait. That wait applies to the device step. At the PIN or email step, each failed submission fires **OnAuthCompleted** with `false`, even one that failed because the headset went offline, and the SDK asks for the input again.
 
 A delayed authentication finishes wherever the user is at that moment. The SDK may then ask for the PIN or email (**OnInputRequested**, or the built-in sign-in UI) and send the first module to **OnModuleTarget**. Make both safe to arrive mid-content, for example by holding the navigation until the user reaches a natural break.
 
