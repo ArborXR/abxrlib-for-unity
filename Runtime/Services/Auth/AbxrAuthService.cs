@@ -530,6 +530,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
             int maxRetryIntervalSeconds = Math.Max(MaxAuthRetryIntervalSeconds, retryIntervalSeconds);
+            bool announcedRetrying = false;
             var transport = _getTransport();
 
             while (true)
@@ -601,6 +602,14 @@ namespace AbxrLib.Runtime.Services.Auth
                 // Transient (offline, timeout, 408/429, 5xx): retry, doubling the wait so a fleet backs off during an outage.
                 string logDetail = ExtractAuthErrorMessage(result.Body) ?? "No response body.";
                 Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
+                if (!announcedRetrying)
+                {
+                    // Release builds drop warnings, so say once per attempt, at info level, that auth is still being retried.
+                    // The body stays out: it can be an HTML page, or a token-bearing response the SDK failed to apply.
+                    announcedRetrying = true;
+                    string reason = result.NetworkError ? "no connection" : result.StatusCode > 0 ? $"HTTP {result.StatusCode}" : "no usable response";
+                    Logcat.Info($"Device authentication failed ({reason}); retrying in the background.");
+                }
                 // Real time, so an app that sets Time.timeScale to 0 while it waits for auth still gets its retries.
                 yield return new WaitForSecondsRealtime(retryIntervalSeconds);
                 retryIntervalSeconds = Math.Min(retryIntervalSeconds * 2, maxRetryIntervalSeconds);

@@ -40,6 +40,32 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator DeviceAuth_Offline_SaysOncePerAttemptThatItIsRetrying()
+    {
+        // Release builds drop warnings, so the retry warning alone would leave a stuck headset's log silent.
+        var transport = UseScriptedTransport(Offline);
+        var infoLines = new List<string>();
+        Application.LogCallback onLog = (message, stackTrace, type) =>
+        {
+            if (type == LogType.Log && message.Contains("Device authentication failed")) infoLines.Add(message);
+        };
+        Application.logMessageReceived += onLog;
+        try
+        {
+            Abxr.StartAuthentication();
+            yield return WaitFor(() => transport.AuthCalls >= 3, 15f);
+
+            Assert.GreaterOrEqual(transport.AuthCalls, 3);
+            Assert.AreEqual(1, infoLines.Count, "The retry is announced once per attempt, not on every retry.");
+            StringAssert.Contains("(no connection)", infoLines[0]);
+        }
+        finally
+        {
+            Application.logMessageReceived -= onLog;
+        }
+    }
+
+    [UnityTest]
     public IEnumerator DeviceAuth_RetriesWhileTimeScaleIsZero()
     {
         var transport = UseScriptedTransport(Offline);
