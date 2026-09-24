@@ -177,6 +177,8 @@ Subscribe **before** auth runs (e.g. in `Start()` or earlier; with auto-start au
 
 If the headset is offline or can't reach the ArborXR backend, **OnAuthCompleted** does not fire right away. The SDK keeps retrying in the background, waiting longer between attempts, and fires it once authentication succeeds or the backend refuses the credentials. Don't hold your whole app on it: let content that doesn't need the user's identity run while you wait.
 
+A delayed authentication finishes wherever the user is at that moment. The SDK may then ask for the PIN or email (**OnInputRequested**, or the built-in sign-in UI) and send the first module to **OnModuleTarget**. Make both safe to arrive mid-content, for example by holding the navigation until the user reaches a natural break.
+
 ### 6.2 Module target (LMS deep link)
 
 When the LMS (or backend) assigns specific modules, the SDK invokes **OnModuleTarget** with a target string (e.g. module or scenario id). Your app must **subscribe** and **navigate** the user to that module.
