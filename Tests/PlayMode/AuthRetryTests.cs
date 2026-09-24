@@ -40,6 +40,25 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator DeviceAuth_RetriesWhileTimeScaleIsZero()
+    {
+        var transport = UseScriptedTransport(Offline);
+        float savedTimeScale = Time.timeScale;
+        Time.timeScale = 0f;
+        try
+        {
+            Abxr.StartAuthentication();
+            yield return WaitFor(() => transport.AuthCalls >= 2, 5f);
+
+            Assert.GreaterOrEqual(transport.AuthCalls, 2, "An app paused with timeScale 0 while it waits for auth must still get retries.");
+        }
+        finally
+        {
+            Time.timeScale = savedTimeScale;
+        }
+    }
+
+    [UnityTest]
     public IEnumerator DeviceAuth_Unauthorized_LatchesForTheSession()
     {
         var transport = UseScriptedTransport(Unauthorized);

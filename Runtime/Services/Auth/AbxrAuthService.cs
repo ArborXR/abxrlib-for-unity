@@ -601,7 +601,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 // Transient (offline, timeout, 408/429, 5xx): retry, doubling the wait so a fleet backs off during an outage.
                 string logDetail = ExtractAuthErrorMessage(result.Body) ?? "No response body.";
                 Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
-                yield return new WaitForSeconds(retryIntervalSeconds);
+                // Real time, so an app that sets Time.timeScale to 0 while it waits for auth still gets its retries.
+                yield return new WaitForSecondsRealtime(retryIntervalSeconds);
                 retryIntervalSeconds = Math.Min(retryIntervalSeconds * 2, maxRetryIntervalSeconds);
             }
         }
