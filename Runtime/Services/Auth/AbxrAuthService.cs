@@ -61,6 +61,9 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _stopping;
         private bool _attemptActive;
         internal bool IsAuthenticationAttemptActive => _attemptActive;
+        /// <summary>Bumped when the session is cleared (EndSession, StartNewSession). An auth coroutine remembers the value it started
+        /// under and, once it changes, stops without applying its result or reporting, since that session no longer exists.</summary>
+        private int _sessionGeneration;
         private bool _isAuthStarted;
         /// <summary>True after <see cref="Authenticate"/> has scheduled <c>AuthenticateCoroutine</c> at least once this process; never cleared in production. Use to gate one-time configuration before auth.</summary>
         internal bool HasAuthenticationStarted => _isAuthStarted;
@@ -363,6 +366,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private IEnumerator AuthenticateCoroutine()
         {
+            int generation = _sessionGeneration;
             bool authOk;
             string authError = null;
             if (_deviceAuthDeferredByHandoff)
@@ -378,6 +382,8 @@ namespace AbxrLib.Runtime.Services.Auth
                     authOk = ok;
                     authError = err;
                 }, withRetry: true));
+                // EndSession or StartNewSession cleared the session this attempt belonged to (possibly while it was retrying).
+                if (generation != _sessionGeneration) yield break;
                 if (!authOk)
                 {
                     _attemptActive = false;
@@ -396,6 +402,7 @@ namespace AbxrLib.Runtime.Services.Auth
             bool configOk = false;
             string configFailureDetail = null;
             yield return _runner.StartCoroutine(GetConfigurationCoroutine((ok, detail) => { configOk = ok; configFailureDetail = detail; }));
+            if (generation != _sessionGeneration) yield break;
             if (!configOk)
             {
                 Logcat.Warning(string.IsNullOrEmpty(configFailureDetail)
@@ -502,6 +509,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>Attempts auth via current transport. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure; when false (e.g. keyboard submit), one attempt only.</summary>
         private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true)
         {
+            int generation = _sessionGeneration;
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
 
@@ -526,6 +534,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
             while (true)
             {
+                // The session was cleared while this attempt waited to retry. Stop without reporting: a newer attempt may own the state now.
+                if (generation != _sessionGeneration) yield break;
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
                 // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret). Use _runtimeAuth so injected test config and runtime overrides are respected.
@@ -554,6 +564,9 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 AuthTransportResult result = default;
                 yield return transport.AuthRequestCoroutine(_payload, r => result = r);
+
+                // The session was cleared while the request was in flight: drop the response instead of applying it to the new session.
+                if (generation != _sessionGeneration) yield break;
 
                 // Parse only what the transport accepted (same IsValidSuccess rule). A failure body such as "No response body."
                 // or an HTML page would log a parse error on every retry.
@@ -787,12 +800,15 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
 
+            int generation = _sessionGeneration;
             string configJson = null;
             string failureDetail = null;
             yield return _getTransport().GetConfigCoroutine((ok, json) =>
             {
                 if (ok) configJson = json; else failureDetail = json;
             });
+            // Session cleared mid-request: do not apply the old session's config (AuthenticateCoroutine stops too).
+            if (generation != _sessionGeneration) yield break;
 
             if (!string.IsNullOrEmpty(configJson))
             {
@@ -1015,9 +1031,14 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>
         /// Clears all auth/session state and assigns a new session ID. Used by StartNewSession before re-authenticating.
         /// Call Authenticate(clearStateFirst: false) after this so the new session ID is preserved.
+        /// Also ends the auth attempt in progress, if any (for example a device auth retrying while offline): its coroutines stop
+        /// at their next step without applying a result, and the next Authenticate() starts fresh instead of being ignored.
         /// </summary>
         internal void ClearSessionAndPrepareForNew()
         {
+            _sessionGeneration++;
+            _attemptActive = false;
+            _setUserDataReAuthActive = false;
             ClearAuthenticationState();
             _payload.sessionId = Guid.NewGuid().ToString();
         }
@@ -1189,12 +1210,17 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator CoSetUserDataReAuth()
         {
             _setUserDataReAuthActive = true;
+            bool reported = false;
             yield return AuthRequestCoroutine((success, errorMsg) =>
             {
+                reported = true;
                 _setUserDataReAuthActive = false;
                 _attemptActive = false;
                 OnUserDataSyncCompleted?.Invoke(success, errorMsg ?? "");
             }, withRetry: false);
+            // The session was cleared mid-request, so the request stopped without reporting (ClearSessionAndPrepareForNew reset the flags).
+            if (!reported)
+                OnUserDataSyncCompleted?.Invoke(false, "The session ended before user data was synced.");
         }
         
         /// <summary>True when the dict has a non-empty "type" (user authentication or custom). Without type, we omit authMechanism so device authentication sends no auth_mechanism (prompt/inputSource alone are not meaningful).</summary>

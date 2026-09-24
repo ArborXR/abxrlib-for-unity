@@ -1,5 +1,6 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
-// PlayMode: the device-auth loop retries transient failures with backoff and latches refusals for the session.
+// PlayMode: the device-auth loop retries transient failures with backoff, latches refusals for the session, and stops
+// when EndSession or StartNewSession clears the session it belonged to.
 // Drives the real AbxrAuthService with a scripted transport, so no network is involved.
 // AuthFailureClassificationTests (EditMode) pins the classification table itself.
 using System;
@@ -56,6 +57,63 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         Assert.AreEqual(1, transport.AuthCalls, "A refusal must not reach the API again this session, even when the app asks.");
     }
 
+    [UnityTest]
+    public IEnumerator DeviceAuth_EndSessionWhileRetrying_StopsRetrying()
+    {
+        var transport = UseScriptedTransport(Offline);
+        bool completed = false;
+        Abxr.OnAuthCompleted += (success, error) => completed = true;
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.AuthCalls >= 1, 5f);
+        Abxr.EndSession();
+        // The first retry was due one second after the first failure.
+        yield return new WaitForSeconds(2.5f);
+
+        Assert.AreEqual(1, transport.AuthCalls, "EndSession must stop the retries of the session it ended.");
+        Assert.IsFalse(completed, "An ended session must not report an auth outcome.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.IsAuthenticationAttemptActive);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.AuthCalls >= 2, 5f);
+        Assert.AreEqual(2, transport.AuthCalls, "StartAuthentication after EndSession must send a request, not be ignored as already in progress.");
+    }
+
+    [UnityTest]
+    public IEnumerator DeviceAuth_StartNewSessionDuringRequest_DropsTheOldAttempt()
+    {
+        var transport = UseScriptedTransport(Offline);
+        transport.Hold = true;
+        bool completed = false;
+        Abxr.OnAuthCompleted += (success, error) => completed = true;
+        var retryWarnings = new List<string>();
+        Application.LogCallback onLog = (message, stackTrace, type) =>
+        {
+            if (type == LogType.Warning && message.Contains("Retrying in")) retryWarnings.Add(message);
+        };
+        Application.logMessageReceived += onLog;
+        try
+        {
+            Abxr.StartAuthentication();
+            yield return WaitFor(() => transport.AuthCalls >= 1, 5f);
+            Abxr.StartNewSession();
+            yield return WaitFor(() => transport.AuthCalls >= 2, 1f);
+            Assert.AreEqual(2, transport.AuthCalls, "StartNewSession must start its own device auth, not wait on the old attempt.");
+
+            // Both requests now fail as offline. The new session's attempt waits at least a second before its next retry.
+            transport.Hold = false;
+            yield return new WaitForSeconds(0.5f);
+
+            Assert.AreEqual(1, retryWarnings.Count, "Only the new session's attempt may retry; the old attempt's late response must be dropped.");
+            Assert.IsFalse(completed, "Neither attempt has an outcome to report yet.");
+            Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.IsAuthenticationAttemptActive);
+        }
+        finally
+        {
+            Application.logMessageReceived -= onLog;
+        }
+    }
+
     /// <summary>Routes device auth through a transport that always answers with the given result, with valid-looking legacy credentials and a 1s base retry interval.</summary>
     private ScriptedAuthTransport UseScriptedTransport(AuthTransportResult response)
     {
@@ -86,6 +144,8 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     {
         private readonly AuthTransportResult _response;
         public int AuthCalls { get; private set; }
+        /// <summary>While true, requests stay in flight: the transport was called but has not answered yet.</summary>
+        public bool Hold { get; set; }
 
         public ScriptedAuthTransport(AuthTransportResult response) => _response = response;
 
@@ -94,8 +154,9 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
             AuthCalls++;
+            while (Hold)
+                yield return null;
             onComplete?.Invoke(_response);
-            yield break;
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
