@@ -8,6 +8,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
+using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
@@ -22,6 +23,9 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         new AuthTransportResult(false, "No response body.", false, 0, networkError: true);
     private static readonly AuthTransportResult Unauthorized =
         new AuthTransportResult(false, "{\"detail\":\"Invalid app token\"}", true, 401);
+    /// <summary>A valid success without a token: the backend wants user authentication next (AuthResponse.IsValidSuccess).</summary>
+    private static readonly AuthTransportResult UserAuthRequired =
+        new AuthTransportResult(true, "{\"appId\":\"12345678-1234-1234-1234-123456789012\"}", false, 200);
 
     [UnityTest]
     public IEnumerator DeviceAuth_Offline_RetriesWithBackoff()
@@ -177,6 +181,74 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         }
     }
 
+    [UnityTest]
+    public IEnumerator DeviceAuth_StartNewSessionDuringRequest_DropsALateSuccess()
+    {
+        var transport = UseScriptedTransport(Offline);
+        transport.AnswerNextWith(UserAuthRequired);
+        bool releaseOldRequest = false;
+        // The old session's request succeeds only after StartNewSession; the new session's request stays in flight.
+        transport.HoldCall = call => call == 1 ? !releaseOldRequest : true;
+        bool completed = false;
+        Abxr.OnAuthCompleted += (success, error) => completed = true;
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.AuthCalls >= 1, 5f);
+        Abxr.StartNewSession();
+        yield return WaitFor(() => transport.AuthCalls >= 2, 1f);
+        releaseOldRequest = true;
+        yield return new WaitForSecondsRealtime(0.25f);
+
+        Assert.IsNull(auth.ResponseData.AppId, "The old session's late success must not be applied to the new session.");
+        Assert.IsFalse(auth.Authenticated);
+        Assert.AreEqual(0, transport.ConfigCalls, "The old attempt must not go on to fetch config.");
+        Assert.IsFalse(completed);
+    }
+
+    [UnityTest]
+    public IEnumerator DeviceAuth_StartNewSessionDuringConfigFetch_DropsTheOldConfig()
+    {
+        var transport = UseScriptedTransport(Offline);
+        transport.AnswerNextWith(UserAuthRequired);
+        transport.HoldCall = call => call >= 2;
+        transport.HoldConfig = true;
+        transport.ConfigJson = "{\"launcherAppID\":\"old-session-launcher\"}";
+        bool completed = false;
+        Abxr.OnAuthCompleted += (success, error) => completed = true;
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.ConfigCalls >= 1, 5f);
+        Abxr.StartNewSession();
+        yield return WaitFor(() => transport.AuthCalls >= 2, 1f);
+        transport.HoldConfig = false;
+        yield return new WaitForSecondsRealtime(0.25f);
+
+        Assert.AreEqual(1, transport.ConfigCalls);
+        Assert.AreNotEqual("old-session-launcher", Configuration.Instance.launcherAppID, "The old session's config must not be applied after StartNewSession.");
+        Assert.IsFalse(completed);
+    }
+
+    [UnityTest]
+    public IEnumerator SetUserData_EndSessionDuringSync_ReportsTheSyncAsFailed()
+    {
+        var transport = UseScriptedTransport(Offline);
+        transport.Hold = true;
+        SimulateAuth();
+        bool? synced = null;
+        string syncError = null;
+        Abxr.OnUserDataSyncCompleted = (success, error) => { synced = success; syncError = error; };
+
+        Abxr.SetUserId("user-1");
+        yield return WaitFor(() => transport.AuthCalls >= 1, 5f);
+        Abxr.EndSession();
+        transport.Hold = false;
+        yield return WaitFor(() => synced.HasValue, 2f);
+
+        Assert.AreEqual(false, synced, "A sync cut off by EndSession must still be reported.");
+        Assert.AreEqual("The session ended before user data was synced.", syncError);
+    }
+
     /// <summary>Routes device auth through a transport that always answers with the given result, with valid-looking legacy credentials and a 1s base retry interval.</summary>
     private ScriptedAuthTransport UseScriptedTransport(AuthTransportResult response)
     {
@@ -206,26 +278,43 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     private sealed class ScriptedAuthTransport : IAbxrTransport
     {
         private readonly AuthTransportResult _response;
+        private readonly Queue<AuthTransportResult> _nextResponses = new Queue<AuthTransportResult>();
         public int AuthCalls { get; private set; }
+        public int ConfigCalls { get; private set; }
         /// <summary>While true, requests stay in flight: the transport was called but has not answered yet.</summary>
         public bool Hold { get; set; }
+        /// <summary>Holds individual requests by their 1-based call number, on top of <see cref="Hold"/>.</summary>
+        public Func<int, bool> HoldCall { get; set; } = call => false;
+        /// <summary>While true, GET config stays in flight.</summary>
+        public bool HoldConfig { get; set; }
+        /// <summary>The GET config answer; null answers with a failure.</summary>
+        public string ConfigJson { get; set; }
 
         public ScriptedAuthTransport(AuthTransportResult response) => _response = response;
+
+        /// <summary>Answers the next request with this result instead of the default one.</summary>
+        public void AnswerNextWith(AuthTransportResult response) => _nextResponses.Enqueue(response);
 
         public bool IsServiceTransport => false;
 
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
-            AuthCalls++;
-            while (Hold)
+            int call = ++AuthCalls;
+            var response = _nextResponses.Count > 0 ? _nextResponses.Dequeue() : _response;
+            while (Hold || HoldCall(call))
                 yield return null;
-            onComplete?.Invoke(_response);
+            onComplete?.Invoke(response);
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
         {
-            onComplete?.Invoke(false, "not scripted");
-            yield break;
+            ConfigCalls++;
+            while (HoldConfig)
+                yield return null;
+            if (ConfigJson != null)
+                onComplete?.Invoke(true, ConfigJson);
+            else
+                onComplete?.Invoke(false, "not scripted");
         }
 
         public void AddEvent(string name, Dictionary<string, string> meta) { }
