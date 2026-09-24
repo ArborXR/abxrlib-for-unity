@@ -40,6 +40,8 @@ namespace AbxrLib.Runtime.Services.Auth
         // ── Constants ────────────────────────────────────────────────
         private const float ReAuthPollSeconds = 60f;
         private const int ReAuthThresholdSeconds = 120;
+        /// <summary>Cap for the device-auth retry wait, which doubles from sendRetryIntervalSeconds after each transient failure.</summary>
+        private const int MaxAuthRetryIntervalSeconds = 60;
         private static readonly WaitForSeconds ReAuthWait = new WaitForSeconds(ReAuthPollSeconds);
 
         // ── Internal state ───────────────────────────────────────────
@@ -519,6 +521,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 _payload.SSOAccessToken = Abxr.GetAccessToken();
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
+            int maxRetryIntervalSeconds = Math.Max(MaxAuthRetryIntervalSeconds, retryIntervalSeconds);
             var transport = _getTransport();
 
             while (true)
@@ -582,9 +585,11 @@ namespace AbxrLib.Runtime.Services.Auth
                     yield break;
                 }
 
+                // Transient (offline, timeout, 408/429, 5xx): retry, doubling the wait so a fleet backs off during an outage.
                 string logDetail = ExtractAuthErrorMessage(result.Body) ?? "No response body.";
                 Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
                 yield return new WaitForSeconds(retryIntervalSeconds);
+                retryIntervalSeconds = Math.Min(retryIntervalSeconds * 2, maxRetryIntervalSeconds);
             }
         }
 
