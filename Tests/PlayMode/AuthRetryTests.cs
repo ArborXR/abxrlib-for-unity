@@ -12,6 +12,7 @@ using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.TestTools;
 
 [TestFixture]
@@ -100,6 +101,23 @@ public class AuthRetryTests : AbxrPlayModeTestBase
 
         CollectionAssert.AreEqual(new[] { false, false }, results);
         Assert.AreEqual(1, transport.AuthCalls, "A refusal must not reach the API again this session, even when the app asks.");
+    }
+
+    [UnityTest]
+    public IEnumerator DeviceAuth_UnauthorizedWithoutErrorBody_ReportsARefusal()
+    {
+        // What the REST transport produces for a bare 401: the body is normalized to "No response body."
+        var transport = UseScriptedTransport(AbxrTransportRest.ToAuthResult(UnityWebRequest.Result.ProtocolError, 401, ""));
+        string reported = null;
+        Abxr.OnAuthCompleted += (success, error) => reported = error;
+        const string refusal = "Authentication was rejected by the API (credentials invalid or denied).";
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: " + refusal)));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => reported != null, 5f);
+
+        Assert.AreEqual(refusal, reported);
+        Assert.AreEqual(1, transport.AuthCalls);
     }
 
     [UnityTest]

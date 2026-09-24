@@ -593,7 +593,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     _credentialsRejectedByApi = true;
                     _payload.buildType = savedBuildType;
-                    string message = ExtractAuthErrorMessage(result.Body) ?? "Authentication was rejected by the API (credentials invalid or denied).";
+                    // The API's own error when it sent one. Otherwise a fixed message: transports turn an empty body into
+                    // "No response body.", and a raw HTML page would not read as a refusal either.
+                    string message = ExtractExplicitApiError(result.Body) ?? "Authentication was rejected by the API (credentials invalid or denied).";
                     Logcat.Warning($"AuthRequest failed: {message} No further auth attempts will be made this session.");
                     onComplete(false, message);
                     yield break;
