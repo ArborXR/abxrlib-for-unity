@@ -492,7 +492,8 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>
         /// Device auth: true when the API refused these credentials, so retrying cannot help and the session latches.
         /// A refusal is the transport's own verdict (REST 401/403, ArborInsightsClient getLastAuthRejected()) or an explicit
-        /// JSON error on a 4xx. Offline, timeouts, 408, 429, 5xx, and failures without an explicit error are transient.
+        /// JSON error on a 4xx (or from ArborInsightsClient, which has no status). Offline, timeouts, 408, 429, 5xx, and
+        /// failures without an explicit error are transient.
         /// </summary>
         internal static bool IsCredentialRejection(AuthTransportResult result)
         {
@@ -501,7 +502,8 @@ namespace AbxrLib.Runtime.Services.Auth
             long status = result.StatusCode;
             if (status == 408 || status == 429 || status >= 500) return false;
             // No HTTP status (ArborInsightsClient): an explicit JSON error is the only refusal signal besides
-            // getLastAuthRejected(), so it still latches as it always has.
+            // getLastAuthRejected(), and it latches as before. The service's other failures (bind or readiness
+            // failures, {"result":0}) used to latch as well; they now retry.
             bool refusalStatus = status == 0 || (status >= 400 && status < 500);
             return refusalStatus && ExtractExplicitApiError(result.Body) != null;
         }
