@@ -552,7 +552,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 AuthTransportResult result = default;
                 yield return transport.AuthRequestCoroutine(_payload, r => result = r);
 
-                if (ApplyAuthResponse(result.Body, stageLabel))
+                // Parse only what the transport accepted (same IsValidSuccess rule). A failure body such as "No response body."
+                // or an HTML page would log a parse error on every retry.
+                if (result.Success && ApplyAuthResponse(result.Body, stageLabel))
                 {
                     if (transport.IsServiceTransport)
                         _usedArborInsightsClientForSession = true;
