@@ -58,7 +58,7 @@ public class PairingServiceTests
 
     private AbxrPairingService CreatePaired()
     {
-        _store.Save(Token, InstanceId);
+        _store.Save(Token, InstanceId, null);
         _store.Saves = 0;
         var service = Create();
         service.SettleIdentity(otherIdentityWins: false);
@@ -74,8 +74,21 @@ public class PairingServiceTests
         return service;
     }
 
-    private static PairingHttpResponse Ok() => new PairingHttpResponse(200, SuccessBody);
+    private static PairingHttpResponse Ok(string deviceName = null) => new PairingHttpResponse(200, deviceName == null
+        ? SuccessBody
+        : $"{{\"app_instance_token\":\"{Token}\",\"app_instance_id\":\"{InstanceId}\",\"device_name\":\"{deviceName}\"}}");
     private static PairingHttpResponse Status(long status, string retryAfter = null) => new PairingHttpResponse(status, "{\"error\":\"nope\"}", retryAfter);
+    private static PairingHttpResponse Coded(long status, string code) => new PairingHttpResponse(status, $"{{\"error\":\"nope\",\"code\":\"{code}\"}}");
+    private static PairingHttpResponse NameTaken() =>
+        new PairingHttpResponse(409, "{\"error\":\"That name is taken\",\"code\":\"device_name_exists\",\"device_name\":\"Headset 12\"}");
+
+    /// <summary>Answers the passcode step, then the name step (skipped unless a name is given), and forgets those requests.</summary>
+    private void SubmitPrompt(AbxrPairingService service, string passcode = "483921", string deviceName = null)
+    {
+        service.SubmitInput(passcode);
+        service.SubmitInput(deviceName ?? "**skip**");
+        _requests.Clear();
+    }
 
     // ── Resolving and startup ─────────────────────────────────────
 
@@ -104,7 +117,7 @@ public class PairingServiceTests
     [Test]
     public void Settle_StoredPairing_IsPairedWithoutAnyCall()
     {
-        _store.Save(Token, InstanceId);
+        _store.Save(Token, InstanceId, null);
         var service = Create();
 
         service.SettleIdentity(otherIdentityWins: false);
@@ -133,7 +146,7 @@ public class PairingServiceTests
     [Test]
     public void Settle_OtherIdentityBeatsAStoredPairing_AndKeepsIt()
     {
-        _store.Save(Token, InstanceId);
+        _store.Save(Token, InstanceId, null);
         var service = Create();
 
         service.SettleIdentity(otherIdentityWins: true);
@@ -159,7 +172,7 @@ public class PairingServiceTests
     [Test]
     public void UnsupportedPlatform_IgnoresAStoredPairing()
     {
-        _store.Save(Token, InstanceId);
+        _store.Save(Token, InstanceId, null);
         _host.IsPlatformSupported = false;
         var service = Create();
 
@@ -220,7 +233,7 @@ public class PairingServiceTests
     public void StartPairing_WhileRedeeming_IsRefused()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         Assert.IsFalse(service.StartPairing());
         Assert.AreEqual(Abxr.PairingState.Redeeming, service.State);
@@ -320,6 +333,7 @@ public class PairingServiceTests
         var service = CreatePrompting();
 
         service.SubmitInput(" 483 921 ");
+        service.SubmitInput("**skip**");
 
         Assert.AreEqual(Abxr.PairingState.Redeeming, service.State);
         Assert.IsFalse(service.IsInputRequestPending);
@@ -328,13 +342,14 @@ public class PairingServiceTests
         StringAssert.Contains("\"passcode\":\"483921\"", _client.Sent[0].json);
         StringAssert.Contains("\"app_token\":\"app.token.jwt\"", _client.Sent[0].json);
         StringAssert.Contains("\"manufacturer\":\"Pico\"", _client.Sent[0].json);
+        StringAssert.DoesNotContain("device_name", _client.Sent[0].json);
     }
 
     [Test]
     public void Submit_Success_StoresBothValuesAndPairs()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         _client.Respond(Ok());
 
@@ -352,7 +367,7 @@ public class PairingServiceTests
     public void Submit_WrongPasscode_RepromptsWithoutAnEvent()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         _client.Respond(Status(400));
 
@@ -384,7 +399,7 @@ public class PairingServiceTests
     public void Submit_ServiceDown_RepromptsAndNeverRetriesOnItsOwn()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         _client.Respond(Status(503));
 
@@ -397,7 +412,7 @@ public class PairingServiceTests
     public void Submit_Offline_IsUnavailable()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         _client.Respond(new PairingHttpResponse(0, null, networkError: true, errorDetail: "Request timeout"));
 
@@ -409,7 +424,7 @@ public class PairingServiceTests
     public void Submit_BuildRejected_Reprompts()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         _client.Respond(Status(401));
 
@@ -421,7 +436,7 @@ public class PairingServiceTests
     public void RateLimited_HoldsAttemptsUntilRetryAfterPasses()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
         _client.Respond(Status(429, retryAfter: "30"));
 
         Assert.AreEqual(Abxr.PairingRedeemError.RateLimited, service.LastRedeemResult.Error);
@@ -443,7 +458,7 @@ public class PairingServiceTests
     public void Cancel_WhileRedeeming_ASuccessStillPairs()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         service.CancelPairing();
         _client.Respond(Ok());
@@ -456,7 +471,7 @@ public class PairingServiceTests
     public void Cancel_WhileRedeeming_AFailureDismissesWithoutReprompting()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         service.CancelPairing();
         _client.Respond(Status(400));
@@ -470,13 +485,253 @@ public class PairingServiceTests
     public void AResponseArrivingTwice_IsHandledOnce()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
         _client.Respond(Ok());
 
         _client.Respond(Status(400));
 
         Assert.AreEqual(Abxr.PairingState.Paired, service.State);
         Assert.AreEqual(1, _events.Count);
+    }
+
+    // ── Naming the headset (INS-511) ──────────────────────────────
+
+    [Test]
+    public void Passcode_AsksForANameBeforeSending()
+    {
+        var service = CreatePrompting();
+
+        service.SubmitInput("483921");
+
+        Assert.IsEmpty(_client.Sent);
+        Assert.AreEqual(Abxr.PairingState.Prompting, service.State);
+        Assert.AreEqual(1, _requests.Count);
+        Assert.AreEqual("pairingDeviceName", _requests[0].type);
+        Assert.AreEqual("Give this connection a name.", _requests[0].prompt);
+        Assert.AreEqual("", _requests[0].error);
+    }
+
+    [Test]
+    public void Name_IsSentWithThePasscode()
+    {
+        var service = CreatePrompting();
+
+        SubmitPrompt(service, deviceName: "  Headset 12 ");
+
+        Assert.AreEqual(1, _client.Sent.Count);
+        StringAssert.Contains("\"passcode\":\"483921\",\"device_name\":\"Headset 12\",", _client.Sent[0].json);
+        StringAssert.DoesNotContain("join_existing", _client.Sent[0].json);
+    }
+
+    [TestCase("**skip**")]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase(null)]
+    public void SkippingTheName_SendsNone(string input)
+    {
+        var service = CreatePrompting();
+        service.SubmitInput("483921");
+
+        service.SubmitInput(input);
+
+        Assert.AreEqual(1, _client.Sent.Count);
+        StringAssert.DoesNotContain("device_name", _client.Sent[0].json);
+    }
+
+    [Test]
+    public void Success_StoresTheNameThePortalEchoes()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service, deviceName: "headset 12");
+
+        _client.Respond(Ok(deviceName: "Headset 12"));
+
+        Assert.AreEqual(Abxr.PairingState.Paired, service.State);
+        Assert.AreEqual("Headset 12", _store.DeviceName);
+        Assert.AreEqual("Headset 12", service.DeviceName);
+        Assert.AreEqual("Headset 12", service.LastRedeemResult.DeviceName);
+    }
+
+    [Test]
+    public void ANameTooLong_IsAskedForAgainWithoutSending()
+    {
+        var service = CreatePrompting();
+        service.SubmitInput("483921");
+        _requests.Clear();
+
+        service.SubmitInput(new string('x', 65));
+
+        Assert.IsEmpty(_client.Sent);
+        Assert.AreEqual("pairingDeviceName", _requests[0].type);
+        Assert.AreEqual(PairingOutcomes.DeviceNameInvalidMessage, _requests[0].error);
+        Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameInvalid, service.LastRedeemResult.Error);
+    }
+
+    [Test]
+    public void ARequiredName_IsAskedForAgainWithoutASkip()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service);
+
+        _client.Respond(Coded(422, "device_name_required"));
+
+        Assert.AreEqual(Abxr.PairingState.Prompting, service.State);
+        Assert.AreEqual("pairingDeviceNameRequired", _requests[0].type);
+        Assert.AreEqual(PairingOutcomes.DeviceNameRequiredMessage, _requests[0].error);
+        Assert.IsEmpty(_events);
+
+        service.SubmitInput("**skip**");
+        Assert.AreEqual(1, _client.Sent.Count, "Skipping again isn't sent.");
+        Assert.AreEqual("pairingDeviceNameRequired", _requests[1].type);
+
+        service.SubmitInput("Headset 12");
+        Assert.AreEqual(2, _client.Sent.Count);
+        StringAssert.Contains("\"passcode\":\"483921\",\"device_name\":\"Headset 12\"", _client.Sent[1].json);
+    }
+
+    [Test]
+    public void ANameThePortalRejects_IsAskedForAgain_StillRequired()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service);
+        _client.Respond(Coded(422, "device_name_required"));
+        service.SubmitInput("Headset 12");
+        _requests.Clear();
+
+        _client.Respond(Coded(422, "device_name_invalid"));
+
+        Assert.AreEqual("pairingDeviceNameRequired", _requests[0].type);
+        Assert.AreEqual(PairingOutcomes.DeviceNameInvalidMessage, _requests[0].error);
+    }
+
+    [Test]
+    public void ANameInUse_AsksToJoinThatDevice()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service, deviceName: "headset 12");
+
+        _client.Respond(NameTaken());
+
+        Assert.AreEqual(Abxr.PairingState.Prompting, service.State);
+        Assert.AreEqual(1, _requests.Count);
+        Assert.AreEqual("pairingDeviceJoin", _requests[0].type);
+        Assert.AreEqual("Headset 12 is already in your organization. Add this app to it?", _requests[0].prompt);
+        Assert.AreEqual("Headset 12", _requests[0].domain);
+        Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameExists, service.LastRedeemResult.Error);
+        Assert.AreEqual("Headset 12", service.LastRedeemResult.DeviceName);
+        Assert.AreEqual(0, _store.Saves, "Nothing is created until the person confirms.");
+        Assert.IsEmpty(_events);
+    }
+
+    [TestCase("Headset 12")]
+    [TestCase("HEADSET 12")]
+    public void ConfirmingTheJoin_ResendsWithJoinExisting(string input)
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service, deviceName: "headset 12");
+        _client.Respond(NameTaken());
+
+        service.SubmitInput(input);
+
+        Assert.AreEqual(2, _client.Sent.Count);
+        StringAssert.Contains("\"passcode\":\"483921\",\"device_name\":\"Headset 12\",\"join_existing\":true", _client.Sent[1].json);
+
+        _client.Respond(Ok(deviceName: "Headset 12"));
+        Assert.AreEqual(Abxr.PairingState.Paired, service.State);
+        Assert.AreEqual("Headset 12", _store.DeviceName);
+    }
+
+    [Test]
+    public void DecliningTheJoin_AsksForAnotherName()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service, deviceName: "Headset 12");
+        _client.Respond(NameTaken());
+        _requests.Clear();
+
+        service.SubmitInput("**skip**");
+
+        Assert.AreEqual(1, _client.Sent.Count);
+        Assert.AreEqual("pairingDeviceName", _requests[0].type);
+
+        service.SubmitInput("Headset 13");
+        Assert.AreEqual(2, _client.Sent.Count);
+        StringAssert.Contains("\"device_name\":\"Headset 13\"", _client.Sent[1].json);
+        StringAssert.DoesNotContain("join_existing", _client.Sent[1].json);
+    }
+
+    [Test]
+    public void ADifferentNameAtTheJoin_IsSentWithoutJoining()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service, deviceName: "Headset 12");
+        _client.Respond(NameTaken());
+
+        service.SubmitInput("Headset 13");
+
+        StringAssert.Contains("\"device_name\":\"Headset 13\"", _client.Sent[1].json);
+        StringAssert.DoesNotContain("join_existing", _client.Sent[1].json);
+    }
+
+    [Test]
+    public void AWrongPasscodeAfterTheName_AsksOnlyForThePasscodeAgain()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service, deviceName: "Headset 12");
+        _client.Respond(Status(400));
+        Assert.AreEqual("pairingPasscode", _requests[0].type);
+
+        service.SubmitInput("111111");
+
+        Assert.AreEqual(2, _client.Sent.Count, "The name already given still stands.");
+        StringAssert.Contains("\"passcode\":\"111111\",\"device_name\":\"Headset 12\"", _client.Sent[1].json);
+        Assert.AreEqual(1, _requests.Count);
+    }
+
+    [Test]
+    public void CancellingAtTheNameStep_Dismisses()
+    {
+        var service = CreatePrompting();
+        service.SubmitInput("483921");
+
+        service.CancelPairing();
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Dismissed) }, _events);
+        Assert.IsEmpty(_client.Sent);
+    }
+
+    [Test]
+    public void ANewPrompt_StartsFromThePasscodeWithNothingRemembered()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service, deviceName: "Headset 12");
+        _client.Respond(Coded(422, "device_name_required"));
+        service.CancelPairing();
+        _requests.Clear();
+
+        Assert.IsTrue(service.StartPairing());
+        service.SubmitInput("483921");
+
+        Assert.AreEqual("pairingPasscode", _requests[0].type);
+        Assert.AreEqual("pairingDeviceName", _requests[1].type, "The requirement belonged to the old prompt's passcode.");
+        Assert.AreEqual(1, _client.Sent.Count);
+    }
+
+    [Test]
+    public void ARateLimit_IsReportedBeforeTheNameStep()
+    {
+        var service = CreateUnpaired();
+        service.RedeemPairingPasscode("483921", _ => { });
+        _client.Respond(Status(429, retryAfter: "30"));
+        Assert.IsTrue(service.StartPairing());
+        _requests.Clear();
+
+        service.SubmitInput("483921");
+
+        Assert.AreEqual(1, _requests.Count);
+        Assert.AreEqual("pairingPasscode", _requests[0].type);
+        Assert.AreEqual("Too many attempts. Try again in 30 seconds.", _requests[0].error);
     }
 
     // ── Headless redeem ───────────────────────────────────────────
@@ -598,6 +853,73 @@ public class PairingServiceTests
         Assert.AreEqual(1, _requests.Count);
     }
 
+    [Test]
+    public void Headless_WithAName_SendsItAndStoresTheEcho()
+    {
+        var service = CreateUnpaired();
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        service.RedeemPairingPasscode("483921", " Headset 12 ", false, results.Add);
+        StringAssert.Contains("\"device_name\":\"Headset 12\"", _client.Sent[0].json);
+        _client.Respond(Ok(deviceName: "Headset 12"));
+
+        Assert.IsTrue(results[0].Success);
+        Assert.AreEqual("Headset 12", results[0].DeviceName);
+        Assert.AreEqual("Headset 12", service.DeviceName);
+    }
+
+    [Test]
+    public void Headless_ANameInUse_ReportsTheDeviceWithoutPrompting()
+    {
+        var service = CreateUnpaired();
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        service.RedeemPairingPasscode("483921", "headset 12", false, results.Add);
+        _client.Respond(NameTaken());
+
+        Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameExists, results[0].Error);
+        Assert.AreEqual("Headset 12", results[0].DeviceName);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+        Assert.IsEmpty(_requests);
+    }
+
+    [Test]
+    public void Headless_JoinExisting_SendsTheFlag()
+    {
+        var service = CreateUnpaired();
+
+        service.RedeemPairingPasscode("483921", "Headset 12", true, _ => { });
+
+        StringAssert.Contains("\"device_name\":\"Headset 12\",\"join_existing\":true", _client.Sent[0].json);
+    }
+
+    [Test]
+    public void Headless_JoinWithoutAName_IsInvalidState()
+    {
+        var service = CreateUnpaired();
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        service.RedeemPairingPasscode("483921", " ", true, results.Add);
+
+        Assert.AreEqual(Abxr.PairingRedeemError.InvalidState, results[0].Error);
+        Assert.IsEmpty(_client.Sent);
+    }
+
+    [Test]
+    public void Headless_AMalformedName_IsNotSent()
+    {
+        var service = CreateUnpaired();
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        service.RedeemPairingPasscode("483921", new string('x', 65), false, results.Add);
+        service.RedeemPairingPasscode("483921", "Head\nset", false, results.Add);
+
+        Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameInvalid, results[0].Error);
+        Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameInvalid, results[1].Error);
+        Assert.IsEmpty(_client.Sent);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+    }
+
     // ── SetAppInstanceToken ───────────────────────────────────────
 
     [Test]
@@ -656,7 +978,7 @@ public class PairingServiceTests
     public void SetAppInstanceToken_WhileRedeeming_IsIgnored()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         service.SetAppInstanceToken(OtherToken, OtherInstanceId);
 
@@ -708,7 +1030,7 @@ public class PairingServiceTests
     [Test]
     public void ClearPairing_WhenManaged_OnlyForgetsTheStoredInstance()
     {
-        _store.Save(Token, InstanceId);
+        _store.Save(Token, InstanceId, null);
         var service = Create();
         service.SettleIdentity(otherIdentityWins: true);
         _events.Clear();
@@ -724,7 +1046,7 @@ public class PairingServiceTests
     public void ClearPairing_WhileRedeeming_IsIgnored()
     {
         var service = CreatePrompting();
-        service.SubmitInput("483921");
+        SubmitPrompt(service);
 
         service.ClearPairing();
 
@@ -798,6 +1120,91 @@ public class PairingServiceTests
         Assert.IsFalse(service.IsSuspendedForSession);
     }
 
+    // ── The stored name ───────────────────────────────────────────
+
+    [Test]
+    public void TheStoredName_SurvivesARelaunch()
+    {
+        _store.Save(Token, InstanceId, "Headset 12");
+        var service = Create();
+
+        service.SettleIdentity(otherIdentityWins: false);
+
+        Assert.AreEqual("Headset 12", service.DeviceName);
+    }
+
+    [Test]
+    public void DeviceName_WithoutAPairing_IsNull()
+    {
+        _store.DeviceName = "Headset 12";
+
+        var service = CreateUnpaired();
+
+        Assert.IsNull(service.DeviceName);
+    }
+
+    [Test]
+    public void UpdateDeviceName_StoresARenameFromThePortal()
+    {
+        var service = CreatePaired();
+
+        service.UpdateDeviceName(InstanceId, " Headset 7 ");
+
+        Assert.AreEqual("Headset 7", service.DeviceName);
+        Assert.AreEqual("Headset 7", _store.DeviceName);
+        Assert.AreEqual(Token, _store.Token, "Only the name changes.");
+        Assert.AreEqual(0, _store.Saves);
+    }
+
+    [Test]
+    public void UpdateDeviceName_Null_RemovesTheName()
+    {
+        _store.Save(Token, InstanceId, "Headset 12");
+        var service = Create();
+        service.SettleIdentity(otherIdentityWins: false);
+
+        service.UpdateDeviceName(InstanceId, null);
+
+        Assert.IsNull(service.DeviceName);
+        Assert.IsNull(_store.DeviceName);
+    }
+
+    [Test]
+    public void UpdateDeviceName_ForAnInstanceAlreadyReplaced_IsIgnored()
+    {
+        var service = CreatePaired();
+
+        service.UpdateDeviceName(OtherInstanceId, "Headset 7");
+
+        Assert.IsNull(service.DeviceName);
+        Assert.AreEqual(0, _store.NameSaves);
+    }
+
+    [Test]
+    public void ClearPairing_ForgetsTheName()
+    {
+        _store.Save(Token, InstanceId, "Headset 12");
+        var service = Create();
+        service.SettleIdentity(otherIdentityWins: false);
+
+        service.ClearPairing();
+
+        Assert.IsNull(service.DeviceName);
+        Assert.IsNull(_store.DeviceName);
+    }
+
+    [Test]
+    public void SetAppInstanceToken_StoresNoName()
+    {
+        _store.DeviceName = "Headset 12";
+        var service = CreateUnpaired();
+
+        service.SetAppInstanceToken(Token, InstanceId);
+
+        Assert.IsNull(service.DeviceName);
+        Assert.IsNull(_store.DeviceName);
+    }
+
     // ── Robustness ────────────────────────────────────────────────
 
     [Test]
@@ -834,6 +1241,20 @@ public class PairingServiceTests
         Assert.IsEmpty(_client.Sent);
     }
 
+    [Test]
+    public void AHandlerAnsweringEachStepFromItsCallback_Pairs()
+    {
+        var service = CreateUnpaired();
+        service.OnInputRequested = (type, _, _, _) =>
+            service.SubmitInput(type == AbxrPairingService.PasscodeInputType ? "483921" : "Headset 12");
+
+        Assert.IsTrue(service.StartPairing());
+        _client.Respond(Ok(deviceName: "Headset 12"));
+
+        Assert.AreEqual(Abxr.PairingState.Paired, service.State);
+        StringAssert.Contains("\"device_name\":\"Headset 12\"", _client.Sent[0].json);
+    }
+
     // ── Fakes ─────────────────────────────────────────────────────
 
     private sealed class FakeHost : IPairingHost
@@ -853,7 +1274,9 @@ public class PairingServiceTests
     {
         public string Token;
         public string InstanceId;
+        public string DeviceName;
         public int Saves;
+        public int NameSaves;
         public int Clears;
 
         public bool TryLoad(out string token, out string instanceId)
@@ -863,17 +1286,27 @@ public class PairingServiceTests
             return !string.IsNullOrEmpty(Token) && !string.IsNullOrEmpty(InstanceId);
         }
 
-        public void Save(string token, string instanceId)
+        public string LoadDeviceName() => DeviceName;
+
+        public void Save(string token, string instanceId, string deviceName)
         {
             Token = token;
             InstanceId = instanceId;
+            DeviceName = deviceName;
             Saves++;
+        }
+
+        public void SaveDeviceName(string deviceName)
+        {
+            DeviceName = deviceName;
+            NameSaves++;
         }
 
         public void Clear()
         {
             Token = null;
             InstanceId = null;
+            DeviceName = null;
             Clears++;
         }
     }

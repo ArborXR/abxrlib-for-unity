@@ -156,6 +156,15 @@ public static partial class Abxr
 		None,
 		/// <summary>The passcode is wrong, expired, or revoked. These can't be told apart, on purpose.</summary>
 		InvalidPasscode,
+		/// <summary>The passcode requires a name for the headset, and none was given. Ask for one, without the option to skip.</summary>
+		DeviceNameRequired,
+		/// <summary>The name can't be used, for example because it's longer than 64 characters.</summary>
+		DeviceNameInvalid,
+		/// <summary>
+		/// A paired device in the organization already has this name, for example from another app on this headset.
+		/// DeviceName holds its name. Confirm with the person, then redeem again with joinExistingDevice to add this app to it.
+		/// </summary>
+		DeviceNameExists,
 		/// <summary>The pairing service didn't accept this build, for example its App Token. A problem for the app's developer, not the person pairing.</summary>
 		BuildRejected,
 		/// <summary>Too many failed attempts for this app. Wait RetryAfterSeconds before trying again.</summary>
@@ -177,13 +186,19 @@ public static partial class Abxr
 		/// <summary>For RateLimited, the seconds to wait before the next attempt. Zero otherwise.</summary>
 		public int RetryAfterSeconds { get; }
 		public string Message { get; }
+		/// <summary>
+		/// On success, the name of the paired device this app joined, or null when the name was skipped. For
+		/// DeviceNameExists, the existing device's name, for the confirm. Null otherwise.
+		/// </summary>
+		public string DeviceName { get; }
 
-		internal PairingRedeemResult(bool success, PairingRedeemError error, int retryAfterSeconds, string message)
+		internal PairingRedeemResult(bool success, PairingRedeemError error, int retryAfterSeconds, string message, string deviceName = null)
 		{
 			Success = success;
 			Error = error;
 			RetryAfterSeconds = retryAfterSeconds;
 			Message = message;
+			DeviceName = deviceName;
 		}
 	}
 

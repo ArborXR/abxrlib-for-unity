@@ -2,12 +2,25 @@ using UnityEngine;
 
 namespace AbxrLib.Runtime.Services.Pairing
 {
-    /// <summary>Where the pairing lives between launches. The token and the app instance id are written and removed together.</summary>
+    /// <summary>
+    /// Where the pairing lives between launches. The token and the app instance id are written and removed together.
+    /// The paired device's name rides along, and changes on its own when the device is renamed in the Portal.
+    /// </summary>
     internal interface IPairingStore
     {
         /// <summary>False unless both values are stored.</summary>
         bool TryLoad(out string token, out string instanceId);
-        void Save(string token, string instanceId);
+
+        /// <summary>The paired device's name, or null when the pairing has none.</summary>
+        string LoadDeviceName();
+
+        /// <summary>Writes the pairing. A null deviceName removes any stored name.</summary>
+        void Save(string token, string instanceId, string deviceName);
+
+        /// <summary>Replaces only the name. Null removes it.</summary>
+        void SaveDeviceName(string deviceName);
+
+        /// <summary>Removes the pairing, name included.</summary>
         void Clear();
     }
 
@@ -20,17 +33,20 @@ namespace AbxrLib.Runtime.Services.Pairing
     {
         internal const string TokenKey = "abxrlib_app_instance_token";
         internal const string InstanceIdKey = "abxrlib_app_instance_id";
+        internal const string DeviceNameKey = "abxrlib_paired_device_name";
 
         private readonly string _tokenKey;
         private readonly string _instanceIdKey;
+        private readonly string _deviceNameKey;
 
-        internal PlayerPrefsPairingStore() : this(TokenKey, InstanceIdKey) { }
+        internal PlayerPrefsPairingStore() : this(TokenKey, InstanceIdKey, DeviceNameKey) { }
 
         /// <summary>Testing only: different keys, so a test run never touches a real pairing.</summary>
-        internal PlayerPrefsPairingStore(string tokenKey, string instanceIdKey)
+        internal PlayerPrefsPairingStore(string tokenKey, string instanceIdKey, string deviceNameKey)
         {
             _tokenKey = tokenKey;
             _instanceIdKey = instanceIdKey;
+            _deviceNameKey = deviceNameKey;
         }
 
         public bool TryLoad(out string token, out string instanceId)
@@ -44,10 +60,23 @@ namespace AbxrLib.Runtime.Services.Pairing
             return false;
         }
 
-        public void Save(string token, string instanceId)
+        public string LoadDeviceName()
+        {
+            string deviceName = PlayerPrefs.GetString(_deviceNameKey, "");
+            return deviceName.Length > 0 ? deviceName : null;
+        }
+
+        public void Save(string token, string instanceId, string deviceName)
         {
             PlayerPrefs.SetString(_tokenKey, token);
             PlayerPrefs.SetString(_instanceIdKey, instanceId);
+            WriteDeviceName(deviceName);
+            PlayerPrefs.Save();
+        }
+
+        public void SaveDeviceName(string deviceName)
+        {
+            WriteDeviceName(deviceName);
             PlayerPrefs.Save();
         }
 
@@ -55,7 +84,14 @@ namespace AbxrLib.Runtime.Services.Pairing
         {
             PlayerPrefs.DeleteKey(_tokenKey);
             PlayerPrefs.DeleteKey(_instanceIdKey);
+            PlayerPrefs.DeleteKey(_deviceNameKey);
             PlayerPrefs.Save();
+        }
+
+        private void WriteDeviceName(string deviceName)
+        {
+            if (string.IsNullOrEmpty(deviceName)) PlayerPrefs.DeleteKey(_deviceNameKey);
+            else PlayerPrefs.SetString(_deviceNameKey, deviceName);
         }
     }
 }

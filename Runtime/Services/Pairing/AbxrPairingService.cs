@@ -6,7 +6,7 @@ namespace AbxrLib.Runtime.Services.Pairing
 {
     /// <summary>
     /// All that authentication reads from pairing. Auth never owns the stored credential: it asks for it while
-    /// resolving identity, and reports the two bootstrap refusals that change it.
+    /// resolving identity, and reports what a bootstrap learns about it.
     /// </summary>
     internal interface IPairedCredential
     {
@@ -21,6 +21,12 @@ namespace AbxrLib.Runtime.Services.Pairing
 
         /// <summary>A paired bootstrap got a 403: keep the pairing, but send nothing more with it this session.</summary>
         void SuspendForSession(string instanceId);
+
+        /// <summary>
+        /// A paired bootstrap returned the paired device's current name, so a rename in the Portal reaches the SDK.
+        /// Null means the instance has no paired device. Ignored once the instance has been replaced.
+        /// </summary>
+        void UpdateDeviceName(string instanceId, string deviceName);
     }
 
     /// <summary>What the pairing service needs from the SDK around it. The subsystem implements it; tests fake it.</summary>
@@ -44,18 +50,32 @@ namespace AbxrLib.Runtime.Services.Pairing
     }
 
     /// <summary>
-    /// Passcode pairing (SDK-60): the state machine, the stored app instance, the redeem, the prompt's lifecycle, the
-    /// Retry-After gate, and the state events. Pairing is something the app asks for; nothing here prompts on its own.
-    /// Main thread only, like the rest of the SDK.
+    /// Passcode pairing (SDK-60): the state machine, the stored app instance, the redeem, the prompt's steps, the
+    /// Retry-After gate, and the state events. The prompt asks for the passcode, then a name for the headset (INS-511),
+    /// then, when that name belongs to a paired device already, whether to add this app to it.
+    /// Pairing is something the app asks for; nothing here prompts on its own. Main thread only, like the rest of the SDK.
     /// </summary>
     internal sealed class AbxrPairingService : IPairedCredential
     {
-        internal const string InputType = "pairingPasscode";
-        private const string PromptLabel = "Pairing Passcode";
+        internal const string PasscodeInputType = "pairingPasscode";
+        /// <summary>The name step. Submit a name, or "" or "**skip**" to pair without one.</summary>
+        internal const string DeviceNameInputType = "pairingDeviceName";
+        /// <summary>The name step once the passcode turned out to require a name, so there's no skip.</summary>
+        internal const string RequiredDeviceNameInputType = "pairingDeviceNameRequired";
+        /// <summary>
+        /// The name belongs to a paired device already, and domain carries its name. Submit that name to add this app
+        /// to the device, "**skip**" to choose another name, or a different name to send it instead.
+        /// </summary>
+        internal const string JoinDeviceInputType = "pairingDeviceJoin";
+
+        private const string PasscodePrompt = "Pairing Passcode";
+        private const string DeviceNamePrompt = "Give this connection a name.";
         private const string SkipInput = "**skip**";
         private const string UnsupportedPlatform = "pairing runs only in Android and WebGL builds.";
         /// <summary>How many prompts an app handler may re-request from inside its own callback before the SDK stops re-asking.</summary>
         private const int MaxNestedInputRequests = 8;
+
+        private enum PromptStep { Passcode, DeviceName, JoinDevice }
 
         /// <summary>Raised to show the prompt, as (type, prompt, domain, error). The subsystem dispatches it like auth's requests.</summary>
         internal Action<string, string, string, string> OnInputRequested;
@@ -69,6 +89,7 @@ namespace AbxrLib.Runtime.Services.Pairing
 
         private string _token;
         private string _instanceId;
+        private string _deviceName;
         private string _suspendedInstanceId;
         private double _rateLimitedUntil;
         private int _redeemAttempt;
@@ -76,13 +97,24 @@ namespace AbxrLib.Runtime.Services.Pairing
         private bool _cancelRequested;
         private int _inputRequestDepth;
 
+        // The open prompt's answers so far, so a failure re-asks only the step it's about. Forgotten when the prompt closes.
+        private PromptStep _step;
+        private string _promptPasscode;
+        private string _promptDeviceName;
+        private bool _promptDeviceNameAnswered;
+        private bool _promptDeviceNameRequired;
+        private string _promptJoinDeviceName;
+
         internal Abxr.PairingState State { get; private set; } = Abxr.PairingState.Resolving;
 
         /// <summary>The last redeem outcome, refused calls included. The default UI reads RetryAfterSeconds from it.</summary>
         internal Abxr.PairingRedeemResult LastRedeemResult { get; private set; }
 
-        /// <summary>True while the prompt waits for a passcode, so the subsystem knows OnInputSubmitted is for pairing.</summary>
+        /// <summary>True while the prompt waits for input, so the subsystem knows OnInputSubmitted is for pairing.</summary>
         internal bool IsInputRequestPending => State == Abxr.PairingState.Prompting;
+
+        /// <summary>The paired device's name, or null when the pairing has none or there's no pairing. Survives relaunches.</summary>
+        internal string DeviceName => HasStoredPairing ? _deviceName : null;
 
         internal AbxrPairingService(IPairingStore store, IPairingRedeemClient client, IPairingHost host)
         {
@@ -94,6 +126,7 @@ namespace AbxrLib.Runtime.Services.Pairing
             {
                 _token = token;
                 _instanceId = instanceId;
+                _deviceName = _store.LoadDeviceName();
             }
         }
 
@@ -128,7 +161,8 @@ namespace AbxrLib.Runtime.Services.Pairing
             }
 
             State = Abxr.PairingState.Prompting;
-            RequestInput("");
+            ForgetPromptAnswers();
+            AskPasscode("");
             return true;
         }
 
@@ -155,24 +189,80 @@ namespace AbxrLib.Runtime.Services.Pairing
         }
 
         /// <summary>
-        /// OnInputSubmitted while the prompt is open, routed here by the subsystem. "**skip**" is the prompt's
-        /// "Not now": it closes the prompt and stores nothing.
+        /// OnInputSubmitted while the prompt is open, routed here by the subsystem. What it answers depends on the
+        /// step the last request asked for (its type): the passcode, where "**skip**" is the prompt's "Not now"; the
+        /// name, where "" or "**skip**" pairs without one; or joining a paired device that already has the name.
         /// </summary>
         internal void SubmitInput(string input)
         {
             if (State != Abxr.PairingState.Prompting)
             {
-                Logcat.Warning("A pairing passcode was submitted, but no pairing prompt is open.");
+                Logcat.Warning("Pairing input was submitted, but no pairing prompt is open.");
                 return;
             }
 
+            switch (_step)
+            {
+                case PromptStep.Passcode: SubmitPasscode(input); break;
+                case PromptStep.DeviceName: SubmitDeviceName(input); break;
+                default: SubmitJoin(input); break;
+            }
+        }
+
+        private void SubmitPasscode(string input)
+        {
             if (input == SkipInput)
             {
                 CancelPairing();
                 return;
             }
 
-            Redeem(input, null);
+            string passcode = PairingOutcomes.NormalizePasscode(input);
+            if (!PairingOutcomes.IsWellFormedPasscode(passcode))
+            {
+                Logcat.Debug("The pairing passcode isn't six digits, so it wasn't sent.");
+                Finish(PairingOutcomes.Failure(Abxr.PairingRedeemError.InvalidPasscode), null, reprompt: true);
+                return;
+            }
+
+            // Checked here as well as before sending, so nobody names the headset only to be told to wait.
+            double wait = _rateLimitedUntil - _host.Now;
+            if (wait > 0)
+            {
+                Finish(PairingOutcomes.RateLimited((int)Math.Ceiling(wait)), null, reprompt: true);
+                return;
+            }
+
+            _promptPasscode = passcode;
+            // After a wrong passcode, the name the person already gave still stands.
+            if (_promptDeviceNameAnswered) Redeem(_promptPasscode, _promptDeviceName, false, null);
+            else AskDeviceName("");
+        }
+
+        private void SubmitDeviceName(string input)
+        {
+            string deviceName = input == SkipInput ? null : PairingOutcomes.NormalizeDeviceName(input);
+            if (deviceName == null && _promptDeviceNameRequired)
+            {
+                Finish(PairingOutcomes.Failure(Abxr.PairingRedeemError.DeviceNameRequired), null, reprompt: true);
+                return;
+            }
+
+            Redeem(_promptPasscode, deviceName, false, null);
+        }
+
+        private void SubmitJoin(string input)
+        {
+            string deviceName = input == SkipInput ? null : PairingOutcomes.NormalizeDeviceName(input);
+            if (deviceName == null)
+            {
+                AskDeviceName("");
+                return;
+            }
+
+            // The Portal matches names without regard to case, so the confirm does too.
+            bool join = string.Equals(deviceName, _promptJoinDeviceName, StringComparison.OrdinalIgnoreCase);
+            Redeem(_promptPasscode, join ? _promptJoinDeviceName : deviceName, join, null);
         }
 
         // ── Redeem ───────────────────────────────────────────────────
@@ -182,11 +272,19 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// fires before this returns when the call is refused or the passcode is malformed.
         /// </summary>
         internal void RedeemPairingPasscode(string passcode, Action<Abxr.PairingRedeemResult> onComplete) =>
-            Redeem(passcode, onComplete);
+            Redeem(passcode, null, false, onComplete);
 
-        private void Redeem(string input, Action<Abxr.PairingRedeemResult> onComplete)
+        /// <summary>
+        /// The headless redeem with a name for the headset. A null or blank name pairs without one. After
+        /// DeviceNameExists, confirm with the person, then call again with joinExistingDevice to add this app to that device.
+        /// </summary>
+        internal void RedeemPairingPasscode(string passcode, string deviceName, bool joinExistingDevice, Action<Abxr.PairingRedeemResult> onComplete) =>
+            Redeem(passcode, deviceName, joinExistingDevice, onComplete);
+
+        private void Redeem(string input, string deviceNameInput, bool joinExisting, Action<Abxr.PairingRedeemResult> onComplete)
         {
-            string refusal = RedeemRefusal();
+            string deviceName = PairingOutcomes.NormalizeDeviceName(deviceNameInput);
+            string refusal = RedeemRefusal() ?? (joinExisting && deviceName == null ? "joinExistingDevice needs the name of the device to join." : null);
             if (refusal != null)
             {
                 Logcat.Warning($"RedeemPairingPasscode() refused: {refusal}");
@@ -211,6 +309,19 @@ namespace AbxrLib.Runtime.Services.Pairing
                 Finish(PairingOutcomes.Failure(Abxr.PairingRedeemError.InvalidPasscode), onComplete, fromPrompt);
                 return;
             }
+            if (fromPrompt) _promptPasscode = passcode;
+
+            if (deviceName != null && !PairingOutcomes.IsWellFormedDeviceName(deviceName))
+            {
+                Logcat.Debug($"The device name isn't 1 to {PairingOutcomes.MaxDeviceNameLength} characters without control characters, so it wasn't sent.");
+                Finish(PairingOutcomes.Failure(Abxr.PairingRedeemError.DeviceNameInvalid), onComplete, fromPrompt);
+                return;
+            }
+            if (fromPrompt)
+            {
+                _promptDeviceName = deviceName;
+                _promptDeviceNameAnswered = true;
+            }
 
             double wait = _rateLimitedUntil - _host.Now;
             if (wait > 0)
@@ -225,21 +336,21 @@ namespace AbxrLib.Runtime.Services.Pairing
             int attempt = ++_redeemAttempt;
             _client.Send(
                 PairingOutcomes.RedeemUrl(_host.PairingUrl),
-                PairingOutcomes.RedeemBody(_host.AppToken, passcode, _host.DeviceMetadata),
-                response => OnRedeemResponse(attempt, response, onComplete));
+                PairingOutcomes.RedeemBody(_host.AppToken, passcode, _host.DeviceMetadata, deviceName, joinExisting),
+                response => OnRedeemResponse(attempt, deviceName, response, onComplete));
         }
 
-        private void OnRedeemResponse(int attempt, PairingHttpResponse response, Action<Abxr.PairingRedeemResult> onComplete)
+        private void OnRedeemResponse(int attempt, string deviceName, PairingHttpResponse response, Action<Abxr.PairingRedeemResult> onComplete)
         {
             if (attempt != _redeemAttempt || State != Abxr.PairingState.Redeeming) return;
 
-            var result = PairingOutcomes.Classify(response, DateTime.UtcNow, out string token, out string instanceId);
+            var result = PairingOutcomes.Classify(response, DateTime.UtcNow, out string token, out string instanceId, deviceName);
             LogRedeemOutcome(result, response, instanceId);
 
             if (result.Success)
             {
                 // Before anything else can run: the Portal returns the token only once.
-                Store(token, instanceId);
+                Store(token, instanceId, result.DeviceName);
                 LastRedeemResult = result;
                 AbxrUi.AuthUi?.Hide();
                 Settle(Abxr.PairingState.Paired, Abxr.PairingChangeReason.Paired);
@@ -268,12 +379,34 @@ namespace AbxrLib.Runtime.Services.Pairing
             }
         }
 
-        /// <summary>Records an attempt that didn't pair, re-shows the prompt with its message when asked, then reports it.</summary>
+        /// <summary>Records an attempt that didn't pair, re-asks the step it's about when asked, then reports it.</summary>
         private void Finish(Abxr.PairingRedeemResult result, Action<Abxr.PairingRedeemResult> onComplete, bool reprompt)
         {
             LastRedeemResult = result;
-            if (reprompt) RequestInput(result.Message);
+            if (reprompt) Reprompt(result);
             onComplete?.Invoke(result);
+        }
+
+        private void Reprompt(Abxr.PairingRedeemResult result)
+        {
+            switch (result.Error)
+            {
+                case Abxr.PairingRedeemError.DeviceNameRequired:
+                    _promptDeviceNameRequired = true;
+                    AskDeviceName(result.Message);
+                    break;
+                case Abxr.PairingRedeemError.DeviceNameInvalid:
+                    AskDeviceName(result.Message);
+                    break;
+                case Abxr.PairingRedeemError.DeviceNameExists:
+                    _promptJoinDeviceName = result.DeviceName;
+                    AskJoin(result.Message);
+                    break;
+                default:
+                    // The passcode, the rate limit, the build, or the network: all start over from the passcode.
+                    AskPasscode(result.Message);
+                    break;
+            }
         }
 
         // ── Stored pairing ───────────────────────────────────────────
@@ -301,15 +434,15 @@ namespace AbxrLib.Runtime.Services.Pairing
                     Logcat.Warning("SetAppInstanceToken() ignored: a passcode is being redeemed.");
                     return;
                 case Abxr.PairingState.Resolving:
-                    Store(token.Trim(), appInstanceId.Trim());
+                    Store(token.Trim(), appInstanceId.Trim(), null);
                     return;
                 case Abxr.PairingState.Managed:
-                    Store(token.Trim(), appInstanceId.Trim());
+                    Store(token.Trim(), appInstanceId.Trim(), null);
                     Logcat.Info("Stored the app instance, but the ArborXR client or an org token identifies this app's organization and takes precedence.");
                     return;
                 default:
                     if (State == Abxr.PairingState.Prompting) AbxrUi.AuthUi?.Hide();
-                    Store(token.Trim(), appInstanceId.Trim());
+                    Store(token.Trim(), appInstanceId.Trim(), null);
                     Settle(Abxr.PairingState.Paired, Abxr.PairingChangeReason.Paired);
                     return;
             }
@@ -357,13 +490,26 @@ namespace AbxrLib.Runtime.Services.Pairing
             Logcat.Warning($"Access for app instance {instanceId} is suspended. The pairing is kept, and nothing more is sent with it this session.");
         }
 
+        public void UpdateDeviceName(string instanceId, string deviceName)
+        {
+            if (string.IsNullOrEmpty(instanceId) || instanceId != _instanceId) return;
+
+            string name = PairingOutcomes.NormalizeDeviceName(deviceName);
+            if (name == _deviceName) return;
+
+            _store.SaveDeviceName(name);
+            _deviceName = name;
+            Logcat.Debug(name == null ? "This app instance no longer has a paired device." : $"The paired device is now named {name}.");
+        }
+
         // ── Helpers ──────────────────────────────────────────────────
 
-        private void Store(string token, string instanceId)
+        private void Store(string token, string instanceId, string deviceName)
         {
-            _store.Save(token, instanceId);
+            _store.Save(token, instanceId, deviceName);
             _token = token;
             _instanceId = instanceId;
+            _deviceName = deviceName;
         }
 
         private void Forget()
@@ -371,11 +517,13 @@ namespace AbxrLib.Runtime.Services.Pairing
             _store.Clear();
             _token = null;
             _instanceId = null;
+            _deviceName = null;
         }
 
         private void Settle(Abxr.PairingState state, Abxr.PairingChangeReason reason)
         {
             State = state;
+            ForgetPromptAnswers();
             try
             {
                 OnStateChanged?.Invoke(state, reason);
@@ -387,21 +535,50 @@ namespace AbxrLib.Runtime.Services.Pairing
             }
         }
 
-        private void RequestInput(string error)
+        /// <summary>A closed prompt keeps nothing, least of all the passcode.</summary>
+        private void ForgetPromptAnswers()
         {
-            // A handler that answers each request from inside the callback, with a passcode that fails before any
+            _step = PromptStep.Passcode;
+            _promptPasscode = null;
+            _promptDeviceName = null;
+            _promptDeviceNameAnswered = false;
+            _promptDeviceNameRequired = false;
+            _promptJoinDeviceName = null;
+        }
+
+        private void AskPasscode(string error)
+        {
+            _step = PromptStep.Passcode;
+            RequestInput(PasscodeInputType, PasscodePrompt, null, error);
+        }
+
+        private void AskDeviceName(string error)
+        {
+            _step = PromptStep.DeviceName;
+            RequestInput(_promptDeviceNameRequired ? RequiredDeviceNameInputType : DeviceNameInputType, DeviceNamePrompt, null, error);
+        }
+
+        private void AskJoin(string question)
+        {
+            _step = PromptStep.JoinDevice;
+            RequestInput(JoinDeviceInputType, question, _promptJoinDeviceName, "");
+        }
+
+        private void RequestInput(string type, string prompt, string domain, string error)
+        {
+            // A handler that answers each request from inside the callback, with input that fails before any
             // request is sent, would otherwise recurse until the stack overflows.
             if (_inputRequestDepth >= MaxNestedInputRequests)
             {
-                Logcat.Warning("The OnInputRequested handler keeps resubmitting a failing passcode from inside its callback. " +
-                               "The prompt stays open; submit again when the person changes the passcode.");
+                Logcat.Warning("The OnInputRequested handler keeps resubmitting failing input from inside its callback. " +
+                               "The prompt stays open; submit again when the person changes their answer.");
                 return;
             }
 
             _inputRequestDepth++;
             try
             {
-                OnInputRequested?.Invoke(InputType, PromptLabel, null, error);
+                OnInputRequested?.Invoke(type, prompt, domain, error);
             }
             finally
             {
@@ -449,10 +626,21 @@ namespace AbxrLib.Runtime.Services.Pairing
             switch (result.Error)
             {
                 case Abxr.PairingRedeemError.None:
-                    Logcat.Info($"Paired as app instance {instanceId}.");
+                    Logcat.Info(result.DeviceName == null
+                        ? $"Paired as app instance {instanceId}."
+                        : $"Paired as app instance {instanceId} on {result.DeviceName}.");
                     break;
                 case Abxr.PairingRedeemError.InvalidPasscode:
                     Logcat.Debug("The pairing passcode wasn't accepted.");
+                    break;
+                case Abxr.PairingRedeemError.DeviceNameRequired:
+                    Logcat.Debug("This passcode requires a name for the headset.");
+                    break;
+                case Abxr.PairingRedeemError.DeviceNameInvalid:
+                    Logcat.Debug($"The pairing service didn't accept the device name{detail}.");
+                    break;
+                case Abxr.PairingRedeemError.DeviceNameExists:
+                    Logcat.Debug($"A paired device named {result.DeviceName} already exists in the organization.");
                     break;
                 case Abxr.PairingRedeemError.BuildRejected:
                     Logcat.Warning($"The pairing service refused this build (HTTP {response.StatusCode}{detail}). Check the App Token, and that pairingUrl ({_host.PairingUrl}) is the Portal API.");

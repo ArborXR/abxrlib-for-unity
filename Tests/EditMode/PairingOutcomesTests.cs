@@ -1,6 +1,8 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
-// EditMode tests for the pairing redeem contract (SDK-60): passcode shape, response classification, Retry-After, and the request.
+// EditMode tests for the pairing redeem contract (SDK-60): passcode and device name shape, response classification,
+// Retry-After, and the request.
 using System;
+using System.Linq;
 using AbxrLib.Runtime.Services.Pairing;
 using NUnit.Framework;
 
@@ -35,6 +37,35 @@ public class PairingOutcomesTests
     [TestCase(null, "")]
     public void NormalizePasscode_DropsWhitespaceAndHyphens(string input, string expected) =>
         Assert.AreEqual(expected, PairingOutcomes.NormalizePasscode(input));
+
+    // ── Device name shape (INS-511) ───────────────────────────────
+
+    [TestCase(" Headset 12 ", "Headset 12")]
+    [TestCase("Headset 12", "Headset 12")]
+    [TestCase("   ", null)]
+    [TestCase("", null)]
+    [TestCase(null, null)]
+    public void NormalizeDeviceName_TrimsAndTreatsBlankAsSkipped(string input, string expected) =>
+        Assert.AreEqual(expected, PairingOutcomes.NormalizeDeviceName(input));
+
+    [TestCase("H", ExpectedResult = true)]
+    [TestCase("Headset 12", ExpectedResult = true)]
+    [TestCase("Head\nset", ExpectedResult = false)]
+    [TestCase("Head\tset", ExpectedResult = false)]
+    [TestCase("", ExpectedResult = false)]
+    [TestCase(null, ExpectedResult = false)]
+    public bool IsWellFormedDeviceName_RejectsControlCharacters(string name) =>
+        PairingOutcomes.IsWellFormedDeviceName(name);
+
+    [Test]
+    public void IsWellFormedDeviceName_CountsCodePointsUpTo64()
+    {
+        const string headphones = "\U0001F3A7"; // two UTF-16 units, one character to the Portal
+        Assert.IsTrue(PairingOutcomes.IsWellFormedDeviceName(new string('x', 64)));
+        Assert.IsFalse(PairingOutcomes.IsWellFormedDeviceName(new string('x', 65)));
+        Assert.IsTrue(PairingOutcomes.IsWellFormedDeviceName(string.Concat(Enumerable.Repeat(headphones, 64))));
+        Assert.IsFalse(PairingOutcomes.IsWellFormedDeviceName(string.Concat(Enumerable.Repeat(headphones, 65))));
+    }
 
     // ── Classification ────────────────────────────────────────────
 
@@ -84,6 +115,44 @@ public class PairingOutcomesTests
     }
 
     [Test]
+    public void Classify_200_CarriesTheStoredName()
+    {
+        string body = $"{{\"app_instance_token\":\"{Token}\",\"app_instance_id\":\"{InstanceId}\",\"device_name\":\" Headset 12 \"}}";
+
+        Assert.AreEqual("Headset 12", Classify(new PairingHttpResponse(200, body)).DeviceName);
+        Assert.IsNull(Classify(new PairingHttpResponse(200, SuccessBody)).DeviceName, "No name means the name was skipped.");
+    }
+
+    [TestCase(422, "device_name_required", Abxr.PairingRedeemError.DeviceNameRequired)]
+    [TestCase(422, "device_name_invalid", Abxr.PairingRedeemError.DeviceNameInvalid)]
+    [TestCase(409, "device_name_exists", Abxr.PairingRedeemError.DeviceNameExists)]
+    [TestCase(409, "something_else", Abxr.PairingRedeemError.BuildRejected)]
+    [TestCase(422, "something_else", Abxr.PairingRedeemError.BuildRejected)]
+    [TestCase(400, "device_name_invalid", Abxr.PairingRedeemError.InvalidPasscode)]
+    [TestCase(401, "device_name_required", Abxr.PairingRedeemError.BuildRejected)]
+    public void Classify_ReadsTheNameCodesOnlyOn409And422(long status, string code, Abxr.PairingRedeemError expected) =>
+        Assert.AreEqual(expected, Classify(new PairingHttpResponse(status, $"{{\"error\":\"nope\",\"code\":\"{code}\"}}")).Error);
+
+    [Test]
+    public void Classify_409_NamesTheExistingDeviceForTheConfirm()
+    {
+        var result = PairingOutcomes.Classify(
+            new PairingHttpResponse(409, "{\"code\":\"device_name_exists\",\"device_name\":\"Headset 12\"}"), Now, out _, out _, "headset 12");
+
+        Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameExists, result.Error);
+        Assert.AreEqual("Headset 12", result.DeviceName);
+        Assert.AreEqual("Headset 12 is already in your organization. Add this app to it?", result.Message);
+    }
+
+    [Test]
+    public void Classify_409_WithoutAName_FallsBackToTheOneSent()
+    {
+        var result = PairingOutcomes.Classify(new PairingHttpResponse(409, "{\"code\":\"device_name_exists\"}"), Now, out _, out _, "Headset 12");
+
+        Assert.AreEqual("Headset 12", result.DeviceName);
+    }
+
+    [Test]
     public void Classify_NoResponse_IsUnavailable()
     {
         Assert.AreEqual(Abxr.PairingRedeemError.Unavailable, Classify(new PairingHttpResponse(0, null, networkError: true, errorDetail: "Cannot resolve destination host")).Error);
@@ -106,6 +175,8 @@ public class PairingOutcomesTests
         Assert.AreEqual("That passcode wasn't recognized. Check it and try again.", Classify(new PairingHttpResponse(400, null)).Message);
         Assert.AreEqual("This app can't pair right now. Contact the app's developer.", Classify(new PairingHttpResponse(401, null)).Message);
         Assert.AreEqual("Can't reach the pairing service. Check the connection and try again.", Classify(new PairingHttpResponse(503, null)).Message);
+        Assert.AreEqual("Your organization requires a name for this headset.", PairingOutcomes.Failure(Abxr.PairingRedeemError.DeviceNameRequired).Message);
+        Assert.AreEqual("That name can't be used. Use 1 to 64 characters.", PairingOutcomes.Failure(Abxr.PairingRedeemError.DeviceNameInvalid).Message);
     }
 
     [Test]
@@ -177,6 +248,17 @@ public class PairingOutcomesTests
     public void RedeemBody_LeavesOutMissingMetadata()
     {
         Assert.AreEqual("{\"app_token\":\"app.token.jwt\",\"passcode\":\"483921\"}", PairingOutcomes.RedeemBody("app.token.jwt", "483921", null));
+    }
+
+    [Test]
+    public void RedeemBody_WithANameAndAJoin_MatchesTheWireContract()
+    {
+        Assert.AreEqual(
+            "{\"app_token\":\"app.token.jwt\",\"passcode\":\"483921\",\"device_name\":\"Headset 12\",\"join_existing\":true}",
+            PairingOutcomes.RedeemBody("app.token.jwt", "483921", null, "Headset 12", joinExisting: true));
+        Assert.AreEqual(
+            "{\"app_token\":\"app.token.jwt\",\"passcode\":\"483921\",\"device_name\":\"Headset 12\"}",
+            PairingOutcomes.RedeemBody("app.token.jwt", "483921", null, "Headset 12"));
     }
 
     [Test]
