@@ -1098,17 +1098,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private static string _authHandoffForTesting;
 
-        private static bool ShouldRetry(UnityWebRequest request)
-        {
-            if (request.result == UnityWebRequest.Result.ConnectionError) return true;
-
-            long code = request.responseCode;
-            if (code == 408 || code == 429) return true;
-            if (code >= 500 && code <= 599) return true;
-
-            return false;
-        }
-        
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
 
         /// <summary>
