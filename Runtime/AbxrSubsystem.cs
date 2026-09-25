@@ -79,6 +79,9 @@ namespace AbxrLib.Runtime
         /// <summary>For testing only. Current transport (REST or ArborInsights). Use to check IsServiceTransport and call GetPending*ForTesting on any transport.</summary>
         internal IAbxrTransport GetTransportForTesting() => _transport;
 
+        /// <summary>For testing only. True when the exit-or-return flow after an assessment has been started and not stopped.</summary>
+        internal bool IsExitAfterAssessmentScheduledForTesting => _exitAfterAssessmentCoroutine != null;
+
         /// <summary>For testing only. Pending events from current transport; empty list when transport is null or service (device).</summary>
         internal List<EventPayload> GetPendingEventsForTesting() => _transport?.GetPendingEventsForTesting() ?? new List<EventPayload>();
         /// <summary>For testing only. Pending logs from current transport; empty when null or service.</summary>
@@ -139,6 +142,7 @@ namespace AbxrLib.Runtime
 
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
+        private bool _endSessionInProgress;
 
         internal bool HasAuthenticationStarted => _authService.HasAuthenticationStarted;
 
@@ -670,7 +674,11 @@ internal void StartNewSession()
 		/// </summary>
 		internal void EndSession()
 		{
-			OnApplicationQuitHandler();
+			// The app keeps running, so an assessment this auto-closes must not start the exit-or-return flow, which would
+			// launch the return app and quit two seconds later.
+			_endSessionInProgress = true;
+			try { OnApplicationQuitHandler(); }
+			finally { _endSessionInProgress = false; }
 		}
 		
 		internal bool StartModuleAtIndex(int moduleIndex)
@@ -953,7 +961,7 @@ internal void StartNewSession()
 			// i.e. no module sequence, or we just completed the last module (same rule as original exit behavior).
 			bool shouldExitOrReturn = _authService.SessionUsedAuthHandoff() && _authService.GetEffectiveEnableReturnTo();
 			bool assessmentFullyComplete = !inModuleSequence || _currentModuleIndex >= (modules?.Count ?? 0);
-			if (shouldExitOrReturn && assessmentFullyComplete)
+			if (shouldExitOrReturn && assessmentFullyComplete && !_endSessionInProgress)
 			{
 				_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
 			}
