@@ -369,6 +369,9 @@ namespace AbxrLib.Runtime.Services.Auth
             int generation = _sessionGeneration;
             bool authOk;
             string authError = null;
+            // Set once device auth has reported its first transient failure as OnAuthCompleted(false) and kept retrying.
+            // The app already has a failure for this attempt then, so only a later success is reported.
+            bool reportedRetrying = false;
             if (_deviceAuthDeferredByHandoff)
             {
                 _deviceAuthDeferredByHandoff = false;
@@ -381,7 +384,14 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     authOk = ok;
                     authError = err;
-                }, withRetry: true));
+                }, withRetry: true, onRetrying: message =>
+                {
+                    reportedRetrying = true;
+                    // Runs inside the retry loop: an exception from an app's handler would end the loop and leave the
+                    // attempt marked active, so every later StartAuthentication() would be ignored for the session.
+                    try { OnFailed?.Invoke(message); }
+                    catch (Exception ex) { Logcat.Error($"An OnAuthCompleted handler threw while device authentication was retrying: {ex}"); }
+                }));
                 // EndSession or StartNewSession cleared the session this attempt belonged to (possibly while it was retrying).
                 if (generation != _sessionGeneration) yield break;
                 if (!authOk)
@@ -390,7 +400,12 @@ namespace AbxrLib.Runtime.Services.Auth
                     string message = !string.IsNullOrEmpty(authError)
                         ? authError
                         : "Initial authentication request failed";
-                    OnFailed?.Invoke(message);
+                    if (!reportedRetrying)
+                        OnFailed?.Invoke(message);
+                    else if (_credentialsRejectedByApi)
+                        // A refusal after the retrying report latches without a second report. Release builds keep this error,
+                        // which stands in for the failure log the subsystem writes when it receives a report.
+                        Logcat.Error($"Authentication failure: {message} (device authentication stopped retrying; OnAuthCompleted already reported false)");
                     yield break;
                 }
             }
@@ -425,7 +440,8 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_stopping || !_attemptActive)
             {
                 _attemptActive = false;
-                OnFailed?.Invoke("Auth stopped or attempt inactive");
+                if (!reportedRetrying)
+                    OnFailed?.Invoke("Auth stopped or attempt inactive");
                 yield break;
             }
             
@@ -508,8 +524,8 @@ namespace AbxrLib.Runtime.Services.Auth
             return refusalStatus && ExtractExplicitApiError(result.Body) != null;
         }
 
-        /// <summary>Attempts auth via current transport. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure; when false (e.g. keyboard submit), one attempt only.</summary>
-        private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true)
+        /// <summary>Attempts auth via current transport. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure, and invokes onRetrying(message) once, at the first transient failure, while it keeps retrying; when false (e.g. keyboard submit), one attempt only.</summary>
+        private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true, Action<string> onRetrying = null)
         {
             int generation = _sessionGeneration;
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
@@ -608,11 +624,13 @@ namespace AbxrLib.Runtime.Services.Auth
                 Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
                 if (!announcedRetrying)
                 {
-                    // Release builds drop warnings, so say once per attempt, at info level, that auth is still being retried.
-                    // The body stays out: it can be an HTML page, or a token-bearing response the SDK failed to apply.
+                    // Report the first failure of the attempt (OnAuthCompleted(false)) so the app can start without auth, as it
+                    // did when every failure latched; the retries carry on, and a later success reports true. The subsystem logs
+                    // the report as an error, which release builds keep, unlike the warning above. The body stays out of the
+                    // message: it can be an HTML page, or a token-bearing response the SDK failed to apply.
                     announcedRetrying = true;
                     string reason = result.NetworkError ? "no connection" : result.StatusCode > 0 ? $"HTTP {result.StatusCode}" : "no usable response";
-                    Logcat.Info($"Device authentication failed ({reason}); retrying in the background.");
+                    onRetrying?.Invoke($"Device authentication failed ({reason}); the SDK is retrying in the background.");
                 }
                 // Real time, so an app that sets Time.timeScale to 0 while it waits for auth still gets its retries.
                 yield return new WaitForSecondsRealtime(retryIntervalSeconds);

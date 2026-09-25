@@ -1,6 +1,7 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode: the device-auth loop retries transient failures with backoff, latches refusals for the session, and stops
-// when EndSession or StartNewSession clears the session it belonged to.
+// when EndSession or StartNewSession clears the session it belonged to. It reports its first transient failure as
+// OnAuthCompleted(false), then only a later success.
 // Drives the real AbxrAuthService with a scripted transport, so no network is involved.
 // AuthFailureClassificationTests (EditMode) pins the classification table itself.
 using System;
@@ -26,43 +27,137 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     /// <summary>A valid success without a token: the backend wants user authentication next (AuthResponse.IsValidSuccess).</summary>
     private static readonly AuthTransportResult UserAuthRequired =
         new AuthTransportResult(true, "{\"appId\":\"12345678-1234-1234-1234-123456789012\"}", false, 200);
+    /// <summary>A full success: a token (a JWT that expires in 2100) and a secret, so the REST data path can sign its requests.</summary>
+    private static readonly AuthTransportResult Authorized = new AuthTransportResult(true,
+        "{\"token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDB9.sig\",\"secret\":\"test-secret\",\"appId\":\"12345678-1234-1234-1234-123456789012\"}",
+        false, 200);
+    private static readonly AuthTransportResult ServiceUnavailable =
+        new AuthTransportResult(false, "<html>Service Unavailable</html>", false, 503);
+
+    /// <summary>What OnAuthCompleted(false) carries when device auth fails offline and keeps retrying.</summary>
+    private const string RetryingReport = "Device authentication failed (no connection); the SDK is retrying in the background.";
 
     [UnityTest]
     public IEnumerator DeviceAuth_Offline_RetriesWithBackoff()
     {
         var transport = UseScriptedTransport(Offline);
-        bool completed = false;
-        Abxr.OnAuthCompleted += (success, error) => completed = true;
+        // LogAssert matches expected logs in order: the first retry warning comes just before the report.
         LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Retrying in 1 seconds")));
+        ExpectRetryingReport();
         LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Retrying in 2 seconds")));
 
         Abxr.StartAuthentication();
         yield return WaitFor(() => transport.AuthCalls >= 3, 15f);
 
         Assert.GreaterOrEqual(transport.AuthCalls, 3, "An offline launch must keep retrying, not latch as rejected.");
-        Assert.IsFalse(completed, "OnAuthCompleted must not fire while retrying.");
         Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.IsAuthenticationAttemptActive);
+    }
+
+    [UnityTest]
+    public IEnumerator DeviceAuth_FirstTransientFailure_ReportsFalseOnce()
+    {
+        // Apps start without auth on OnAuthCompleted(false), as they did when every failure latched, while the SDK retries.
+        var transport = UseScriptedTransport(Offline);
+        var results = new List<bool>();
+        var errors = new List<string>();
+        Abxr.OnAuthCompleted += (success, error) => { results.Add(success); errors.Add(error); };
+        ExpectRetryingReport();
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        CollectionAssert.AreEqual(new[] { false }, results);
+        Assert.AreEqual(RetryingReport, errors[0], "The message must say that the SDK keeps retrying.");
+        Assert.AreEqual(1, transport.AuthCalls, "The report comes with the first failure, not after a retry.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.IsAuthenticationAttemptActive, "Reporting false must not end the attempt.");
+    }
+
+    [UnityTest]
+    public IEnumerator DeviceAuth_FurtherTransientFailures_DoNotReportAgain()
+    {
+        var transport = UseScriptedTransport(Offline);
+        transport.AnswerNextWith(Offline);
+        transport.AnswerNextWith(ServiceUnavailable);
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, error) => results.Add(success);
+        ExpectRetryingReport();
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.AuthCalls >= 3, 15f);
+
+        Assert.GreaterOrEqual(transport.AuthCalls, 3);
+        CollectionAssert.AreEqual(new[] { false }, results, "Later transient failures of the same attempt, of any kind, must not report again.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.IsAuthenticationAttemptActive);
+    }
+
+    [UnityTest]
+    public IEnumerator DeviceAuth_RetrySucceeds_ReportsTrueAfterTheFalse()
+    {
+        var transport = UseScriptedTransport(Authorized);
+        transport.AnswerNextWith(Offline);
+        transport.AnswerNextWith(Offline);
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, error) => results.Add(success);
+        ExpectRetryingReport();
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => results.Count >= 2, 10f);
+
+        CollectionAssert.AreEqual(new[] { false, true }, results, "A retry that succeeds must report true after the false.");
+        Assert.AreEqual(3, transport.AuthCalls);
+        Assert.IsTrue(auth.Authenticated);
+        Assert.IsFalse(auth.IsAuthenticationAttemptActive);
+    }
+
+    [UnityTest]
+    public IEnumerator DeviceAuth_RefusalAfterRetrying_LatchesWithoutReportingAgain()
+    {
+        var transport = UseScriptedTransport(Unauthorized);
+        transport.AnswerNextWith(Offline);
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, error) => results.Add(success);
+        ExpectRetryingReport();
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Invalid app token (device authentication stopped retrying")));
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.AuthCalls >= 2 && !auth.IsAuthenticationAttemptActive, 5f);
+
+        Assert.AreEqual(2, transport.AuthCalls);
+        Assert.IsFalse(auth.IsAuthenticationAttemptActive, "A refusal ends the attempt.");
+        CollectionAssert.AreEqual(new[] { false }, results, "The app already has this attempt's failure; the refusal must not report another.");
+
+        // The refusal latched: a new call reports the latch without reaching the API.
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Authentication was rejected by the API")));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => results.Count >= 2, 5f);
+
+        CollectionAssert.AreEqual(new[] { false, false }, results);
+        Assert.AreEqual(2, transport.AuthCalls, "A refusal must not reach the API again this session.");
     }
 
     [UnityTest]
     public IEnumerator DeviceAuth_Offline_SaysOncePerAttemptThatItIsRetrying()
     {
-        // Release builds drop warnings, so the retry warning alone would leave a stuck headset's log silent.
+        // Release builds drop warnings, so the retry warning alone would leave a stuck headset's log silent. The report's
+        // failure log is an error, which release builds keep.
         var transport = UseScriptedTransport(Offline);
-        var infoLines = new List<string>();
+        var errorLines = new List<string>();
         Application.LogCallback onLog = (message, stackTrace, type) =>
         {
-            if (type == LogType.Log && message.Contains("Device authentication failed")) infoLines.Add(message);
+            if (type == LogType.Error && message.Contains("retrying in the background")) errorLines.Add(message);
         };
         Application.logMessageReceived += onLog;
+        ExpectRetryingReport();
         try
         {
             Abxr.StartAuthentication();
             yield return WaitFor(() => transport.AuthCalls >= 3, 15f);
 
             Assert.GreaterOrEqual(transport.AuthCalls, 3);
-            Assert.AreEqual(1, infoLines.Count, "The retry is announced once per attempt, not on every retry.");
-            StringAssert.Contains("(no connection)", infoLines[0]);
+            Assert.AreEqual(1, errorLines.Count, "The retry is announced once per attempt, not on every retry.");
+            StringAssert.Contains("(no connection)", errorLines[0]);
         }
         finally
         {
@@ -74,6 +169,7 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     public IEnumerator DeviceAuth_RetriesWhileTimeScaleIsZero()
     {
         var transport = UseScriptedTransport(Offline);
+        ExpectRetryingReport();
         float savedTimeScale = Time.timeScale;
         Time.timeScale = 0f;
         try
@@ -128,22 +224,55 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     public IEnumerator DeviceAuth_EndSessionWhileRetrying_StopsRetrying()
     {
         var transport = UseScriptedTransport(Offline);
-        bool completed = false;
-        Abxr.OnAuthCompleted += (success, error) => completed = true;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, error) => results.Add(success);
+        ExpectRetryingReport();
 
         Abxr.StartAuthentication();
-        yield return WaitFor(() => transport.AuthCalls >= 1, 5f);
+        yield return WaitFor(() => results.Count >= 1, 5f);
         Abxr.EndSession();
         // The first retry was due one second after the first failure.
         yield return new WaitForSeconds(2.5f);
 
         Assert.AreEqual(1, transport.AuthCalls, "EndSession must stop the retries of the session it ended.");
-        Assert.IsFalse(completed, "An ended session must not report an auth outcome.");
+        CollectionAssert.AreEqual(new[] { false }, results, "An ended session must report nothing after its first failure.");
         Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.IsAuthenticationAttemptActive);
 
+        // A new attempt reports its own first failure.
+        ExpectRetryingReport();
         Abxr.StartAuthentication();
-        yield return WaitFor(() => transport.AuthCalls >= 2, 5f);
+        yield return WaitFor(() => results.Count >= 2, 5f);
         Assert.AreEqual(2, transport.AuthCalls, "StartAuthentication after EndSession must send a request, not be ignored as already in progress.");
+        CollectionAssert.AreEqual(new[] { false, false }, results);
+    }
+
+    [UnityTest]
+    public IEnumerator DeviceAuth_EndSessionWhileRetrying_ReportsNothingLate()
+    {
+        // The retry in flight when the session ends would succeed. The ended attempt must neither report it nor apply it.
+        var transport = UseScriptedTransport(Offline);
+        transport.AnswerNextWith(Offline);
+        transport.AnswerNextWith(UserAuthRequired);
+        bool releaseRetry = false;
+        transport.HoldCall = call => call == 2 && !releaseRetry;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, error) => results.Add(success);
+        ExpectRetryingReport();
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => results.Count >= 1 && transport.AuthCalls >= 2, 5f);
+        Assert.AreEqual(2, transport.AuthCalls, "The retry must be in flight before the session ends.");
+        Abxr.EndSession();
+        releaseRetry = true;
+        // Long enough for the late success to be applied, and for a further retry, had the attempt carried on.
+        yield return new WaitForSecondsRealtime(2.5f);
+
+        CollectionAssert.AreEqual(new[] { false }, results, "After EndSession the ended attempt must report nothing, not even its late success.");
+        Assert.IsFalse(auth.Authenticated);
+        Assert.IsNull(auth.ResponseData.AppId, "The late success must not be applied after EndSession.");
+        Assert.AreEqual(2, transport.AuthCalls, "The ended attempt must not retry.");
+        Assert.AreEqual(0, transport.ConfigCalls, "The ended attempt must not go on to fetch config.");
     }
 
     [UnityTest]
@@ -151,8 +280,10 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     {
         var transport = UseScriptedTransport(Offline);
         transport.Hold = true;
-        bool completed = false;
-        Abxr.OnAuthCompleted += (success, error) => completed = true;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, error) => results.Add(success);
+        // Only the new session's attempt reports its failure.
+        ExpectRetryingReport();
         var retryWarnings = new List<string>();
         Application.LogCallback onLog = (message, stackTrace, type) =>
         {
@@ -172,7 +303,7 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             yield return new WaitForSeconds(0.5f);
 
             Assert.AreEqual(1, retryWarnings.Count, "Only the new session's attempt may retry; the old attempt's late response must be dropped.");
-            Assert.IsFalse(completed, "Neither attempt has an outcome to report yet.");
+            CollectionAssert.AreEqual(new[] { false }, results, "Only the new session's attempt may report its failure.");
             Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.IsAuthenticationAttemptActive);
         }
         finally
@@ -267,6 +398,10 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         ModifyConfig("sendRetryIntervalSeconds", 1);
         return transport;
     }
+
+    /// <summary>The subsystem logs every reported failure as an error, and LogAssert fails a test on an error it did not expect.</summary>
+    private static void ExpectRetryingReport()
+        => LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: " + RetryingReport)));
 
     private static IEnumerator WaitFor(Func<bool> condition, float timeoutSeconds)
     {
