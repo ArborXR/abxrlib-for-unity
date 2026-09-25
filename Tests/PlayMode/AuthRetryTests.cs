@@ -396,6 +396,9 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             authSecret = "test-secret"
         });
         ModifyConfig("sendRetryIntervalSeconds", 1);
+        // A host whose AbxrLib asset sets unit-test SSO would otherwise make every success start a SetUserData re-auth
+        // (an extra transport call), and make SimulateAuth start one too. BaseSetUp turns this back on for the next test.
+        AbxrSubsystem.UnitTestSsoSimulationFromConfigAllowed = false;
         return transport;
     }
 
