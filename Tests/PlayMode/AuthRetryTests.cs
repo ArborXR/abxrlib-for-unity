@@ -138,6 +138,29 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator DeviceAuth_HandlerThatThrowsOnTheReport_DoesNotStopTheRetries()
+    {
+        // The report runs app code inside the retry loop. Uncaught, an exception there would end the loop and leave the
+        // attempt active, so the SDK would never authenticate or accept StartAuthentication() again this session.
+        var transport = UseScriptedTransport(Authorized);
+        transport.AnswerNextWith(Offline);
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, error) =>
+        {
+            results.Add(success);
+            if (!success) throw new InvalidOperationException("app handler failed");
+        };
+        ExpectRetryingReport();
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("An OnAuthCompleted handler threw while device authentication was retrying")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => results.Count >= 2, 5f);
+
+        CollectionAssert.AreEqual(new[] { false, true }, results, "A handler that throws on the report must not stop the retries.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
+    }
+
+    [UnityTest]
     public IEnumerator DeviceAuth_Offline_SaysOncePerAttemptThatItIsRetrying()
     {
         // Release builds drop warnings, so the retry warning alone would leave a stuck headset's log silent. The report's
