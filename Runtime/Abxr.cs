@@ -30,8 +30,10 @@ public static partial class Abxr
 	/// Event triggered when authentication completes
 	/// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
 	/// Subscribe to this event to handle authentication results
-	/// While device authentication can't reach the backend (offline, captive portal, outage), the SDK keeps retrying and
-	/// this does not fire until it succeeds or the credentials are refused, so don't block content that works without it.
+	/// It can fire 'false' and later 'true' for the same sign-in, so make the handler safe to run more than once.
+	/// When device authentication can't reach the backend (offline, captive portal, outage), it fires 'false' once, with a
+	/// message saying the SDK is retrying in the background, and 'true' when a retry succeeds. If the backend refuses the
+	/// credentials during those retries, the SDK stops retrying without firing again.
 	/// At the PIN or email step, each failed submission fires 'false', even one that failed for lack of a connection,
 	/// and the SDK asks for the input again.
 	/// </summary>

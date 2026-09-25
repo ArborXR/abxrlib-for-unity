@@ -249,7 +249,8 @@ namespace AbxrLib.Runtime
             // Abxr.OnAuthCompleted(false, error). Same pipeline as the API refusing the credentials: Authenticated stays false,
             // no session; apps that continue without analytics should handle success == false (as for any failed auth).
             // This is not success == true (unlike a completed session with authMechanism none from the backend).
-            // Network failures are not terminal: device auth retries them and OnAuthCompleted waits for an outcome.
+            // Network failures are not terminal: device auth reports the first one as OnAuthCompleted(false, "...; the SDK is
+            // retrying in the background."), keeps retrying, and reports true if a retry succeeds.
             //
             // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass and the request fails in the
             // transport (an unreachable host is retried like an offline one). MDM/query overrides after LoadRuntimeAuthFromConfig
@@ -420,6 +421,8 @@ namespace AbxrLib.Runtime
 	        // Start default assessment tracking if no assessments are currently running
 	        // This ensures duration tracking starts immediately after authentication
 	        // But delay sending the event to server for 1 minute to allow developers to start their own assessment
+	        // Failures run this too: when 'false' comes before 'true' (a device auth that retried, a wrong PIN), the DEFAULT
+	        // duration counts from the first report, when the app went ahead without auth; only 'true' starts the timer.
 	        // Use lock to prevent race condition with concurrent EventAssessmentStart calls
 	        lock (_assessmentStartTimesLock)
 	        {
