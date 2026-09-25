@@ -2,11 +2,13 @@
 // PlayMode tests for event tracking, logging, telemetry, and super-metadata propagation.
 // Uses AbxrSubsystem GetPending*ForTesting (works with any transport; service transport returns empty lists).
 // Tests that assert on queue contents are skipped when using ArborInsightsClient (device) transport.
+using System.Collections;
 using System.Collections.Generic;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 [TestFixture]
 public class EventTrackingTests : AbxrPlayModeTestBase
@@ -22,6 +24,30 @@ public class EventTrackingTests : AbxrPlayModeTestBase
     {
         if (IsServiceTransport)
             Assert.Ignore("Event tracking tests that inspect the queue require REST transport. On device with ArborInsightsClient, run in Editor or use REST transport.");
+    }
+
+    // ── Session end ───────────────────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator EndSession_DuringASendRetry_DropsTheBatchInsteadOfRequeuingIt()
+    {
+        // Nothing listens on port 1, so each attempt is a connection error, which the transport retries.
+        ModifyConfig("restUrl", "http://127.0.0.1:1/");
+        ModifyConfig("sendRetryIntervalSeconds", 1);
+        ModifyConfig("sendRetriesOnFailure", 2);
+        SimulateAuth();
+        Abxr.Event("stale_batch", null, sendTelemetry: false);
+        AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
+
+        float deadline = Time.realtimeSinceStartup + 5f;
+        while (PendingEvents.Count > 0 && Time.realtimeSinceStartup < deadline)
+            yield return null;
+        Assert.AreEqual(0, PendingEvents.Count, "The transport should have taken the batch to send.");
+
+        Abxr.EndSession();
+        yield return new WaitForSeconds(5f); // past every retry the ended session had left
+
+        Assert.AreEqual(0, PendingEvents.Count, "A batch from an ended session must not go back in the queue for the next one.");
     }
 
     // ── Generic Event ─────────────────────────────────────────────────────

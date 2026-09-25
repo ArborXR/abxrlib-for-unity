@@ -37,6 +37,8 @@ namespace AbxrLib.Runtime.Services.Transport
         private float _lastStorageCallTime;
         private Coroutine _tickCoroutine;
         private bool _stopped;
+        /// <summary>Bumped by ClearAllPending, so a send still retrying when its session ends drops its batch instead of carrying it into the next session.</summary>
+        private int _sessionGeneration;
 
         public bool IsServiceTransport => false;
 
@@ -388,6 +390,7 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             lock (_lock)
             {
+                _sessionGeneration++;
                 _eventPayloads.Clear();
                 _telemetryPayloads.Clear();
                 _logPayloads.Clear();
@@ -432,6 +435,17 @@ namespace AbxrLib.Runtime.Services.Transport
             return _eventPayloads.Count + _telemetryPayloads.Count + _logPayloads.Count;
         }
 
+        /// <summary>
+        /// True once the session a batch came from has ended. A retry would sign it with the next session's token, and a
+        /// re-queue would send it with the next session's data, so the batch is dropped.
+        /// </summary>
+        private bool SessionEndedSince(int generation, string kind)
+        {
+            if (generation == _sessionGeneration) return false;
+            Logcat.Debug($"Dropped a {kind} batch from a session that has ended.");
+            return true;
+        }
+
         private static bool IsQueueAtLimit<T>(List<T> queue, string queueType)
         {
             int max = Configuration.Instance.maximumCachedItems;
@@ -466,12 +480,14 @@ namespace AbxrLib.Runtime.Services.Transport
             string json;
             try { json = JsonConvert.SerializeObject(new DataPayloadWrapper { @event = events, telemetry = telemetries, basicLog = logs }); }
             catch (Exception ex) { Logcat.Error($"Data serialization failed: {ex.Message}"); yield break; }
+            int generation = _sessionGeneration;
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
             string lastError = "";
             while (retryCount <= maxRetries && !success)
             {
+                if (SessionEndedSince(generation, "data")) yield break;
                 UnityWebRequest request = null;
                 bool created = false;
                 bool dataRetryWait = false;
@@ -499,6 +515,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             if (!success)
             {
+                if (SessionEndedSince(generation, "data")) yield break;
                 Logcat.Error($"Data POST failed after {retryCount} attempts: {lastError}");
                 _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
                 lock (_lock)
@@ -543,12 +560,14 @@ namespace AbxrLib.Runtime.Services.Transport
             string json;
             try { json = JsonConvert.SerializeObject(new StoragePayloadWrapper { data = toSend }); }
             catch (Exception ex) { Logcat.Error($"Storage serialization failed: {ex.Message}"); yield break; }
+            int generation = _sessionGeneration;
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
             string lastError = "";
             while (retryCount <= maxRetries && !success)
             {
+                if (SessionEndedSince(generation, "storage")) yield break;
                 UnityWebRequest request = null;
                 bool created = false;
                 bool storageRetryWait = false;
@@ -576,6 +595,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             if (!success)
             {
+                if (SessionEndedSince(generation, "storage")) yield break;
                 Logcat.Error($"Storage POST failed after {retryCount} attempts: {lastError}");
                 _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
                 lock (_lock) { foreach (var p in toSend) { if (!IsQueueAtLimit(_storagePayloads, "Storage")) _storagePayloads.Insert(0, p); } }
