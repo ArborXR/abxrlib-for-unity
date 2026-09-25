@@ -40,6 +40,8 @@ namespace AbxrLib.Runtime.Services.Auth
         // ── Constants ────────────────────────────────────────────────
         private const float ReAuthPollSeconds = 60f;
         private const int ReAuthThresholdSeconds = 120;
+        /// <summary>Cap for the device-auth retry wait, which doubles from sendRetryIntervalSeconds after each transient failure.</summary>
+        private const int MaxAuthRetryIntervalSeconds = 60;
         private static readonly WaitForSeconds ReAuthWait = new WaitForSeconds(ReAuthPollSeconds);
 
         // ── Internal state ───────────────────────────────────────────
@@ -59,6 +61,9 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _stopping;
         private bool _attemptActive;
         internal bool IsAuthenticationAttemptActive => _attemptActive;
+        /// <summary>Bumped when the session is cleared (EndSession, StartNewSession). An auth coroutine remembers the value it started
+        /// under and, once it changes, stops without applying its result or reporting, since that session no longer exists.</summary>
+        private int _sessionGeneration;
         private bool _isAuthStarted;
         /// <summary>True after <see cref="Authenticate"/> has scheduled <c>AuthenticateCoroutine</c> at least once this process; never cleared in production. Use to gate one-time configuration before auth.</summary>
         internal bool HasAuthenticationStarted => _isAuthStarted;
@@ -361,8 +366,12 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private IEnumerator AuthenticateCoroutine()
         {
+            int generation = _sessionGeneration;
             bool authOk;
             string authError = null;
+            // Set once device auth has reported its first transient failure as OnAuthCompleted(false) and kept retrying.
+            // The app already has a failure for this attempt then, so only a later success is reported.
+            bool reportedRetrying = false;
             if (_deviceAuthDeferredByHandoff)
             {
                 _deviceAuthDeferredByHandoff = false;
@@ -375,14 +384,28 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     authOk = ok;
                     authError = err;
-                }, withRetry: true));
+                }, withRetry: true, onRetrying: message =>
+                {
+                    reportedRetrying = true;
+                    // Runs inside the retry loop: an exception from an app's handler would end the loop and leave the
+                    // attempt marked active, so every later StartAuthentication() would be ignored for the session.
+                    try { OnFailed?.Invoke(message); }
+                    catch (Exception ex) { Logcat.Error($"An OnAuthCompleted handler threw while device authentication was retrying: {ex}"); }
+                }));
+                // EndSession or StartNewSession cleared the session this attempt belonged to (possibly while it was retrying).
+                if (generation != _sessionGeneration) yield break;
                 if (!authOk)
                 {
                     _attemptActive = false;
                     string message = !string.IsNullOrEmpty(authError)
                         ? authError
                         : "Initial authentication request failed";
-                    OnFailed?.Invoke(message);
+                    if (!reportedRetrying)
+                        OnFailed?.Invoke(message);
+                    else if (_credentialsRejectedByApi)
+                        // A refusal after the retrying report latches without a second report. Release builds keep this error,
+                        // which stands in for the failure log the subsystem writes when it receives a report.
+                        Logcat.Error($"Authentication failure: {message} (device authentication stopped retrying; OnAuthCompleted already reported false)");
                     yield break;
                 }
             }
@@ -394,6 +417,7 @@ namespace AbxrLib.Runtime.Services.Auth
             bool configOk = false;
             string configFailureDetail = null;
             yield return _runner.StartCoroutine(GetConfigurationCoroutine((ok, detail) => { configOk = ok; configFailureDetail = detail; }));
+            if (generation != _sessionGeneration) yield break;
             if (!configOk)
             {
                 Logcat.Warning(string.IsNullOrEmpty(configFailureDetail)
@@ -416,7 +440,8 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_stopping || !_attemptActive)
             {
                 _attemptActive = false;
-                OnFailed?.Invoke("Auth stopped or attempt inactive");
+                if (!reportedRetrying)
+                    OnFailed?.Invoke("Auth stopped or attempt inactive");
                 yield break;
             }
             
@@ -445,21 +470,22 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
-        private class AuthRequestResultHolder
+        /// <summary>Extract a user-facing error string from auth failure JSON, falling back to the raw (truncated) body. Same keys for REST and service so behavior is identical.</summary>
+        private static string ExtractAuthErrorMessage(string responseJson)
         {
-            public bool Success;
-            public string Response;
-            public bool IsAuthRejectedByApi;
+            if (string.IsNullOrEmpty(responseJson)) return null;
+            return ExtractExplicitApiError(responseJson)
+                ?? (responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...");
         }
 
-        /// <summary>Extract a user-facing error string from auth failure JSON. Same keys for REST and service so behavior is identical.</summary>
-        private static string ExtractAuthErrorMessage(string responseJson)
+        /// <summary>The API's own error string from a JSON failure body, or null when the body is not a JSON error (plain text, HTML, or JSON without an error key).</summary>
+        private static string ExtractExplicitApiError(string responseJson)
         {
             if (string.IsNullOrEmpty(responseJson)) return null;
             try
             {
                 var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
-                if (obj == null) return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
+                if (obj == null) return null;
                 // Backend (e.g. FastAPI) uses "detail" (string or array); other APIs use "message" or "error". Check all so REST and service behave the same.
                 string FromValue(object v)
                 {
@@ -475,13 +501,33 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (obj.TryGetValue("message", out var msg)) { var s = FromValue(msg); if (!string.IsNullOrEmpty(s)) return s; }
                 if (obj.TryGetValue("error", out var err)) { var s = FromValue(err); if (!string.IsNullOrEmpty(s)) return s; }
             }
-            catch { /* ignore */ }
-            return responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...";
+            catch { /* not JSON */ }
+            return null;
         }
 
-        /// <summary>Attempts auth via current transport. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure; when false (e.g. keyboard submit), one attempt only.</summary>
-        private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true)
+        /// <summary>
+        /// Device auth: true when the API refused these credentials, so retrying cannot help and the session latches.
+        /// A refusal is the transport's own verdict (REST 401/403, ArborInsightsClient getLastAuthRejected()) or an explicit
+        /// JSON error on a 4xx (or from ArborInsightsClient, which has no status). Offline, timeouts, 408, 429, 5xx, and
+        /// failures without an explicit error are transient.
+        /// </summary>
+        internal static bool IsCredentialRejection(AuthTransportResult result)
         {
+            if (result.IsAuthRejectedByApi) return true;
+            if (result.NetworkError) return false;
+            long status = result.StatusCode;
+            if (status == 408 || status == 429 || status >= 500) return false;
+            // No HTTP status (ArborInsightsClient): an explicit JSON error is the only refusal signal besides
+            // getLastAuthRejected(), and it latches as before. The service's other failures (bind or readiness
+            // failures, {"result":0}) used to latch as well; they now retry.
+            bool refusalStatus = status == 0 || (status >= 400 && status < 500);
+            return refusalStatus && ExtractExplicitApiError(result.Body) != null;
+        }
+
+        /// <summary>Attempts auth via current transport. Invokes onComplete(success, errorMessage). When withRetry is true, retries until success or terminal failure, and invokes onRetrying(message) once, at the first transient failure, while it keeps retrying; when false (e.g. keyboard submit), one attempt only.</summary>
+        private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true, Action<string> onRetrying = null)
+        {
+            int generation = _sessionGeneration;
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
 
@@ -501,10 +547,14 @@ namespace AbxrLib.Runtime.Services.Auth
                 _payload.SSOAccessToken = Abxr.GetAccessToken();
 
             int retryIntervalSeconds = Math.Max(1, Configuration.Instance.sendRetryIntervalSeconds);
+            int maxRetryIntervalSeconds = Math.Max(MaxAuthRetryIntervalSeconds, retryIntervalSeconds);
+            bool announcedRetrying = false;
             var transport = _getTransport();
 
             while (true)
             {
+                // The session was cleared while this attempt waited to retry. Stop without reporting: a newer attempt may own the state now.
+                if (generation != _sessionGeneration) yield break;
                 if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
 
                 // Send one mode only to REST/backend: app tokens OR legacy (app_id/org_id/auth_secret). Use _runtimeAuth so injected test config and runtime overrides are respected.
@@ -531,15 +581,15 @@ namespace AbxrLib.Runtime.Services.Auth
                 else
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
-                var holder = new AuthRequestResultHolder();
-                yield return transport.AuthRequestCoroutine(_payload, (ok, json, isAuthRejectedByApi) =>
-                {
-                    holder.Success = ok;
-                    holder.Response = json;
-                    holder.IsAuthRejectedByApi = isAuthRejectedByApi;
-                });
+                AuthTransportResult result = default;
+                yield return transport.AuthRequestCoroutine(_payload, r => result = r);
 
-                if (ApplyAuthResponse(holder.Response, stageLabel))
+                // The session was cleared while the request was in flight: drop the response instead of applying it to the new session.
+                if (generation != _sessionGeneration) yield break;
+
+                // Parse only what the transport accepted (same IsValidSuccess rule). A failure body such as "No response body."
+                // or an HTML page would log a parse error on every retry.
+                if (result.Success && ApplyAuthResponse(result.Body, stageLabel))
                 {
                     if (transport.IsServiceTransport)
                         _usedArborInsightsClientForSession = true;
@@ -551,27 +601,40 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (!withRetry)
                 {
                     _payload.buildType = savedBuildType;
-                    onComplete(false, ExtractAuthErrorMessage(holder.Response));
+                    onComplete(false, ExtractAuthErrorMessage(result.Body));
                     yield break;
                 }
 
-                // Device authentication (withRetry): do not retry when the transport reported auth rejected or response body contains an explicit error.
+                // Device authentication (withRetry): do not retry when the API refused these credentials.
                 // Retrying would keep hitting the same rejection; treat as permanent failure and no-op for the rest of the session.
-                string explicitError = ExtractAuthErrorMessage(holder.Response);
-                bool isAuthRejected = holder.IsAuthRejectedByApi || !string.IsNullOrEmpty(explicitError);
-                if (isAuthRejected)
+                if (IsCredentialRejection(result))
                 {
                     _credentialsRejectedByApi = true;
                     _payload.buildType = savedBuildType;
-                    string message = !string.IsNullOrEmpty(explicitError) ? explicitError : "Authentication was rejected by the API (credentials invalid or denied).";
+                    // The API's own error when it sent one. Otherwise a fixed message: transports turn an empty body into
+                    // "No response body.", and a raw HTML page would not read as a refusal either.
+                    string message = ExtractExplicitApiError(result.Body) ?? "Authentication was rejected by the API (credentials invalid or denied).";
                     Logcat.Warning($"AuthRequest failed: {message} No further auth attempts will be made this session.");
                     onComplete(false, message);
                     yield break;
                 }
 
-                string logDetail = ExtractAuthErrorMessage(holder.Response) ?? "No response body.";
+                // Transient (offline, timeout, 408/429, 5xx): retry, doubling the wait so a fleet backs off during an outage.
+                string logDetail = ExtractAuthErrorMessage(result.Body) ?? "No response body.";
                 Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
-                yield return new WaitForSeconds(retryIntervalSeconds);
+                if (!announcedRetrying)
+                {
+                    // Report the first failure of the attempt (OnAuthCompleted(false)) so the app can start without auth, as it
+                    // did when every failure latched; the retries carry on, and a later success reports true. The subsystem logs
+                    // the report as an error, which release builds keep, unlike the warning above. The body stays out of the
+                    // message: it can be an HTML page, or a token-bearing response the SDK failed to apply.
+                    announcedRetrying = true;
+                    string reason = result.NetworkError ? "no connection" : result.StatusCode > 0 ? $"HTTP {result.StatusCode}" : "no usable response";
+                    onRetrying?.Invoke($"Device authentication failed ({reason}); the SDK is retrying in the background.");
+                }
+                // Real time, so an app that sets Time.timeScale to 0 while it waits for auth still gets its retries.
+                yield return new WaitForSecondsRealtime(retryIntervalSeconds);
+                retryIntervalSeconds = Math.Min(retryIntervalSeconds * 2, maxRetryIntervalSeconds);
             }
         }
 
@@ -769,12 +832,15 @@ namespace AbxrLib.Runtime.Services.Auth
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
 
+            int generation = _sessionGeneration;
             string configJson = null;
             string failureDetail = null;
             yield return _getTransport().GetConfigCoroutine((ok, json) =>
             {
                 if (ok) configJson = json; else failureDetail = json;
             });
+            // Session cleared mid-request: do not apply the old session's config (AuthenticateCoroutine stops too).
+            if (generation != _sessionGeneration) yield break;
 
             if (!string.IsNullOrEmpty(configJson))
             {
@@ -997,9 +1063,14 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>
         /// Clears all auth/session state and assigns a new session ID. Used by StartNewSession before re-authenticating.
         /// Call Authenticate(clearStateFirst: false) after this so the new session ID is preserved.
+        /// Also ends the auth attempt in progress, if any (for example a device auth retrying while offline): its coroutines stop
+        /// at their next step without applying a result, and the next Authenticate() starts fresh instead of being ignored.
         /// </summary>
         internal void ClearSessionAndPrepareForNew()
         {
+            _sessionGeneration++;
+            _attemptActive = false;
+            _setUserDataReAuthActive = false;
             ClearAuthenticationState();
             _payload.sessionId = Guid.NewGuid().ToString();
         }
@@ -1080,17 +1151,6 @@ namespace AbxrLib.Runtime.Services.Auth
 
         private static string _authHandoffForTesting;
 
-        private static bool ShouldRetry(UnityWebRequest request)
-        {
-            if (request.result == UnityWebRequest.Result.ConnectionError) return true;
-
-            long code = request.responseCode;
-            if (code == 408 || code == 429) return true;
-            if (code >= 500 && code <= 599) return true;
-
-            return false;
-        }
-        
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
 
         /// <summary>
@@ -1182,12 +1242,17 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator CoSetUserDataReAuth()
         {
             _setUserDataReAuthActive = true;
+            bool reported = false;
             yield return AuthRequestCoroutine((success, errorMsg) =>
             {
+                reported = true;
                 _setUserDataReAuthActive = false;
                 _attemptActive = false;
                 OnUserDataSyncCompleted?.Invoke(success, errorMsg ?? "");
             }, withRetry: false);
+            // The session was cleared mid-request, so the request stopped without reporting (ClearSessionAndPrepareForNew reset the flags).
+            if (!reported)
+                OnUserDataSyncCompleted?.Invoke(false, "The session ended before user data was synced.");
         }
         
         /// <summary>True when the dict has a non-empty "type" (user authentication or custom). Without type, we omit authMechanism so device authentication sends no auth_mechanism (prompt/inputSource alone are not meaningful).</summary>
