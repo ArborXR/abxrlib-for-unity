@@ -275,8 +275,15 @@ public static partial class Abxr
 	/// Manually start the authentication process
 	/// Use this when Enable Auto Start Authentication is off in configuration
 	/// or when you want to trigger authentication at a specific time in your app
+	/// Does nothing while an authentication attempt is in progress, including while device authentication keeps retrying
+	/// in the background after OnAuthCompleted(false): the SDK retries on its own and fires OnAuthCompleted(true) when a
+	/// retry succeeds.
 	/// </summary>
 	public static void StartAuthentication() => X?.StartAuthentication();
+	/// <summary>
+	/// Same as <see cref="StartAuthentication"/>, so it also does nothing while an authentication attempt is in progress,
+	/// including while device authentication keeps retrying in the background.
+	/// </summary>
 	public static void ReAuthenticate() => X?.StartAuthentication();
 
 	/// <summary>
