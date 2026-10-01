@@ -683,7 +683,11 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (pairedInstanceId != null && IsCredentialRejection(result))
                 {
                     _payload.buildType = savedBuildType;
-                    bool revoked = result.StatusCode == 401;
+                    // Only lib-backend's own 401 (it always carries an API error) removes the pairing: a revoke can't be undone
+                // without a new passcode, so a bare 401 from a proxy or a wrong restUrl only suspends it for the launch.
+                bool revoked = result.StatusCode == 401 && ExtractExplicitApiError(result.Body) != null;
+                if (result.StatusCode == 401 && !revoked)
+                    Logcat.Warning("Device authentication got a 401 without an API error, so the pairing is kept. Check restUrl.");
                     string message = revoked ? PairingRevokedMessage
                         : result.StatusCode == 403 ? AccessSuspendedMessage
                         : ExtractExplicitApiError(result.Body) ?? AccessSuspendedMessage;

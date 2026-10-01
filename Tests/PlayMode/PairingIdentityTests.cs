@@ -203,6 +203,21 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator PairedBootstrap_A401WithoutAnApiError_KeepsThePairing()
+    {
+        Start(pairedAs: InstanceId, new AuthTransportResult(false, "<html><body>401 Authorization Required</body></html>", true, 401));
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("got a 401 without an API error, so the pairing is kept")));
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Access suspended")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual(Abxr.PairingState.Paired, Pairing.State, "A proxy's 401 mustn't unpair the headset.");
+        Assert.AreEqual(InstanceToken, _store.Token);
+        Assert.IsTrue(Pairing.IsSuspendedForSession);
+    }
+
+    [UnityTest]
     public IEnumerator PairedBootstrap_Forbidden_KeepsThePairingAndStopsForTheLaunch()
     {
         var transport = Start(pairedAs: InstanceId, Forbidden);
