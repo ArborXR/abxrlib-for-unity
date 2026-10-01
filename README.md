@@ -159,6 +159,7 @@ void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason rea
 - **Headset names** are set per passcode in the Portal. When a passcode allows naming, the headset asks for a name after the passcode is accepted, and every app paired with that name joins the same headset. `Abxr.GetPairedDeviceName()` returns it.
 - **Settings:** **Pairing URL** is the Portal API that redeems passcodes (`https://api.xrdm.app/`). **Enable Pairing Dismiss** shows **Not now** on the default prompt; leave it on, or someone without a passcode can't close a prompt your app opens at launch.
 - **Removing a pairing:** revoking the app instance in the Portal removes the pairing on the headset at its next sign-in (`OnPairingStateChanged` reports `Revoked`). `Abxr.ClearPairing()` removes it from the app.
+- Each launch's identity is decided once, at the first authentication. An org credential set after a launch settled with no organization (a late `SetOrgId`, for example) takes effect next launch, and the SDK logs a warning saying so.
 - With **Enable Auto Start Authentication** off, the SDK decides the app's identity when you call `Abxr.StartAuthentication()`. Until then the state is `Resolving` and `StartPairing()` returns false.
 - Pairing runs only in Android and WebGL builds. When the ArborXR client or an org token identifies the organization, it wins, and pairing doesn't apply.
 

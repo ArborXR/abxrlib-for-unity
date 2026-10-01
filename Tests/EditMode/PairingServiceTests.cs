@@ -179,6 +179,21 @@ public class PairingServiceTests
     }
 
     [Test]
+    public void Settle_WherePairingRuns_ALaterOrgCredentialWarnsOnceAndHolds()
+    {
+        var service = Create();
+        service.SettleIdentity(otherIdentityWins: false);
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("takes effect next launch")));
+
+        service.SettleIdentity(otherIdentityWins: true);
+        service.SettleIdentity(otherIdentityWins: true);
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+        Assert.AreEqual(1, _events.Count);
+        LogAssert.NoUnexpectedReceived();
+    }
+
+    [Test]
     public void Settle_WherePairingCantRun_ALaterOrgCredentialWins()
     {
         _host.IsPlatformSupported = false;

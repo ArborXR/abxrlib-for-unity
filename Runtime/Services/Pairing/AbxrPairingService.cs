@@ -155,9 +155,10 @@ namespace AbxrLib.Runtime.Services.Pairing
             // When this app can't pair (the platform, or no App Token), holding "no identity" for the launch protects
             // nothing, so an org credential it sets later (SetOrgId after a failed auto-start) still wins, as it did
             // before pairing existed.
-            if (State == Abxr.PairingState.Unpaired && otherIdentityWins && !CanPair)
+            if (State == Abxr.PairingState.Unpaired && otherIdentityWins)
             {
-                Settle(Abxr.PairingState.Managed, Abxr.PairingChangeReason.Startup);
+                if (!CanPair) Settle(Abxr.PairingState.Managed, Abxr.PairingChangeReason.Startup);
+                else WarnLateOrgCredentialOnce();
                 return;
             }
             if (State != Abxr.PairingState.Resolving) return;
@@ -165,6 +166,17 @@ namespace AbxrLib.Runtime.Services.Pairing
             if (otherIdentityWins) Settle(Abxr.PairingState.Managed, Abxr.PairingChangeReason.Startup);
             else if (HasStoredPairing) Settle(Abxr.PairingState.Paired, Abxr.PairingChangeReason.Startup);
             else Settle(Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Startup);
+        }
+
+        private bool _lateOrgCredentialWarned;
+
+        /// <summary>The hold is by design, but without this the app would only hear "No organization identity" right after supplying one.</summary>
+        private void WarnLateOrgCredentialOnce()
+        {
+            if (_lateOrgCredentialWarned) return;
+            _lateOrgCredentialWarned = true;
+            Logcat.Warning("An org credential arrived after this launch settled with no organization, so it takes effect next launch. " +
+                           "Set it (SetOrgId, SetAuthSecret, or an org token) before the first authentication.");
         }
 
         // ── Prompt ───────────────────────────────────────────────────
