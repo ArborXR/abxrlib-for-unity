@@ -450,6 +450,23 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator ReplacingAPairing_WhileItsAttemptRetries_AuthenticatesAsTheNewInstance()
+    {
+        var transport = Start(pairedAs: InstanceId, Offline);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(RetryingLog)));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        transport.AnswerNextWith(Authorized);
+        Pairing.SetAppInstanceToken(OtherInstanceToken, OtherInstanceId);
+        yield return WaitFor(() => _reports.Exists(r => r.success), 5f);
+
+        Assert.IsTrue(_reports.Exists(r => r.success));
+        Assert.AreEqual(OtherInstanceToken, transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(OtherInstanceId, transport.LastPayload.deviceId);
+    }
+
+    [UnityTest]
     public IEnumerator AnInvalidPairingUrl_RefusesStartPairing()
     {
         Start(pairedAs: null, Authorized);
