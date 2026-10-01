@@ -175,8 +175,9 @@ namespace AbxrLib.Runtime.Services.Pairing
         {
             if (_lateOrgCredentialWarned) return;
             _lateOrgCredentialWarned = true;
-            Logcat.Warning("An org credential arrived after this launch settled with no organization, so it takes effect next launch. " +
-                           "Set it (SetOrgId, SetAuthSecret, or an org token) before the first authentication.");
+            Logcat.Warning("An org credential arrived after this launch settled with no organization, so it's ignored until a launch " +
+                           "where it's set before the first authentication. If the app gets it later in every launch, turn off " +
+                           "Enable Auto Start Authentication and call Abxr.StartAuthentication() after setting it.");
         }
 
         // ── Prompt ───────────────────────────────────────────────────

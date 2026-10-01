@@ -183,7 +183,7 @@ public class PairingServiceTests
     {
         var service = Create();
         service.SettleIdentity(otherIdentityWins: false);
-        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("takes effect next launch")));
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("turn off Enable Auto Start Authentication")));
 
         service.SettleIdentity(otherIdentityWins: true);
         service.SettleIdentity(otherIdentityWins: true);

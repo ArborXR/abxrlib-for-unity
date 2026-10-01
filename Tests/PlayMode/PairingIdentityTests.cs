@@ -104,7 +104,7 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
 
         // A development build honors a baked org token, so without the hold this one would authenticate.
         SetRuntimeAuth(Auth(OrgToken, "development"));
-        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("takes effect next launch")));
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("turn off Enable Auto Start Authentication")));
         Abxr.StartAuthentication();
         yield return WaitFor(() => _reports.Count > 1, 5f);
 

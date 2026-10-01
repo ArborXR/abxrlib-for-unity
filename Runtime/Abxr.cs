@@ -958,15 +958,16 @@ public static partial class Abxr
 	/// <summary>
 	///   Sets the organization ID to use for auth. When set, this value is used instead of ArborMdmClient or Configuration.
 	///   Call before StartAuthentication(). Pass null to clear the override. On an Android or WebGL build that can pair, the
-	///   first authentication decides the launch's identity: a value set after a launch settled with no organization takes
-	///   effect next launch.
+	///   first authentication decides the launch's identity, so a value set after a launch settled with no organization is
+	///   ignored for that launch. An app that gets it after an async step should turn off auto-start and call
+	///   StartAuthentication() once it's set.
 	/// </summary>
 	public static void SetOrgId(string orgId) => X?.SetOrgId(orgId);
 
 	/// <summary>
 	///   Sets the auth secret (fingerprint) to use for auth. When set, this value is used instead of ArborMdmClient.
 	///   Call before StartAuthentication(). Pass null to clear the override. Like SetOrgId, a value set after a launch
-	///   settled with no organization takes effect next launch where the app can pair.
+	///   settled with no organization is ignored for that launch where the app can pair.
 	/// </summary>
 	public static void SetAuthSecret(string authSecret) => X?.SetAuthSecret(authSecret);
 
