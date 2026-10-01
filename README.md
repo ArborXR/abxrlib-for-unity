@@ -134,6 +134,33 @@ Do **not** use `Production (Custom APK)` for a managed fleet. It takes the organ
 
 On the legacy scheme, the MDM supplies Org ID and Auth Secret at runtime, so only **App ID** needs setting.
 
+#### Headsets without ArborXR MDM (passcode pairing)
+
+On an Android headset or in a WebGL build with no ArborXR client and no org token, the app has no organization to report to. It runs as usual and stays quiet: no data is recorded or sent, and `OnAuthCompleted` fires once with `false` and *"No organization identity"*. The app can offer pairing instead. An org admin creates a pairing passcode in the ArborXR Portal (the app's **Insights Hub** → **Pairing Passcodes**), and someone on the headset types it in once. The pairing is stored on the device, so later launches authenticate on their own.
+
+The SDK never prompts by itself. Call `Abxr.StartPairing()` when your app wants to offer pairing, either at launch or from your own settings menu:
+
+```csharp
+void Start()
+{
+    // Subscribe first, then check the state: the startup decision can come before this script exists.
+    Abxr.OnPairingStateChanged += OnPairingStateChanged;
+    if (Abxr.GetPairingState() == Abxr.PairingState.Unpaired) Abxr.StartPairing();
+}
+
+void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason reason)
+{
+    if (state == Abxr.PairingState.Unpaired && reason == Abxr.PairingChangeReason.Startup) Abxr.StartPairing();
+    // Paired: authentication starts on its own, and OnAuthCompleted fires true.
+}
+```
+
+- **The prompt** uses the [Sign-in UI](#sign-in-ui-optional) when it's imported: the PIN pad for the passcode, with **Not now** to close it, then the keyboard if the passcode lets the person name the headset. To draw your own, handle `Abxr.OnInputRequested`, whose `type` is `pairingPasscode`, `pairingDeviceName`, `pairingDeviceNameRequired`, or `pairingDeviceJoin`, and answer with `Abxr.OnInputSubmitted`. Call `Abxr.CancelPairing()` to close it. Or skip the prompt entirely with `Abxr.RedeemPairingPasscode(passcode, result => ...)`, which reports a typed `PairingRedeemResult`.
+- **Headset names** are set per passcode in the Portal. When a passcode allows naming, the headset asks for a name after the passcode is accepted, and every app paired with that name joins the same headset. `Abxr.GetPairedDeviceName()` returns it.
+- **Settings:** **Pairing URL** is the Portal API that redeems passcodes (`https://api.xrdm.app/`). **Enable Pairing Dismiss** shows **Not now** on the default prompt; leave it on, or someone without a passcode can't close a prompt your app opens at launch.
+- **Removing a pairing:** revoking the app instance in the Portal removes the pairing on the headset at its next sign-in (`OnPairingStateChanged` reports `Revoked`). `Abxr.ClearPairing()` removes it from the app.
+- Pairing runs only in Android and WebGL builds. When the ArborXR client or an org token identifies the organization, it wins, and pairing doesn't apply.
+
 #### Legacy (App ID / Org ID / Auth Secret)
 
 If your project still uses the legacy scheme: in Configuration, leave **Use App Tokens** off and set App ID, Org ID, and Auth Secret from the app’s credential or details views in the portal where your organization still exposes them. On ArborXR-managed devices, only App ID may be required; Org ID and Auth Secret can auto-fill. New integrations should use app token and org token.
