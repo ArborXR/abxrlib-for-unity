@@ -4,7 +4,13 @@ namespace AbxrLib.Runtime.Core.UI
     public enum AuthUiKind
     {
         PinPad,
-        FullKeyboard
+        FullKeyboard,
+        /// <summary>The pairing passcode on the PIN pad. Its skip is "Not now", shown unless enablePairingDismiss is off.</summary>
+        PairingPasscode,
+        /// <summary>The headset's name on the keyboard, with a skip. Also the step that confirms joining a headset that has the name.</summary>
+        PairingDeviceName,
+        /// <summary>The headset's name on the keyboard, without a skip: the passcode requires one.</summary>
+        PairingDeviceNameRequired
     }
 
     /// <summary>

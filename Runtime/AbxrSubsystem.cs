@@ -1671,8 +1671,11 @@ internal void StartNewSession()
 				return false;
 			}
 
-			// When showing an error (e.g. invalid PIN), stop the Processing animation so the message is visible.
-			if (!string.IsNullOrEmpty(error)) authUi.StopProcessing();
+			// When showing an error (e.g. invalid PIN), stop the Processing animation so the message is visible. Each
+			// pairing step is a new question even without an error, so the animation stops for those too.
+			bool pairingStep = type is AbxrPairingService.PasscodeInputType or AbxrPairingService.DeviceNameInputType
+				or AbxrPairingService.RequiredDeviceNameInputType or AbxrPairingService.JoinDeviceInputType;
+			if (!string.IsNullOrEmpty(error) || pairingStep) authUi.StopProcessing();
 
 			string displayPrompt = "";
 			if (type is "text" or null or "")
@@ -1692,18 +1695,23 @@ internal void StartNewSession()
 			}
 			else if (type == AbxrPairingService.PasscodeInputType)
 			{
-				authUi.Show(AuthUiKind.PinPad);
-				displayPrompt = $"Enter {prompt}";
+				authUi.Show(AuthUiKind.PairingPasscode);
+				displayPrompt = $"Pair this app with ArborXR Insights.\nEnter {prompt}";
 			}
-			else if (type is AbxrPairingService.DeviceNameInputType or AbxrPairingService.RequiredDeviceNameInputType)
+			else if (type == AbxrPairingService.DeviceNameInputType)
 			{
-				authUi.Show(AuthUiKind.FullKeyboard);
+				authUi.Show(AuthUiKind.PairingDeviceName);
+				displayPrompt = prompt;
+			}
+			else if (type == AbxrPairingService.RequiredDeviceNameInputType)
+			{
+				authUi.Show(AuthUiKind.PairingDeviceNameRequired);
 				displayPrompt = prompt;
 			}
 			else if (type == AbxrPairingService.JoinDeviceInputType)
 			{
-				authUi.Show(AuthUiKind.FullKeyboard);
-				displayPrompt = $"{prompt}\nType {domain} to add it, or enter a different name.";
+				authUi.Show(AuthUiKind.PairingDeviceName);
+				displayPrompt = $"{prompt}\nSubmit {domain} to add it, or type a different name.";
 			}
 
 			if (!string.IsNullOrEmpty(error)) displayPrompt = $"{error}\n{displayPrompt}";

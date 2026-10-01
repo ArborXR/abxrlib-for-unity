@@ -88,6 +88,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (_keyboardInstance) Destroy(_keyboardInstance);
             if (_pinPadInstance) Destroy(_pinPadInstance);
+            IsPairing = false;
+            _skipLabel = null;
+            _deviceNameStep = DeviceNameStep.None;
             
             // Restore laser pointer states to their original configuration
             LaserPointerManager.RestoreLaserPointerStates();
@@ -108,6 +111,83 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (_prompt != null) _prompt.text = prompt;
         }
+
+        // ── Passcode pairing ─────────────────────────────────────────
+
+        private enum DeviceNameStep { None, Skippable, Required }
+        private static DeviceNameStep _deviceNameStep;
+
+        /// <summary>True while the PIN pad shows the pairing passcode, so the QR button stays hidden.</summary>
+        public static bool IsPairing { get; private set; }
+
+        /// <summary>
+        /// Sets the prompt for a new step. On a skippable name step with no skip button on the keyboard, it says how
+        /// to skip: submitting the name blank pairs without one.
+        /// </summary>
+        public static void SetStepPrompt(string prompt)
+        {
+            bool hasSkipButton = _keyboardInstance != null && SkipButton(_keyboardInstance) != null;
+            SetPrompt(_deviceNameStep == DeviceNameStep.Skippable && !hasSkipButton ? $"{prompt}\nLeave it blank to skip." : prompt);
+        }
+
+        /// <summary>
+        /// Switches the PIN pad between pairing and sign-in. While pairing, its skip button reads "Not now" and shows
+        /// unless <see cref="Configuration.enablePairingDismiss"/> is off, and the QR button is hidden.
+        /// </summary>
+        public static void SetPairingMode(bool pairing)
+        {
+            IsPairing = pairing;
+            if (_pinPadInstance == null) return;
+            var manager = _pinPadInstance.GetComponentInChildren<KeyboardManager>(true);
+            if (manager == null) return;
+
+            if (manager.skipButton != null)
+            {
+                var label = manager.skipButton.GetComponentInChildren<TextMeshProUGUI>(true);
+                if (label != null)
+                {
+                    if (pairing && _skipLabel == null) _skipLabel = label.text;
+                    if (pairing) label.text = NotNowLabel;
+                    else if (_skipLabel != null) label.text = _skipLabel;
+                }
+                var config = Configuration.Instance;
+                manager.skipButton.gameObject.SetActive(pairing ? config == null || config.enablePairingDismiss : true);
+                if (!pairing) ApplyPinPadGuestAccessSetting(_pinPadInstance);
+            }
+
+            if (pairing && manager.qrCodeButton != null) manager.qrCodeButton.gameObject.SetActive(false);
+            else if (!pairing) KeyboardManager.RefreshQrButtonAvailability();
+        }
+
+        /// <summary>Marks the keyboard as the name step. A custom keyboard with a skip button shows it only when the name is optional.</summary>
+        public static void SetDeviceNameMode(bool skippable)
+        {
+            _deviceNameStep = skippable ? DeviceNameStep.Skippable : DeviceNameStep.Required;
+            Button skip = _keyboardInstance != null ? SkipButton(_keyboardInstance) : null;
+            if (skip != null) skip.gameObject.SetActive(skippable);
+        }
+
+        /// <summary>Removes the PIN pad only, when pairing moves on to the keyboard.</summary>
+        public static void DestroyPinPad()
+        {
+            if (_pinPadInstance) Destroy(_pinPadInstance);
+            _pinPadInstance = null;
+            IsPairing = false;
+            _skipLabel = null;
+        }
+
+        /// <summary>Removes the keyboard only, when pairing goes back to the passcode.</summary>
+        public static void DestroyKeyboard()
+        {
+            if (_keyboardInstance) Destroy(_keyboardInstance);
+            _keyboardInstance = null;
+            _deviceNameStep = DeviceNameStep.None;
+        }
+
+        private const string NotNowLabel = "Not now";
+        private static string _skipLabel;
+
+        private static Button SkipButton(GameObject root) => root.GetComponentInChildren<KeyboardManager>(true)?.skipButton;
 
         public static bool IsPinPadVisible() => _pinPadInstance != null && _pinPadInstance.activeSelf;
 

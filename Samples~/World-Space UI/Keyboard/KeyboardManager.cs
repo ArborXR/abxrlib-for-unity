@@ -103,6 +103,12 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private void CheckAndEnableQRButton()
         {
             if (qrCodeButton == null) return;
+            // A pairing passcode can't be scanned, so the button stays hidden until the PIN pad is back to sign-in.
+            if (KeyboardHandler.IsPairing)
+            {
+                qrCodeButton.gameObject.SetActive(false);
+                return;
+            }
 #if UNITY_ANDROID && !UNITY_EDITOR
             bool isAvailable = AbxrUi.QrScanner != null;
             if (_lastQRButtonState != isAvailable)
