@@ -127,7 +127,10 @@ public static partial class Abxr
 	/// <summary>Where this app stands on passcode pairing. Read it with GetPairingState().</summary>
 	public enum PairingState
 	{
-		/// <summary>Startup. The SDK hasn't decided this app's organization identity yet, for example while it waits for the ArborXR client.</summary>
+		/// <summary>
+		/// Startup. The SDK hasn't decided this app's organization identity yet, for example while it waits for the ArborXR
+		/// client. With Enable Auto Start Authentication off, it decides when the app calls StartAuthentication().
+		/// </summary>
 		Resolving,
 		/// <summary>The ArborXR client or an org token identifies the organization, so pairing doesn't apply.</summary>
 		Managed,
