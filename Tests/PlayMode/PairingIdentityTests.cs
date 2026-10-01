@@ -25,6 +25,10 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     private const string OrgToken = "eyJhbGciOiJub25lIn0.eyJvcmciOiJ0ZXN0In0.sig";
     private const string InstanceToken = "0123456789abcdef0123456789abcdef01234567";
     private const string InstanceId = "9b2c6a58-2f61-4c1e-9d0a-3f6f1d1e2a11";
+    private const string OtherInstanceToken = "fedcba9876543210fedcba9876543210fedcba98";
+    private const string OtherInstanceId = "0d5e3c1b-7a24-4f9e-8b6d-2c1a0f9e8d77";
+    private const string RetryingLog =
+        "Authentication failure: Device authentication failed (no connection); the SDK is retrying in the background.";
 
     private const string AuthorizedBody =
         "{\"token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDB9.sig\",\"secret\":\"test-secret\",\"appId\":\"12345678-1234-1234-1234-123456789012\"";
@@ -365,6 +369,55 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Cleared) }, _stateEvents);
         Assert.IsNull(_store.Token);
         Assert.IsNull(Abxr.GetPairedDeviceName());
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_WhileAuthenticated_EndsTheSession()
+    {
+        Start(pairedAs: InstanceId, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
+
+        Abxr.ClearPairing();
+
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated, "Storage and the AI proxy mustn't keep using the cleared instance.");
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_WhileRetrying_StopsTheOldAttempt()
+    {
+        var transport = Start(pairedAs: InstanceId, Offline);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(RetryingLog)));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Abxr.ClearPairing();
+        int callsAtClear = transport.AuthCalls;
+        transport.AnswerNextWith(Authorized);
+        yield return new WaitForSecondsRealtime(3f);
+
+        Assert.AreEqual(callsAtClear, transport.AuthCalls, "The cleared instance's attempt stopped retrying.");
+        Assert.IsFalse(_reports.Exists(r => r.success), "Nothing authenticates as the cleared instance.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
+    }
+
+    [UnityTest]
+    public IEnumerator RePairing_WhileTheOldAttemptRetries_AuthenticatesAsTheNewInstance()
+    {
+        var transport = Start(pairedAs: InstanceId, Offline);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(RetryingLog)));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Abxr.ClearPairing();
+        transport.AnswerNextWith(Authorized);
+        Pairing.SetAppInstanceToken(OtherInstanceToken, OtherInstanceId);
+        yield return WaitFor(() => _reports.Exists(r => r.success), 5f);
+
+        Assert.IsTrue(_reports.Exists(r => r.success));
+        Assert.AreEqual(OtherInstanceToken, transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(OtherInstanceId, transport.LastPayload.deviceId);
     }
 
     [UnityTest]

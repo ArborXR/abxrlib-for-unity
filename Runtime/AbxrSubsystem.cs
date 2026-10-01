@@ -458,6 +458,12 @@ namespace AbxrLib.Runtime
 
         private void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason reason)
         {
+            // A cleared or replaced pairing takes its session with it, including an attempt still retrying: otherwise that
+            // attempt finishes later as the old instance. A revoke needs none of this, since it ends the attempt that
+            // found it, and that attempt still has to report.
+            if (reason == Abxr.PairingChangeReason.Cleared || reason == Abxr.PairingChangeReason.Paired)
+                EndSessionOfPreviousPairing();
+
             if (state == Abxr.PairingState.Unpaired) StopRecordingWhileUnpaired();
             if (state == Abxr.PairingState.Paired)
             {
@@ -466,6 +472,14 @@ namespace AbxrLib.Runtime
                 if (reason == Abxr.PairingChangeReason.Paired) StartAuthentication();
             }
             Abxr.RaisePairingStateChanged(state, reason);
+        }
+
+        private void EndSessionOfPreviousPairing()
+        {
+            if (!_authService.Authenticated && !_authService.IsAuthenticationAttemptActive) return;
+            bool signInPromptOpen = _authService.IsInputRequestPending;
+            _authService.ClearSessionAndPrepareForNew();
+            if (signInPromptOpen) AbxrUi.AuthUi?.Hide();
         }
 
         /// <summary>
