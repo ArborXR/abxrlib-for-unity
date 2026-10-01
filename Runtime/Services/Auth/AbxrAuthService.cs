@@ -547,6 +547,21 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>The API's own error string from a JSON failure body, or null when the body is not a JSON error (plain text, HTML, or JSON without an error key).</summary>
+        /// <summary>lib-backend (FastAPI) answers every refusal with a JSON "detail". Other error shapes come from something in between.</summary>
+        private static bool IsLibBackendError(string responseJson)
+        {
+            if (string.IsNullOrEmpty(responseJson)) return false;
+            try
+            {
+                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
+                return obj != null && obj.TryGetValue("detail", out var detail) && !string.IsNullOrEmpty(detail?.ToString());
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
         private static string ExtractExplicitApiError(string responseJson)
         {
             if (string.IsNullOrEmpty(responseJson)) return null;
@@ -683,13 +698,13 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (pairedInstanceId != null && IsCredentialRejection(result))
                 {
                     _payload.buildType = savedBuildType;
-                    // Only lib-backend's own 401 (it always carries an API error) removes the pairing: a revoke can't be undone
-                // without a new passcode, so a bare 401 from a proxy or a wrong restUrl only suspends it for the launch.
-                bool revoked = result.StatusCode == 401 && ExtractExplicitApiError(result.Body) != null;
-                if (result.StatusCode == 401 && !revoked)
-                    Logcat.Warning("Device authentication got a 401 without an API error, so the pairing is kept. Check restUrl.");
+                    // Only lib-backend's own 401 removes the pairing: a revoke can't be undone without a new passcode, so a
+                    // 401 from a proxy, a gateway, or a wrong restUrl only suspends it for the launch.
+                    bool revoked = result.StatusCode == 401 && IsLibBackendError(result.Body);
+                    if (result.StatusCode == 401 && !revoked)
+                        Logcat.Warning("Device authentication got a 401 that didn't come from lib-backend, so the pairing is kept. Check restUrl.");
                     string message = revoked ? PairingRevokedMessage
-                        : result.StatusCode == 403 ? AccessSuspendedMessage
+                        : result.StatusCode == 403 || result.StatusCode == 401 ? AccessSuspendedMessage
                         : ExtractExplicitApiError(result.Body) ?? AccessSuspendedMessage;
                     if (revoked) _pairing.Revoke(pairedInstanceId);
                     else _pairing.SuspendForSession(pairedInstanceId);

@@ -222,10 +222,17 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator PairedBootstrap_A401WithoutAnApiError_KeepsThePairing()
+    public IEnumerator PairedBootstrap_AnHtml401_KeepsThePairing() =>
+        A401NotFromLibBackend_KeepsThePairing("<html><body>401 Authorization Required</body></html>");
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_AGateway401_KeepsThePairing() =>
+        A401NotFromLibBackend_KeepsThePairing("{\"message\":\"Unauthorized\"}");
+
+    private IEnumerator A401NotFromLibBackend_KeepsThePairing(string body)
     {
-        Start(pairedAs: InstanceId, new AuthTransportResult(false, "<html><body>401 Authorization Required</body></html>", true, 401));
-        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("got a 401 without an API error, so the pairing is kept")));
+        Start(pairedAs: InstanceId, new AuthTransportResult(false, body, true, 401));
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("got a 401 that didn't come from lib-backend, so the pairing is kept")));
         LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Access suspended")));
 
         Abxr.StartAuthentication();
