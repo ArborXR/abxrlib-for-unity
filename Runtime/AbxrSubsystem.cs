@@ -436,6 +436,10 @@ namespace AbxrLib.Runtime
 			        // The OnAuthCompleted event handler will start the delayed timer
 			        _assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
 		        }
+		        else if (success && !_assessmentStarted && _assessmentStartTimes.Count == 1 && _assessmentStartTimes.ContainsKey("DEFAULT"))
+		        {
+			        _assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
+		        }
 	        }
 	        
 	        Abxr.OnAuthCompleted?.Invoke(success, errorMessage);

@@ -280,6 +280,25 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Assert.That(Abxr.GetSuperMetaData(), Is.Null.Or.Empty);
     }
 
+    // ── DEFAULT assessment ────────────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator DefaultAssessment_StartsOverWhenTrueFollowsFalse()
+    {
+        // A device auth that retried offline, or a wrong PIN, reports false first. The DEFAULT duration counts from the true.
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: offline")));
+        AbxrSubsystem.Instance.AuthServiceForTesting.OnFailed("offline");
+        var startTimes = (Dictionary<string, System.DateTime>)typeof(AbxrSubsystem)
+            .GetField("_assessmentStartTimes", BindingFlags.NonPublic | BindingFlags.Instance)
+            .GetValue(AbxrSubsystem.Instance);
+        System.DateTime afterFalse = startTimes["DEFAULT"];
+
+        yield return new WaitForSecondsRealtime(0.05f);
+        SimulateAuth();
+
+        Assert.Greater(startTimes["DEFAULT"], afterFalse);
+    }
+
     // ── EndSession ────────────────────────────────────────────────────────
 
     [UnityTest]
