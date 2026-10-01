@@ -469,7 +469,11 @@ public static partial class Abxr
 	/// <summary>The name of the headset this app is paired on, or null when it has none or the app isn't paired. Renames in the Portal arrive at the next session.</summary>
 	public static string GetPairedDeviceName() => X?.Pairing?.DeviceName;
 
-	/// <summary>Deletes the stored pairing. A paired app becomes Unpaired and stops sending; whether to offer pairing again is the app's call.</summary>
+	/// <summary>
+	/// Deletes the stored pairing. A paired app becomes Unpaired and stops sending; whether to offer pairing again is the
+	/// app's call. A signed-in session ends the way EndSession() does: open assessments close, queued data is flushed to
+	/// the organization it belongs to (blocking, like EndSession), and super metadata is cleared.
+	/// </summary>
 	public static void ClearPairing() => X?.Pairing?.ClearPairing();
 
 	/// <summary>
