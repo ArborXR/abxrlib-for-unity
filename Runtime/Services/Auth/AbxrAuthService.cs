@@ -546,7 +546,6 @@ namespace AbxrLib.Runtime.Services.Auth
                 ?? (responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...");
         }
 
-        /// <summary>The API's own error string from a JSON failure body, or null when the body is not a JSON error (plain text, HTML, or JSON without an error key).</summary>
         /// <summary>lib-backend (FastAPI) answers every refusal with a JSON "detail". Other error shapes come from something in between.</summary>
         private static bool IsLibBackendError(string responseJson)
         {
@@ -562,6 +561,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
         }
 
+        /// <summary>The API's own error string from a JSON failure body, or null when the body is not a JSON error (plain text, HTML, or JSON without an error key).</summary>
         private static string ExtractExplicitApiError(string responseJson)
         {
             if (string.IsNullOrEmpty(responseJson)) return null;
