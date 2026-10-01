@@ -45,11 +45,17 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     private FakeAuthUi _ui;
+    private readonly List<(Abxr.PairingState state, Abxr.PairingChangeReason reason)> _stateEvents =
+        new List<(Abxr.PairingState, Abxr.PairingChangeReason)>();
+
+    private void RecordState(Abxr.PairingState state, Abxr.PairingChangeReason reason) => _stateEvents.Add((state, reason));
 
     [TearDown]
     public void UnsubscribeReports()
     {
         Abxr.OnAuthCompleted -= Record;
+        Abxr.OnPairingStateChanged -= RecordState;
+        _stateEvents.Clear();
         if (_ui != null) AbxrUi.UnregisterAuthUi(_ui);
         _ui = null;
     }
@@ -295,6 +301,70 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.AreEqual(1, transport.AuthCalls);
         Assert.AreEqual(InstanceToken, transport.LastPayload.appInstanceToken);
         Assert.AreEqual(InstanceId, transport.LastPayload.deviceId);
+    }
+
+    // ── Public API ────────────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator OnPairingStateChanged_ReportsStartup_AndGetPairingStateAgrees()
+    {
+        Start(pairedAs: null, Authorized);
+        Abxr.OnPairingStateChanged += RecordState;
+        Assert.AreEqual(Abxr.PairingState.Resolving, Abxr.GetPairingState());
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Startup) }, _stateEvents);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Abxr.GetPairingState());
+    }
+
+    [UnityTest]
+    public IEnumerator StartPairing_ThenCancelPairing_Dismisses()
+    {
+        Start(pairedAs: null, Authorized);
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Abxr.OnPairingStateChanged += RecordState;
+
+        Assert.IsTrue(Abxr.StartPairing());
+        Assert.AreEqual(Abxr.PairingState.Prompting, Abxr.GetPairingState());
+        Abxr.CancelPairing();
+
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Dismissed) }, _stateEvents,
+            "Prompting itself never fires the event.");
+    }
+
+    [UnityTest]
+    public IEnumerator RedeemPairingPasscode_WhenPaired_CallsBackWithInvalidState()
+    {
+        Start(pairedAs: InstanceId, Authorized, deviceName: "Headset 12");
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        Abxr.RedeemPairingPasscode("483921", results.Add);
+
+        Assert.AreEqual(1, results.Count);
+        Assert.AreEqual(Abxr.PairingRedeemError.InvalidState, results[0].Error);
+        Assert.AreEqual(Abxr.PairingRedeemError.InvalidState, Abxr.GetLastPairingRedeemResult().Error);
+        Assert.AreEqual("Headset 12", Abxr.GetPairedDeviceName());
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_FromPaired_FiresCleared()
+    {
+        Start(pairedAs: InstanceId, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Abxr.OnPairingStateChanged += RecordState;
+
+        Abxr.ClearPairing();
+
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Cleared) }, _stateEvents);
+        Assert.IsNull(_store.Token);
+        Assert.IsNull(Abxr.GetPairedDeviceName());
     }
 
     // ── Helpers ───────────────────────────────────────────────────

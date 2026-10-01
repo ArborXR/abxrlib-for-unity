@@ -82,6 +82,7 @@ namespace AbxrLib.Runtime
 
         /// <summary>For testing only. The pairing service, for its state and stored pairing.</summary>
         internal AbxrPairingService PairingServiceForTesting => _pairingService;
+        internal AbxrPairingService Pairing => _pairingService;
 
         /// <summary>For testing only. True when ArborMdmClient is available and connected (e.g. on Android device with MDM). Used to decide expected auth outcome in environment-dependent tests.</summary>
         internal bool IsArborMdmClientAvailableAndConnected => _arborMdmClient != null && _arborMdmClient.IsConnected();
@@ -466,6 +467,7 @@ namespace AbxrLib.Runtime
                 // At startup auth is already bootstrapping as the instance. A new pairing has nothing running yet.
                 if (reason == Abxr.PairingChangeReason.Paired) StartAuthentication();
             }
+            Abxr.RaisePairingStateChanged(state, reason);
         }
 
         /// <summary>

@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using AbxrLib.Runtime;
 using UnityEngine;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Types;
 
 public static partial class Abxr
@@ -381,6 +382,9 @@ public static partial class Abxr
 	/// Only one handler is allowed; use assignment (=), not subscribe (+=). Your handler receives (type, prompt, domain, error).
 	/// Show your UI; when the user submits, call Abxr.OnInputSubmitted(enteredValue). Set to null in OnDestroy when your component is no longer responsible.
 	/// type is "text" | "pin" | "email"; error is empty on first request and may contain a previous failure message on retry.
+	/// The pairing prompt (StartPairing) uses the same handler, with type "pairingPasscode", then "pairingDeviceName"
+	/// (Skip allowed) or "pairingDeviceNameRequired" when the passcode allows naming, and "pairingDeviceJoin" when the name
+	/// is taken: domain carries that name, and submitting it adds this app to that headset.
 	/// </summary>
 	public static Action<string, string, string, string> OnInputRequested //(type, prompt, domain, error)
 	{
@@ -393,6 +397,74 @@ public static partial class Abxr
 	/// If no input was requested, the call is ignored.
 	/// </summary>
 	public static void OnInputSubmitted(string input) => X?.SubmitInput(input);
+
+	// ── Passcode pairing (MDM-less) ──────────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Fired when pairing settles: once at startup, when the SDK has decided this app's identity (Startup), and later
+	/// when a passcode pairs, the prompt closes without pairing, ClearPairing runs, or the backend revokes the pairing.
+	/// Never fired for Prompting or Redeeming, or for a failed attempt the prompt asks again for.
+	/// The usual place to offer pairing is (Unpaired, Startup). Startup can fire before a late subscriber exists, so
+	/// subscribe, then check GetPairingState().
+	/// </summary>
+	public static event Action<PairingState, PairingChangeReason> OnPairingStateChanged;
+
+	internal static void RaisePairingStateChanged(PairingState state, PairingChangeReason reason)
+	{
+		try
+		{
+			OnPairingStateChanged?.Invoke(state, reason);
+		}
+		catch (Exception ex)
+		{
+			Logcat.Error($"An OnPairingStateChanged handler threw: {ex}");
+		}
+	}
+
+	/// <summary>Where this app stands on passcode pairing. Resolving until the SDK decides this app's identity.</summary>
+	public static PairingState GetPairingState() => X?.Pairing?.State ?? PairingState.Resolving;
+
+	/// <summary>
+	/// Opens the pairing prompt, through OnInputRequested or the world-space UI. The SDK never prompts on its own.
+	/// Returns false, with a warning that says why, unless the app is Unpaired and something can show the prompt.
+	/// Pairing runs in Android and WebGL builds only.
+	/// </summary>
+	public static bool StartPairing() => X?.Pairing?.StartPairing() ?? false;
+
+	/// <summary>Closes the pairing prompt without pairing. Replaces submitting "**skip**" from a custom UI.</summary>
+	public static void CancelPairing() => X?.Pairing?.CancelPairing();
+
+	/// <summary>
+	/// Redeems a passcode from the app's own UI, with no prompt. Valid while Unpaired or while the prompt is open.
+	/// onComplete always fires, refused calls included. When the passcode allows naming the headset, the result is
+	/// DeviceNameRequested (offer a Skip) or DeviceNameRequired (no Skip): ask for a name, then call the overload that takes one.
+	/// </summary>
+	public static void RedeemPairingPasscode(string passcode, Action<PairingRedeemResult> onComplete)
+	{
+		AbxrPairingService pairing = X?.Pairing;
+		if (pairing == null) onComplete?.Invoke(PairingOutcomes.Refused("the SDK isn't initialized yet."));
+		else pairing.RedeemPairingPasscode(passcode, onComplete);
+	}
+
+	/// <summary>
+	/// Redeems a passcode with the person's answer to the name step. A null or blank deviceName skips naming. After
+	/// DeviceNameExists, confirm with the person, then call again with joinExistingDevice true to add this app to that headset.
+	/// </summary>
+	public static void RedeemPairingPasscode(string passcode, string deviceName, bool joinExistingDevice, Action<PairingRedeemResult> onComplete)
+	{
+		AbxrPairingService pairing = X?.Pairing;
+		if (pairing == null) onComplete?.Invoke(PairingOutcomes.Refused("the SDK isn't initialized yet."));
+		else pairing.RedeemPairingPasscode(passcode, deviceName, joinExistingDevice, onComplete);
+	}
+
+	/// <summary>The last redeem's outcome, refused calls included, for a custom UI answering OnInputRequested. Default when none has run.</summary>
+	public static PairingRedeemResult GetLastPairingRedeemResult() => X?.Pairing?.LastRedeemResult ?? default;
+
+	/// <summary>The name of the headset this app is paired on, or null when it has none or the app isn't paired. Renames in the Portal arrive at the next session.</summary>
+	public static string GetPairedDeviceName() => X?.Pairing?.DeviceName;
+
+	/// <summary>Deletes the stored pairing. A paired app becomes Unpaired and stops sending; whether to offer pairing again is the app's call.</summary>
+	public static void ClearPairing() => X?.Pairing?.ClearPairing();
 
 	/// <summary>
 	/// Returns true if QR scanning for auth input is available. Use to show/hide a "Scan QR" option in custom auth UI.
