@@ -166,8 +166,6 @@ namespace AbxrLib.Runtime
         private static readonly WaitForSecondsRealtime AuthStartPollWait = new WaitForSecondsRealtime(0.1f);
         /// <summary>How long identity waits for the ArborXR client after startup: the client's own initialization limit (SDK-60 decision 2).</summary>
         private const float ArborMdmClientWaitSeconds = 16f;
-        /// <summary>The Portal API that redeems pairing passcodes.</summary>
-        private const string DefaultPairingUrl = "https://api.xrdm.app/";
         private float _startRealtime;
         private bool _arborMdmClientInstalled;
 
@@ -510,7 +508,7 @@ namespace AbxrLib.Runtime
 
             public bool CanPresentPrompt => _subsystem._appOnInputRequested != null || AbxrUi.AuthUi != null;
             public string AppToken => _subsystem._authService?.AppTokenForPairing ?? "";
-            public string PairingUrl => DefaultPairingUrl;
+            public string PairingUrl => Configuration.Instance.pairingUrl;
             public double Now => Time.realtimeSinceStartupAsDouble;
             public PairingDeviceMetadata DeviceMetadata => PairingDeviceMetadata.Current();
         }

@@ -62,7 +62,8 @@ namespace AbxrLib.Editor
             new ReportedField("appToken", c => DescribeSecret(c.appToken, expectJwt: true)),
             new ReportedField("orgToken", c => DescribeSecret(c.orgToken, expectJwt: true)),
             new ReportedField("authSecret", c => DescribeSecret(c.authSecret, expectJwt: false)),
-            new ReportedField("restUrl", c => OrNotSet(c.restUrl))
+            new ReportedField("restUrl", c => OrNotSet(c.restUrl)),
+            new ReportedField("pairingUrl", c => OrNotSet(c.pairingUrl))
         };
 
         /// <summary>
@@ -96,6 +97,7 @@ namespace AbxrLib.Editor
             new ReportedField("enableAutoAdvanceModules", c => c.enableAutoAdvanceModules),
             new ReportedField("enableReturnTo", c => c.enableReturnTo),
             new ReportedField("enablePinPadGuestAccess", c => c.enablePinPadGuestAccess),
+            new ReportedField("enablePairingDismiss", c => c.enablePairingDismiss),
             new ReportedField("recordIpAddress", c => c.recordIpAddress),
             new ReportedField("telemetryTrackingPeriodSeconds", c => c.telemetryTrackingPeriodSeconds),
             new ReportedField("frameRateTrackingPeriodSeconds", c => c.frameRateTrackingPeriodSeconds),

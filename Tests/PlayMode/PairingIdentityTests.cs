@@ -367,6 +367,20 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.IsNull(Abxr.GetPairedDeviceName());
     }
 
+    [UnityTest]
+    public IEnumerator AnInvalidPairingUrl_RefusesStartPairing()
+    {
+        Start(pairedAs: null, Authorized);
+        ModifyConfig("pairingUrl", "api.xrdm.app");
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("isn't an HTTP or HTTPS URL")));
+
+        Assert.IsFalse(Abxr.StartPairing());
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Abxr.GetPairingState());
+    }
+
     // ── Helpers ───────────────────────────────────────────────────
 
     private static List<string> PendingEventNames() =>

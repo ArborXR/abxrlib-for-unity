@@ -116,6 +116,12 @@ namespace AbxrLib.Editor
                 config.restUrl = newRestUrl;
             }
             //if (config.restUrl == "https://lib-backend.xrdm.dev/") config.restUrl = "https://lib-backend.xrdm.app/"; //TODO remove
+
+            string newPairingUrl = EditorGUILayout.TextField(new GUIContent(
+                "Pairing URL", "Portal API origin for redeeming passcode pairing codes (MDM-less). https://api.xrdm.app/, or https://api.xrdm.dev/ for development."), config.pairingUrl);
+            if (newPairingUrl != config.pairingUrl) config.pairingUrl = newPairingUrl;
+            if (!Utils.IsValidUrl(config.pairingUrl))
+                EditorGUILayout.HelpBox("Pairing URL must be an http:// or https:// URL, or passcode pairing can't redeem.", MessageType.Warning);
             EditorGUILayout.Space();
         
             // Warning about production usage
@@ -174,6 +180,9 @@ namespace AbxrLib.Editor
             config.enablePinPadGuestAccess = EditorGUILayout.Toggle(new GUIContent(
                 "Enable PIN Pad Guest Access", "When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, that button is hidden at runtime. Requires KeyboardManager.skipButton on the PIN prefab (default AbxrPinPad does)."), config.enablePinPadGuestAccess);
             
+            config.enablePairingDismiss = EditorGUILayout.Toggle(new GUIContent(
+                "Enable Pairing Dismiss", "When enabled, the default pairing prompt shows Not now, so someone without a passcode can close it. Custom pairing UIs ignore this. When disabled, a prompt the app opens at launch can't be closed."), config.enablePairingDismiss);
+
             config.recordIpAddress = EditorGUILayout.Toggle(new GUIContent(
                 "Record IP Address", "When enabled, the user's IP Address will be sent during authentication."), config.recordIpAddress);
 
@@ -305,6 +314,7 @@ namespace AbxrLib.Editor
                 
                 // Service Provider
                 config.restUrl = defaultConfig.restUrl;
+                config.pairingUrl = defaultConfig.pairingUrl;
                 
                 // UI Behavior Control
                 config.authUIFollowCamera = defaultConfig.authUIFollowCamera;
@@ -324,6 +334,7 @@ namespace AbxrLib.Editor
                 config.authenticationStartDelay = defaultConfig.authenticationStartDelay;
                 config.enableReturnTo = defaultConfig.enableReturnTo;
                 config.enablePinPadGuestAccess = defaultConfig.enablePinPadGuestAccess;
+                config.enablePairingDismiss = defaultConfig.enablePairingDismiss;
                 config.recordIpAddress = defaultConfig.recordIpAddress;
                 config.enableAutoStartModules = defaultConfig.enableAutoStartModules;
                 config.enableAutoAdvanceModules = defaultConfig.enableAutoAdvanceModules;
