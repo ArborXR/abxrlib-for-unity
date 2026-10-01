@@ -162,6 +162,11 @@ public static partial class Abxr
 		None,
 		/// <summary>The passcode is wrong, expired, or revoked. These can't be told apart, on purpose.</summary>
 		InvalidPasscode,
+		/// <summary>
+		/// The passcode is valid and allows a name for the headset. Ask for one with the option to skip, then redeem
+		/// again with the name, or with a null name to skip. Nothing was created yet.
+		/// </summary>
+		DeviceNameRequested,
 		/// <summary>The passcode requires a name for the headset, and none was given. Ask for one, without the option to skip.</summary>
 		DeviceNameRequired,
 		/// <summary>The name can't be used, for example because it's longer than 64 characters.</summary>
@@ -193,7 +198,7 @@ public static partial class Abxr
 		public int RetryAfterSeconds { get; }
 		public string Message { get; }
 		/// <summary>
-		/// On success, the name of the paired device this app joined, or null when the name was skipped. For
+		/// On success, the name of the paired device this app joined, or null when it has none. For
 		/// DeviceNameExists, the existing device's name, for the confirm. Null otherwise.
 		/// </summary>
 		public string DeviceName { get; }

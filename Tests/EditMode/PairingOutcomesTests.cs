@@ -120,9 +120,10 @@ public class PairingOutcomesTests
         string body = $"{{\"app_instance_token\":\"{Token}\",\"app_instance_id\":\"{InstanceId}\",\"device_name\":\" Headset 12 \"}}";
 
         Assert.AreEqual("Headset 12", Classify(new PairingHttpResponse(200, body)).DeviceName);
-        Assert.IsNull(Classify(new PairingHttpResponse(200, SuccessBody)).DeviceName, "No name means the name was skipped.");
+        Assert.IsNull(Classify(new PairingHttpResponse(200, SuccessBody)).DeviceName, "No name means this app has no paired device.");
     }
 
+    [TestCase(422, "device_name_requested", Abxr.PairingRedeemError.DeviceNameRequested)]
     [TestCase(422, "device_name_required", Abxr.PairingRedeemError.DeviceNameRequired)]
     [TestCase(422, "device_name_invalid", Abxr.PairingRedeemError.DeviceNameInvalid)]
     [TestCase(409, "device_name_exists", Abxr.PairingRedeemError.DeviceNameExists)]
@@ -260,6 +261,12 @@ public class PairingOutcomesTests
             "{\"app_token\":\"app.token.jwt\",\"passcode\":\"483921\",\"device_name\":\"Headset 12\"}",
             PairingOutcomes.RedeemBody("app.token.jwt", "483921", null, "Headset 12"));
     }
+
+    [Test]
+    public void RedeemBody_SkippingTheName_MatchesTheWireContract() =>
+        Assert.AreEqual(
+            "{\"app_token\":\"app.token.jwt\",\"passcode\":\"483921\",\"skip_device_name\":true}",
+            PairingOutcomes.RedeemBody("app.token.jwt", "483921", null, skipDeviceName: true));
 
     [Test]
     public void DeviceMetadata_Current_FillsEveryKey()

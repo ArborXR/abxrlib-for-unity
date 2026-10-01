@@ -82,11 +82,20 @@ public class PairingServiceTests
     private static PairingHttpResponse NameTaken() =>
         new PairingHttpResponse(409, "{\"error\":\"That name is taken\",\"code\":\"device_name_exists\",\"device_name\":\"Headset 12\"}");
 
-    /// <summary>Answers the passcode step, then the name step (skipped unless a name is given), and forgets those requests.</summary>
+    private static PairingHttpResponse NameRequested() => Coded(422, "device_name_requested");
+
+    /// <summary>
+    /// Answers the passcode step. With a name, the Portal first asks for one (the passcode allows naming), and the
+    /// name step answers it. Forgets those requests.
+    /// </summary>
     private void SubmitPrompt(AbxrPairingService service, string passcode = "483921", string deviceName = null)
     {
         service.SubmitInput(passcode);
-        service.SubmitInput(deviceName ?? "**skip**");
+        if (deviceName != null)
+        {
+            _client.Respond(NameRequested());
+            service.SubmitInput(deviceName);
+        }
         _requests.Clear();
     }
 
@@ -333,7 +342,6 @@ public class PairingServiceTests
         var service = CreatePrompting();
 
         service.SubmitInput(" 483 921 ");
-        service.SubmitInput("**skip**");
 
         Assert.AreEqual(Abxr.PairingState.Redeeming, service.State);
         Assert.IsFalse(service.IsInputRequestPending);
@@ -342,7 +350,7 @@ public class PairingServiceTests
         StringAssert.Contains("\"passcode\":\"483921\"", _client.Sent[0].json);
         StringAssert.Contains("\"app_token\":\"app.token.jwt\"", _client.Sent[0].json);
         StringAssert.Contains("\"manufacturer\":\"Pico\"", _client.Sent[0].json);
-        StringAssert.DoesNotContain("device_name", _client.Sent[0].json);
+        StringAssert.DoesNotContain("device_name", _client.Sent[0].json, "The passcode goes alone, so the Portal decides whether to ask for a name.");
     }
 
     [Test]
@@ -497,18 +505,35 @@ public class PairingServiceTests
     // ── Naming the headset (INS-511) ──────────────────────────────
 
     [Test]
-    public void Passcode_AsksForANameBeforeSending()
+    public void APasscodeWithoutNaming_PairsWithoutANameStep()
     {
         var service = CreatePrompting();
-
         service.SubmitInput("483921");
 
-        Assert.IsEmpty(_client.Sent);
+        _client.Respond(Ok());
+
+        Assert.AreEqual(Abxr.PairingState.Paired, service.State);
+        Assert.IsEmpty(_requests, "The passcode doesn't allow naming, so the headset never asks.");
+        Assert.AreEqual(1, _client.Sent.Count);
+        Assert.IsNull(service.DeviceName);
+    }
+
+    [Test]
+    public void ANameRequest_AsksForANameWithASkip()
+    {
+        var service = CreatePrompting();
+        service.SubmitInput("483921");
+
+        _client.Respond(NameRequested());
+
         Assert.AreEqual(Abxr.PairingState.Prompting, service.State);
         Assert.AreEqual(1, _requests.Count);
         Assert.AreEqual("pairingDeviceName", _requests[0].type);
         Assert.AreEqual("Give this connection a name.", _requests[0].prompt);
-        Assert.AreEqual("", _requests[0].error);
+        Assert.AreEqual("", _requests[0].error, "Being asked for a name isn't an error.");
+        Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameRequested, service.LastRedeemResult.Error);
+        Assert.IsEmpty(_events);
+        Assert.AreEqual(0, _store.Saves);
     }
 
     [Test]
@@ -518,24 +543,27 @@ public class PairingServiceTests
 
         SubmitPrompt(service, deviceName: "  Headset 12 ");
 
-        Assert.AreEqual(1, _client.Sent.Count);
-        StringAssert.Contains("\"passcode\":\"483921\",\"device_name\":\"Headset 12\",", _client.Sent[0].json);
-        StringAssert.DoesNotContain("join_existing", _client.Sent[0].json);
+        Assert.AreEqual(2, _client.Sent.Count);
+        StringAssert.Contains("\"passcode\":\"483921\",\"device_name\":\"Headset 12\",", _client.Sent[1].json);
+        StringAssert.DoesNotContain("skip_device_name", _client.Sent[1].json);
+        StringAssert.DoesNotContain("join_existing", _client.Sent[1].json);
     }
 
     [TestCase("**skip**")]
     [TestCase("")]
     [TestCase("   ")]
     [TestCase(null)]
-    public void SkippingTheName_SendsNone(string input)
+    public void SkippingTheName_SendsTheSkipFlag(string input)
     {
         var service = CreatePrompting();
         service.SubmitInput("483921");
+        _client.Respond(NameRequested());
 
         service.SubmitInput(input);
 
-        Assert.AreEqual(1, _client.Sent.Count);
-        StringAssert.DoesNotContain("device_name", _client.Sent[0].json);
+        Assert.AreEqual(2, _client.Sent.Count);
+        StringAssert.Contains("\"passcode\":\"483921\",\"skip_device_name\":true", _client.Sent[1].json);
+        StringAssert.DoesNotContain("\"device_name\"", _client.Sent[1].json);
     }
 
     [Test]
@@ -557,18 +585,19 @@ public class PairingServiceTests
     {
         var service = CreatePrompting();
         service.SubmitInput("483921");
+        _client.Respond(NameRequested());
         _requests.Clear();
 
         service.SubmitInput(new string('x', 65));
 
-        Assert.IsEmpty(_client.Sent);
+        Assert.AreEqual(1, _client.Sent.Count);
         Assert.AreEqual("pairingDeviceName", _requests[0].type);
         Assert.AreEqual(PairingOutcomes.DeviceNameInvalidMessage, _requests[0].error);
         Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameInvalid, service.LastRedeemResult.Error);
     }
 
     [Test]
-    public void ARequiredName_IsAskedForAgainWithoutASkip()
+    public void ARequiredName_IsAskedForWithoutASkip()
     {
         var service = CreatePrompting();
         SubmitPrompt(service);
@@ -581,7 +610,7 @@ public class PairingServiceTests
         Assert.IsEmpty(_events);
 
         service.SubmitInput("**skip**");
-        Assert.AreEqual(1, _client.Sent.Count, "Skipping again isn't sent.");
+        Assert.AreEqual(1, _client.Sent.Count, "Skipping a required name isn't sent.");
         Assert.AreEqual("pairingDeviceNameRequired", _requests[1].type);
 
         service.SubmitInput("Headset 12");
@@ -633,8 +662,8 @@ public class PairingServiceTests
 
         service.SubmitInput(input);
 
-        Assert.AreEqual(2, _client.Sent.Count);
-        StringAssert.Contains("\"passcode\":\"483921\",\"device_name\":\"Headset 12\",\"join_existing\":true", _client.Sent[1].json);
+        Assert.AreEqual(3, _client.Sent.Count);
+        StringAssert.Contains("\"passcode\":\"483921\",\"device_name\":\"Headset 12\",\"join_existing\":true", _client.Sent[2].json);
 
         _client.Respond(Ok(deviceName: "Headset 12"));
         Assert.AreEqual(Abxr.PairingState.Paired, service.State);
@@ -651,13 +680,13 @@ public class PairingServiceTests
 
         service.SubmitInput("**skip**");
 
-        Assert.AreEqual(1, _client.Sent.Count);
+        Assert.AreEqual(2, _client.Sent.Count);
         Assert.AreEqual("pairingDeviceName", _requests[0].type);
 
         service.SubmitInput("Headset 13");
-        Assert.AreEqual(2, _client.Sent.Count);
-        StringAssert.Contains("\"device_name\":\"Headset 13\"", _client.Sent[1].json);
-        StringAssert.DoesNotContain("join_existing", _client.Sent[1].json);
+        Assert.AreEqual(3, _client.Sent.Count);
+        StringAssert.Contains("\"device_name\":\"Headset 13\"", _client.Sent[2].json);
+        StringAssert.DoesNotContain("join_existing", _client.Sent[2].json);
     }
 
     [Test]
@@ -669,23 +698,20 @@ public class PairingServiceTests
 
         service.SubmitInput("Headset 13");
 
-        StringAssert.Contains("\"device_name\":\"Headset 13\"", _client.Sent[1].json);
-        StringAssert.DoesNotContain("join_existing", _client.Sent[1].json);
+        StringAssert.Contains("\"device_name\":\"Headset 13\"", _client.Sent[2].json);
+        StringAssert.DoesNotContain("join_existing", _client.Sent[2].json);
     }
 
     [Test]
-    public void AWrongPasscodeAfterTheName_AsksOnlyForThePasscodeAgain()
+    public void AWrongPasscode_IsCaughtBeforeAnyNameStep()
     {
         var service = CreatePrompting();
-        SubmitPrompt(service, deviceName: "Headset 12");
+        SubmitPrompt(service);
+
         _client.Respond(Status(400));
-        Assert.AreEqual("pairingPasscode", _requests[0].type);
 
-        service.SubmitInput("111111");
-
-        Assert.AreEqual(2, _client.Sent.Count, "The name already given still stands.");
-        StringAssert.Contains("\"passcode\":\"111111\",\"device_name\":\"Headset 12\"", _client.Sent[1].json);
         Assert.AreEqual(1, _requests.Count);
+        Assert.AreEqual("pairingPasscode", _requests[0].type, "Nobody names the headset for a passcode that doesn't work.");
     }
 
     [Test]
@@ -693,33 +719,36 @@ public class PairingServiceTests
     {
         var service = CreatePrompting();
         service.SubmitInput("483921");
+        _client.Respond(NameRequested());
 
         service.CancelPairing();
 
         Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
         CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Dismissed) }, _events);
-        Assert.IsEmpty(_client.Sent);
+        Assert.AreEqual(1, _client.Sent.Count);
+        Assert.AreEqual(0, _store.Saves);
     }
 
     [Test]
     public void ANewPrompt_StartsFromThePasscodeWithNothingRemembered()
     {
         var service = CreatePrompting();
-        SubmitPrompt(service, deviceName: "Headset 12");
+        SubmitPrompt(service);
         _client.Respond(Coded(422, "device_name_required"));
         service.CancelPairing();
         _requests.Clear();
 
         Assert.IsTrue(service.StartPairing());
         service.SubmitInput("483921");
+        _client.Respond(NameRequested());
 
         Assert.AreEqual("pairingPasscode", _requests[0].type);
         Assert.AreEqual("pairingDeviceName", _requests[1].type, "The requirement belonged to the old prompt's passcode.");
-        Assert.AreEqual(1, _client.Sent.Count);
+        Assert.AreEqual(2, _client.Sent.Count);
     }
 
     [Test]
-    public void ARateLimit_IsReportedBeforeTheNameStep()
+    public void ARateLimit_IsReportedAtThePasscodeStep()
     {
         var service = CreateUnpaired();
         service.RedeemPairingPasscode("483921", _ => { });
@@ -729,6 +758,7 @@ public class PairingServiceTests
 
         service.SubmitInput("483921");
 
+        Assert.AreEqual(1, _client.Sent.Count);
         Assert.AreEqual(1, _requests.Count);
         Assert.AreEqual("pairingPasscode", _requests[0].type);
         Assert.AreEqual("Too many attempts. Try again in 30 seconds.", _requests[0].error);
@@ -854,6 +884,35 @@ public class PairingServiceTests
     }
 
     [Test]
+    public void Headless_APasscodeThatAllowsNaming_ReportsTheRequestWithoutPrompting()
+    {
+        var service = CreateUnpaired();
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        service.RedeemPairingPasscode("483921", results.Add);
+        StringAssert.DoesNotContain("skip_device_name", _client.Sent[0].json);
+        _client.Respond(NameRequested());
+
+        Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameRequested, results[0].Error);
+        Assert.AreEqual(PairingOutcomes.DeviceNameRequestedMessage, results[0].Message);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+        Assert.IsEmpty(_requests);
+        Assert.IsEmpty(_events);
+    }
+
+    [TestCase(null)]
+    [TestCase(" ")]
+    public void Headless_WithoutAName_SendsTheSkipFlag(string deviceName)
+    {
+        var service = CreateUnpaired();
+
+        service.RedeemPairingPasscode("483921", deviceName, false, _ => { });
+
+        StringAssert.Contains("\"skip_device_name\":true", _client.Sent[0].json);
+        StringAssert.DoesNotContain("\"device_name\"", _client.Sent[0].json);
+    }
+
+    [Test]
     public void Headless_WithAName_SendsItAndStoresTheEcho()
     {
         var service = CreateUnpaired();
@@ -861,6 +920,7 @@ public class PairingServiceTests
 
         service.RedeemPairingPasscode("483921", " Headset 12 ", false, results.Add);
         StringAssert.Contains("\"device_name\":\"Headset 12\"", _client.Sent[0].json);
+        StringAssert.DoesNotContain("skip_device_name", _client.Sent[0].json);
         _client.Respond(Ok(deviceName: "Headset 12"));
 
         Assert.IsTrue(results[0].Success);
@@ -1249,10 +1309,11 @@ public class PairingServiceTests
             service.SubmitInput(type == AbxrPairingService.PasscodeInputType ? "483921" : "Headset 12");
 
         Assert.IsTrue(service.StartPairing());
+        _client.Respond(NameRequested());
         _client.Respond(Ok(deviceName: "Headset 12"));
 
         Assert.AreEqual(Abxr.PairingState.Paired, service.State);
-        StringAssert.Contains("\"device_name\":\"Headset 12\"", _client.Sent[0].json);
+        StringAssert.Contains("\"device_name\":\"Headset 12\"", _client.Sent[1].json);
     }
 
     // ── Fakes ─────────────────────────────────────────────────────

@@ -44,13 +44,15 @@ namespace AbxrLib.Runtime.Services.Pairing
         internal const int DefaultRetryAfterSeconds = 60;
         internal const int MaxRetryAfterSeconds = 3600;
 
-        // The error codes that tell the name failures apart from a 409 or 422 about the build (INS-511).
+        // The error codes that tell the name step apart from a 409 or 422 about the build (INS-511).
+        internal const string DeviceNameRequestedCode = "device_name_requested";
         internal const string DeviceNameRequiredCode = "device_name_required";
         internal const string DeviceNameInvalidCode = "device_name_invalid";
         internal const string DeviceNameExistsCode = "device_name_exists";
 
         // Default copy (RFC D13). Product owns the wording; ISVs replace it by branching on the error.
         internal const string InvalidPasscodeMessage = "That passcode wasn't recognized. Check it and try again.";
+        internal const string DeviceNameRequestedMessage = "Give this connection a name, or skip.";
         internal const string DeviceNameRequiredMessage = "Your organization requires a name for this headset.";
         internal const string DeviceNameInvalidMessage = "That name can't be used. Use 1 to 64 characters.";
         internal const string BuildRejectedMessage = "This app can't pair right now. Contact the app's developer.";
@@ -61,6 +63,7 @@ namespace AbxrLib.Runtime.Services.Pairing
             [JsonProperty("app_token")] public string AppToken;
             [JsonProperty("passcode")] public string Passcode;
             [JsonProperty("device_name", NullValueHandling = NullValueHandling.Ignore)] public string DeviceName;
+            [JsonProperty("skip_device_name", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool SkipDeviceName;
             [JsonProperty("join_existing", DefaultValueHandling = DefaultValueHandling.Ignore)] public bool JoinExisting;
             [JsonProperty("device_metadata", NullValueHandling = NullValueHandling.Ignore)] public PairingDeviceMetadata DeviceMetadata;
         }
@@ -82,11 +85,16 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// <summary>Keeps a path prefix on pairingUrl, unlike Uri's relative resolution, which drops the last segment.</summary>
         internal static string RedeemUrl(string pairingUrl) => pairingUrl.TrimEnd('/') + "/" + RedeemPath;
 
-        /// <summary>No device_name means the name was skipped. join_existing goes only on the resend after a confirm.</summary>
-        internal static string RedeemBody(string appToken, string passcode, PairingDeviceMetadata metadata, string deviceName = null, bool joinExisting = false) =>
+        /// <summary>
+        /// Neither device_name nor skip_device_name lets the Portal ask for a name when the passcode allows one.
+        /// skip_device_name answers that ask with "no name". join_existing goes only on the resend after a confirm.
+        /// </summary>
+        internal static string RedeemBody(string appToken, string passcode, PairingDeviceMetadata metadata, string deviceName = null,
+            bool skipDeviceName = false, bool joinExisting = false) =>
             JsonConvert.SerializeObject(new RedeemRequest
             {
-                AppToken = appToken, Passcode = passcode, DeviceName = deviceName, JoinExisting = joinExisting, DeviceMetadata = metadata
+                AppToken = appToken, Passcode = passcode, DeviceName = deviceName, SkipDeviceName = skipDeviceName,
+                JoinExisting = joinExisting, DeviceMetadata = metadata
             });
 
         /// <summary>Drops whitespace and hyphens, so "483 921" and "483-921" from a custom keyboard still pair.</summary>
@@ -163,6 +171,7 @@ namespace AbxrLib.Runtime.Services.Pairing
                 ErrorResponse error = ReadError(response.Body);
                 switch (error?.Code)
                 {
+                    case DeviceNameRequestedCode: return Failure(Abxr.PairingRedeemError.DeviceNameRequested);
                     case DeviceNameRequiredCode: return Failure(Abxr.PairingRedeemError.DeviceNameRequired);
                     case DeviceNameInvalidCode: return Failure(Abxr.PairingRedeemError.DeviceNameInvalid);
                     case DeviceNameExistsCode: return DeviceNameExists(NormalizeDeviceName(error.DeviceName) ?? NormalizeDeviceName(requestedDeviceName));
@@ -176,6 +185,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         internal static Abxr.PairingRedeemResult Failure(Abxr.PairingRedeemError error) => error switch
         {
             Abxr.PairingRedeemError.InvalidPasscode => new Abxr.PairingRedeemResult(false, error, 0, InvalidPasscodeMessage),
+            Abxr.PairingRedeemError.DeviceNameRequested => new Abxr.PairingRedeemResult(false, error, 0, DeviceNameRequestedMessage),
             Abxr.PairingRedeemError.DeviceNameRequired => new Abxr.PairingRedeemResult(false, error, 0, DeviceNameRequiredMessage),
             Abxr.PairingRedeemError.DeviceNameInvalid => new Abxr.PairingRedeemResult(false, error, 0, DeviceNameInvalidMessage),
             Abxr.PairingRedeemError.BuildRejected => new Abxr.PairingRedeemResult(false, error, 0, BuildRejectedMessage),
