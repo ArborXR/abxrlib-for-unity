@@ -128,6 +128,21 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator StartNewSession_WhileResolving_SettlesOnALaterFrame()
+    {
+        Start(pairedAs: null, Authorized);
+
+        Abxr.StartNewSession();
+        Assert.AreEqual(Abxr.PairingState.Resolving, Pairing.State, "The first attempt waits, like auto-start, before deciding identity.");
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State);
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+    }
+
+    // ── Paired bootstrap ──────────────────────────────────────────
+
+    [UnityTest]
     public IEnumerator StoredPairing_BootstrapsAsTheInstance()
     {
         var transport = Start(pairedAs: InstanceId, Authorized);

@@ -392,7 +392,6 @@ namespace AbxrLib.Runtime
 	        _authService.ClearSessionAndPrepareForNew();
         }
         
-        internal void DoAuthenticate() => _authService.Authenticate();
 
         private IEnumerator WaitForTransportSelectionCoroutine()
         {
@@ -429,7 +428,7 @@ namespace AbxrLib.Runtime
 #endif
         }
 
-        private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds)
+        private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds, bool clearStateFirst = true)
         {
             // Never from inside Awake, which runs before the first scene loads: OnAuthCompleted and the pairing Startup
             // event would fire with no subscribers. One frame in, the scene's objects have run Awake and Start.
@@ -439,7 +438,7 @@ namespace AbxrLib.Runtime
             while (_pairingService.State == Abxr.PairingState.Resolving && IsWaitingForArborMdmClient())
                 yield return AuthStartPollWait;
             if (delaySeconds > 0) yield return new WaitForSeconds(delaySeconds);
-            DoAuthenticate();
+            _authService.Authenticate(clearStateFirst);
         }
 
         /// <summary>
@@ -827,7 +826,12 @@ internal void StartNewSession()
 			}
 #endif
 			_authService.ClearSessionAndPrepareForNew();
-			_authService.Authenticate(clearStateFirst: false);
+			// The first attempt of a launch decides identity, so it waits like auto-start does: for the ArborXR client,
+			// and for the first frame. Otherwise a login that calls StartNewSession early settles a managed headset as Unpaired.
+			if (_pairingService.State == Abxr.PairingState.Resolving)
+				StartCoroutine(AuthStartAfterTransportSelectionCoroutine(0f, clearStateFirst: false));
+			else
+				_authService.Authenticate(clearStateFirst: false);
 		}
 
 		/// <summary>
