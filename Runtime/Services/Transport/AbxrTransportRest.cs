@@ -39,6 +39,8 @@ namespace AbxrLib.Runtime.Services.Transport
         private bool _stopped;
         /// <summary>Bumped by ClearAllPending, so a send still retrying when its session ends drops its batch instead of carrying it into the next session.</summary>
         private int _sessionGeneration;
+        /// <summary>The queues that have warned since they last had room.</summary>
+        private readonly HashSet<string> _queuesAtLimit = new HashSet<string>();
 
         public bool IsServiceTransport => false;
 
@@ -451,11 +453,22 @@ namespace AbxrLib.Runtime.Services.Transport
             return true;
         }
 
-        private static bool IsQueueAtLimit<T>(List<T> queue, string queueType)
+        /// <summary>
+        /// True when the queue is full, so the entry is dropped. Warns once each time a queue fills, not for every entry it
+        /// drops (SDK-60 decision 1): at about six telemetry entries a second, that was a warning for each one. Call under _lock.
+        /// </summary>
+        private bool IsQueueAtLimit<T>(List<T> queue, string queueType)
         {
             int max = Configuration.Instance.maximumCachedItems;
-            if (max > 0 && queue.Count >= max) { Logcat.Warning($"{queueType} queue limit reached ({max})"); return true; }
-            return false;
+            if (max <= 0 || queue.Count < max)
+            {
+                _queuesAtLimit.Remove(queueType);
+                return false;
+            }
+
+            if (_queuesAtLimit.Add(queueType))
+                Logcat.Warning($"{queueType} queue limit reached ({max}). New entries are dropped until it drains.");
+            return true;
         }
 
         private IEnumerator SendData()

@@ -4,6 +4,7 @@
 // Tests that assert on queue contents are skipped when using ArborInsightsClient (device) transport.
 using System.Collections;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
@@ -48,6 +49,36 @@ public class EventTrackingTests : AbxrPlayModeTestBase
         yield return new WaitForSeconds(5f); // past every retry the ended session had left
 
         Assert.AreEqual(0, PendingEvents.Count, "A batch from an ended session must not go back in the queue for the next one.");
+    }
+
+    // ── Queue limit ───────────────────────────────────────────────────────
+
+    [Test]
+    public void AFullQueue_WarnsOnceAndDropsTheRest()
+    {
+        ModifyConfig("maximumCachedItems", 2);
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Event queue limit reached (2).")));
+
+        for (int i = 0; i < 5; i++) Abxr.Event($"event_{i}", null, sendTelemetry: false);
+
+        Assert.AreEqual(2, PendingEvents.Count);
+        LogAssert.NoUnexpectedReceived();
+    }
+
+    [Test]
+    public void AQueueThatDrains_WarnsAgainWhenItFillsAgain()
+    {
+        ModifyConfig("maximumCachedItems", 1);
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Event queue limit reached (1).")));
+        Abxr.Event("first", null, sendTelemetry: false);
+        Abxr.Event("dropped", null, sendTelemetry: false);
+
+        AbxrSubsystem.Instance.RestTransportForTesting.ClearAllPending();
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Event queue limit reached (1).")));
+        Abxr.Event("second", null, sendTelemetry: false);
+        Abxr.Event("dropped_again", null, sendTelemetry: false);
+
+        LogAssert.NoUnexpectedReceived();
     }
 
     // ── Generic Event ─────────────────────────────────────────────────────
