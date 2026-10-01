@@ -111,7 +111,21 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.AreEqual(0, transport.AuthCalls, "Unpaired at startup stays unpaired until the next launch.");
     }
 
-    // ── Paired bootstrap ──────────────────────────────────────────
+    [UnityTest]
+    public IEnumerator WherePairingCantRun_ALaterOrgToken_Authenticates()
+    {
+        var transport = Start(pairedAs: null, Authorized, pairingPlatform: false);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        SetRuntimeAuth(Auth(OrgToken, "development"));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((true, (string)null), _reports[1], "A standalone or Editor build that sets its org late still signs in.");
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+    }
 
     [UnityTest]
     public IEnumerator StoredPairing_BootstrapsAsTheInstance()
@@ -443,13 +457,13 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
 
     /// <summary>A production build with an App Token, optionally a stored pairing, routed through a scripted transport.</summary>
     private AuthRetryTests.ScriptedAuthTransport Start(string pairedAs, AuthTransportResult response, string orgToken = null,
-        string deviceName = null, string buildType = "production")
+        string deviceName = null, string buildType = "production", bool pairingPlatform = true)
     {
         _reports.Clear();
         _store = new MemoryPairingStore();
         if (pairedAs != null) _store.Save(InstanceToken, pairedAs, deviceName);
         AbxrSubsystem.NextPairingStoreForTesting = _store;
-        AbxrSubsystem.PairingPlatformSupportedForTesting = true;
+        AbxrSubsystem.PairingPlatformSupportedForTesting = pairingPlatform;
         CreateSubsystem();
 
         var transport = new AuthRetryTests.ScriptedAuthTransport(response);

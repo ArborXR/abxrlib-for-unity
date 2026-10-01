@@ -146,6 +146,13 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// </summary>
         public void SettleIdentity(bool otherIdentityWins)
         {
+            // Where pairing can't run, holding "no identity" for the launch protects nothing, so an org credential the
+            // app sets later (SetOrgId after a failed auto-start) still wins, as it did before pairing existed.
+            if (State == Abxr.PairingState.Unpaired && otherIdentityWins && !_host.IsPlatformSupported)
+            {
+                Settle(Abxr.PairingState.Managed, Abxr.PairingChangeReason.Startup);
+                return;
+            }
             if (State != Abxr.PairingState.Resolving) return;
 
             if (otherIdentityWins) Settle(Abxr.PairingState.Managed, Abxr.PairingChangeReason.Startup);

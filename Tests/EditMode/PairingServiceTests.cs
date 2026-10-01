@@ -179,6 +179,23 @@ public class PairingServiceTests
     }
 
     [Test]
+    public void Settle_WherePairingCantRun_ALaterOrgCredentialWins()
+    {
+        _host.IsPlatformSupported = false;
+        var service = Create();
+        service.SettleIdentity(otherIdentityWins: false);
+
+        service.SettleIdentity(otherIdentityWins: true);
+
+        Assert.AreEqual(Abxr.PairingState.Managed, service.State, "Holding \"no identity\" protects nothing where pairing can't run.");
+        CollectionAssert.AreEqual(new[]
+        {
+            (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Startup),
+            (Abxr.PairingState.Managed, Abxr.PairingChangeReason.Startup)
+        }, _events);
+    }
+
+    [Test]
     public void UnsupportedPlatform_IgnoresAStoredPairing()
     {
         _store.Save(Token, InstanceId, null);

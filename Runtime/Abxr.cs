@@ -147,7 +147,10 @@ public static partial class Abxr
 	/// <summary>Why the pairing state changed. OnPairingStateChanged carries it.</summary>
 	public enum PairingChangeReason
 	{
-		/// <summary>The SDK decided this app's identity at startup.</summary>
+		/// <summary>
+		/// The SDK decided this app's identity at startup. Where pairing doesn't run, also when an org credential set after
+		/// a startup with none replaces Unpaired with Managed.
+		/// </summary>
 		Startup,
 		/// <summary>A passcode was redeemed, or SetAppInstanceToken stored an app instance.</summary>
 		Paired,
