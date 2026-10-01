@@ -152,7 +152,7 @@ public static partial class Abxr
 		/// a startup with none replaces Unpaired with Managed.
 		/// </summary>
 		Startup,
-		/// <summary>A passcode was redeemed, or SetAppInstanceToken stored an app instance.</summary>
+		/// <summary>A passcode was redeemed.</summary>
 		Paired,
 		/// <summary>The prompt closed without pairing. Nothing was stored.</summary>
 		Dismissed,
