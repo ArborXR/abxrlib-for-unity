@@ -114,6 +114,7 @@ namespace AbxrLib.Runtime
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
         private AbxrPairingService _pairingService;
+        private PairingHost _pairingHost;
         private AbxrDataService _dataService;
         private AbxrTelemetryService _telemetryService;
         private ArborMdmClient _arborMdmClient;
@@ -217,14 +218,16 @@ namespace AbxrLib.Runtime
                 _authService.ApplyRuntimeAuthOverridesForTesting(_nextRuntimeAuthConfigForTesting);
                 _nextRuntimeAuthConfigForTesting = null;
             }
+            _pairingHost = new PairingHost(this);
             _pairingService = new AbxrPairingService(_nextPairingStoreForTesting ?? new PlayerPrefsPairingStore(),
-                new UnityWebRequestPairingClient(this), new PairingHost(this));
+                new UnityWebRequestPairingClient(this), _pairingHost);
             _nextPairingStoreForTesting = null;
             _pairingService.OnStateChanged = OnPairingStateChanged;
+            _pairingService.OnInputRequested = OnInputRequestedDispatch;
             _authService.SetPairedCredential(_pairingService);
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
-            _dataService = new AbxrDataService(this, () => _transport);
+            _dataService = new AbxrDataService(this, () => _transport, () => IsRecording);
             _telemetryService = new AbxrTelemetryService(this);
             _aiProxyApi = new AIProxyApi(_authService);
             _storageService = new AbxrStorageService(_authService, this, () => _transport);
@@ -456,7 +459,27 @@ namespace AbxrLib.Runtime
 
         private void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason reason)
         {
-            if (state == Abxr.PairingState.Paired) UseRestTransportForPairing();
+            if (state == Abxr.PairingState.Unpaired) StopRecordingWhileUnpaired();
+            if (state == Abxr.PairingState.Paired)
+            {
+                UseRestTransportForPairing();
+                // At startup auth is already bootstrapping as the instance. A new pairing has nothing running yet.
+                if (reason == Abxr.PairingChangeReason.Paired) StartAuthentication();
+            }
+        }
+
+        /// <summary>
+        /// False while the app is unpaired and no pairing prompt is open (SDK-60 decision 1): a never-paired install
+        /// would otherwise fill the queues, and a later pairing would send data recorded before anyone opted in.
+        /// Recording resumes when the prompt opens.
+        /// </summary>
+        private bool IsRecording => !(_pairingService != null && _pairingService.State == Abxr.PairingState.Unpaired && _pairingHost.IsPlatformSupported);
+
+        private void StopRecordingWhileUnpaired()
+        {
+            if (!_pairingHost.IsPlatformSupported) return;
+            _transport?.ClearAllPending();
+            Logcat.Info("Not recording: this app isn't paired with an organization. Recording starts when the pairing prompt opens.");
         }
 
         /// <summary>Paired mode runs over REST: the ArborInsightsClient bridge has no field for an app instance token.</summary>
@@ -490,7 +513,22 @@ namespace AbxrLib.Runtime
             public PairingDeviceMetadata DeviceMetadata => PairingDeviceMetadata.Current();
         }
 
-        internal void SubmitInput(string input) => _authService.SubmitInput(input);
+        /// <summary>
+        /// OnInputSubmitted goes to whichever service asked for input. They can't both be waiting: the pairing prompt
+        /// only opens while Unpaired, and auth asks for input only once identity is settled.
+        /// </summary>
+        internal void SubmitInput(string input)
+        {
+            bool pairingPending = _pairingService != null && _pairingService.IsInputRequestPending;
+            if (pairingPending && _authService.IsInputRequestPending)
+                Logcat.Warning("Both pairing and sign-in are waiting for input. The input went to pairing.");
+
+            if (pairingPending) _pairingService.SubmitInput(input);
+            else _authService.SubmitInput(input);
+        }
+
+        private bool IsAnyInputRequestPending =>
+            (_authService != null && _authService.IsInputRequestPending) || (_pairingService != null && _pairingService.IsInputRequestPending);
 
         internal bool IsQRScanForAuthAvailable()
         {
@@ -719,7 +757,7 @@ namespace AbxrLib.Runtime
 				// still-pending request replays, and never one a UI presented, so assigning a handler while
 				// the built-in keyboard is up stays a no-op, as it was before the UI became optional.
 				if (value == null || _droppedInputRequest == null) return;
-				if (_authService == null || !_authService.IsInputRequestPending) return;
+				if (!IsAnyInputRequestPending) return;
 
 				var request = _droppedInputRequest.Value;
 				_droppedInputRequest = null;
@@ -1651,6 +1689,21 @@ internal void StartNewSession()
 			{
 				authUi.Show(AuthUiKind.FullKeyboard);
 				displayPrompt = $"Enter your email username\n(<u>username</u>@{domain})";
+			}
+			else if (type == AbxrPairingService.PasscodeInputType)
+			{
+				authUi.Show(AuthUiKind.PinPad);
+				displayPrompt = $"Enter {prompt}";
+			}
+			else if (type is AbxrPairingService.DeviceNameInputType or AbxrPairingService.RequiredDeviceNameInputType)
+			{
+				authUi.Show(AuthUiKind.FullKeyboard);
+				displayPrompt = prompt;
+			}
+			else if (type == AbxrPairingService.JoinDeviceInputType)
+			{
+				authUi.Show(AuthUiKind.FullKeyboard);
+				displayPrompt = $"{prompt}\nType {domain} to add it, or enter a different name.";
 			}
 
 			if (!string.IsNullOrEmpty(error)) displayPrompt = $"{error}\n{displayPrompt}";

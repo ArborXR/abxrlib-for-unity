@@ -1,7 +1,8 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode: which identity device auth uses (SDK-60 step 3, SDK-59 RFC §03 and D2). An org credential wins, then a
 // stored pairing, then none, which is quiet. The choice holds for the launch. A paired bootstrap refusal revokes on 401
-// and suspends on 403, without latching the session.
+// and suspends on 403, without latching the session. Also the subsystem's wiring around pairing: where the prompt and
+// its input go, recording while unpaired, and auth after a new pairing.
 // Drives the real AbxrAuthService through AuthRetryTests' scripted transport and an in-memory pairing store, so no
 // network or PlayerPrefs is involved.
 using System;
@@ -9,6 +10,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
+using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
@@ -42,8 +44,15 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         // Each test chooses its stored pairing first, then creates the subsystem.
     }
 
+    private FakeAuthUi _ui;
+
     [TearDown]
-    public void UnsubscribeReports() => Abxr.OnAuthCompleted -= Record;
+    public void UnsubscribeReports()
+    {
+        Abxr.OnAuthCompleted -= Record;
+        if (_ui != null) AbxrUi.UnregisterAuthUi(_ui);
+        _ui = null;
+    }
 
     private void Record(bool success, string reason) => _reports.Add((success, reason));
 
@@ -209,7 +218,89 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.AreEqual(InstanceToken, _store.Token, "The stored pairing is kept for a later migration.");
     }
 
+    // ── Subsystem wiring ──────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator Unpaired_RecordsNothingUntilThePromptOpens()
+    {
+        Start(pairedAs: null, Authorized);
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Abxr.Event("before_pairing");
+        Assert.IsFalse(PendingEventNames().Contains("before_pairing"), "A never-paired install records nothing.");
+
+        Assert.IsTrue(Pairing.StartPairing());
+        Abxr.Event("while_prompting");
+        Assert.IsTrue(PendingEventNames().Contains("while_prompting"), "Opening the prompt is the opt-in.");
+    }
+
+    [UnityTest]
+    public IEnumerator SettlingUnpaired_DropsWhatWasRecordedWhileResolving()
+    {
+        Start(pairedAs: null, Authorized);
+        Abxr.Event("while_resolving");
+        Assert.IsTrue(PendingEventNames().Contains("while_resolving"), "Resolving buffers, as before.");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsFalse(PendingEventNames().Contains("while_resolving"), "A later pairing mustn't send data recorded before anyone opted in.");
+    }
+
+    [UnityTest]
+    public IEnumerator ThePrompt_GoesToTheAppHandler_AndItsInputComesBack()
+    {
+        Start(pairedAs: null, Authorized);
+        var requests = new List<string>();
+        Abxr.OnInputRequested = (type, _, _, _) => requests.Add(type);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(Pairing.StartPairing());
+        CollectionAssert.AreEqual(new[] { AbxrPairingService.PasscodeInputType }, requests);
+
+        Abxr.OnInputSubmitted("**skip**");
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State, "The input went to pairing, whose skip closes the prompt.");
+    }
+
+    [UnityTest]
+    public IEnumerator ThePrompt_WithoutAHandler_ShowsThePinPad()
+    {
+        Start(pairedAs: null, Authorized);
+        _ui = new FakeAuthUi();
+        AbxrUi.RegisterAuthUi(_ui);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(Pairing.StartPairing());
+
+        Assert.AreEqual(AuthUiKind.PinPad, _ui.Shown);
+        Assert.AreEqual("Enter Pairing Passcode", _ui.Prompt);
+    }
+
+    [UnityTest]
+    public IEnumerator ANewPairing_StartsAuthAsTheInstance()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.AreEqual(0, transport.AuthCalls);
+
+        Pairing.SetAppInstanceToken(InstanceToken, InstanceId);
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((true, (string)null), _reports[1], "False at startup, then true once paired.");
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(InstanceToken, transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(InstanceId, transport.LastPayload.deviceId);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────
+
+    private static List<string> PendingEventNames() =>
+        AbxrSubsystem.Instance.GetTransportForTesting().GetPendingEventsForTesting().ConvertAll(e => e.name);
 
     private static AbxrPairingService Pairing => AbxrSubsystem.Instance.PairingServiceForTesting;
 
@@ -248,6 +339,16 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         float deadline = Time.realtimeSinceStartup + timeoutSeconds;
         while (!condition() && Time.realtimeSinceStartup < deadline)
             yield return null;
+    }
+
+    private sealed class FakeAuthUi : IAbxrAuthUi
+    {
+        public AuthUiKind? Shown;
+        public string Prompt;
+        public void Show(AuthUiKind kind) => Shown = kind;
+        public void SetPrompt(string prompt) => Prompt = prompt;
+        public void Hide() { }
+        public void StopProcessing() { }
     }
 
     private sealed class MemoryPairingStore : IPairingStore
