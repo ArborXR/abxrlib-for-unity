@@ -10,6 +10,12 @@ namespace AbxrLib.Runtime.Services.Pairing
     /// </summary>
     internal interface IPairedCredential
     {
+        /// <summary>Which identity this launch uses. Auth reads it after <see cref="SettleIdentity"/> to pick the mode.</summary>
+        Abxr.PairingState State { get; }
+
+        /// <summary>Auth's identity decision, once per launch: whether the ArborXR client or an org token identifies the organization.</summary>
+        void SettleIdentity(bool otherIdentityWins);
+
         /// <summary>The stored app instance. Answers in Managed too, so auth can send it as priorAppInstanceId.</summary>
         bool TryGetStored(out string token, out string instanceId);
 
@@ -105,7 +111,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         private bool _promptDeviceNameRequired;
         private string _promptJoinDeviceName;
 
-        internal Abxr.PairingState State { get; private set; } = Abxr.PairingState.Resolving;
+        public Abxr.PairingState State { get; private set; } = Abxr.PairingState.Resolving;
 
         /// <summary>The last redeem outcome, refused calls included. The default UI reads RetryAfterSeconds from it.</summary>
         internal Abxr.PairingRedeemResult LastRedeemResult { get; private set; }
@@ -139,7 +145,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// Ends Resolving once auth knows whether the ArborXR client or an org token identifies the organization.
         /// If neither does, a stored pairing does, or nothing does. Fires Startup, the launch trigger for apps.
         /// </summary>
-        internal void SettleIdentity(bool otherIdentityWins)
+        public void SettleIdentity(bool otherIdentityWins)
         {
             if (State != Abxr.PairingState.Resolving) return;
 

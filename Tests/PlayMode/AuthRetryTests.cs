@@ -436,11 +436,14 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             yield return null;
     }
 
-    private sealed class ScriptedAuthTransport : IAbxrTransport
+    /// <summary>Also used by PairingIdentityTests, which checks the identity each request carried.</summary>
+    internal sealed class ScriptedAuthTransport : IAbxrTransport
     {
         private readonly AuthTransportResult _response;
         private readonly Queue<AuthTransportResult> _nextResponses = new Queue<AuthTransportResult>();
         public int AuthCalls { get; private set; }
+        /// <summary>The identity fields of the latest request, copied: the SDK reuses one payload object.</summary>
+        public AuthPayload LastPayload { get; private set; }
         public int ConfigCalls { get; private set; }
         /// <summary>While true, requests stay in flight: the transport was called but has not answered yet.</summary>
         public bool Hold { get; set; }
@@ -461,6 +464,17 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
             int call = ++AuthCalls;
+            LastPayload = new AuthPayload
+            {
+                appToken = payload.appToken,
+                orgToken = payload.orgToken,
+                appId = payload.appId,
+                orgId = payload.orgId,
+                authSecret = payload.authSecret,
+                appInstanceToken = payload.appInstanceToken,
+                priorAppInstanceId = payload.priorAppInstanceId,
+                deviceId = payload.deviceId
+            };
             var response = _nextResponses.Count > 0 ? _nextResponses.Dequeue() : _response;
             while (Hold || HoldCall(call))
                 yield return null;

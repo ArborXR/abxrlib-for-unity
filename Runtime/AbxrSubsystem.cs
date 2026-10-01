@@ -8,6 +8,7 @@ using AbxrLib.Runtime.Services.AI;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.Services.Data;
 using AbxrLib.Runtime.Services.Auth;
+using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Services.Telemetry;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Services.Transport;
@@ -30,9 +31,27 @@ namespace AbxrLib.Runtime
             _nextRuntimeAuthConfigForTesting = null;
             _simulateQuitInExitAfterAssessmentComplete = false;
             _unitTestSsoSimulationFromConfigAllowed = false;
+            _nextPairingStoreForTesting = null;
+            _pairingPlatformSupportedForTesting = false;
             if (Instance != null) Instance._authService.ResetAuthStartedForTesting();
             Abxr.ResetQuitClosingEventDefaultsForTesting();
         }
+
+        /// <summary>For testing only. When set before CreateSubsystem(), the pairing service keeps its pairing here instead of in PlayerPrefs.</summary>
+        internal static IPairingStore NextPairingStoreForTesting
+        {
+            get => _nextPairingStoreForTesting;
+            set => _nextPairingStoreForTesting = value;
+        }
+        private static IPairingStore _nextPairingStoreForTesting;
+
+        /// <summary>For testing only. Pairing runs only in Android and WebGL players; this lets a PlayMode test pair in the Editor. Read by the subsystem created afterwards.</summary>
+        internal static bool PairingPlatformSupportedForTesting
+        {
+            get => _pairingPlatformSupportedForTesting;
+            set => _pairingPlatformSupportedForTesting = value;
+        }
+        private static bool _pairingPlatformSupportedForTesting;
 
         /// <summary>For testing only. When true, ExitAfterAssessmentComplete() does not call EditorApplication.isPlaying = false / Application.Quit(); it logs and ends the coroutine so PlayMode tests can complete.</summary>
         internal static bool SimulateQuitInExitAfterAssessmentComplete
@@ -60,6 +79,9 @@ namespace AbxrLib.Runtime
 
         /// <summary>For testing only. Exposes the auth service so tests can simulate auth success.</summary>
         internal AbxrAuthService AuthServiceForTesting => _authService;
+
+        /// <summary>For testing only. The pairing service, for its state and stored pairing.</summary>
+        internal AbxrPairingService PairingServiceForTesting => _pairingService;
 
         /// <summary>For testing only. True when ArborMdmClient is available and connected (e.g. on Android device with MDM). Used to decide expected auth outcome in environment-dependent tests.</summary>
         internal bool IsArborMdmClientAvailableAndConnected => _arborMdmClient != null && _arborMdmClient.IsConnected();
@@ -91,6 +113,7 @@ namespace AbxrLib.Runtime
 
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
+        private AbxrPairingService _pairingService;
         private AbxrDataService _dataService;
         private AbxrTelemetryService _telemetryService;
         private ArborMdmClient _arborMdmClient;
@@ -139,6 +162,12 @@ namespace AbxrLib.Runtime
 
         private static readonly WaitForSecondsRealtime TransportPollWait = new WaitForSecondsRealtime(0.25f);
         private static readonly WaitForSecondsRealtime AuthStartPollWait = new WaitForSecondsRealtime(0.1f);
+        /// <summary>How long identity waits for the ArborXR client after startup: the client's own initialization limit (SDK-60 decision 2).</summary>
+        private const float ArborMdmClientWaitSeconds = 16f;
+        /// <summary>The Portal API that redeems pairing passcodes.</summary>
+        private const string DefaultPairingUrl = "https://api.xrdm.app/";
+        private float _startRealtime;
+        private bool _arborMdmClientInstalled;
 
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
@@ -168,12 +197,14 @@ namespace AbxrLib.Runtime
             }
 
             // Create services
+            _startRealtime = Time.realtimeSinceStartup;
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (Configuration.Instance.enableArborMdmClient)
             {
                 _arborMdmClient = new ArborMdmClient();
-                // Start bind early so it can complete while the scene loads; auth will wait for ready in a coroutine.
+                // Start bind early so it can complete while the scene loads; identity waits for it in a coroutine.
                 _arborMdmClient.Initialize();
+                _arborMdmClientInstalled = ArborMdmClient.IsClientPackageInstalled();
             }
             if (Configuration.Instance.enableArborInsightsClient)
                 _arborInsightsClient = new ArborInsightsClient();
@@ -186,6 +217,11 @@ namespace AbxrLib.Runtime
                 _authService.ApplyRuntimeAuthOverridesForTesting(_nextRuntimeAuthConfigForTesting);
                 _nextRuntimeAuthConfigForTesting = null;
             }
+            _pairingService = new AbxrPairingService(_nextPairingStoreForTesting ?? new PlayerPrefsPairingStore(),
+                new UnityWebRequestPairingClient(this), new PairingHost(this));
+            _nextPairingStoreForTesting = null;
+            _pairingService.OnStateChanged = OnPairingStateChanged;
+            _authService.SetPairedCredential(_pairingService);
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
             _dataService = new AbxrDataService(this, () => _transport);
@@ -211,6 +247,12 @@ namespace AbxrLib.Runtime
             {
                 Logcat.Error($"Authentication failure: {error}");
                 HandleAuthCompleted(false, error);
+            };
+            // No organization identity, or a suspended pairing: states a store install is expected to be in, not faults.
+            _authService.OnFailedQuietly = reason =>
+            {
+                Logcat.Info($"Not authenticating: {reason}. The app runs without sending data.");
+                HandleAuthCompleted(false, reason);
             };
             _authService.OnUserDataSyncCompleted = (success, errorMsg) => Abxr.OnUserDataSyncCompleted?.Invoke(success, errorMsg);
 
@@ -246,9 +288,12 @@ namespace AbxrLib.Runtime
             //
             // Invalid AbxrLib asset (missing/invalid credentials or rest URL): always use this coroutine path — do not
             // call HandleAuthCompleted from Awake. AbxrSubsystem.Awake runs during BeforeSceneLoad, before the scene
-            // exists, so synchronous OnAuthCompleted would run with no subscribers.
+            // exists, so synchronous OnAuthCompleted would run with no subscribers; the coroutine waits a frame first.
             //
-            // When credentials cannot be sent, AbxrAuthService.Authenticate() fails at IsValidToSend() (before
+            // With no org credential from any source and no stored pairing, Authenticate() stops quietly: one Info line
+            // and OnAuthCompleted(false, "No organization identity") through OnFailedQuietly, since a store install is
+            // expected to be in that state (SDK-59 RFC D2). When credentials are present but can't be sent (malformed, a
+            // missing App Token, a production_custom build without its org token), it fails at validation (before
             // AuthenticateCoroutine / device auth / HTTP). That invokes OnFailed → HandleAuthCompleted(false, …) →
             // Abxr.OnAuthCompleted(false, error). Same pipeline as the API refusing the credentials: Authenticated stays false,
             // no session; apps that continue without analytics should handle success == false (as for any failed auth).
@@ -384,9 +429,65 @@ namespace AbxrLib.Runtime
 
         private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds)
         {
+            // Never from inside Awake, which runs before the first scene loads: OnAuthCompleted and the pairing Startup
+            // event would fire with no subscribers. One frame in, the scene's objects have run Awake and Start.
+            yield return null;
             while (!_transportSelectionComplete) yield return AuthStartPollWait;
+            // A slow ArborXR client would otherwise look like a headset with no identity, and the app would pair it.
+            while (_pairingService.State == Abxr.PairingState.Resolving && IsWaitingForArborMdmClient())
+                yield return AuthStartPollWait;
             if (delaySeconds > 0) yield return new WaitForSeconds(delaySeconds);
             DoAuthenticate();
+        }
+
+        /// <summary>
+        /// True while the ArborXR client is installed but not connected yet, for up to 16s after startup (SDK-60 decision 2).
+        /// Nothing reports when it connects, so the caller polls.
+        /// </summary>
+        private bool IsWaitingForArborMdmClient()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_arborMdmClient == null || !_arborMdmClientInstalled || _arborMdmClient.IsConnected()) return false;
+            return Time.realtimeSinceStartup - _startRealtime < ArborMdmClientWaitSeconds;
+#else
+            return false;
+#endif
+        }
+
+        private void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason reason)
+        {
+            if (state == Abxr.PairingState.Paired) UseRestTransportForPairing();
+        }
+
+        /// <summary>Paired mode runs over REST: the ArborInsightsClient bridge has no field for an app instance token.</summary>
+        private void UseRestTransportForPairing()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!(_transport is AbxrTransportArborInsights)) return;
+            _transport = new AbxrTransportRest(_authService, this);
+            Logcat.Info("Paired with an app instance, so the SDK sends over REST instead of the ArborInsightsClient service.");
+#endif
+        }
+
+        /// <summary>What the pairing service reads from the SDK around it.</summary>
+        private sealed class PairingHost : IPairingHost
+        {
+            private readonly AbxrSubsystem _subsystem;
+
+            internal PairingHost(AbxrSubsystem subsystem) => _subsystem = subsystem;
+
+            public bool IsPlatformSupported =>
+#if (UNITY_ANDROID || UNITY_WEBGL) && !UNITY_EDITOR
+                true;
+#else
+                _pairingPlatformSupportedForTesting;
+#endif
+
+            public bool CanPresentPrompt => _subsystem._appOnInputRequested != null || AbxrUi.AuthUi != null;
+            public string AppToken => _subsystem._authService?.AppTokenForPairing ?? "";
+            public string PairingUrl => DefaultPairingUrl;
+            public double Now => Time.realtimeSinceStartupAsDouble;
+            public PairingDeviceMetadata DeviceMetadata => PairingDeviceMetadata.Current();
         }
 
         internal void SubmitInput(string input) => _authService.SubmitInput(input);
@@ -425,8 +526,8 @@ namespace AbxrLib.Runtime
 	        // Start default assessment tracking if no assessments are currently running
 	        // This ensures duration tracking starts immediately after authentication
 	        // But delay sending the event to server for 1 minute to allow developers to start their own assessment
-	        // Failures run this too: when 'false' comes before 'true' (a device auth that retried, a wrong PIN), the DEFAULT
-	        // duration counts from the first report, when the app went ahead without auth; only 'true' starts the timer.
+	        // Failures run this too. When 'false' comes before 'true' (a device auth that retried, a wrong PIN), 'true' restarts
+	        // the DEFAULT start, so its duration covers only the time after auth succeeded; only 'true' starts the timer.
 	        // Use lock to prevent race condition with concurrent EventAssessmentStart calls
 	        lock (_assessmentStartTimesLock)
 	        {
