@@ -5,12 +5,20 @@ namespace AbxrLib.Runtime.Core.UI
     {
         PinPad,
         FullKeyboard,
-        /// <summary>The pairing passcode on the PIN pad. Its skip is "Not now", shown unless enablePairingDismiss is off.</summary>
+        /// <summary>
+        /// The pairing passcode on the PIN pad. Submitting "**skip**" closes the prompt; the default UI offers that as
+        /// "Not now", unless enablePairingDismiss is off.
+        /// </summary>
         PairingPasscode,
-        /// <summary>The headset's name on the keyboard, with a skip. Also the step that confirms joining a headset that has the name.</summary>
+        /// <summary>The headset's name on the keyboard, with a skip.</summary>
         PairingDeviceName,
         /// <summary>The headset's name on the keyboard, without a skip: the passcode requires one.</summary>
-        PairingDeviceNameRequired
+        PairingDeviceNameRequired,
+        /// <summary>
+        /// A headset in the organization already has the name: confirm adding this app to it, or choose another name.
+        /// Abxr.GetLastPairingRedeemResult().DeviceName holds the name; submit it to join, or "**skip**" for another.
+        /// </summary>
+        PairingDeviceJoin
     }
 
     /// <summary>

@@ -24,6 +24,20 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public Button skipButton;
 
         public TMP_InputField inputField;
+
+        [Header("Passcode pairing (optional)")]
+        [Tooltip("The keypad and its prompt, hidden while the gate or the confirm is up.")]
+        public GameObject keypadGroup;
+        [Tooltip("The screen before the passcode: what pairing is, Enter Pairing Passcode, and Not now. Without it the keypad opens straight away.")]
+        public GameObject pairingGate;
+        public Button gateConnectButton;
+        public Button gateNotNowButton;
+        [Tooltip("Asks whether to add this app to a headset that already has the name. Without it the person types the name on the keyboard.")]
+        public GameObject pairingConfirm;
+        public TextMeshProUGUI confirmTitle;
+        public Button confirmJoinButton;
+        public TextMeshProUGUI confirmJoinLabel;
+        public Button confirmOtherButton;
 #if UNITY_ANDROID && !UNITY_EDITOR 
         // Cache button state to avoid repeated logs
         private bool? _lastQRButtonState = null;
@@ -44,6 +58,10 @@ namespace AbxrLib.Runtime.UI.Keyboard
             AddPointerDownHandler(submitButton, Submit);
             AddPointerDownHandler(qrCodeButton, QRCode);
             AddPointerDownHandler(skipButton, Skip);
+            AddPointerDownHandler(gateConnectButton, KeyboardHandler.LeavePairingGate);
+            AddPointerDownHandler(gateNotNowButton, NotNow);
+            AddPointerDownHandler(confirmJoinButton, JoinExistingHeadset);
+            AddPointerDownHandler(confirmOtherButton, NotNow);
         }
 
         private void OnEnable()
@@ -194,7 +212,21 @@ namespace AbxrLib.Runtime.UI.Keyboard
             }
         }
         
-        private static void Skip() => AbxrSubsystem.Instance.SubmitInput("**skip**");
+        /// <summary>Guest Access while signing in. While pairing it's Back to the gate, or "Not now" on a PIN pad without one.</summary>
+        private static void Skip()
+        {
+            if (KeyboardHandler.IsPairing && KeyboardHandler.ReturnToPairingGate()) return;
+            NotNow();
+        }
+
+        /// <summary>"**skip**": closes the pairing prompt from the gate, and picks another name from the confirm.</summary>
+        private static void NotNow() => AbxrSubsystem.Instance.SubmitInput("**skip**");
+
+        private void JoinExistingHeadset()
+        {
+            StartCoroutine(KeyboardHandler.ProcessingVisual());
+            AbxrSubsystem.Instance.SubmitInput(Abxr.GetLastPairingRedeemResult().DeviceName);
+        }
 
         private void QRCode()
         {

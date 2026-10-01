@@ -1696,7 +1696,7 @@ internal void StartNewSession()
 			else if (type == AbxrPairingService.PasscodeInputType)
 			{
 				authUi.Show(AuthUiKind.PairingPasscode);
-				displayPrompt = $"Pair this app with ArborXR Insights.\nEnter {prompt}";
+				displayPrompt = $"Enter {prompt}";
 			}
 			else if (type == AbxrPairingService.DeviceNameInputType)
 			{
@@ -1710,8 +1710,8 @@ internal void StartNewSession()
 			}
 			else if (type == AbxrPairingService.JoinDeviceInputType)
 			{
-				authUi.Show(AuthUiKind.PairingDeviceName);
-				displayPrompt = $"{prompt}\nSubmit {domain} to add it, or type a different name.";
+				authUi.Show(AuthUiKind.PairingDeviceJoin);
+				displayPrompt = prompt;
 			}
 
 			if (!string.IsNullOrEmpty(error)) displayPrompt = $"{error}\n{displayPrompt}";

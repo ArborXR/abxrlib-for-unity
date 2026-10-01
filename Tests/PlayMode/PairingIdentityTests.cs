@@ -283,7 +283,7 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.IsTrue(Pairing.StartPairing());
 
         Assert.AreEqual(AuthUiKind.PairingPasscode, _ui.Shown);
-        Assert.AreEqual("Pair this app with ArborXR Insights.\nEnter Pairing Passcode", _ui.Prompt);
+        Assert.AreEqual("Enter Pairing Passcode", _ui.Prompt);
     }
 
     [UnityTest]

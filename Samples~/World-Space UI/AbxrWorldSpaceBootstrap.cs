@@ -72,7 +72,22 @@ namespace AbxrLib.Runtime.UI
                     // interface's contract: create if missing, reveal if hidden.
                     KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
                     KeyboardHandler.SetPairingMode(kind == AuthUiKind.PairingPasscode);
+                    if (kind == AuthUiKind.PairingPasscode) KeyboardHandler.ShowPairingPasscode();
                     KeyboardHandler.ShowPinPad();
+                    break;
+                case AuthUiKind.PairingDeviceJoin:
+                    KeyboardHandler.DestroyKeyboard();
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+                    KeyboardHandler.SetPairingMode(true);
+                    if (KeyboardHandler.ShowPairingConfirm())
+                    {
+                        KeyboardHandler.ShowPinPad();
+                        break;
+                    }
+                    // A PIN pad without the confirm panel: type the existing name on the keyboard instead.
+                    KeyboardHandler.DestroyPinPad();
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+                    KeyboardHandler.SetDeviceNameMode(skippable: true, joinByTyping: true);
                     break;
                 case AuthUiKind.PairingDeviceName:
                 case AuthUiKind.PairingDeviceNameRequired:
