@@ -102,6 +102,9 @@ namespace AbxrLib.Runtime
         /// <summary>For testing only. Current transport (REST or ArborInsights). Use to check IsServiceTransport and call GetPending*ForTesting on any transport.</summary>
         internal IAbxrTransport GetTransportForTesting() => _transport;
 
+        /// <summary>For testing only. Replaces the data transport, so a test can see what a flush sends.</summary>
+        internal void SetTransportForTesting(IAbxrTransport transport) => _transport = transport;
+
         /// <summary>For testing only. True when the exit-or-return flow after an assessment has been started and not stopped.</summary>
         internal bool IsExitAfterAssessmentScheduledForTesting => _exitAfterAssessmentCoroutine != null;
 
@@ -477,7 +480,10 @@ namespace AbxrLib.Runtime
         {
             if (!_authService.Authenticated && !_authService.IsAuthenticationAttemptActive) return;
             bool signInPromptOpen = _authService.IsInputRequestPending;
-            _authService.ClearSessionAndPrepareForNew();
+            // A session that signed in ends the way EndSession does, while its token still works: open assessments
+            // close, and what it recorded goes to the org it belongs to instead of being dropped with the queue.
+            if (_authService.Authenticated) EndSession();
+            else _authService.ClearSessionAndPrepareForNew();
             if (signInPromptOpen) AbxrUi.AuthUi?.Hide();
         }
 
@@ -486,7 +492,8 @@ namespace AbxrLib.Runtime
         /// would otherwise fill the queues, and a later pairing would send data recorded before anyone opted in.
         /// Recording resumes when the prompt opens.
         /// </summary>
-        private bool IsRecording => !(_pairingService != null && _pairingService.State == Abxr.PairingState.Unpaired && _pairingHost.IsPlatformSupported);
+        private bool IsRecording => _endSessionInProgress ||
+            !(_pairingService != null && _pairingService.State == Abxr.PairingState.Unpaired && _pairingHost.IsPlatformSupported);
 
         private void StopRecordingWhileUnpaired()
         {

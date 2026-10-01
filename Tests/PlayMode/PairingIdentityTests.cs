@@ -403,14 +403,36 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     [UnityTest]
     public IEnumerator ClearPairing_WhileAuthenticated_EndsTheSession()
     {
-        Start(pairedAs: InstanceId, Authorized);
+        var transport = Start(pairedAs: InstanceId, Authorized);
         Abxr.StartAuthentication();
         yield return WaitFor(() => _reports.Count > 0, 5f);
+        AbxrSubsystem.Instance.SetTransportForTesting(transport);
         Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
 
         Abxr.ClearPairing();
 
         Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated, "Storage and the AI proxy mustn't keep using the cleared instance.");
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_WhileAuthenticated_FlushesAndClosesWhatItRecorded()
+    {
+        var transport = Start(pairedAs: InstanceId, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        AbxrSubsystem.Instance.SetTransportForTesting(transport);
+        bool authenticatedAtFlush = false;
+        transport.OnQuitCalled = () => authenticatedAtFlush = AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated;
+        Abxr.EventAssessmentStart("open_assessment");
+        Abxr.Event("done");
+        transport.Events.Clear();
+
+        Abxr.ClearPairing();
+
+        Assert.AreEqual(1, transport.QuitCalls, "The old pairing's queue is flushed, not dropped.");
+        Assert.IsTrue(authenticatedAtFlush, "The flush signs with the old session's token, before it's cleared.");
+        Assert.IsTrue(transport.Events.Exists(e => e.name == "open_assessment"), "Its open assessment is closed and recorded for its own org.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
     }
 
     [UnityTest]

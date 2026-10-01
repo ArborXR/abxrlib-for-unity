@@ -492,7 +492,13 @@ public class AuthRetryTests : AbxrPlayModeTestBase
                 onComplete?.Invoke(false, "not scripted");
         }
 
-        public void AddEvent(string name, Dictionary<string, string> meta) { }
+        /// <summary>Events added while this is also the data transport (SetTransportForTesting).</summary>
+        public readonly List<(string name, Dictionary<string, string> meta)> Events = new List<(string, Dictionary<string, string>)>();
+        public int QuitCalls { get; private set; }
+        /// <summary>Runs inside OnQuit, while the flush would send.</summary>
+        public Action OnQuitCalled { get; set; }
+
+        public void AddEvent(string name, Dictionary<string, string> meta) => Events.Add((name, meta));
         public void AddTelemetry(string name, Dictionary<string, string> meta) { }
         public void AddLog(string logLevel, string text, Dictionary<string, string> meta) { }
         public void ForceSend() { }
@@ -510,7 +516,12 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             yield break;
         }
 
-        public void OnQuit() { }
+        public void OnQuit()
+        {
+            QuitCalls++;
+            OnQuitCalled?.Invoke();
+        }
+
         public void ClearAllPending() { }
         public List<EventPayload> GetPendingEventsForTesting() => new List<EventPayload>();
         public List<LogPayload> GetPendingLogsForTesting() => new List<LogPayload>();
