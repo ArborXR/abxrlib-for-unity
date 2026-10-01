@@ -148,8 +148,8 @@ public static partial class Abxr
 	public enum PairingChangeReason
 	{
 		/// <summary>
-		/// The SDK decided this app's identity at startup. Where pairing doesn't run, also when an org credential set after
-		/// a startup with none replaces Unpaired with Managed.
+		/// The SDK decided this app's identity at startup. In an app that can't pair (no App Token, or a platform without
+		/// pairing), also when an org credential set after a startup with none replaces Unpaired with Managed.
 		/// </summary>
 		Startup,
 		/// <summary>A passcode was redeemed.</summary>

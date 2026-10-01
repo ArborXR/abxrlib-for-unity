@@ -493,11 +493,11 @@ namespace AbxrLib.Runtime
         /// Recording resumes when the prompt opens.
         /// </summary>
         private bool IsRecording => _endSessionInProgress ||
-            !(_pairingService != null && _pairingService.State == Abxr.PairingState.Unpaired && _pairingHost.IsPlatformSupported);
+            !(_pairingService != null && _pairingService.State == Abxr.PairingState.Unpaired && _pairingService.CanPair);
 
         private void StopRecordingWhileUnpaired()
         {
-            if (!_pairingHost.IsPlatformSupported) return;
+            if (!_pairingService.CanPair) return;
             _transport?.ClearAllPending();
             Logcat.Info("Not recording: this app isn't paired with an organization. Recording starts when the pairing prompt opens.");
         }

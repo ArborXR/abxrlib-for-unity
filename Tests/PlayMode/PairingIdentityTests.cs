@@ -128,6 +128,25 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator WithoutAnAppToken_ALateOrgCredential_Authenticates()
+    {
+        // A legacy (App ID) app on a pairing platform: it can't pair, so the launch-long hold doesn't apply to it.
+        var transport = Start(pairedAs: null, Authorized);
+        SetRuntimeAuth(LegacyAuth(orgId: null, authSecret: null, buildType: "production"));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.IsFalse(Pairing.CanPair);
+
+        SetRuntimeAuth(LegacyAuth(LegacyOrgId, "secret", "development"));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((true, (string)null), _reports[1]);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+    }
+
+    [UnityTest]
     public IEnumerator StartNewSession_WhileResolving_SettlesOnALaterFrame()
     {
         Start(pairedAs: null, Authorized);
@@ -544,6 +563,19 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Abxr.OnAuthCompleted += Record;
         return transport;
     }
+
+    private const string LegacyAppId = "12345678-1234-1234-1234-123456789012";
+    private const string LegacyOrgId = "87654321-4321-4321-4321-210987654321";
+
+    private static RuntimeAuthConfig LegacyAuth(string orgId, string authSecret, string buildType) => new RuntimeAuthConfig
+    {
+        authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "" },
+        useAppTokens = false,
+        buildType = buildType,
+        appId = LegacyAppId,
+        orgId = orgId,
+        authSecret = authSecret
+    };
 
     private static RuntimeAuthConfig Auth(string orgToken, string buildType) => new RuntimeAuthConfig
     {

@@ -135,6 +135,12 @@ namespace AbxrLib.Runtime.Services.Pairing
             }
         }
 
+        /// <summary>
+        /// Whether this app can pair at all: a platform where pairing runs, an App Token, and a usable pairingUrl. An app
+        /// that can't keeps the SDK's pre-pairing behavior: no launch-long hold, and recording as before.
+        /// </summary>
+        internal bool CanPair => _host.IsPlatformSupported && ConfigurationProblem() == null;
+
         private bool HasStoredPairing =>
             _host.IsPlatformSupported && !string.IsNullOrEmpty(_token) && !string.IsNullOrEmpty(_instanceId);
 
@@ -146,9 +152,10 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// </summary>
         public void SettleIdentity(bool otherIdentityWins)
         {
-            // Where pairing can't run, holding "no identity" for the launch protects nothing, so an org credential the
-            // app sets later (SetOrgId after a failed auto-start) still wins, as it did before pairing existed.
-            if (State == Abxr.PairingState.Unpaired && otherIdentityWins && !_host.IsPlatformSupported)
+            // When this app can't pair (the platform, or no App Token), holding "no identity" for the launch protects
+            // nothing, so an org credential it sets later (SetOrgId after a failed auto-start) still wins, as it did
+            // before pairing existed.
+            if (State == Abxr.PairingState.Unpaired && otherIdentityWins && !CanPair)
             {
                 Settle(Abxr.PairingState.Managed, Abxr.PairingChangeReason.Startup);
                 return;
