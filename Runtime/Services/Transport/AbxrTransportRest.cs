@@ -257,11 +257,53 @@ namespace AbxrLib.Runtime.Services.Transport
             onComplete?.Invoke(request.result == UnityWebRequest.Result.Success);
         }
 
-        /// <summary>Flush and release. Sends any pending data and storage synchronously so it reaches the server before the app exits.</summary>
+        /// <summary>Flush and release. Sends any pending data and storage so it reaches the server before the app exits (synchronously, except on WebGL).</summary>
         public void OnQuit()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // WebGL is single-threaded: a UnityWebRequest only completes through browser callbacks on the main thread, so the
+            // sync flush's Thread.Sleep spin never ends and freezes the tab. Send the tail without waiting instead. Leaving it to
+            // ForceSend and the next tick would lose it: the caller clears the queues and auth state as soon as this returns.
+            SendPendingWithoutWaiting();
+#else
             FlushDataSync();
             FlushStorageSync();
+#endif
+        }
+
+        /// <summary>WebGL quit flush (see <see cref="OnQuit"/>). Signs each queued batch with the still-valid session token and lets the browser finish the request. One attempt, no re-queue: a retry or a re-queued batch would go out after this session's auth is cleared.</summary>
+        private void SendPendingWithoutWaiting()
+        {
+            if (!_authService.Authenticated) return;
+            DataPayloadWrapper data = null;
+            StoragePayloadWrapper storage = null;
+            lock (_lock)
+            {
+                if (GetTotalDataCount() > 0)
+                    data = new DataPayloadWrapper { @event = new List<EventPayload>(_eventPayloads), telemetry = new List<TelemetryPayload>(_telemetryPayloads), basicLog = new List<LogPayload>(_logPayloads) };
+                if (_storagePayloads.Count > 0)
+                    storage = new StoragePayloadWrapper { data = new List<StoragePayload>(_storagePayloads) };
+                _eventPayloads.Clear();
+                _telemetryPayloads.Clear();
+                _logPayloads.Clear();
+                _storagePayloads.Clear();
+            }
+            if (data != null) PostWithoutWaiting(DataPath, JsonConvert.SerializeObject(data), "data");
+            if (storage != null) PostWithoutWaiting(StoragePath, JsonConvert.SerializeObject(storage), "storage");
+        }
+
+        private void PostWithoutWaiting(string path, string json, string kind)
+        {
+            var request = new UnityWebRequest(RestUri(path), "POST");
+            Utils.BuildRequest(request, json);
+            _authService.SetAuthHeaders(request, json);
+            request.timeout = Configuration.Instance.requestTimeoutSeconds;
+            request.SendWebRequest().completed += _ =>
+            {
+                if (request.result != UnityWebRequest.Result.Success)
+                    Logcat.Warning($"Quit flush ({kind}) failed ({request.responseCode}): {request.error}");
+                request.Dispose();
+            };
         }
 
         /// <summary>Synchronously send any queued events/telemetry/logs. Used on quit so data is sent before the process exits (ForceSend only sets flags; the tick may never run again).</summary>
