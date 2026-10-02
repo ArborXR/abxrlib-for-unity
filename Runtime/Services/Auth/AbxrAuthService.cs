@@ -587,7 +587,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 // The session was cleared while the request was in flight: drop the response instead of applying it to the new session.
                 if (generation != _sessionGeneration) yield break;
 
-                // Parse only what the transport accepted (same IsValidSuccess rule). A failure body such as "No response body."
+                // Parse only what the transport accepted (same IsValidSuccess rule). A failure body such as an empty body
                 // or an HTML page would log a parse error on every retry.
                 if (result.Success && ApplyAuthResponse(result.Body, stageLabel))
                 {
@@ -601,7 +601,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (!withRetry)
                 {
                     _payload.buildType = savedBuildType;
-                    onComplete(false, ExtractAuthErrorMessage(result.Body));
+                    onComplete(false, ExtractAuthErrorMessage(result.Body) ?? "No response body.");
                     yield break;
                 }
 
@@ -611,8 +611,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     _credentialsRejectedByApi = true;
                     _payload.buildType = savedBuildType;
-                    // The API's own error when it sent one. Otherwise a fixed message: transports turn an empty body into
-                    // "No response body.", and a raw HTML page would not read as a refusal either.
+                    // The API's own error when it sent one. Otherwise a fixed message, since an empty body says nothing
+                    // and a raw HTML page would not read as a refusal either.
                     string message = ExtractExplicitApiError(result.Body) ?? "Authentication was rejected by the API (credentials invalid or denied).";
                     Logcat.Warning($"AuthRequest failed: {message} No further auth attempts will be made this session.");
                     onComplete(false, message);

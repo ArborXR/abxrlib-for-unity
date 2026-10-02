@@ -48,13 +48,9 @@ namespace AbxrLib.Runtime.Services.Transport
                 bool isAuthRejectedByApi = ArborInsightsClient.GetLastAuthRejected();
                 // Use same success rule as auth service (AuthResponse.IsValidSuccess): full success or second-stage required.
                 bool success = !string.IsNullOrEmpty(responseJson) && ParseAndCheckValidSuccess(responseJson);
-                // Normalize empty failure body so auth service logs the same message for both transports.
-                string body = responseJson ?? "";
-                if (string.IsNullOrEmpty(body) && !success)
-                    body = "No response body.";
                 if (!success)
-                    Logcat.Warning($"AuthRequest failed: {body}");
-                onComplete?.Invoke(new AuthTransportResult(success, body, isAuthRejectedByApi));
+                    Logcat.Warning($"AuthRequest failed: {(string.IsNullOrEmpty(responseJson) ? "(empty)" : responseJson)}");
+                onComplete?.Invoke(new AuthTransportResult(success, responseJson, isAuthRejectedByApi));
             }
             catch (Exception ex)
             {

@@ -14,7 +14,7 @@ namespace AbxrLib.Runtime.Services.Transport
         public readonly bool IsAuthRejectedByApi;
         /// <summary>No HTTP response arrived: offline, DNS, refused connection, timeout, or TLS failure.</summary>
         public readonly bool NetworkError;
-        /// <summary>Response body. Never empty on failure.</summary>
+        /// <summary>Response body as received; null or empty when the response had none.</summary>
         public readonly string Body;
         /// <summary>HTTP status, or 0 when no response arrived or the transport has none (ArborInsightsClient).</summary>
         public readonly long StatusCode;

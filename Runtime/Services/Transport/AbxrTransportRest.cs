@@ -79,7 +79,7 @@ namespace AbxrLib.Runtime.Services.Transport
             // Always pass response body when present so auth service gets the same error payload as service transport (ExtractAuthErrorMessage, OnFailed message).
             var result = ToAuthResult(request.result, request.responseCode, request.downloadHandler?.text);
             if (!result.Success)
-                Logcat.Warning($"AuthRequest failed: {result.Body}");
+                Logcat.Warning($"AuthRequest failed: {(string.IsNullOrEmpty(result.Body) ? $"(empty, HTTP {result.StatusCode})" : result.Body)}");
             onComplete?.Invoke(result);
         }
 
@@ -99,12 +99,8 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             // Transport decides: API rejected credentials (do not retry) when HTTP 401 or 403.
             bool isAuthRejectedByApi = !success && (responseCode == 401 || responseCode == 403);
-            // Normalize empty failure body so auth service logs the same message for both transports.
-            string responseBody = response ?? "";
-            if (string.IsNullOrEmpty(responseBody) && !success)
-                responseBody = "No response body.";
             bool networkError = requestResult == UnityWebRequest.Result.ConnectionError;
-            return new AuthTransportResult(success, responseBody, isAuthRejectedByApi, responseCode, networkError);
+            return new AuthTransportResult(success, response, isAuthRejectedByApi, responseCode, networkError);
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
