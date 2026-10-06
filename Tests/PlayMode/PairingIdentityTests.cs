@@ -33,8 +33,9 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     private const string AuthorizedBody =
         "{\"token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDB9.sig\",\"secret\":\"test-secret\",\"appId\":\"12345678-1234-1234-1234-123456789012\"";
     private static readonly AuthTransportResult Authorized = new AuthTransportResult(true, AuthorizedBody + "}", false, 200);
+    // lib-backend's real body for a revoked instance: its exception handler sends "message", not FastAPI's "detail".
     private static readonly AuthTransportResult Unauthorized =
-        new AuthTransportResult(false, "{\"detail\":\"Invalid AppInstanceToken\"}", true, 401);
+        new AuthTransportResult(false, "{\"message\":\"Invalid AppInstanceToken\"}", true, 401);
     private static readonly AuthTransportResult Forbidden =
         new AuthTransportResult(false, "{\"detail\":\"Access suspended\"}", true, 403);
     private static readonly AuthTransportResult Offline =
@@ -223,17 +224,34 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator PairedBootstrap_FastApiDefault401_Revokes()
+    {
+        Start(pairedAs: InstanceId, new AuthTransportResult(false, "{\"detail\":\"Invalid AppInstanceToken\"}", true, 401));
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Pairing revoked")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State, "FastAPI's default shape still means the instance is gone.");
+        Assert.IsNull(_store.Token);
+    }
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_ADifferentFastApi401_KeepsThePairing() =>
+        A401NotARevoke_KeepsThePairing("{\"detail\":\"Unauthorized\"}");
+
+    [UnityTest]
     public IEnumerator PairedBootstrap_AnHtml401_KeepsThePairing() =>
-        A401NotFromLibBackend_KeepsThePairing("<html><body>401 Authorization Required</body></html>");
+        A401NotARevoke_KeepsThePairing("<html><body>401 Authorization Required</body></html>");
 
     [UnityTest]
     public IEnumerator PairedBootstrap_AGateway401_KeepsThePairing() =>
-        A401NotFromLibBackend_KeepsThePairing("{\"message\":\"Unauthorized\"}");
+        A401NotARevoke_KeepsThePairing("{\"message\":\"Unauthorized\"}");
 
-    private IEnumerator A401NotFromLibBackend_KeepsThePairing(string body)
+    private IEnumerator A401NotARevoke_KeepsThePairing(string body)
     {
         Start(pairedAs: InstanceId, new AuthTransportResult(false, body, true, 401));
-        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("got a 401 that didn't come from lib-backend, so the pairing is kept")));
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("got a 401 that isn't lib-backend's revoked-instance error, so the pairing is kept")));
         LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Access suspended")));
 
         Abxr.StartAuthentication();

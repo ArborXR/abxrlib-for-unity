@@ -34,6 +34,8 @@ namespace AbxrLib.Runtime.Services.Auth
         internal const string NoIdentityMessage = "No organization identity";
         internal const string AccessSuspendedMessage = "Access suspended";
         internal const string PairingRevokedMessage = "Pairing revoked";
+        /// <summary>lib-backend's error for an instance token with no live instance behind it.</summary>
+        internal const string InvalidInstanceTokenError = "Invalid AppInstanceToken";
 
         /// <summary>
         /// Fired only when the re-auth triggered by SetUserData (authMechanism type=custom) completes. Not fired for normal session auth.
@@ -546,14 +548,20 @@ namespace AbxrLib.Runtime.Services.Auth
                 ?? (responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...");
         }
 
-        /// <summary>lib-backend (FastAPI) answers every refusal with a JSON "detail". Other error shapes come from something in between.</summary>
-        private static bool IsLibBackendError(string responseJson)
+        /// <summary>
+        /// lib-backend's answer for a missing or revoked instance. Its exception handler sends the error as "message"; "detail"
+        /// is FastAPI's default, kept in case that handler goes. The key alone isn't enough, since gateways send
+        /// {"message":"Unauthorized"} too.
+        /// </summary>
+        private static bool IsInstanceTokenRejection(string responseJson)
         {
             if (string.IsNullOrEmpty(responseJson)) return false;
             try
             {
                 var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
-                return obj != null && obj.TryGetValue("detail", out var detail) && !string.IsNullOrEmpty(detail?.ToString());
+                if (obj == null) return false;
+                return (obj.TryGetValue("message", out var message) && message?.ToString() == InvalidInstanceTokenError)
+                    || (obj.TryGetValue("detail", out var detail) && detail?.ToString() == InvalidInstanceTokenError);
             }
             catch (JsonException)
             {
@@ -698,11 +706,11 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (pairedInstanceId != null && IsCredentialRejection(result))
                 {
                     _payload.buildType = savedBuildType;
-                    // Only lib-backend's own 401 removes the pairing: a revoke can't be undone without a new passcode, so a
-                    // 401 from a proxy, a gateway, or a wrong restUrl only suspends it for the launch.
-                    bool revoked = result.StatusCode == 401 && IsLibBackendError(result.Body);
+                    // Only lib-backend's revoked-instance 401 removes the pairing: a revoke can't be undone without a new passcode,
+                    // so any other 401 (a proxy, a gateway, a wrong restUrl) only suspends it for the launch.
+                    bool revoked = result.StatusCode == 401 && IsInstanceTokenRejection(result.Body);
                     if (result.StatusCode == 401 && !revoked)
-                        Logcat.Warning("Device authentication got a 401 that didn't come from lib-backend, so the pairing is kept. Check restUrl.");
+                        Logcat.Warning("Device authentication got a 401 that isn't lib-backend's revoked-instance error, so the pairing is kept. Check restUrl.");
                     string message = revoked ? PairingRevokedMessage
                         : result.StatusCode == 403 || result.StatusCode == 401 ? AccessSuspendedMessage
                         : ExtractExplicitApiError(result.Body) ?? AccessSuspendedMessage;
