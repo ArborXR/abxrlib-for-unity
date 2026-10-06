@@ -237,7 +237,7 @@ void OnRecordsSent(AbxrObserver.SendResult result)
 
 - Both events are raised on the main thread, in release builds too. With no handler attached, the SDK does no extra work.
 - A record that isn't kept says why in `DropReason`: `NotRecording` (unpaired, no pairing prompt open), `QueueFull`, or for storage `NotAuthenticated` or `NoUser`.
-- REST reports one result per batch. A failed batch is queued again, so a record can report `Failed` and later `Sent`; treat the latest result as its status. Records lost after they were queued report `Dropped` with `SessionEnded` or `QueueFull`.
+- REST reports one result per batch. A failed batch is usually queued again, so a record can report `Failed` and later `Sent`; treat the latest result as its status. A batch that fails as the session ends (`EndSession`, or the app quitting) isn't queued again. Records lost after they were queued report `Dropped` with `SessionEnded` or `QueueFull`.
 - On Android with the ArborXR client app, records report `HandedToService`: the client app sends them, and the SDK can't see the outcome.
 - Records never carry tokens or secrets.
 
