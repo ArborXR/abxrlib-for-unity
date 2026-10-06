@@ -1419,38 +1419,12 @@ internal void StartNewSession()
 			yield return _storageService.Get(entryName, scope, callback);
 		}
 		
-		internal void StorageSetDefaultEntry(Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
-		{
-			// Check if basic authentication is ready
-			if (!_authService.Authenticated) return;
-			
-			// For user-scoped storage, we need a user to actually be logged in
-			// For device-scoped storage, app-level authentication should be sufficient
-			if (scope == Abxr.StorageScope.User && _authService.ResponseData.UserId == null)
-			{
-				// User-scoped storage requires a user to be logged in, defer this request
-				return;
-			}
-			
+		// The storage service checks authentication and the signed-in user, so it can report the drop to AbxrObserver.
+		internal void StorageSetDefaultEntry(Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy) =>
 			_storageService.Add("state", entry, scope, policy);
-		}
 		
-		internal void StorageSetEntry(string entryName, Dictionary<string, string> entryData, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
-		{
-			// Check if basic authentication is ready
-			if (!_authService.Authenticated) return;
-			
-			// For user-scoped storage, we need a user to actually be logged in
-			// For device-scoped storage, app-level authentication should be sufficient
-			var authResponse = _authService.ResponseData;
-			if (scope == Abxr.StorageScope.User && (authResponse == null || authResponse.UserId == null))
-			{
-				// User-scoped storage requires a user to be logged in, defer this request
-				return;
-			}
-			
+		internal void StorageSetEntry(string entryName, Dictionary<string, string> entryData, Abxr.StorageScope scope, Abxr.StoragePolicy policy) =>
 			_storageService.Add(entryName, entryData, scope, policy);
-		}
 
 		internal void StorageRemoveDefaultEntry(Abxr.StorageScope scope)
 		{
@@ -1567,6 +1541,7 @@ internal void StartNewSession()
 			{
 				string errorMessage = $"Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
 				Logcat.Warning(errorMessage);
+				using var automatic = AbxrObserver.AutomaticScope();
 				Abxr.LogInfo(errorMessage, new Dictionary<string, string> { 
 					{ "attempted_key", key }, 
 					{ "attempted_value", value },
@@ -1879,6 +1854,8 @@ internal void StartNewSession()
         /// </summary>
         private void CloseRunningEvents()
         {
+            // The SDK closes these through the public API; AbxrObserver must report them as its own.
+            using var automatic = AbxrObserver.AutomaticScope();
             // Get references to the static dictionaries using safe public methods
             var runningAssessmentTimes = GetAssessmentStartTimes();
             var runningObjectiveTimes = new Dictionary<string, DateTime>(_objectiveStartTimes);

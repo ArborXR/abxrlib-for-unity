@@ -498,11 +498,11 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         /// <summary>Runs inside OnQuit, while the flush would send.</summary>
         public Action OnQuitCalled { get; set; }
 
-        public void AddEvent(string name, Dictionary<string, string> meta) => Events.Add((name, meta));
-        public void AddTelemetry(string name, Dictionary<string, string> meta) { }
-        public void AddLog(string logLevel, string text, Dictionary<string, string> meta) { }
+        public bool AddEvent(string name, Dictionary<string, string> meta, long recordId = 0) { Events.Add((name, meta)); return true; }
+        public bool AddTelemetry(string name, Dictionary<string, string> meta, long recordId = 0) => true;
+        public bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long recordId = 0) => true;
         public void ForceSend() { }
-        public void StorageAdd(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy) { }
+        public bool StorageAdd(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy, long recordId = 0) => true;
 
         public IEnumerator StorageGetCoroutine(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)
         {

@@ -79,17 +79,20 @@ namespace AbxrLib.Runtime.Services.Transport
             yield return null;
         }
 
-        public void AddEvent(string name, Dictionary<string, string> meta)
+        // The client app queues and sends, so these always accept the record. The data service reports it as handed to the service.
+        public bool AddEvent(string name, Dictionary<string, string> meta, long recordId = 0)
         {
             ArborInsightsClient.Event(name ?? "", meta ?? new Dictionary<string, string>());
+            return true;
         }
 
-        public void AddTelemetry(string name, Dictionary<string, string> meta)
+        public bool AddTelemetry(string name, Dictionary<string, string> meta, long recordId = 0)
         {
             ArborInsightsClient.AddTelemetryEntry(name ?? "", meta ?? new Dictionary<string, string>());
+            return true;
         }
 
-        public void AddLog(string logLevel, string text, Dictionary<string, string> meta)
+        public bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long recordId = 0)
         {
             var dict = meta ?? new Dictionary<string, string>();
             string level = (logLevel ?? "").ToUpperInvariant();
@@ -99,6 +102,7 @@ namespace AbxrLib.Runtime.Services.Transport
             else if (level == "ERROR") ArborInsightsClient.LogError(text ?? "", dict);
             else if (level == "CRITICAL") ArborInsightsClient.LogCritical(text ?? "", dict);
             else ArborInsightsClient.LogInfo(text ?? "", dict);
+            return true;
         }
 
         public void ForceSend()
@@ -106,7 +110,7 @@ namespace AbxrLib.Runtime.Services.Transport
             try { ArborInsightsClient.ForceSendUnsent(); } catch { /* ignore */ }
         }
 
-        public void StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy)
+        public bool StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
@@ -125,6 +129,7 @@ namespace AbxrLib.Runtime.Services.Transport
                 ArborInsightsClient.StorageSetDefaultEntryFromString(json, keepLatest, "unity", sessionData);
             else
                 ArborInsightsClient.StorageSetEntryFromString(name, json, keepLatest, "unity", sessionData);
+            return true;
         }
 
         public IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)

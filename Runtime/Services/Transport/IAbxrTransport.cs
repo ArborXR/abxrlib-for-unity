@@ -44,19 +44,23 @@ namespace AbxrLib.Runtime.Services.Transport
         /// <summary>Get app config JSON. onComplete(success, configJson).</summary>
         IEnumerator GetConfigCoroutine(Action<bool, string> onComplete);
 
-        void AddEvent(string name, Dictionary<string, string> meta);
-        void AddTelemetry(string name, Dictionary<string, string> meta);
-        void AddLog(string logLevel, string text, Dictionary<string, string> meta);
+        /// <summary>Queue or hand off one record. False when it was dropped because the queue is full. recordId is the observer id (0 when nobody observes); REST reports it with the batch's send result.</summary>
+        bool AddEvent(string name, Dictionary<string, string> meta, long recordId = 0);
+        /// <summary>See <see cref="AddEvent"/>.</summary>
+        bool AddTelemetry(string name, Dictionary<string, string> meta, long recordId = 0);
+        /// <summary>See <see cref="AddEvent"/>.</summary>
+        bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long recordId = 0);
         void ForceSend();
 
-        void StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy);
+        /// <summary>See <see cref="AddEvent"/>.</summary>
+        bool StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy, long recordId = 0);
         IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete);
         IEnumerator StorageDeleteCoroutine(global::Abxr.StorageScope scope, string name, Action<bool> onComplete);
 
         /// <summary>Flush and release. REST: ForceSend; service: Unbind.</summary>
         void OnQuit();
 
-        /// <summary>Clear pending data/storage (e.g. for StartNewSession). REST: clear queues; Service: no-op.</summary>
+        /// <summary>Clear pending data/storage (e.g. for StartNewSession). REST: clear queues and report them dropped; Service: no-op.</summary>
         void ClearAllPending();
 
         /// <summary>For testing only. Pending events (REST: in-memory queue; service: empty, not available on device).</summary>

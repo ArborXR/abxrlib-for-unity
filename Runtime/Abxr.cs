@@ -531,8 +531,11 @@ public static partial class Abxr
 	/// <param name="eventName">Name of the event</param>
 	/// <param name="metadata">Any additional information (optional)</param>
 	/// <param name="sendTelemetry">Send telemetry with the event (optional)</param>
-	public static void Event(string eventName, Dictionary<string, string> metadata = null, bool sendTelemetry = true) =>
+	public static void Event(string eventName, Dictionary<string, string> metadata = null, bool sendTelemetry = true)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, metadata);
 		X?.Event(eventName, metadata, sendTelemetry);
+	}
 
 	/// <summary>
 	/// Add event information
@@ -540,8 +543,11 @@ public static partial class Abxr
 	/// <param name="eventName">Name of the event</param>
 	/// <param name="position">Adds position tracking of the object</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void Event(string eventName, Vector3 position, Dictionary<string, string> metadata = null) =>
+	public static void Event(string eventName, Vector3 position, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, metadata);
 		X?.Event(eventName, position, metadata);
+	}
 
 	/// <summary>
 	/// Start timing an event
@@ -559,8 +565,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="assessmentName">Name of the assessment to start</param>
 	/// <param name="meta">Optional metadata with assessment details</param>
-	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null) =>
+	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventAssessmentStart(assessmentName, meta);
+	}
 
 	/// <summary>
 	/// Complete an assessment with score and status - triggers LMS grade recording
@@ -571,8 +580,11 @@ public static partial class Abxr
 	/// <param name="score">Numerical score achieved (typically 0-100; if your range differs, set score_min and score_max in meta)</param>
 	/// <param name="status">Result status of the assessment (Pass, Fail, Complete, etc.)</param>
 	/// <param name="meta">Optional metadata; include score_min and score_max when your scoring range is not 0-100</param>
-	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
+	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventAssessmentComplete(assessmentName, score, status, meta);
+	}
 	public static void EventAssessmentComplete(string assessmentName, string score) =>
 		EventAssessmentComplete(assessmentName, int.Parse(score), EventStatus.Complete);  // disambiguating 2-arg overload
 	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
@@ -587,8 +599,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="experienceName">Name of the experience to start</param>
 	/// <param name="meta">Optional metadata with experience details</param>
-	public static void EventExperienceStart(string experienceName, Dictionary<string, string> meta = null) =>
+	public static void EventExperienceStart(string experienceName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventExperienceStart(experienceName, meta);
+	}
 	
 	/// <summary>
 	/// Complete an experience - developer-friendly wrapper for EventAssessmentComplete
@@ -597,8 +612,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="experienceName">Name of the experience (must match the start event)</param>
 	/// <param name="meta">Optional metadata with completion details</param>
-	public static void EventExperienceComplete(string experienceName, Dictionary<string, string> meta = null) =>
+	public static void EventExperienceComplete(string experienceName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventExperienceComplete(experienceName, meta);
+	}
 	
 	/// <summary>
 	/// Start tracking an objective - individual learning goals within assessments
@@ -606,8 +624,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="objectiveName">Name of the objective to start</param>
 	/// <param name="meta">Optional metadata with objective details</param>
-	public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null) =>
+	public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventObjectiveStart(objectiveName, meta);
+	}
 
 	/// <summary>
 	/// Complete an objective with score and status - contributes to overall assessment
@@ -618,8 +639,11 @@ public static partial class Abxr
 	/// <param name="score">Numerical score achieved (typically 0-100; if your range differs, set score_min and score_max in meta)</param>
 	/// <param name="status">Result status (Complete, Pass, Fail, etc.)</param>
 	/// <param name="meta">Optional metadata; include score_min and score_max when your scoring range is not 0-100</param>
-	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
+	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventObjectiveComplete(objectiveName, score, status, meta);
+	}
 	public static void EventObjectiveComplete(string objectiveName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		EventObjectiveComplete(objectiveName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	
@@ -629,8 +653,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="interactionName">Name of the interaction to start</param>
 	/// <param name="meta">Optional metadata with interaction context</param>
-	public static void EventInteractionStart(string interactionName, Dictionary<string, string> meta = null) =>
+	public static void EventInteractionStart(string interactionName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventInteractionStart(interactionName, meta);
+	}
 
 	/// <summary>
 	/// Complete an interaction with type, response, and optional metadata
@@ -643,8 +670,11 @@ public static partial class Abxr
 	/// <param name="meta">Optional metadata with interaction details</param>
 	public static void EventInteractionComplete(string interactionName, InteractionType type) =>
 		EventInteractionComplete(interactionName, type, InteractionResult.Neutral, null);  // disambiguating 2-arg overload
-	public static void EventInteractionComplete(string interactionName, InteractionType type, InteractionResult result = InteractionResult.Neutral, string response = null, Dictionary<string, string> meta = null) =>
+	public static void EventInteractionComplete(string interactionName, InteractionType type, InteractionResult result = InteractionResult.Neutral, string response = null, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventInteractionComplete(interactionName, type, result, response, meta);
+	}
 	public static void EventInteractionComplete(string interactionName, InteractionType type, string response = "", Dictionary<string, string> meta = null) =>
 		EventInteractionComplete(interactionName, type, InteractionResult.Neutral, response, meta); // Just here for backwards compatability
 	// backwards compatibility for very old method signature (string, string, string, InteractionType, meta)
@@ -667,8 +697,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="levelName">Name of the level to start</param>
 	/// <param name="meta">Optional metadata with level details</param>
-	public static void EventLevelStart(string levelName, Dictionary<string, string> meta = null) =>
+	public static void EventLevelStart(string levelName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventLevelStart(levelName, meta);
+	}
 	
 	/// <summary>
 	/// Complete a level with score and optional metadata
@@ -677,8 +710,11 @@ public static partial class Abxr
 	/// <param name="levelName">Name of the level (must match the start event)</param>
 	/// <param name="score">Numerical score achieved for this level</param>
 	/// <param name="meta">Optional metadata with completion details</param>
-	public static void EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null) =>
+	public static void EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventLevelComplete(levelName, score, meta);
+	}
 	public static void EventLevelComplete(string levelName, string score, Dictionary<string, string> meta = null) =>
 		EventLevelComplete(levelName, int.Parse(score), meta); // backwards compatibility
 	
@@ -689,8 +725,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="label">Label for the critical event (will be prefixed with CRITICAL_ABXR_)</param>
 	/// <param name="meta">Optional metadata with critical event details</param>
-	public static void EventCritical(string label, Dictionary<string, string> meta = null) =>
+	public static void EventCritical(string label, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventCritical(label, meta);
+	}
 	
 	
 	// ── Logging ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -701,48 +740,66 @@ public static partial class Abxr
 	/// <param name="logMessage">The log message</param>
 	/// <param name="logLevel">Log level (defaults to LogLevel.Info)</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null) =>
+	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		X?.Log(logMessage, logLevel, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Debug' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogDebug(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogDebug(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Debug, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Informational' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogInfo(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogInfo(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Info, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Warning' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogWarn(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogWarn(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Warn, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Error' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogError(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogError(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Error, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Critical' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogCritical(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogCritical(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Critical, metadata);
+	}
 
 	
 	// ── Telemetry ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -761,12 +818,18 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="telemetryName">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
 	/// <param name="telemetryData">Key-value pairs of telemetry measurements</param>
-	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData) =>
+	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Telemetry, telemetryData);
 		X?.Telemetry(telemetryName, telemetryData);
+	}
 	
 	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
-	public static void TelemetryEntry(string telemetryName, Dictionary<string, string> telemetryData) =>
+	public static void TelemetryEntry(string telemetryName, Dictionary<string, string> telemetryData)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Telemetry, telemetryData);
 		X?.Telemetry(telemetryName, telemetryData);
+	}
 	
 	
 	// ── Storage ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -804,8 +867,11 @@ public static partial class Abxr
 	/// <param name="entry">The data to store</param>
 	/// <param name="scope">Store under 'device' or 'user'</param>
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
-	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest) =>
+	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Storage, entry);
 		X?.StorageSetDefaultEntry(entry, scope, policy);
+	}
 	
 	/// <summary>
 	/// Set the session data with the given name
@@ -814,8 +880,11 @@ public static partial class Abxr
 	/// <param name="entryData">The data to store</param>
 	/// <param name="scope">Store under 'device' or 'user'</param>
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
-	public static void StorageSetEntry(string entryName, Dictionary<string, string> entryData, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest) =>
+	public static void StorageSetEntry(string entryName, Dictionary<string, string> entryData, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Storage, entryData);
 		X?.StorageSetEntry(entryName, entryData, scope, policy);
+	}
 	
 	/// <summary>
 	/// Remove the session data stored under the default name 'state'
