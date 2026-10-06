@@ -134,6 +134,30 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator Batch_Refused_HandlerThatEndsTheSession_DoesNotCarryTheBatchIntoTheNextOne()
+    {
+        _server.StatusCode = 400;
+        ModifyConfig("sendNextBatchWaitSeconds", 60);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Data POST failed")));
+        bool cleared = false;
+        AbxrObserver.OnRecordsSent += result =>
+        {
+            if (result.Status != AbxrObserver.SendStatus.Failed) return;
+            AbxrSubsystem.Instance.RestTransportForTesting.ClearAllPending();
+            cleared = true;
+        };
+        SimulateAuth();
+        Abxr.Event("old_session", null, sendTelemetry: false);
+        AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
+
+        yield return WaitFor(() => cleared, 5f);
+
+        Assert.IsTrue(cleared);
+        Assert.IsFalse(AbxrSubsystem.Instance.GetPendingEventsForTesting().Any(e => e.name == "old_session"),
+            "The failed batch must be queued before the handler runs, so ending the session clears it.");
+    }
+
+    [UnityTest]
     public IEnumerator Batch_Refused_WithNoRoomToQueueItAgain_ReportsTheOverflowDropped()
     {
         _server.StatusCode = 400;

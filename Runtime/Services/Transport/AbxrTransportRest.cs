@@ -596,7 +596,6 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             if (SessionEndedSince(generation, "data")) { ReportSessionEnded(recordIds); yield break; }
             Logcat.Error($"Data POST failed after {retryCount} attempts: {lastError}");
-            ReportSent(recordIds, false, lastStatus, lastError);
             _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
             var dropped = recordIds != null ? new List<long>() : null;
             lock (_lock)
@@ -605,6 +604,8 @@ namespace AbxrLib.Runtime.Services.Transport
                 Requeue(_telemetryPayloads, telemetries, "Telemetry", p => p.RecordId, dropped);
                 Requeue(_logPayloads, logs, "Log", p => p.RecordId, dropped);
             }
+            // Report only after the requeue: a handler that ends the session must clear this batch, not have it queued after.
+            ReportSent(recordIds, false, lastStatus, lastError);
             AbxrObserver.Sent(dropped, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.QueueFull);
         }
 
@@ -689,10 +690,11 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             if (SessionEndedSince(generation, "storage")) { ReportSessionEnded(recordIds); yield break; }
             Logcat.Error($"Storage POST failed after {retryCount} attempts: {lastError}");
-            ReportSent(recordIds, false, lastStatus, lastError);
             _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
             var dropped = recordIds != null ? new List<long>() : null;
             lock (_lock) { Requeue(_storagePayloads, toSend, "Storage", p => p.RecordId, dropped); }
+            // After the requeue, as for data.
+            ReportSent(recordIds, false, lastStatus, lastError);
             AbxrObserver.Sent(dropped, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.QueueFull);
         }
 
