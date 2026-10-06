@@ -204,6 +204,43 @@ Abxr.EventObjectiveStart("open_valve");
 Abxr.EventObjectiveComplete("open_valve", 100, EventStatus.Complete);
 ```
 
+### Watching What the SDK Records (Diagnostic)
+
+`AbxrObserver` shows every record the SDK creates and what happened when it sent it. Use it for debug overlays and sample apps, not app logic: it's a best-effort diagnostic API, and the details it reports can change between releases.
+
+```csharp
+void OnEnable()
+{
+    AbxrObserver.OnRecordCreated += OnRecordCreated;
+    AbxrObserver.OnRecordsSent += OnRecordsSent;
+}
+
+void OnDisable()
+{
+    AbxrObserver.OnRecordCreated -= OnRecordCreated;
+    AbxrObserver.OnRecordsSent -= OnRecordsSent;
+}
+
+void OnRecordCreated(AbxrObserver.Record record)
+{
+    // record.Data is the metadata as queued, with what the SDK added (scene, duration, super metadata, scores).
+    // record.CallerData is what your code passed. record.Automatic is true for records the SDK made itself.
+    Debug.Log($"#{record.Id} {record.Kind} {record.Method ?? "(automatic)"} '{record.Name}' {record.DropReason}");
+}
+
+void OnRecordsSent(AbxrObserver.SendResult result)
+{
+    // Sent or Failed (REST, with the HTTP status), HandedToService (the ArborXR client app sends it), or Dropped.
+    Debug.Log($"{result.Status} {string.Join(",", result.RecordIds)} {result.HttpStatus} {result.Error}");
+}
+```
+
+- Both events are raised on the main thread, in release builds too. With no handler attached, the SDK does no extra work.
+- A record that isn't kept says why in `DropReason`: `NotRecording` (unpaired, no pairing prompt open), `QueueFull`, or for storage `NotAuthenticated` or `NoUser`.
+- REST reports one result per batch. A failed batch is queued again, so a record can report `Failed` and later `Sent`; treat the latest result as its status. Records lost after they were queued report `Dropped` with `SessionEnded` or `QueueFull`.
+- On Android with the ArborXR client app, records report `HandedToService`: the client app sends them, and the SDK can't see the outcome.
+- Records never carry tokens or secrets.
+
 ---
 
 ## Full Documentation
