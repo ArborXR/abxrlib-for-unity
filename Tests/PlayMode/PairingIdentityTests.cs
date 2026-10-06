@@ -380,6 +380,27 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator ARateLimit_CountsDownInThePrompt()
+    {
+        AbxrSubsystem.NextPairingRedeemClientForTesting = new RateLimitedRedeemClient("3");
+        Start(pairedAs: null, Authorized);
+        _ui = new FakeAuthUi();
+        AbxrUi.RegisterAuthUi(_ui);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(Pairing.StartPairing());
+        Abxr.OnInputSubmitted("123456");
+        Assert.AreEqual("Too many attempts. Try again in 3 seconds.\nEnter Pairing Passcode", _ui.Prompt);
+
+        yield return WaitFor(() => _ui.Prompt.Contains("in 2 seconds"), 2f);
+        StringAssert.Contains("in 2 seconds", _ui.Prompt, "The wait counts down without another attempt.");
+
+        yield return WaitFor(() => _ui.Prompt == "Enter Pairing Passcode", 4f);
+        Assert.AreEqual("Enter Pairing Passcode", _ui.Prompt, "The line goes once the wait is over.");
+    }
+
+    [UnityTest]
     public IEnumerator ANewPairing_StartsAuthAsTheInstance()
     {
         var transport = Start(pairedAs: null, Authorized);
@@ -627,6 +648,15 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         public void SetPrompt(string prompt) => Prompt = prompt;
         public void Hide() { }
         public void StopProcessing() { }
+    }
+
+    /// <summary>Answers every redeem with a 429 and the given Retry-After.</summary>
+    private sealed class RateLimitedRedeemClient : IPairingRedeemClient
+    {
+        private readonly string _retryAfter;
+        public RateLimitedRedeemClient(string retryAfter) => _retryAfter = retryAfter;
+        public void Send(string url, string json, Action<PairingHttpResponse> onComplete) =>
+            onComplete(new PairingHttpResponse(429, "{\"error\":\"Too many attempts\"}", _retryAfter));
     }
 
     private sealed class MemoryPairingStore : IPairingStore

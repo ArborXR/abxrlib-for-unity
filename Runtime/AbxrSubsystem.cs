@@ -32,6 +32,7 @@ namespace AbxrLib.Runtime
             _simulateQuitInExitAfterAssessmentComplete = false;
             _unitTestSsoSimulationFromConfigAllowed = false;
             _nextPairingStoreForTesting = null;
+            _nextPairingRedeemClientForTesting = null;
             _pairingPlatformSupportedForTesting = false;
             if (Instance != null) Instance._authService.ResetAuthStartedForTesting();
             Abxr.ResetQuitClosingEventDefaultsForTesting();
@@ -44,6 +45,14 @@ namespace AbxrLib.Runtime
             set => _nextPairingStoreForTesting = value;
         }
         private static IPairingStore _nextPairingStoreForTesting;
+
+        /// <summary>For testing only. When set before CreateSubsystem(), the pairing service redeems through this instead of the network.</summary>
+        internal static IPairingRedeemClient NextPairingRedeemClientForTesting
+        {
+            get => _nextPairingRedeemClientForTesting;
+            set => _nextPairingRedeemClientForTesting = value;
+        }
+        private static IPairingRedeemClient _nextPairingRedeemClientForTesting;
 
         /// <summary>For testing only. Pairing runs only in Android and WebGL players; this lets a PlayMode test pair in the Editor. Read by the subsystem created afterwards.</summary>
         internal static bool PairingPlatformSupportedForTesting
@@ -174,6 +183,7 @@ namespace AbxrLib.Runtime
 
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
+        private Coroutine _rateLimitCountdown;
         private bool _endSessionInProgress;
 
         internal bool HasAuthenticationStarted => _authService.HasAuthenticationStarted;
@@ -222,8 +232,9 @@ namespace AbxrLib.Runtime
             }
             _pairingHost = new PairingHost(this);
             _pairingService = new AbxrPairingService(_nextPairingStoreForTesting ?? new PlayerPrefsPairingStore(),
-                new UnityWebRequestPairingClient(this), _pairingHost);
+                _nextPairingRedeemClientForTesting ?? new UnityWebRequestPairingClient(this), _pairingHost);
             _nextPairingStoreForTesting = null;
+            _nextPairingRedeemClientForTesting = null;
             _pairingService.OnStateChanged = OnPairingStateChanged;
             _pairingService.OnInputRequested = OnInputRequestedDispatch;
             _authService.SetPairedCredential(_pairingService);
@@ -1739,9 +1750,49 @@ internal void StartNewSession()
 				displayPrompt = prompt;
 			}
 
+			StopRateLimitCountdown();
+			Abxr.PairingRedeemResult last = _pairingService?.LastRedeemResult ?? default;
+			if (type == AbxrPairingService.PasscodeInputType && !string.IsNullOrEmpty(error)
+			    && last.Error == Abxr.PairingRedeemError.RateLimited && last.RetryAfterSeconds > 0)
+			{
+				_rateLimitCountdown = StartCoroutine(RateLimitCountdown(authUi, displayPrompt, last.RetryAfterSeconds));
+				return true;
+			}
+
 			if (!string.IsNullOrEmpty(error)) displayPrompt = $"{error}\n{displayPrompt}";
 			authUi.SetPrompt(displayPrompt);
 			return true;
+		}
+
+		/// <summary>
+		/// Counts the rate limit's wait down in the prompt, so it doesn't read "51 seconds" until the next attempt. Stops
+		/// when the prompt moves on, and drops the line once the wait is over.
+		/// </summary>
+		private IEnumerator RateLimitCountdown(IAbxrAuthUi authUi, string prompt, int seconds)
+		{
+			float until = Time.realtimeSinceStartup + seconds;
+			while (true)
+			{
+				int left = Mathf.CeilToInt(until - Time.realtimeSinceStartup);
+				if (left <= 0) break;
+				authUi.SetPrompt($"{PairingOutcomes.RateLimited(left).Message}\n{prompt}");
+				// Wakes when the shown number goes stale, not a second after it was drawn.
+				yield return new WaitForSecondsRealtime(until - Time.realtimeSinceStartup - (left - 1));
+				if (_pairingService.State != Abxr.PairingState.Prompting || AbxrUi.AuthUi != authUi)
+				{
+					_rateLimitCountdown = null;
+					yield break;
+				}
+			}
+			authUi.SetPrompt(prompt);
+			_rateLimitCountdown = null;
+		}
+
+		private void StopRateLimitCountdown()
+		{
+			if (_rateLimitCountdown == null) return;
+			StopCoroutine(_rateLimitCountdown);
+			_rateLimitCountdown = null;
 		}
 		
 		/// <summary>
