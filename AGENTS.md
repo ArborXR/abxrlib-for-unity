@@ -67,6 +67,7 @@ AIDL → ArborInsightsClient (separate APK)
 - **Transport:** `Runtime/Services/Transport/IAbxrTransport.cs`, `AbxrTransportRest.cs`, `AbxrTransportArborInsights.cs` (abstraction for REST vs ArborInsightsClient)
 - **Service client (Android):** `Runtime/Services/Platform/ArborInsightsClient.cs` (ArborInsightsServiceBridge in same file), `Runtime/Services/Platform/ArborMdmClient.cs`
 - **Data / storage / telemetry:** `Runtime/Services/Data/AbxrDataService.cs`, `Runtime/Services/Data/AbxrStorageService.cs` (forward to current transport), `Runtime/Services/Telemetry/AbxrTelemetryService.cs`, `Runtime/Services/Telemetry/TrackObject.cs`
+- **Record observer (diagnostic):** `Runtime/AbxrObserver.cs` (public `OnRecordCreated`/`OnRecordsSent`; the data and storage services report creation, the transports report sends; SDK code that calls the public `Abxr` record methods wraps the call in `AbxrObserver.AutomaticScope()`)
 - **UI contracts (core):** `Runtime/Core/UI/` (`AbxrUi` registry + `IAbxrAuthUi`, `IAbxrPollUi`, `IAbxrQrScanner`, `IAbxrAuthBridge`); `PollType` is in `Runtime/Types/AbxrTypes.cs`
 - **UI implementations (optional sample):** `Samples~/World-Space UI/` (Keyboard, ExitPoll, DebugWindow, HandTrackingButtonSystem, QRScanner, ThirdParty/ZXing, Resources/ prefabs and shaders, its own `link.xml` and `AbxrLib.WorldSpace` asmdef)
 - **Plugins:** `Plugins/Android/` (client AAR, e.g. `insights-client-service.aar`, containing the client bridge used by ArborInsightsClient; supplied separately, not built in this repo)
