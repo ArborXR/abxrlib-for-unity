@@ -2,6 +2,7 @@ using System.Linq;
 using System;
 using System.Collections;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Services.Pairing;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -152,6 +153,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
             IsPairing = pairing;
             KeyboardManager manager = PinPadManager();
             if (manager == null) return;
+            // A passcode is exactly six digits, so the keypad stops there. KeyboardKey checks the limit, since TMP doesn't
+            // apply it when text is set from code.
+            if (manager.inputField != null) manager.inputField.characterLimit = pairing ? PairingOutcomes.PasscodeLength : 0;
 
             bool dismissAllowed = Configuration.Instance == null || Configuration.Instance.enablePairingDismiss;
             if (manager.skipButton != null)

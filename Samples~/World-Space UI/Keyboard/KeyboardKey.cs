@@ -133,14 +133,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         private void TypeKey()
         {
-            if (_isShifted)
-            {
-                KeyboardManager.Instance.inputField.text += shiftCharacter;
-            }
-            else
-            {
-                KeyboardManager.Instance.inputField.text += character;
-            }
+            TMP_InputField field = KeyboardManager.Instance.inputField;
+            if (field.characterLimit > 0 && field.text.Length >= field.characterLimit) return;
+            field.text += _isShifted ? shiftCharacter : character;
         }
     }
 }
