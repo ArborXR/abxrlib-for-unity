@@ -211,6 +211,24 @@ public class AbxrObserverTests
     }
 
     [Test]
+    public void ResultRaisedInsideAHandler_IsDeliveredAfterItReturns()
+    {
+        // A send handler that ends the session makes the transport report the records it clears.
+        var order = new List<string>();
+        AbxrObserver.OnRecordsSent += s =>
+        {
+            order.Add("start " + s.Status);
+            if (s.Status == AbxrObserver.SendStatus.Sent)
+                AbxrObserver.Sent(new List<long> { 7 }, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.SessionEnded);
+            order.Add("end " + s.Status);
+        };
+
+        AbxrObserver.Sent(new List<long> { 7 }, AbxrObserver.SendStatus.Sent);
+
+        CollectionAssert.AreEqual(new[] { "start Sent", "end Sent", "start Dropped", "end Dropped" }, order);
+    }
+
+    [Test]
     public void NoScope_IsAutomatic()
     {
         Observe();

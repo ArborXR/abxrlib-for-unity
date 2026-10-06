@@ -148,6 +148,7 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         };
         SimulateAuth();
         Abxr.Event("old_session", null, sendTelemetry: false);
+        long id = Single("old_session").Id;
         AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
 
         yield return WaitFor(() => cleared, 5f);
@@ -155,6 +156,9 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         Assert.IsTrue(cleared);
         Assert.IsFalse(AbxrSubsystem.Instance.GetPendingEventsForTesting().Any(e => e.name == "old_session"),
             "The failed batch must be queued before the handler runs, so ending the session clears it.");
+        var last = ResultFor(id).Value;
+        Assert.AreEqual(AbxrObserver.SendStatus.Dropped, last.Status, "Clearing it from inside the handler must still report it, after the handler returns.");
+        Assert.AreEqual(AbxrObserver.DropReason.SessionEnded, last.DropReason);
     }
 
     [UnityTest]

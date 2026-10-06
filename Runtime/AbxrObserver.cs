@@ -132,6 +132,8 @@ public static class AbxrObserver
 	private static long _lastId;
 	private static ScopeState _scope;
 	private static bool _raising;
+	/// <summary>Results raised while a handler runs, delivered after it returns.</summary>
+	private static readonly Queue<Action> _deferred = new Queue<Action>();
 
 	/// <summary>Who is recording right now, as the scopes below set it.</summary>
 	internal struct ScopeState
@@ -145,10 +147,17 @@ public static class AbxrObserver
 	}
 
 	/// <summary>
-	/// True while a handler is attached to either event, and no handler is running. Every other entry point is a no-op
-	/// otherwise, so the records a handler makes (a handler that logs, say) are kept but never reported, and can't loop.
+	/// True while a handler is attached to either event and no handler is running: the gate for tracking a new record
+	/// (an id, a scope, a copy). The records a handler makes (a handler that logs, say) are kept but never tracked, so
+	/// they can't loop.
 	/// </summary>
 	internal static bool IsObserved => !_raising && (OnRecordCreated != null || OnRecordsSent != null);
+
+	/// <summary>
+	/// True while a send handler is attached. The gate for collecting the ids of a batch: records tracked earlier still
+	/// get their result when it happens inside a handler (one that ends the session, say).
+	/// </summary>
+	internal static bool HasSendHandler => OnRecordsSent != null;
 
 	/// <summary>Restores the scope state it saved when disposed. A struct; the default one does nothing.</summary>
 	internal readonly struct Scope : IDisposable
@@ -225,7 +234,7 @@ public static class AbxrObserver
 		}
 
 		var handler = OnRecordCreated;
-		if (handler == null || _raising) return;
+		if (handler == null) return;
 		var record = new Record(id, kind, method, name, level, callerData,
 			data != null ? new Dictionary<string, string>(data) : new Dictionary<string, string>(),
 			automatic, dropReason, DateTime.UtcNow);
@@ -235,7 +244,7 @@ public static class AbxrObserver
 	/// <summary>Raises <see cref="OnRecordsSent"/> for one record.</summary>
 	internal static void Sent(long id, SendStatus status, int httpStatus = 0, string error = null, DropReason dropReason = DropReason.None)
 	{
-		if (id == 0 || OnRecordsSent == null || _raising) return;
+		if (id == 0 || OnRecordsSent == null) return;
 		Sent(new List<long> { id }, status, httpStatus, error, dropReason);
 	}
 
@@ -243,7 +252,7 @@ public static class AbxrObserver
 	internal static void Sent(List<long> ids, SendStatus status, int httpStatus = 0, string error = null, DropReason dropReason = DropReason.None)
 	{
 		var handler = OnRecordsSent;
-		if (handler == null || _raising || ids == null || ids.Count == 0) return;
+		if (handler == null || ids == null || ids.Count == 0) return;
 		Raise(handler, new SendResult(ids.AsReadOnly(), status, httpStatus, error, dropReason), "OnRecordsSent");
 	}
 
@@ -254,21 +263,37 @@ public static class AbxrObserver
 	}
 
 	/// <summary>
-	/// Calls each handler separately, so one that throws can't stop recording or the handlers after it. While handlers
-	/// run, nothing is reported (see <see cref="IsObserved"/>).
+	/// Calls the handlers. A result raised while a handler runs waits until it returns, so handlers never nest, and
+	/// it can't loop: only records tracked before the handler ran have ids to report.
 	/// </summary>
 	private static void Raise<T>(Action<T> handler, T value, string eventName)
 	{
+		if (_raising)
+		{
+			_deferred.Enqueue(() => Invoke(handler, value, eventName));
+			return;
+		}
 		_raising = true;
 		try
 		{
-			foreach (var each in handler.GetInvocationList())
-			{
-				try { ((Action<T>)each)(value); }
-				catch (Exception ex) { Logcat.Error($"An AbxrObserver.{eventName} handler threw: {ex.Message}"); }
-			}
+			Invoke(handler, value, eventName);
+			while (_deferred.Count > 0) _deferred.Dequeue()();
 		}
-		finally { _raising = false; }
+		finally
+		{
+			_raising = false;
+			_deferred.Clear();
+		}
+	}
+
+	/// <summary>Calls each handler separately, so one that throws can't stop recording or the handlers after it.</summary>
+	private static void Invoke<T>(Action<T> handler, T value, string eventName)
+	{
+		foreach (var each in handler.GetInvocationList())
+		{
+			try { ((Action<T>)each)(value); }
+			catch (Exception ex) { Logcat.Error($"An AbxrObserver.{eventName} handler threw: {ex.Message}"); }
+		}
 	}
 
 	/// <summary>For testing only. Clears handlers, ids, and any scope a failed test left open.</summary>
@@ -279,5 +304,6 @@ public static class AbxrObserver
 		_lastId = 0;
 		_scope = default;
 		_raising = false;
+		_deferred.Clear();
 	}
 }

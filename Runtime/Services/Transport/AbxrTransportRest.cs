@@ -499,10 +499,10 @@ namespace AbxrLib.Runtime.Services.Transport
             }
         }
 
-        /// <summary>The observer ids carried by these payloads, or null when nobody observes (no list is built).</summary>
+        /// <summary>The observer ids carried by these payloads, or null when no send handler is attached (no list is built).</summary>
         private static List<long> RecordIds(List<EventPayload> events = null, List<TelemetryPayload> telemetries = null, List<LogPayload> logs = null, List<StoragePayload> storage = null)
         {
-            if (!AbxrObserver.IsObserved) return null;
+            if (!AbxrObserver.HasSendHandler) return null;
             var ids = new List<long>();
             if (events != null) foreach (var p in events) AbxrObserver.AddId(ids, p.RecordId);
             if (telemetries != null) foreach (var p in telemetries) AbxrObserver.AddId(ids, p.RecordId);
