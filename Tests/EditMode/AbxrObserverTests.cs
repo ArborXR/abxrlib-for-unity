@@ -144,6 +144,73 @@ public class AbxrObserverTests
     }
 
     [Test]
+    public void AppCodeScope_AppCallsFromAnSdkCallback_GetTheirOwnScope()
+    {
+        // EventAssessmentComplete advances the module sequence and calls the app's OnModuleTarget, whose handler starts the next one.
+        Observe();
+        using (AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, null, "EventAssessmentComplete"))
+        {
+            _data.AddEvent("Module 1", null);
+            using (AbxrObserver.AppCodeScope())
+            using (AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, new Dictionary<string, string> { ["next"] = "1" }, "EventAssessmentStart"))
+                _data.AddEvent("Module 2", null);
+            _data.AddEvent("after", null);
+        }
+
+        Assert.AreEqual("EventAssessmentComplete", _created[0].Method);
+        Assert.IsFalse(_created[1].Automatic, "The handler's call is the app's.");
+        Assert.AreEqual("EventAssessmentStart", _created[1].Method);
+        Assert.AreEqual("1", _created[1].CallerData["next"]);
+        Assert.IsTrue(_created[2].Automatic, "The outer scope comes back, already taken.");
+    }
+
+    [Test]
+    public void AppCodeScope_InsideAutomaticScope_LetsTheAppsCallsReportAsTheApps()
+    {
+        // EndSession closes an assessment automatically, which can advance the module sequence into app code.
+        Observe();
+        using (AbxrObserver.AutomaticScope())
+        {
+            using (AbxrObserver.AppCodeScope())
+            using (AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, null, "LogInfo"))
+                _data.AddLog("info", "from the app", null);
+            _data.AddEvent("closing", null);
+        }
+
+        Assert.IsFalse(_created[0].Automatic);
+        Assert.IsTrue(_created[1].Automatic);
+    }
+
+    [Test]
+    public void HandlerThatRecords_IsNotReported_AndDoesNotLoop()
+    {
+        AbxrObserver.OnRecordCreated += r =>
+        {
+            _created.Add(r);
+            using (AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, null, "LogInfo"))
+                _data.AddLog("info", "saw " + r.Name, null);
+        };
+
+        _data.AddEvent("e", null);
+
+        Assert.AreEqual(1, _created.Count, "A record made inside a handler must not raise the handler again.");
+        Assert.AreEqual(2, _transport.Added.Count, "It is still recorded.");
+        Assert.AreEqual(0, _transport.Added[1].recordId);
+    }
+
+    [Test]
+    public void SendHandlerThatRecords_OnTheServiceTransport_DoesNotLoop()
+    {
+        _transport.IsServiceTransport = true;
+        AbxrObserver.OnRecordsSent += s => { _sent.Add(s); _data.AddLog("info", "sent", null); };
+
+        _data.AddEvent("e", null);
+
+        Assert.AreEqual(1, _sent.Count);
+        Assert.AreEqual(2, _transport.Added.Count);
+    }
+
+    [Test]
     public void NoScope_IsAutomatic()
     {
         Observe();

@@ -938,10 +938,13 @@ internal void StartNewSession()
             {
                 Logcat.Info($"Module '{modules[_currentModuleIndex - 1].Name}' complete. " +
                              $"Advancing to next module - '{modules[_currentModuleIndex].Name}'");
+                // Runs inside the app's EventAssessmentComplete; what the handler records is the app's own call.
+                using var appCode = AbxrObserver.AppCodeScope();
                 Abxr.OnModuleTarget?.Invoke(modules[_currentModuleIndex].Target);
             }
             else
             {
+                using var appCode = AbxrObserver.AppCodeScope();
                 Abxr.OnAllModulesCompleted?.Invoke();
                 Logcat.Info("All modules complete");
             }

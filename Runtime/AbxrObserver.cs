@@ -48,8 +48,9 @@ public static class AbxrObserver
 		/// <summary>The backend accepted the batch.</summary>
 		Sent,
 		/// <summary>
-		/// The batch failed after its retries. While the app runs it goes back in the queue, and any record that no longer
-		/// fits gets a separate Dropped result. A batch sent while the app quits isn't queued again.
+		/// The batch failed after its retries. Usually it goes back in the queue, and any record that no longer fits gets a
+		/// separate Dropped result. A batch sent as the session ends (EndSession, or the app quitting) isn't queued again,
+		/// so Failed is its last result.
 		/// </summary>
 		Failed,
 		/// <summary>The record went to the ArborXR client app, which sends it. The SDK can't see whether that send succeeds.</summary>
@@ -129,63 +130,78 @@ public static class AbxrObserver
 
 	// Main thread only, like the rest of the record path.
 	private static long _lastId;
-	private static bool _appScopeOpen;
-	private static bool _appScopeTaken;
-	private static RecordKind _appScopeKind;
-	private static string _appScopeMethod;
-	private static Dictionary<string, string> _appScopeCallerData;
-	private static int _automaticDepth;
+	private static ScopeState _scope;
+	private static bool _raising;
 
-	/// <summary>True while a handler is attached to either event. Every other entry point is a no-op otherwise.</summary>
-	internal static bool IsObserved => OnRecordCreated != null || OnRecordsSent != null;
+	/// <summary>Who is recording right now, as the scopes below set it.</summary>
+	internal struct ScopeState
+	{
+		public bool AppOpen;
+		public bool AppTaken;
+		public RecordKind AppKind;
+		public string AppMethod;
+		public Dictionary<string, string> AppCallerData;
+		public int AutomaticDepth;
+	}
 
 	/// <summary>
-	/// Opened by each Abxr record method so the record it makes reports the method name and what the app passed.
-	/// A struct, and a no-op with no handler attached. Only the outermost scope counts, and none opens inside an
-	/// <see cref="AutomaticScope"/>.
+	/// True while a handler is attached to either event, and no handler is running. Every other entry point is a no-op
+	/// otherwise, so the records a handler makes (a handler that logs, say) are kept but never reported, and can't loop.
 	/// </summary>
+	internal static bool IsObserved => !_raising && (OnRecordCreated != null || OnRecordsSent != null);
+
+	/// <summary>Restores the scope state it saved when disposed. A struct; the default one does nothing.</summary>
 	internal readonly struct Scope : IDisposable
 	{
-		private const byte None = 0, App = 1, Auto = 2;
-		private readonly byte _type;
+		private readonly bool _active;
+		private readonly ScopeState _saved;
 
-		private Scope(byte type) => _type = type;
-
-		internal static Scope ForApp() => new Scope(App);
-		internal static Scope ForAutomatic() => new Scope(Auto);
+		internal Scope(ScopeState saved)
+		{
+			_active = true;
+			_saved = saved;
+		}
 
 		public void Dispose()
 		{
-			if (_type == App)
-			{
-				_appScopeOpen = false;
-				_appScopeTaken = false;
-				_appScopeMethod = null;
-				_appScopeCallerData = null;
-			}
-			else if (_type == Auto)
-			{
-				_automaticDepth--;
-			}
+			if (_active) _scope = _saved;
 		}
 	}
 
+	/// <summary>
+	/// Opened by each Abxr record method so the record it makes reports the method name and what the app passed.
+	/// A no-op with no handler attached. Only the outermost scope counts, so an overload that delegates reports the
+	/// method the app called, and none opens inside an <see cref="AutomaticScope"/>.
+	/// </summary>
 	internal static Scope AppScope(RecordKind kind, Dictionary<string, string> callerData, [CallerMemberName] string method = null)
 	{
-		if (!IsObserved || _appScopeOpen || _automaticDepth > 0) return default;
-		_appScopeOpen = true;
-		_appScopeTaken = false;
-		_appScopeKind = kind;
-		_appScopeMethod = method;
-		_appScopeCallerData = callerData != null ? new Dictionary<string, string>(callerData) : new Dictionary<string, string>();
-		return Scope.ForApp();
+		if (!IsObserved || _scope.AppOpen || _scope.AutomaticDepth > 0) return default;
+		var saved = _scope;
+		_scope.AppOpen = true;
+		_scope.AppTaken = false;
+		_scope.AppKind = kind;
+		_scope.AppMethod = method;
+		_scope.AppCallerData = callerData != null ? new Dictionary<string, string>(callerData) : new Dictionary<string, string>();
+		return new Scope(saved);
 	}
 
 	/// <summary>Wraps SDK code that calls the public Abxr API, so the records it makes report as automatic, even inside an app's call.</summary>
 	internal static Scope AutomaticScope()
 	{
-		_automaticDepth++;
-		return Scope.ForAutomatic();
+		var saved = _scope;
+		_scope.AutomaticDepth++;
+		return new Scope(saved);
+	}
+
+	/// <summary>
+	/// Wraps a call into app code made while a record is being created (OnModuleTarget from EventAssessmentComplete),
+	/// so what the app records there gets its own scope instead of the SDK's or the outer call's.
+	/// </summary>
+	internal static Scope AppCodeScope()
+	{
+		var saved = _scope;
+		_scope = default;
+		return new Scope(saved);
 	}
 
 	/// <summary>The id for a new record. Call only while <see cref="IsObserved"/>; 0 means "not tracked" everywhere.</summary>
@@ -200,16 +216,16 @@ public static class AbxrObserver
 		string method = null;
 		Dictionary<string, string> callerData = null;
 		bool automatic = true;
-		if (_appScopeOpen && !_appScopeTaken && _automaticDepth == 0 && _appScopeKind == kind)
+		if (_scope.AppOpen && !_scope.AppTaken && _scope.AutomaticDepth == 0 && _scope.AppKind == kind)
 		{
-			_appScopeTaken = true;
-			method = _appScopeMethod;
-			callerData = _appScopeCallerData;
+			_scope.AppTaken = true;
+			method = _scope.AppMethod;
+			callerData = _scope.AppCallerData;
 			automatic = false;
 		}
 
 		var handler = OnRecordCreated;
-		if (handler == null) return;
+		if (handler == null || _raising) return;
 		var record = new Record(id, kind, method, name, level, callerData,
 			data != null ? new Dictionary<string, string>(data) : new Dictionary<string, string>(),
 			automatic, dropReason, DateTime.UtcNow);
@@ -219,7 +235,7 @@ public static class AbxrObserver
 	/// <summary>Raises <see cref="OnRecordsSent"/> for one record.</summary>
 	internal static void Sent(long id, SendStatus status, int httpStatus = 0, string error = null, DropReason dropReason = DropReason.None)
 	{
-		if (id == 0 || OnRecordsSent == null) return;
+		if (id == 0 || OnRecordsSent == null || _raising) return;
 		Sent(new List<long> { id }, status, httpStatus, error, dropReason);
 	}
 
@@ -227,7 +243,7 @@ public static class AbxrObserver
 	internal static void Sent(List<long> ids, SendStatus status, int httpStatus = 0, string error = null, DropReason dropReason = DropReason.None)
 	{
 		var handler = OnRecordsSent;
-		if (handler == null || ids == null || ids.Count == 0) return;
+		if (handler == null || _raising || ids == null || ids.Count == 0) return;
 		Raise(handler, new SendResult(ids.AsReadOnly(), status, httpStatus, error, dropReason), "OnRecordsSent");
 	}
 
@@ -237,14 +253,22 @@ public static class AbxrObserver
 		if (id != 0) ids?.Add(id);
 	}
 
-	/// <summary>Calls each handler separately, so one that throws can't stop recording or the handlers after it.</summary>
+	/// <summary>
+	/// Calls each handler separately, so one that throws can't stop recording or the handlers after it. While handlers
+	/// run, nothing is reported (see <see cref="IsObserved"/>).
+	/// </summary>
 	private static void Raise<T>(Action<T> handler, T value, string eventName)
 	{
-		foreach (var each in handler.GetInvocationList())
+		_raising = true;
+		try
 		{
-			try { ((Action<T>)each)(value); }
-			catch (Exception ex) { Logcat.Error($"An AbxrObserver.{eventName} handler threw: {ex.Message}"); }
+			foreach (var each in handler.GetInvocationList())
+			{
+				try { ((Action<T>)each)(value); }
+				catch (Exception ex) { Logcat.Error($"An AbxrObserver.{eventName} handler threw: {ex.Message}"); }
+			}
 		}
+		finally { _raising = false; }
 	}
 
 	/// <summary>For testing only. Clears handlers, ids, and any scope a failed test left open.</summary>
@@ -253,10 +277,7 @@ public static class AbxrObserver
 		OnRecordCreated = null;
 		OnRecordsSent = null;
 		_lastId = 0;
-		_appScopeOpen = false;
-		_appScopeTaken = false;
-		_appScopeMethod = null;
-		_appScopeCallerData = null;
-		_automaticDepth = 0;
+		_scope = default;
+		_raising = false;
 	}
 }
