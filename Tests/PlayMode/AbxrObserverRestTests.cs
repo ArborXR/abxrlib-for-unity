@@ -11,6 +11,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using AbxrLib.Runtime;
 using NUnit.Framework;
 using UnityEngine;
@@ -171,17 +172,19 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Event queue limit reached (1).")));
         SimulateAuth();
         Abxr.Event("kept", null, sendTelemetry: false);
+        long kept = Single("kept").Id;
+        _server.HoldResponses = true;
         AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
         yield return WaitFor(() => _server.Bodies(DataPath).Count > 0, 5f);
-        // Fills the queue again while the batch is on its way back.
+        // Fills the queue while the server holds the batch's answer, so the refused batch has no room to come back.
         Abxr.Event("newer", null, sendTelemetry: false);
-        long kept = Single("kept").Id;
+        _server.HoldResponses = false;
 
-        yield return WaitFor(() => _sent.Any(s => s.Status == AbxrObserver.SendStatus.Dropped), 5f);
+        yield return WaitFor(() => _sent.Any(s => s.Status == AbxrObserver.SendStatus.Dropped && s.RecordIds.Contains(kept)), 5f);
 
-        var dropped = _sent.Single(s => s.Status == AbxrObserver.SendStatus.Dropped);
+        // Auto telemetry can share the one-item queues, so look for the result that names this record.
+        var dropped = _sent.Single(s => s.Status == AbxrObserver.SendStatus.Dropped && s.RecordIds.Contains(kept));
         Assert.AreEqual(AbxrObserver.DropReason.QueueFull, dropped.DropReason);
-        CollectionAssert.AreEqual(new[] { kept }, dropped.RecordIds);
     }
 
     [UnityTest]
@@ -284,6 +287,14 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         private readonly ConcurrentQueue<(string path, string body)> _requests = new ConcurrentQueue<(string, string)>();
         public string Url { get; }
         public volatile int StatusCode = 200;
+        private readonly ManualResetEventSlim _released = new ManualResetEventSlim(true);
+
+        /// <summary>While true, requests are recorded but not answered, so a test can act while a send is in flight.</summary>
+        public bool HoldResponses
+        {
+            get => !_released.IsSet;
+            set { if (value) _released.Reset(); else _released.Set(); }
+        }
 
         public LocalServer()
         {
@@ -310,6 +321,7 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
             using (var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8))
                 body = reader.ReadToEnd();
             _requests.Enqueue((context.Request.Url.AbsolutePath, body));
+            _released.Wait(TimeSpan.FromSeconds(10));
             context.Response.StatusCode = StatusCode;
             byte[] bytes = Encoding.UTF8.GetBytes("{}");
             context.Response.OutputStream.Write(bytes, 0, bytes.Length);
@@ -318,6 +330,7 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
 
         public void Dispose()
         {
+            _released.Set();
             try { _listener.Stop(); _listener.Close(); } catch { /* already closed */ }
         }
     }
