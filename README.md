@@ -189,7 +189,7 @@ For comprehensive documentation covering all features, advanced topics, and deta
 The full documentation includes:
 - Complete event tracking API (Events, Analytics Event Wrappers, Timed Events)
 - Advanced features (Module Targets, Authentication, Session Management)
-- Storage, Telemetry, Logging, and AI Integration
+- Storage, Telemetry, and Logging
 - Mixpanel and Cognitive3D compatibility guides
 - Troubleshooting and best practices
 - Platform-specific examples and code samples
