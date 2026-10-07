@@ -62,8 +62,9 @@ namespace AbxrLib.Runtime.UI.ExitPoll
 
         private static void ProcessNextPoll()
         {
+            // Clearing the flag after starting the next poll let another AddPoll open a second one on top of it.
             if (Polls.Count > 0) ProcessPoll();
-            _isProcessing = false;
+            else _isProcessing = false;
         }
 
         /// <summary>Clears what an Editor play session left behind when domain reload is off: its polls died with it.</summary>
