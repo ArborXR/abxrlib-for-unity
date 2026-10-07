@@ -66,6 +66,19 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             _isProcessing = false;
         }
 
+        /// <summary>Clears what an Editor play session left behind when domain reload is off: its polls died with it.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            Polls.Clear();
+            Responses.Clear();
+            Callbacks.Clear();
+            _isProcessing = false;
+            _pollInstance = null;
+            _panelInstance = null;
+            _prompt = null;
+        }
+
         private static void CreatePoll(PollType pollType)
         {
             if (pollType == PollType.Rating)
@@ -88,11 +101,14 @@ namespace AbxrLib.Runtime.UI.ExitPoll
                     AddButton(response, panelTransform);
                 }
             }
+            // An open poll must outlive a scene load: it holds the queue until it's answered.
+            if (_pollInstance) DontDestroyOnLoad(_pollInstance);
         }
     
         private static void CreatePanel(GameObject prefab)
         {
             _panelInstance = Instantiate(prefab);
+            DontDestroyOnLoad(_panelInstance); // Outlives a scene load, like the poll.
             TextMeshProUGUI panelText = _panelInstance.GetComponentInChildren<TextMeshProUGUI>();
             panelText.text = _prompt;
         }
