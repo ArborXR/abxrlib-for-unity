@@ -67,6 +67,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>True when OnInputRequested was invoked and we are waiting for the app to call SubmitInput (OnInputSubmitted). Used so clients can show/hide QR-for-auth UI via IsQRScanForAuthAvailable() without tracking state themselves.</summary>
         internal bool IsInputRequestPending => _inputRequestPending;
+        /// <summary>True from a sign-in submit until its answer arrives, while the UI shows Processing. IsInputRequestPending is already false then.</summary>
+        internal bool IsUserAuthSubmitInFlight { get; private set; }
         
         private bool _stopping;
         private bool _attemptActive;
@@ -81,6 +83,7 @@ namespace AbxrLib.Runtime.Services.Auth
         internal void ResetAuthStartedForTesting() => _isAuthStarted = false;
         /// <summary>Testing only. Tests that invoke <see cref="OnInputRequested"/> directly bypass the request bookkeeping; this restores it.</summary>
         internal void SetInputRequestPendingForTesting(bool pending) => _inputRequestPending = pending;
+        internal void SetUserAuthSubmitInFlightForTesting(bool inFlight) => IsUserAuthSubmitInFlight = inFlight;
         private Coroutine _reAuthCoroutine;
         private Coroutine _retryCoroutine;
         private Dictionary<string, string> _userData;
@@ -342,7 +345,19 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <see cref="IAbxrAuthBridge"/>: what the world-space UI calls when the user submits a value. Named for the
         /// caller's world rather than the keyboard's, since the UI is optional and may not be a keyboard at all.
         /// </summary>
-        public void SubmitAuthInput(string input) => KeyboardAuthenticate(input);
+        public void SubmitAuthInput(string input)
+        {
+            // Like SubmitInput: only an outstanding request takes input, so a scan finishing after the session moved on
+            // (or during a submit already in flight) doesn't start a second request.
+            if (!_inputRequestPending)
+            {
+                Logcat.Warning("A scanned code was ignored: no sign-in input request is pending.");
+                SetInputSource("user"); // the scanner set QRlms for this submit
+                return;
+            }
+            _inputRequestPending = false;
+            KeyboardAuthenticate(input);
+        }
 
         public void KeyboardAuthenticate(string input)
         {
@@ -353,8 +368,11 @@ namespace AbxrLib.Runtime.Services.Auth
             else
                 _authMechanism.prompt = input;
 
+            IsUserAuthSubmitInFlight = true;
             _runner.StartCoroutine(AuthRequestCoroutine((success, errorMessage) =>
             {
+                // IsUserAuthSubmitInFlight stays set until the outcome is reported, so an app that ends the session from its
+                // OnAuthCompleted handler still gets the prompt closed (ClearAuthSession reads it).
                 // Store the entered value only for email and text so we can add it to UserData. PIN is never stored in UserData—only used as auth prompt.
                 if (_authMechanism.type == "email" || _authMechanism.type == "text")
                 {
@@ -369,6 +387,7 @@ namespace AbxrLib.Runtime.Services.Auth
 #if UNITY_WEBGL && !UNITY_EDITOR
                     _webglQueryAssessmentPin = null;
 #endif
+                    IsUserAuthSubmitInFlight = false;
                     AbxrUi.AuthUi?.Hide();
                     AuthSucceeded();
                 }
@@ -382,7 +401,12 @@ namespace AbxrLib.Runtime.Services.Auth
                     SetInputSource("user");  // In case it was changed by QR Scanner
 
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.
+                    int generation = _sessionGeneration;
                     OnFailed?.Invoke("Authentication failed");
+                    // The app's OnAuthCompleted handler ended or restarted the session: don't ask again in it. Clearing it
+                    // closed the prompt and reset IsUserAuthSubmitInFlight.
+                    if (generation != _sessionGeneration) return;
+                    IsUserAuthSubmitInFlight = false;
                     _inputRequestPending = true;
                     OnInputRequested?.Invoke(_authMechanism.type, originalPrompt, _authMechanism.domain, "Authentication Failed");
                 }
@@ -1169,6 +1193,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _returnToPackage = null;
             _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
+            IsUserAuthSubmitInFlight = false;
             _userData = null;
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;

@@ -145,6 +145,11 @@ namespace AbxrLib.Runtime
         // ── Module state ─────────────────────────────────────────────
         private int _currentModuleIndex;
         private Action<string, string, string, string> _appOnInputRequested;
+        /// <summary>
+        /// The SDK's UI showed the latest sign-in request. Set when it's dispatched, not read from the handler later: an
+        /// app that assigns OnInputRequested while the SDK's prompt is up leaves the request with that prompt.
+        /// </summary>
+        private bool _signInShownBySdkUi;
 
         // Developer-supplied overrides (bypass ArborMdmClient); null = not set.
         private string _overrideOrgId;
@@ -257,7 +262,9 @@ namespace AbxrLib.Runtime
             Abxr.OnAuthCompleted += OnAuthCompletedHandler;
 
             // Wire auth callbacks. Auth always invokes our dispatcher; we never call PresentKeyboard when the app has set OnInputRequested.
-            _authService.OnInputRequested = OnInputRequestedDispatch;
+            // Records who showed each sign-in request, so a cleared session closes only the SDK's own prompt.
+            _authService.OnInputRequested = (type, prompt, domain, error) =>
+                _signInShownBySdkUi = DispatchInputRequest(type, prompt, domain, error);
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
             {
@@ -403,7 +410,30 @@ namespace AbxrLib.Runtime
 	        _assessmentStarted = false;
 	        _currentModuleIndex = 0;
 	        AIProxyApi.ClearPastMessages();
-	        _authService.ClearSessionAndPrepareForNew();
+	        // At app quit everything is going away; closing the UI then would only let a poll queued behind it open.
+	        ClearAuthSession(closeSignInUi: _endSessionInProgress);
+        }
+
+        /// <summary>
+        /// Clears the auth session, and closes the SDK's sign-in prompt if it was open for it: waiting for input, or
+        /// showing Processing after a submit. Clearing doesn't hide it, and the World-Space UI prompt outlives scene
+        /// loads, so it would stay on screen. An open pairing prompt stays open.
+        /// </summary>
+        private void ClearAuthSession(bool closeSignInUi = true)
+        {
+            bool signInUiOpen = closeSignInUi
+                && (_authService.IsInputRequestPending || _authService.IsUserAuthSubmitInFlight)
+                // Not when the app's own OnInputRequested handler showed the request.
+                && _signInShownBySdkUi
+                // When pairing waits too, the prompt on screen is pairing's (SubmitInput routes to it), so it stays.
+                && !(_pairingService?.IsInputRequestPending ?? false);
+            _authService.ClearSessionAndPrepareForNew();
+            _signInShownBySdkUi = false;
+            if (!signInUiOpen) return;
+            // A sign-in QR scan, even one still starting the camera, would otherwise submit its result into the next session.
+            var scanner = AbxrUi.QrScanner;
+            if (scanner != null && (scanner.IsScanning || scanner.IsInitializing)) scanner.CancelScan();
+            AbxrUi.AuthUi?.Hide();
         }
         
 
@@ -490,12 +520,11 @@ namespace AbxrLib.Runtime
         private void EndSessionOfPreviousPairing()
         {
             if (!_authService.Authenticated && !_authService.IsAuthenticationAttemptActive) return;
-            bool signInPromptOpen = _authService.IsInputRequestPending;
             // A session that signed in ends the way EndSession does, while its token still works: open assessments
             // close, and what it recorded goes to the org it belongs to instead of being dropped with the queue.
+            // Either way an open sign-in prompt closes (ClearAuthSession).
             if (_authService.Authenticated) EndSession();
-            else _authService.ClearSessionAndPrepareForNew();
-            if (signInPromptOpen) AbxrUi.AuthUi?.Hide();
+            else ClearAuthSession();
         }
 
         /// <summary>
@@ -796,21 +825,25 @@ namespace AbxrLib.Runtime
 			}
 		}
 
-		private void OnInputRequestedDispatch(string type, string prompt, string domain, string error)
+		private void OnInputRequestedDispatch(string type, string prompt, string domain, string error) =>
+			DispatchInputRequest(type, prompt, domain, error);
+
+		/// <summary>Sends an input request to the app's handler or the SDK's UI. True when the SDK's UI shows it.</summary>
+		private bool DispatchInputRequest(string type, string prompt, string domain, string error)
 		{
 			if (_appOnInputRequested != null)
 			{
 				_droppedInputRequest = null;
 				_appOnInputRequested(type, prompt, domain, error);
+				return false;
 			}
-			else if (PresentKeyboard(type, prompt, domain, error))
+			if (PresentKeyboard(type, prompt, domain, error))
 			{
 				_droppedInputRequest = null;
+				return true;
 			}
-			else
-			{
-				_droppedInputRequest = (type, prompt, domain, error);
-			}
+			_droppedInputRequest = (type, prompt, domain, error);
+			return false;
 		}
 		
 		/// <summary>
@@ -843,7 +876,7 @@ internal void StartNewSession()
 				ArborInsightsClient.Bind(null);
 			}
 #endif
-			_authService.ClearSessionAndPrepareForNew();
+			ClearAuthSession();
 			// The first attempt of a launch decides identity, so it waits like auto-start does: for the ArborXR client,
 			// and for the first frame. Otherwise a login that calls StartNewSession early settles a managed headset as Unpaired.
 			if (_pairingService.State == Abxr.PairingState.Resolving)
