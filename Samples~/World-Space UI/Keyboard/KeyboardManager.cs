@@ -42,12 +42,15 @@ namespace AbxrLib.Runtime.UI.Keyboard
         // Cache button state to avoid repeated logs
         private bool? _lastQRButtonState = null;
 #endif
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
         private void Awake()
         {
-            if (Instance == null)
-            {
-                Instance = this;
-            }
+            // The newest one wins: a prompt reopened in the frame the old one is destroyed must not keep the old one's.
+            Instance = this;
 
             // Trigger on press (OnPointerDown) instead of release (onClick)
             // onClick listeners removed to prevent double-firing

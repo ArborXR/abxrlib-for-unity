@@ -35,6 +35,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private const float InputGuardDuration = 0.5f;
         private static float _inputUnlockTime;
 
+        /// <summary>True while a keyboard or PIN pad is open.</summary>
+        public static bool IsOpen => _keyboardInstance || _pinPadInstance;
+
         /// <summary>Returns true when pointer-down input is currently blocked by the opening guard.</summary>
         public static bool IsInputGuarded => Time.unscaledTime < _inputUnlockTime;
 
@@ -87,8 +90,13 @@ namespace AbxrLib.Runtime.UI.Keyboard
     
         public static void Destroy()
         {
+            _processingSubmit = false; // ProcessingVisual can still tick once this frame, before the instance goes
             if (_keyboardInstance) Destroy(_keyboardInstance);
             if (_pinPadInstance) Destroy(_pinPadInstance);
+            // Destroy waits for the end of the frame, so a prompt opened again in this frame must not find the old one.
+            _keyboardInstance = null;
+            _pinPadInstance = null;
+            _prompt = null;
             ResetPairingState();
             
             // Restore laser pointer states to their original configuration
@@ -236,6 +244,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (_pinPadInstance) Destroy(_pinPadInstance);
             _pinPadInstance = null;
+            _processingSubmit = false;
             IsPairing = false;
             _skipLabel = null;
         }
@@ -245,8 +254,23 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             if (_keyboardInstance) Destroy(_keyboardInstance);
             _keyboardInstance = null;
+            _processingSubmit = false;
             _deviceNameStep = DeviceNameStep.None;
             _joinByTyping = false;
+        }
+
+        /// <summary>Clears what an Editor play session left behind when domain reload is off: the prompt objects died with it.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            _keyboardInstance = null;
+            _pinPadInstance = null;
+            _prompt = null;
+            _processingSubmit = false;
+            _inputUnlockTime = 0;
+            ResetPairingState();
+            LaserPointerManager.ForceCleanup();
+            KeyboardManager.Instance = null;
         }
 
         private static void ResetPairingState()
@@ -311,6 +335,9 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
                 if (_pinPadInstance) return; // Prevent duplicate PIN pad creation
                 _pinPadInstance = Instantiate(_pinPadPrefab);
+                // An open prompt must outlive a scene load: the SDK still waits on its input, and only KeyboardHandler's
+                // Destroy methods close it.
+                DontDestroyOnLoad(_pinPadInstance);
                 
                 // Ensure PIN pad FaceCamera uses configuration values
                 var pinPadFaceCamera = _pinPadInstance.GetComponent<FaceCamera>();
@@ -329,6 +356,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 }
                 if( _keyboardInstance) return; // Prevent duplicate full keyboard creation
                 _keyboardInstance = Instantiate(_keyboardPrefab);
+                DontDestroyOnLoad(_keyboardInstance); // Outlives a scene load, like the PIN pad.
                 
                 // Ensure FaceCamera uses configuration values
                 var faceCamera = _keyboardInstance.GetComponent<FaceCamera>();
@@ -387,7 +415,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         {
             _processingSubmit = true;
             SetPrompt(ProcessingText);
-            while (_processingSubmit)
+            while (_processingSubmit && _prompt != null)
             {
                 string currentText = _prompt.text;
                 _prompt.text = currentText.Length > ProcessingText.Length + 10 ? ProcessingText : $":{_prompt.text}:";
