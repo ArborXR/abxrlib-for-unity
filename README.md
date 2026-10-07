@@ -93,10 +93,13 @@ It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`, and Te
 
 **Skip it** if your app collects input itself. Handle `Abxr.OnInputRequested` and pass the value to `Abxr.OnInputSubmitted`; AbxrLib will not try to draw anything. Events, telemetry, logs, storage, and authentication all work without the UI. Two things do not: `Abxr.PollUser` drops its poll with a warning unless you register your own UI via `AbxrUi.RegisterPollUi`, and the "same user?" prompt shown when the headset is put back on (`Abxr.OnHeadsetPutOnNewSession`) is asked through that same poll UI — so without one, that callback never fires.
 
-> **Upgrading from 2.0.10 or earlier?** Two changes to know about:
+> **Upgrading from 2.0.10 or earlier?** Three changes to know about:
 >
 > 1. The sign-in UI used to ship inside the package. After updating, import it as above — otherwise an authentication request that needs a PIN or email has nothing to show unless your app handles `Abxr.OnInputRequested`. The wizard says so on its first page.
-> 2. `Abxr.PollUser()` now takes `PollType` from `AbxrLib.Runtime.Types` instead of `ExitPollHandler.PollType`. If you call it, add `using AbxrLib.Runtime.Types;` and drop the `ExitPollHandler.` prefix — the enum values are unchanged. This is the only change you need to make to existing code; 3.0 also adds new public API (the `AbxrUi` registry and its interfaces) without touching anything else you already call.
+> 2. `Abxr.PollUser()` now takes `PollType` from `AbxrLib.Runtime.Types` instead of `ExitPollHandler.PollType`. If you call it, add `using AbxrLib.Runtime.Types;` and drop the `ExitPollHandler.` prefix — the enum values are unchanged.
+> 3. `Abxr.AIProxy` has been removed, along with `AIProxyApi` and `AIPromptPayload`. The backend endpoint it called is no longer served, so every call already returned `null`. Call your LLM provider directly with your own keys.
+>
+> Beyond these, 3.0 adds new public API (the `AbxrUi` registry and its interfaces) without touching anything else you already call.
 
 ---
 
