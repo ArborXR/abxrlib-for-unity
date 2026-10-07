@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.Scripting;
 using AbxrLib.Runtime.Core;
 
@@ -32,12 +33,26 @@ namespace AbxrLib.Runtime.UI
         private Transform cam;
         private Configuration config;
 
+        private void OnEnable() => SceneManager.activeSceneChanged += OnActiveSceneChanged;
+        private void OnDisable() => SceneManager.activeSceneChanged -= OnActiveSceneChanged;
+
+        // A rig that persists across scenes keeps its camera but may move to a new spawn point, so look again after a load.
+        private void OnActiveSceneChanged(Scene from, Scene to) => cam = null;
+
         private void Start()
         {
             if (Camera.main == null) return;
             cam = Camera.main.transform;
             if (!cam) return;
-            
+            PlaceInFrontOfCamera();
+        }
+
+        /// <summary>
+        /// Puts the panel in front of the camera and turns it to face it. Runs on Start and whenever a new camera is
+        /// found, for example after a scene load, so a panel that outlives its scene doesn't stay where the old camera was.
+        /// </summary>
+        private void PlaceInFrontOfCamera()
+        {
             config = Configuration.Instance;
             
             // Use configuration values if enabled
@@ -78,6 +93,7 @@ namespace AbxrLib.Runtime.UI
                 if (Camera.main != null)
                 {
                     cam = Camera.main.transform;
+                    PlaceInFrontOfCamera();
                 }
                 else
                 {
