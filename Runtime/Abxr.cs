@@ -30,6 +30,12 @@ public static partial class Abxr
 	/// Event triggered when authentication completes
 	/// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
 	/// Subscribe to this event to handle authentication results
+	/// It can fire 'false' and later 'true' for the same sign-in, so make the handler safe to run more than once.
+	/// When device authentication can't reach the backend (offline, captive portal, outage), it fires 'false' once, with a
+	/// message saying the SDK is retrying in the background, and 'true' when a retry succeeds. If the backend refuses the
+	/// credentials during those retries, the SDK stops retrying without firing again.
+	/// At the PIN or email step, each failed submission fires 'false', even one that failed for lack of a connection,
+	/// and the SDK asks for the input again.
 	/// </summary>
 	public static Action<bool, string> OnAuthCompleted;
 
@@ -269,8 +275,15 @@ public static partial class Abxr
 	/// Manually start the authentication process
 	/// Use this when Enable Auto Start Authentication is off in configuration
 	/// or when you want to trigger authentication at a specific time in your app
+	/// Does nothing while an authentication attempt is in progress, including while device authentication keeps retrying
+	/// in the background after OnAuthCompleted(false): the SDK retries on its own and fires OnAuthCompleted(true) when a
+	/// retry succeeds.
 	/// </summary>
 	public static void StartAuthentication() => X?.StartAuthentication();
+	/// <summary>
+	/// Same as <see cref="StartAuthentication"/>, so it also does nothing while an authentication attempt is in progress,
+	/// including while device authentication keeps retrying in the background.
+	/// </summary>
 	public static void ReAuthenticate() => X?.StartAuthentication();
 
 	/// <summary>

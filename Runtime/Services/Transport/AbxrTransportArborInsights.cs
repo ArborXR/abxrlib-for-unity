@@ -16,7 +16,7 @@ namespace AbxrLib.Runtime.Services.Transport
     {
         public bool IsServiceTransport => true;
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, bool> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
             // If unbound (e.g. after EndSession), re-establish bind so StartAuthentication() works without StartNewSession.
             // Yields must be outside any try-catch block in C# iterators.
@@ -24,7 +24,7 @@ namespace AbxrLib.Runtime.Services.Transport
             {
                 if (!ArborInsightsClient.Bind(null))
                 {
-                    onComplete?.Invoke(false, "ArborInsightsClient.Bind failed", false);
+                    onComplete?.Invoke(new AuthTransportResult(false, "ArborInsightsClient.Bind failed", false));
                     yield break;
                 }
                 const int maxAttempts = 40;
@@ -33,7 +33,7 @@ namespace AbxrLib.Runtime.Services.Transport
                     yield return new WaitForSecondsRealtime(intervalSeconds);
                 if (!ArborInsightsClient.ServiceIsFullyInitialized())
                 {
-                    onComplete?.Invoke(false, "ArborInsightsClient service not ready after bind", false);
+                    onComplete?.Invoke(new AuthTransportResult(false, "ArborInsightsClient service not ready after bind", false));
                     yield break;
                 }
             }
@@ -44,21 +44,18 @@ namespace AbxrLib.Runtime.Services.Transport
                 ArborInsightsClient.SetAuthPayloadForRequest(restUrl, payload);
                 string responseJson = ArborInsightsClient.AuthRequest(payload.userId ?? "", Utils.DictToString(payload.authMechanism));
                 // Device client (AAR/service) decides if the API rejected auth (e.g. 401/403); we only pass the flag.
+                // It exposes no HTTP status, so the result's StatusCode stays 0.
                 bool isAuthRejectedByApi = ArborInsightsClient.GetLastAuthRejected();
                 // Use same success rule as auth service (AuthResponse.IsValidSuccess): full success or second-stage required.
                 bool success = !string.IsNullOrEmpty(responseJson) && ParseAndCheckValidSuccess(responseJson);
-                // Normalize empty failure body so auth service logs the same message for both transports.
-                string body = responseJson ?? "";
-                if (string.IsNullOrEmpty(body) && !success)
-                    body = "No response body.";
                 if (!success)
-                    Logcat.Warning($"AuthRequest failed: {body}");
-                onComplete?.Invoke(success, body, isAuthRejectedByApi);
+                    Logcat.Warning($"AuthRequest failed: {(string.IsNullOrEmpty(responseJson) ? "(empty)" : responseJson)}");
+                onComplete?.Invoke(new AuthTransportResult(success, responseJson, isAuthRejectedByApi));
             }
             catch (Exception ex)
             {
                 Logcat.Error($"ArborInsights auth failed: {ex.Message}");
-                onComplete?.Invoke(false, ex.Message, false);
+                onComplete?.Invoke(new AuthTransportResult(false, ex.Message, false));
             }
             yield return null;
         }

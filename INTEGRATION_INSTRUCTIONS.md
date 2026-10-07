@@ -167,12 +167,17 @@ Abxr.OnAuthCompleted += (success, errorMessage) => {
         // Safe to use GetUserId(), GetUserData(), GetModuleList(), etc.
         StartAppFlow();
     } else {
-        // Show error or fallback flow
+        // Auth failed: show an error or a fallback flow. Offline, the SDK keeps retrying in the background,
+        // so this can be followed by a call with success == true (see below).
     }
 };
 ```
 
 Subscribe **before** auth runs (e.g. in `Start()` or earlier; with auto-start auth, that means as early as your scene allows).
+
+If the headset is offline or can't reach the ArborXR backend, **OnAuthCompleted** fires `false` right away, with a message saying the SDK is retrying in the background, so your app can go ahead without the user's identity as it would after any failed auth. The SDK keeps retrying, waiting longer between attempts, and fires **OnAuthCompleted** again with `true` once a retry succeeds. If the backend refuses the credentials instead, the SDK stops retrying and does not fire again. One sign-in can therefore report `false` and then `true`, so make your handler safe to run twice: keep anything that must happen once, such as starting a level, behind a flag. You don't need to call `Abxr.StartAuthentication()` again; while the SDK is retrying, that call does nothing. At the PIN or email step, each failed submission also fires **OnAuthCompleted** with `false`, even one that failed because the headset went offline, and the SDK asks for the input again.
+
+A delayed authentication finishes wherever the user is at that moment. The SDK may then ask for the PIN or email (**OnInputRequested**, or the built-in sign-in UI) and send the first module to **OnModuleTarget**. Make both safe to arrive mid-content, for example by holding the navigation until the user reaches a natural break.
 
 ### 6.2 Module target (LMS deep link)
 
@@ -250,7 +255,7 @@ Use this to implement or audit an integration.
 
 ### Auth and navigation
 
-- [ ] If the app needs auth before proceeding, it subscribes to **OnAuthCompleted** and continues only when `success` is true.
+- [ ] If the app needs auth before proceeding, it subscribes to **OnAuthCompleted** and continues only when `success` is true. The handler is safe to run twice: offline, it gets `false` first and `true` once a retry succeeds.
 - [ ] **OnModuleTarget** is subscribed (and unsubscribed in OnDisable/OnDestroy); the handler navigates to the requested module/scenario.
 - [ ] If the app has multi-module sequences, **OnAllModulesCompleted** is subscribed and used to e.g. go home and call **Abxr.StartNewSession()**.
 
