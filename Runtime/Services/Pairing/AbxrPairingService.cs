@@ -118,6 +118,12 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// <summary>True while the prompt waits for input, so the subsystem knows OnInputSubmitted is for pairing.</summary>
         internal bool IsInputRequestPending => State == Abxr.PairingState.Prompting;
 
+        /// <summary>
+        /// True while a passcode sent from the prompt waits for its answer. The prompt is still up, showing Processing,
+        /// so the subsystem still routes its input here: "Not now" has to cancel, not reach auth.
+        /// </summary>
+        internal bool IsPromptRedeemInFlight => State == Abxr.PairingState.Redeeming && _redeemFromPrompt;
+
         /// <summary>The paired device's name, or null when the pairing has none or there's no pairing. Survives relaunches.</summary>
         internal string DeviceName => HasStoredPairing ? _deviceName : null;
 
@@ -224,9 +230,17 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// OnInputSubmitted while the prompt is open, routed here by the subsystem. What it answers depends on the
         /// step the last request asked for (its type): the passcode, where "**skip**" is the prompt's "Not now"; the
         /// name, where "" or "**skip**" pairs without one; or joining a paired device that already has the name.
+        /// While the passcode step's redeem is in flight, "**skip**" still means "Not now" and cancels.
         /// </summary>
         internal void SubmitInput(string input)
         {
+            if (IsPromptRedeemInFlight)
+            {
+                // A name step's "**skip**" answers a question that isn't open until the redeem comes back.
+                if (input == SkipInput && _step == PromptStep.Passcode) CancelPairing();
+                else Logcat.Warning("Pairing input was submitted while a passcode is being redeemed, so it was ignored.");
+                return;
+            }
             if (State != Abxr.PairingState.Prompting)
             {
                 Logcat.Warning("Pairing input was submitted, but no pairing prompt is open.");

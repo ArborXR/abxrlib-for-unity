@@ -522,6 +522,59 @@ public class PairingServiceTests
     }
 
     [Test]
+    public void NotNow_WhileThePasscodeIsRedeeming_Cancels()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service);
+        Assert.IsTrue(service.IsPromptRedeemInFlight);
+
+        service.SubmitInput("**skip**");
+        _client.Respond(Status(400));
+
+        Assert.AreEqual(1, _ui.Hides, "Not now closes the prompt right away, not when the answer comes.");
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Dismissed) }, _events);
+        Assert.IsEmpty(_requests, "A cancelled prompt doesn't reopen with the failure.");
+    }
+
+    [Test]
+    public void OtherInput_WhileThePasscodeIsRedeeming_IsIgnored()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service);
+
+        service.SubmitInput("111111");
+        _client.Respond(Status(400));
+
+        Assert.AreEqual(1, _client.Sent.Count);
+        Assert.AreEqual(Abxr.PairingState.Prompting, service.State);
+        Assert.AreEqual("pairingPasscode", _requests[0].type, "The failure still reopens the prompt.");
+    }
+
+    [Test]
+    public void Skip_WhileTheNameIsRedeeming_IsIgnored()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service, deviceName: "Headset 12");
+
+        service.SubmitInput("**skip**");
+        _client.Respond(Ok(deviceName: "Headset 12"));
+
+        Assert.AreEqual(1, _ui.Hides, "Only the success closes the prompt.");
+        Assert.AreEqual(2, _client.Sent.Count, "The name step's skip has no question to answer until the redeem comes back.");
+        Assert.AreEqual(Abxr.PairingState.Paired, service.State);
+    }
+
+    [Test]
+    public void AHeadlessRedeem_DoesNotTakePromptInput()
+    {
+        var service = CreateUnpaired();
+        service.RedeemPairingPasscode("483921", _ => { });
+
+        Assert.IsFalse(service.IsPromptRedeemInFlight, "With no prompt, OnInputSubmitted still goes to auth.");
+    }
+
+    [Test]
     public void AResponseArrivingTwice_IsHandledOnce()
     {
         var service = CreatePrompting();

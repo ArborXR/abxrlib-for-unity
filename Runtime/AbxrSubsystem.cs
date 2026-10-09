@@ -575,7 +575,8 @@ namespace AbxrLib.Runtime
 
         /// <summary>
         /// OnInputSubmitted goes to whichever service asked for input. They can't both be waiting: the pairing prompt
-        /// only opens while Unpaired, and auth asks for input only once identity is settled.
+        /// only opens while Unpaired, and auth asks for input only once identity is settled. Pairing keeps its prompt's
+        /// input while the passcode it sent is redeemed, so "Not now" there cancels instead of reaching auth.
         /// </summary>
         internal void SubmitInput(string input)
         {
@@ -583,7 +584,8 @@ namespace AbxrLib.Runtime
             if (pairingPending && _authService.IsInputRequestPending)
                 Logcat.Warning("Both pairing and sign-in are waiting for input. The input went to pairing.");
 
-            if (pairingPending) _pairingService.SubmitInput(input);
+            bool pairingRedeeming = _pairingService != null && _pairingService.IsPromptRedeemInFlight && !_authService.IsInputRequestPending;
+            if (pairingPending || pairingRedeeming) _pairingService.SubmitInput(input);
             else _authService.SubmitInput(input);
         }
 

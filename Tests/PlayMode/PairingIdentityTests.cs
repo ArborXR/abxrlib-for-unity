@@ -451,6 +451,28 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator NotNow_WhileThePasscodeIsRedeeming_CancelsInsteadOfReachingAuth()
+    {
+        var client = new HeldRedeemClient();
+        AbxrSubsystem.NextPairingRedeemClientForTesting = client;
+        Start(pairedAs: null, Authorized);
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Abxr.OnPairingStateChanged += RecordState;
+
+        Assert.IsTrue(Abxr.StartPairing());
+        Abxr.OnInputSubmitted("483921");
+        Assert.AreEqual(Abxr.PairingState.Redeeming, Abxr.GetPairingState());
+        Abxr.OnInputSubmitted("**skip**");
+        client.Respond(new PairingHttpResponse(400, "{\"error\":\"nope\"}"));
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Abxr.GetPairingState());
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Dismissed) }, _stateEvents,
+            "The failure dismisses instead of reopening the prompt the person closed.");
+    }
+
+    [UnityTest]
     public IEnumerator RedeemPairingPasscode_WhenPaired_CallsBackWithInvalidState()
     {
         Start(pairedAs: InstanceId, Authorized, deviceName: "Headset 12");
@@ -657,6 +679,14 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         public RateLimitedRedeemClient(string retryAfter) => _retryAfter = retryAfter;
         public void Send(string url, string json, Action<PairingHttpResponse> onComplete) =>
             onComplete(new PairingHttpResponse(429, "{\"error\":\"Too many attempts\"}", _retryAfter));
+    }
+
+    /// <summary>Holds each redeem until the test answers it, like a request still on the wire.</summary>
+    private sealed class HeldRedeemClient : IPairingRedeemClient
+    {
+        private Action<PairingHttpResponse> _pending;
+        public void Send(string url, string json, Action<PairingHttpResponse> onComplete) => _pending = onComplete;
+        public void Respond(PairingHttpResponse response) => _pending(response);
     }
 
     private sealed class MemoryPairingStore : IPairingStore
