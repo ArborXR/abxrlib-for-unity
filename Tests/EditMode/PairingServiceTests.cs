@@ -579,6 +579,13 @@ public class PairingServiceTests
     private const double PastTheDeadline = 30 + AbxrPairingService.StalledRedeemSlackSeconds + 1;
 
     [Test]
+    public void TheServiceDeadline_ComesAfterTheClients()
+    {
+        // Abandoning a request the client might still answer drops a success, and the Portal returns its token only once.
+        Assert.Greater(AbxrPairingService.StalledRedeemSlackSeconds, UnityWebRequestPairingClient.TimeoutGraceSeconds);
+    }
+
+    [Test]
     public void AnUnansweredRedeem_BeforeItsDeadline_StillRefusesStartPairing()
     {
         var service = CreateUnpaired();
