@@ -207,7 +207,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
 
         /// <summary>
         /// The keypad's Back button while pairing. False when this PIN pad has no gate, so the button means "Not now".
-        /// Does nothing while a passcode is being redeemed: its answer, an error or the name step, belongs on the keypad.
+        /// Does nothing while a passcode is being redeemed, so a failed passcode's error shows on the keypad, not under the gate.
         /// </summary>
         public static bool ReturnToPairingGate()
         {
