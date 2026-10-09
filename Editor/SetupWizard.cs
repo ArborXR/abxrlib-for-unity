@@ -439,6 +439,7 @@ namespace AbxrLib.Editor
             DrawBullet("Enter Play Mode: AbxrLib authenticates and logs its progress to the Console.");
             DrawBullet("Sign-in UI (PIN, email, QR) appears on its own when the backend asks for it.");
             DrawBullet("Events queue locally and send in batches, so a moment can pass before they show up in Insights.");
+            DrawBullet("The pairing prompt appears only when your code calls Abxr.StartPairing().");
 
             GUILayout.Space(10f);
             DrawStatusSummary();

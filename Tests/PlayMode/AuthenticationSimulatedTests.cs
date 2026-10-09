@@ -1,9 +1,12 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode tests using simulated auth only (no API calls): auth state, override setters, module list, session management.
 // Device auth (config, validation, handoff) is in AuthenticationDeviceTests.
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
+using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
@@ -275,6 +278,45 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Abxr.Register("context", "training");
         Abxr.StartNewSession();
         Assert.That(Abxr.GetSuperMetaData(), Is.Null.Or.Empty);
+    }
+
+    // ── DEFAULT assessment ────────────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator DefaultAssessment_StartsOverWhenTrueFollowsFalse()
+    {
+        // A device auth that retried offline, or a wrong PIN, reports false first. The DEFAULT duration counts from the true.
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: offline")));
+        AbxrSubsystem.Instance.AuthServiceForTesting.OnFailed("offline");
+        var startTimes = (Dictionary<string, System.DateTime>)typeof(AbxrSubsystem)
+            .GetField("_assessmentStartTimes", BindingFlags.NonPublic | BindingFlags.Instance)
+            .GetValue(AbxrSubsystem.Instance);
+        System.DateTime afterFalse = startTimes["DEFAULT"];
+
+        yield return new WaitForSecondsRealtime(0.05f);
+        SimulateAuth();
+
+        Assert.Greater(startTimes["DEFAULT"], afterFalse);
+    }
+
+    // ── EndSession ────────────────────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator EndSession_WithAnOpenAssessmentInAHandoffSession_DoesNotStartTheReturnFlow()
+    {
+        AbxrSubsystem.SimulateQuitInExitAfterAssessmentComplete = true; // if the flow does start, it must not stop play mode
+        ModifyConfig("restUrl", "http://127.0.0.1:1/"); // EndSession flushes the closed assessment; keep that off the network
+        SimulateAuth();
+        // A handoff session with enableReturnTo on (the default) exits or returns once an assessment completes.
+        typeof(AbxrAuthService).GetField("_sessionUsedAuthHandoff", BindingFlags.NonPublic | BindingFlags.Instance)
+            .SetValue(AbxrSubsystem.Instance.AuthServiceForTesting, true);
+        Abxr.EventAssessmentStart("open_assessment");
+
+        Abxr.EndSession();
+
+        Assert.IsFalse(AbxrSubsystem.Instance.IsExitAfterAssessmentScheduledForTesting,
+            "EndSession auto-closes the assessment, but the app keeps running, so it must not launch the return app or quit.");
+        yield return new WaitForSeconds(2.5f); // lets a wrongly started flow finish before TearDown resets the quit simulation
     }
 
     // ── SetUserData ───────────────────────────────────────────────────────

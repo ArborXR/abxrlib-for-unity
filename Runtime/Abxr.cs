@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using AbxrLib.Runtime;
 using UnityEngine;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Types;
 
 public static partial class Abxr
@@ -121,6 +122,102 @@ public static partial class Abxr
 	{
 		Device,
 		User
+	}
+
+	/// <summary>Where this app stands on passcode pairing. Read it with GetPairingState().</summary>
+	public enum PairingState
+	{
+		/// <summary>
+		/// Startup. The SDK hasn't decided this app's organization identity yet, for example while it waits for the ArborXR
+		/// client. With Enable Auto Start Authentication off, it decides when the app calls StartAuthentication().
+		/// </summary>
+		Resolving,
+		/// <summary>The ArborXR client or an org token identifies the organization, so pairing doesn't apply.</summary>
+		Managed,
+		/// <summary>No organization identity and no stored pairing. The app runs without sending data until it pairs.</summary>
+		Unpaired,
+		/// <summary>The pairing prompt is open, waiting for a passcode.</summary>
+		Prompting,
+		/// <summary>A passcode is being redeemed.</summary>
+		Redeeming,
+		/// <summary>A stored pairing identifies this app's organization.</summary>
+		Paired
+	}
+
+	/// <summary>Why the pairing state changed. OnPairingStateChanged carries it.</summary>
+	public enum PairingChangeReason
+	{
+		/// <summary>
+		/// The SDK decided this app's identity at startup. In an app that can't pair (no App Token, or a platform without
+		/// pairing), also when an org credential set after a startup with none replaces Unpaired with Managed.
+		/// </summary>
+		Startup,
+		/// <summary>A passcode was redeemed.</summary>
+		Paired,
+		/// <summary>The prompt closed without pairing. Nothing was stored.</summary>
+		Dismissed,
+		/// <summary>ClearPairing removed the stored pairing.</summary>
+		Cleared,
+		/// <summary>The backend no longer accepts the stored pairing, so the SDK removed it.</summary>
+		Revoked
+	}
+
+	/// <summary>Why a passcode redemption failed.</summary>
+	public enum PairingRedeemError
+	{
+		/// <summary>The redeem succeeded, or none has been attempted.</summary>
+		None,
+		/// <summary>The passcode is wrong, expired, or revoked. These can't be told apart, on purpose.</summary>
+		InvalidPasscode,
+		/// <summary>
+		/// The passcode is valid and allows a name for the headset. Ask for one with the option to skip, then redeem
+		/// again with the name, or with a null name to skip. Nothing was created yet.
+		/// </summary>
+		DeviceNameRequested,
+		/// <summary>The passcode requires a name for the headset, and none was given. Ask for one, without the option to skip.</summary>
+		DeviceNameRequired,
+		/// <summary>The name can't be used, for example because it's longer than 64 characters.</summary>
+		DeviceNameInvalid,
+		/// <summary>
+		/// A paired device in the organization already has this name, for example from another app on this headset.
+		/// DeviceName holds its name. Confirm with the person, then redeem again with joinExistingDevice to add this app to it.
+		/// </summary>
+		DeviceNameExists,
+		/// <summary>The pairing service didn't accept this build, for example its App Token. A problem for the app's developer, not the person pairing.</summary>
+		BuildRejected,
+		/// <summary>Too many failed attempts for this app. Wait RetryAfterSeconds before trying again.</summary>
+		RateLimited,
+		/// <summary>The pairing service couldn't be reached, or had a problem.</summary>
+		Unavailable,
+		/// <summary>The call isn't valid in the current pairing state, or on this platform. Nothing was sent.</summary>
+		InvalidState
+	}
+
+	/// <summary>
+	/// How a passcode redemption ended. Message is English display text; branch on Error, and localize from it.
+	/// A default value, with Error None and Success false, means no attempt has been made.
+	/// </summary>
+	public readonly struct PairingRedeemResult
+	{
+		public bool Success { get; }
+		public PairingRedeemError Error { get; }
+		/// <summary>For RateLimited, the seconds to wait before the next attempt. Zero otherwise.</summary>
+		public int RetryAfterSeconds { get; }
+		public string Message { get; }
+		/// <summary>
+		/// On success, the name of the paired device this app joined, or null when it has none. For
+		/// DeviceNameExists, the existing device's name, for the confirm. Null otherwise.
+		/// </summary>
+		public string DeviceName { get; }
+
+		internal PairingRedeemResult(bool success, PairingRedeemError error, int retryAfterSeconds, string message, string deviceName = null)
+		{
+			Success = success;
+			Error = error;
+			RetryAfterSeconds = retryAfterSeconds;
+			Message = message;
+			DeviceName = deviceName;
+		}
 	}
 
 	// ── Application quit / EndSession: auto-complete open assessment tree ─────────────────────────
@@ -291,6 +388,9 @@ public static partial class Abxr
 	/// Only one handler is allowed; use assignment (=), not subscribe (+=). Your handler receives (type, prompt, domain, error).
 	/// Show your UI; when the user submits, call Abxr.OnInputSubmitted(enteredValue). Set to null in OnDestroy when your component is no longer responsible.
 	/// type is "text" | "pin" | "email"; error is empty on first request and may contain a previous failure message on retry.
+	/// The pairing prompt (StartPairing) uses the same handler, with type "pairingPasscode", then "pairingDeviceName"
+	/// (Skip allowed) or "pairingDeviceNameRequired" when the passcode allows naming, and "pairingDeviceJoin" when the name
+	/// is taken: domain carries that name, and submitting it adds this app to that headset.
 	/// </summary>
 	public static Action<string, string, string, string> OnInputRequested //(type, prompt, domain, error)
 	{
@@ -303,6 +403,78 @@ public static partial class Abxr
 	/// If no input was requested, the call is ignored.
 	/// </summary>
 	public static void OnInputSubmitted(string input) => X?.SubmitInput(input);
+
+	// ── Passcode pairing (MDM-less) ──────────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Fired when pairing settles: once at startup, when the SDK has decided this app's identity (Startup), and later
+	/// when a passcode pairs, the prompt closes without pairing, ClearPairing runs, or the backend revokes the pairing.
+	/// Never fired for Prompting or Redeeming, or for a failed attempt the prompt asks again for.
+	/// The usual place to offer pairing is (Unpaired, Startup). Startup can fire before a late subscriber exists, so
+	/// subscribe, then check GetPairingState().
+	/// </summary>
+	public static event Action<PairingState, PairingChangeReason> OnPairingStateChanged;
+
+	internal static void RaisePairingStateChanged(PairingState state, PairingChangeReason reason)
+	{
+		try
+		{
+			OnPairingStateChanged?.Invoke(state, reason);
+		}
+		catch (Exception ex)
+		{
+			Logcat.Error($"An OnPairingStateChanged handler threw: {ex}");
+		}
+	}
+
+	/// <summary>Where this app stands on passcode pairing. Resolving until the SDK decides this app's identity.</summary>
+	public static PairingState GetPairingState() => X?.Pairing?.State ?? PairingState.Resolving;
+
+	/// <summary>
+	/// Opens the pairing prompt, through OnInputRequested or the world-space UI. The SDK never prompts on its own.
+	/// Returns false, with a warning that says why, unless the app is Unpaired and something can show the prompt.
+	/// Pairing runs in Android and WebGL builds only.
+	/// </summary>
+	public static bool StartPairing() => X?.Pairing?.StartPairing() ?? false;
+
+	/// <summary>Closes the pairing prompt without pairing. Replaces submitting "**skip**" from a custom UI.</summary>
+	public static void CancelPairing() => X?.Pairing?.CancelPairing();
+
+	/// <summary>
+	/// Redeems a passcode from the app's own UI, with no prompt. Valid while Unpaired or while the prompt is open.
+	/// onComplete always fires, refused calls included. When the passcode allows naming the headset, the result is
+	/// DeviceNameRequested (offer a Skip) or DeviceNameRequired (no Skip): ask for a name, then call the overload that takes one.
+	/// </summary>
+	public static void RedeemPairingPasscode(string passcode, Action<PairingRedeemResult> onComplete)
+	{
+		AbxrPairingService pairing = X?.Pairing;
+		if (pairing == null) onComplete?.Invoke(PairingOutcomes.Refused("the SDK isn't initialized yet."));
+		else pairing.RedeemPairingPasscode(passcode, onComplete);
+	}
+
+	/// <summary>
+	/// Redeems a passcode with the person's answer to the name step. A null or blank deviceName skips naming. After
+	/// DeviceNameExists, confirm with the person, then call again with joinExistingDevice true to add this app to that headset.
+	/// </summary>
+	public static void RedeemPairingPasscode(string passcode, string deviceName, bool joinExistingDevice, Action<PairingRedeemResult> onComplete)
+	{
+		AbxrPairingService pairing = X?.Pairing;
+		if (pairing == null) onComplete?.Invoke(PairingOutcomes.Refused("the SDK isn't initialized yet."));
+		else pairing.RedeemPairingPasscode(passcode, deviceName, joinExistingDevice, onComplete);
+	}
+
+	/// <summary>The last redeem's outcome, refused calls included, for a custom UI answering OnInputRequested. Default when none has run.</summary>
+	public static PairingRedeemResult GetLastPairingRedeemResult() => X?.Pairing?.LastRedeemResult ?? default;
+
+	/// <summary>The name of the headset this app is paired on, or null when it has none or the app isn't paired. Renames in the Portal arrive at the next session.</summary>
+	public static string GetPairedDeviceName() => X?.Pairing?.DeviceName;
+
+	/// <summary>
+	/// Deletes the stored pairing. A paired app becomes Unpaired and stops sending; whether to offer pairing again is the
+	/// app's call. A signed-in session ends the way EndSession() does: open assessments close, queued data is flushed to
+	/// the organization it belongs to (blocking, like EndSession), and super metadata is cleared.
+	/// </summary>
+	public static void ClearPairing() => X?.Pairing?.ClearPairing();
 
 	/// <summary>
 	/// Returns true if QR scanning for auth input is available. Use to show/hide a "Scan QR" option in custom auth UI.
@@ -785,13 +957,17 @@ public static partial class Abxr
 
 	/// <summary>
 	///   Sets the organization ID to use for auth. When set, this value is used instead of ArborMdmClient or Configuration.
-	///   Call before StartAuthentication(). Pass null to clear the override.
+	///   Call before StartAuthentication(). Pass null to clear the override. On an Android or WebGL build that can pair, the
+	///   first authentication decides the launch's identity, so a value set after a launch settled with no organization is
+	///   ignored for that launch. An app that gets it after an async step should turn off auto-start and call
+	///   StartAuthentication() once it's set.
 	/// </summary>
 	public static void SetOrgId(string orgId) => X?.SetOrgId(orgId);
 
 	/// <summary>
 	///   Sets the auth secret (fingerprint) to use for auth. When set, this value is used instead of ArborMdmClient.
-	///   Call before StartAuthentication(). Pass null to clear the override.
+	///   Call before StartAuthentication(). Pass null to clear the override. Like SetOrgId, a value set after a launch
+	///   settled with no organization is ignored for that launch where the app can pair.
 	/// </summary>
 	public static void SetAuthSecret(string authSecret) => X?.SetAuthSecret(authSecret);
 

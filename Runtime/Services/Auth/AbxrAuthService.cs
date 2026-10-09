@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Core.UI;
+using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
@@ -26,6 +27,15 @@ namespace AbxrLib.Runtime.Services.Auth
         public Action<string, string, string, string> OnInputRequested;
         public Action OnSucceeded;
         public Action<string> OnFailed;
+        /// <summary>A failure that is an expected state, not a fault (no organization identity, a suspended pairing). Reported without an error log.</summary>
+        internal Action<string> OnFailedQuietly;
+
+        // OnAuthCompleted reasons for passcode pairing (SDK-59 RFC D2, §07). Display text, not identifiers.
+        internal const string NoIdentityMessage = "No organization identity";
+        internal const string AccessSuspendedMessage = "Access suspended";
+        internal const string PairingRevokedMessage = "Pairing revoked";
+        /// <summary>lib-backend's error for an instance token with no live instance behind it.</summary>
+        internal const string InvalidInstanceTokenError = "Invalid AppInstanceToken";
 
         /// <summary>
         /// Fired only when the re-auth triggered by SetUserData (authMechanism type=custom) completes. Not fired for normal session auth.
@@ -57,6 +67,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>True when OnInputRequested was invoked and we are waiting for the app to call SubmitInput (OnInputSubmitted). Used so clients can show/hide QR-for-auth UI via IsQRScanForAuthAvailable() without tracking state themselves.</summary>
         internal bool IsInputRequestPending => _inputRequestPending;
+        /// <summary>True from a sign-in submit until its answer arrives, while the UI shows Processing. IsInputRequestPending is already false then.</summary>
+        internal bool IsUserAuthSubmitInFlight { get; private set; }
         
         private bool _stopping;
         private bool _attemptActive;
@@ -71,6 +83,7 @@ namespace AbxrLib.Runtime.Services.Auth
         internal void ResetAuthStartedForTesting() => _isAuthStarted = false;
         /// <summary>Testing only. Tests that invoke <see cref="OnInputRequested"/> directly bypass the request bookkeeping; this restores it.</summary>
         internal void SetInputRequestPendingForTesting(bool pending) => _inputRequestPending = pending;
+        internal void SetUserAuthSubmitInFlightForTesting(bool inFlight) => IsUserAuthSubmitInFlight = inFlight;
         private Coroutine _reAuthCoroutine;
         private Coroutine _retryCoroutine;
         private Dictionary<string, string> _userData;
@@ -83,6 +96,10 @@ namespace AbxrLib.Runtime.Services.Auth
         private readonly MonoBehaviour _runner;
         private readonly ArborMdmClient _ArborMdmClient;
         private Func<IAbxrTransport> _getTransport;
+        /// <summary>Passcode pairing (SDK-60). Null when nothing attached it; identity then works as it did before pairing.</summary>
+        private IPairedCredential _pairing;
+        /// <summary>The app instance the current attempt authenticates as, in paired mode. Null otherwise.</summary>
+        private string _pairedInstanceId;
         
         private const string DeviceIdKey = "abxrlib_device_id";
         
@@ -161,6 +178,11 @@ namespace AbxrLib.Runtime.Services.Auth
 
         internal void SetTransportGetter(Func<IAbxrTransport> getter) => _getTransport = getter;
 
+        internal void SetPairedCredential(IPairedCredential pairing) => _pairing = pairing;
+
+        /// <summary>The App Token a pairing redeem proves the build with. Empty in legacy (app id) mode, which can't pair.</summary>
+        internal string AppTokenForPairing => _runtimeAuth.useAppTokens ? _runtimeAuth.appToken ?? "" : "";
+
         // ── Public API ───────────────────────────────────────────────
         
         /// <param name="clearStateFirst">If true (default), clears auth state before running. If false, caller has already cleared and set session (e.g. StartNewSession).</param>
@@ -216,7 +238,10 @@ namespace AbxrLib.Runtime.Services.Auth
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
             GetQueryData();
 #endif
-            var validationError = _runtimeAuth.IsValidToSend();
+            if (!ApplyPairingIdentity()) return;
+
+            // Paired mode has no org credential by design; the app side is still checked.
+            var validationError = _pairedInstanceId != null ? _runtimeAuth.IsValid() : _runtimeAuth.IsValidToSend();
             if (validationError != null)
             {
                 _attemptActive = false;
@@ -234,7 +259,55 @@ namespace AbxrLib.Runtime.Services.Auth
             _isAuthStarted = true;
             _runner.StartCoroutine(AuthenticateCoroutine());
         }
-        
+
+        /// <summary>
+        /// Puts this attempt in the launch's identity mode (SDK-59 RFC §03). An org credential from the sources above wins,
+        /// then a stored pairing, then nothing, which is quiet (D2). Settled on the launch's first attempt and held after
+        /// that, so a late ArborXR client or SetOrgId takes effect next launch and one launch never sends as two identities.
+        /// False when the attempt ends here, already reported.
+        /// </summary>
+        private bool ApplyPairingIdentity()
+        {
+            _pairedInstanceId = null;
+            _payload.appInstanceToken = null;
+            _payload.priorAppInstanceId = null;
+            if (_pairing == null) return true;
+
+            _pairing.SettleIdentity(otherIdentityWins: _runtimeAuth.HasOrgCredential());
+            switch (_pairing.State)
+            {
+                case Abxr.PairingState.Managed:
+                    // A migration later can link this install's paired data to the MDM device (decision 7).
+                    if (_pairing.TryGetStored(out _, out string priorInstanceId))
+                        _payload.priorAppInstanceId = priorInstanceId;
+                    return true;
+                case Abxr.PairingState.Paired:
+                    if (_pairing.IsSuspendedForSession) return EndQuietly(AccessSuspendedMessage);
+                    if (!_runtimeAuth.useAppTokens || !_pairing.TryGetStored(out string token, out string instanceId))
+                        return EndQuietly(NoIdentityMessage);
+                    // The instance is the identity, and its id is the device id. An org token a late ArborXR client
+                    // supplied doesn't ride along.
+                    _runtimeAuth.orgToken = null;
+                    _runtimeAuth.deviceId = instanceId;
+                    _payload.appInstanceToken = token;
+                    _pairedInstanceId = instanceId;
+                    return true;
+                default:
+                    // Unpaired, or pairing right now. A missing or malformed App Token, or a production_custom build
+                    // without its org credential, is a misconfiguration rather than a store install, so it keeps the
+                    // validation error.
+                    if (_runtimeAuth.buildType == "production_custom" || _runtimeAuth.IsValid() != null) return true;
+                    return EndQuietly(NoIdentityMessage);
+            }
+        }
+
+        private bool EndQuietly(string message)
+        {
+            _attemptActive = false;
+            OnFailedQuietly?.Invoke(message);
+            return false;
+        }
+
         public void SetSessionId(string sessionId) => _payload.sessionId = sessionId;
 
         /// <summary>
@@ -272,7 +345,19 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <see cref="IAbxrAuthBridge"/>: what the world-space UI calls when the user submits a value. Named for the
         /// caller's world rather than the keyboard's, since the UI is optional and may not be a keyboard at all.
         /// </summary>
-        public void SubmitAuthInput(string input) => KeyboardAuthenticate(input);
+        public void SubmitAuthInput(string input)
+        {
+            // Like SubmitInput: only an outstanding request takes input, so a scan finishing after the session moved on
+            // (or during a submit already in flight) doesn't start a second request.
+            if (!_inputRequestPending)
+            {
+                Logcat.Warning("A scanned code was ignored: no sign-in input request is pending.");
+                SetInputSource("user"); // the scanner set QRlms for this submit
+                return;
+            }
+            _inputRequestPending = false;
+            KeyboardAuthenticate(input);
+        }
 
         public void KeyboardAuthenticate(string input)
         {
@@ -283,8 +368,11 @@ namespace AbxrLib.Runtime.Services.Auth
             else
                 _authMechanism.prompt = input;
 
+            IsUserAuthSubmitInFlight = true;
             _runner.StartCoroutine(AuthRequestCoroutine((success, errorMessage) =>
             {
+                // IsUserAuthSubmitInFlight stays set until the outcome is reported, so an app that ends the session from its
+                // OnAuthCompleted handler still gets the prompt closed (ClearAuthSession reads it).
                 // Store the entered value only for email and text so we can add it to UserData. PIN is never stored in UserData—only used as auth prompt.
                 if (_authMechanism.type == "email" || _authMechanism.type == "text")
                 {
@@ -299,6 +387,7 @@ namespace AbxrLib.Runtime.Services.Auth
 #if UNITY_WEBGL && !UNITY_EDITOR
                     _webglQueryAssessmentPin = null;
 #endif
+                    IsUserAuthSubmitInFlight = false;
                     AbxrUi.AuthUi?.Hide();
                     AuthSucceeded();
                 }
@@ -312,7 +401,12 @@ namespace AbxrLib.Runtime.Services.Auth
                     SetInputSource("user");  // In case it was changed by QR Scanner
 
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.
+                    int generation = _sessionGeneration;
                     OnFailed?.Invoke("Authentication failed");
+                    // The app's OnAuthCompleted handler ended or restarted the session: don't ask again in it. Clearing it
+                    // closed the prompt and reset IsUserAuthSubmitInFlight.
+                    if (generation != _sessionGeneration) return;
+                    IsUserAuthSubmitInFlight = false;
                     _inputRequestPending = true;
                     OnInputRequested?.Invoke(_authMechanism.type, originalPrompt, _authMechanism.domain, "Authentication Failed");
                 }
@@ -478,6 +572,27 @@ namespace AbxrLib.Runtime.Services.Auth
                 ?? (responseJson.Length <= 200 ? responseJson : responseJson.Substring(0, 200) + "...");
         }
 
+        /// <summary>
+        /// lib-backend's answer for a missing or revoked instance. Its exception handler sends the error as "message"; "detail"
+        /// is FastAPI's default, kept in case that handler goes. The key alone isn't enough, since gateways send
+        /// {"message":"Unauthorized"} too.
+        /// </summary>
+        private static bool IsInstanceTokenRejection(string responseJson)
+        {
+            if (string.IsNullOrEmpty(responseJson)) return false;
+            try
+            {
+                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseJson);
+                if (obj == null) return false;
+                return (obj.TryGetValue("message", out var message) && message?.ToString() == InvalidInstanceTokenError)
+                    || (obj.TryGetValue("detail", out var detail) && detail?.ToString() == InvalidInstanceTokenError);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
+        }
+
         /// <summary>The API's own error string from a JSON failure body, or null when the body is not a JSON error (plain text, HTML, or JSON without an error key).</summary>
         private static string ExtractExplicitApiError(string responseJson)
         {
@@ -528,6 +643,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator AuthRequestCoroutine(Action<bool, string> onComplete, bool withRetry = true, Action<string> onRetrying = null)
         {
             int generation = _sessionGeneration;
+            string pairedInstanceId = _pairedInstanceId;
             if (_stopping || !_attemptActive) { onComplete(false, null); yield break; }
             if (_getTransport == null) { onComplete(false, "Transport not set"); yield break; }
 
@@ -593,6 +709,9 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     if (transport.IsServiceTransport)
                         _usedArborInsightsClientForSession = true;
+                    // A rename in the Portal reaches the SDK here (INS-511), but only when the backend sent the key at all.
+                    if (pairedInstanceId != null && ResponseData.DeviceNameSpecified)
+                        _pairing.UpdateDeviceName(pairedInstanceId, ResponseData.DeviceName);
                     _payload.buildType = savedBuildType;
                     onComplete(true, null);
                     yield break;
@@ -602,6 +721,29 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     _payload.buildType = savedBuildType;
                     onComplete(false, ExtractAuthErrorMessage(result.Body) ?? "No response body.");
+                    yield break;
+                }
+
+                // Paired mode (SDK-60 decision 6): a refusal never latches the session, so a re-pair in the same session
+                // still authenticates. A 401 means the instance is gone. Anything else (403, suspended) keeps the pairing
+                // and stops sending with it until the next launch.
+                if (pairedInstanceId != null && IsCredentialRejection(result))
+                {
+                    _payload.buildType = savedBuildType;
+                    // Only lib-backend's revoked-instance 401 removes the pairing: a revoke can't be undone without a new passcode,
+                    // so any other 401 (a proxy, a gateway, a wrong restUrl) only suspends it for the launch.
+                    bool revoked = result.StatusCode == 401 && IsInstanceTokenRejection(result.Body);
+                    if (result.StatusCode == 401 && !revoked)
+                        Logcat.Warning("Device authentication got a 401 that isn't lib-backend's revoked-instance error, so the pairing is kept. Check restUrl.");
+                    string message = revoked ? PairingRevokedMessage
+                        : result.StatusCode == 403 || result.StatusCode == 401 ? AccessSuspendedMessage
+                        : ExtractExplicitApiError(result.Body) ?? AccessSuspendedMessage;
+                    if (revoked) _pairing.Revoke(pairedInstanceId);
+                    else _pairing.SuspendForSession(pairedInstanceId);
+                    // After the retrying report the app hears nothing more, so the reason stays in release logs.
+                    if (announcedRetrying)
+                        Logcat.Error($"Authentication failure: {message} (device authentication stopped retrying; OnAuthCompleted already reported false)");
+                    onComplete(false, message);
                     yield break;
                 }
 
@@ -1051,6 +1193,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _returnToPackage = null;
             _usedArborInsightsClientForSession = false;
             _inputRequestPending = false;
+            IsUserAuthSubmitInFlight = false;
             _userData = null;
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;

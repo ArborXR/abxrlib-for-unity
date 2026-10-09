@@ -37,6 +37,9 @@ namespace AbxrLib.Runtime.Core
         [Header("Service Provider")]
         public string restUrl = "https://lib-backend.xrdm.app/";
 
+        [Tooltip("Portal API origin for redeeming passcode pairing codes (MDM-less). https://api.xrdm.dev/ for development.")]
+        public string pairingUrl = "https://api.xrdm.app/";
+
         [Header("UI Behavior Control")]
         [Tooltip("When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions.")]
         public bool authUIFollowCamera = true;
@@ -75,6 +78,9 @@ namespace AbxrLib.Runtime.Core
 
         [Tooltip("When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, KeyboardManager.skipButton is hidden at runtime. Custom PIN prefabs should assign skipButton like the default.")]
         public bool enablePinPadGuestAccess = true;
+
+        [Tooltip("When enabled, the default pairing prompt shows Not now, so someone without a passcode can close it. Custom pairing UIs ignore this. When disabled, a prompt the app opens at launch can't be closed.")]
+        public bool enablePairingDismiss = true;
         
         [Tooltip("When enabled, the user's IP Address will be sent during authentication.")]
         public bool recordIpAddress = false;

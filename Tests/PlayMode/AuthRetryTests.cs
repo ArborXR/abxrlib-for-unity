@@ -436,11 +436,14 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             yield return null;
     }
 
-    private sealed class ScriptedAuthTransport : IAbxrTransport
+    /// <summary>Also used by PairingIdentityTests, which checks the identity each request carried.</summary>
+    internal sealed class ScriptedAuthTransport : IAbxrTransport
     {
         private readonly AuthTransportResult _response;
         private readonly Queue<AuthTransportResult> _nextResponses = new Queue<AuthTransportResult>();
         public int AuthCalls { get; private set; }
+        /// <summary>The identity fields of the latest request, copied: the SDK reuses one payload object.</summary>
+        public AuthPayload LastPayload { get; private set; }
         public int ConfigCalls { get; private set; }
         /// <summary>While true, requests stay in flight: the transport was called but has not answered yet.</summary>
         public bool Hold { get; set; }
@@ -461,6 +464,17 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
             int call = ++AuthCalls;
+            LastPayload = new AuthPayload
+            {
+                appToken = payload.appToken,
+                orgToken = payload.orgToken,
+                appId = payload.appId,
+                orgId = payload.orgId,
+                authSecret = payload.authSecret,
+                appInstanceToken = payload.appInstanceToken,
+                priorAppInstanceId = payload.priorAppInstanceId,
+                deviceId = payload.deviceId
+            };
             var response = _nextResponses.Count > 0 ? _nextResponses.Dequeue() : _response;
             while (Hold || HoldCall(call))
                 yield return null;
@@ -478,7 +492,13 @@ public class AuthRetryTests : AbxrPlayModeTestBase
                 onComplete?.Invoke(false, "not scripted");
         }
 
-        public void AddEvent(string name, Dictionary<string, string> meta) { }
+        /// <summary>Events added while this is also the data transport (SetTransportForTesting).</summary>
+        public readonly List<(string name, Dictionary<string, string> meta)> Events = new List<(string, Dictionary<string, string>)>();
+        public int QuitCalls { get; private set; }
+        /// <summary>Runs inside OnQuit, while the flush would send.</summary>
+        public Action OnQuitCalled { get; set; }
+
+        public void AddEvent(string name, Dictionary<string, string> meta) => Events.Add((name, meta));
         public void AddTelemetry(string name, Dictionary<string, string> meta) { }
         public void AddLog(string logLevel, string text, Dictionary<string, string> meta) { }
         public void ForceSend() { }
@@ -496,7 +516,12 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             yield break;
         }
 
-        public void OnQuit() { }
+        public void OnQuit()
+        {
+            QuitCalls++;
+            OnQuitCalled?.Invoke();
+        }
+
         public void ClearAllPending() { }
         public List<EventPayload> GetPendingEventsForTesting() => new List<EventPayload>();
         public List<LogPayload> GetPendingLogsForTesting() => new List<LogPayload>();

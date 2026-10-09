@@ -55,6 +55,10 @@ namespace AbxrLib.Runtime.UI.Examples
         public string customPromptText = "Enter your text here";
         
         private bool _keyboardActive = false;
+        /// <summary>True while a keyboard this example created is open. A sign-in or pairing prompt isn't the example's to close.</summary>
+        private bool _createdKeyboard;
+        /// <summary>Set around this example's own Create call, so OnKeyboardCreated can tell its keyboard from the SDK's.</summary>
+        private bool _creating;
         private KeyboardHandler.KeyboardType _currentKeyboardType;
         
         private void Start()
@@ -95,8 +99,9 @@ namespace AbxrLib.Runtime.UI.Examples
             KeyboardHandler.OnKeyboardCreated -= OnKeyboardCreated;
             KeyboardHandler.OnKeyboardDestroyed -= OnKeyboardDestroyed;
             
-            // Clean up any active keyboard
-            if (_keyboardActive)
+            // Clean up the keyboard this example opened. Not the SDK's own prompt: it outlives this scene, and closing it here
+            // would leave the SDK waiting on input that can't come. The SDK can take over the example's surface, so check that too.
+            if (_createdKeyboard && !IsSdkWaitingForInput())
             {
                 KeyboardHandler.Destroy();
             }
@@ -107,7 +112,7 @@ namespace AbxrLib.Runtime.UI.Examples
         /// </summary>
         public void CreateFullKeyboard()
         {
-            if (_keyboardActive)
+            if (_keyboardActive || KeyboardHandler.IsOpen)
             {
                 Logcat.Warning("KeyboardExample - Keyboard already active. Destroy current keyboard first.");
                 UpdateStatusText("Keyboard already active - Destroy current keyboard first");
@@ -123,7 +128,7 @@ namespace AbxrLib.Runtime.UI.Examples
                 "full_keyboard");
             
             // Create the keyboard
-            KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+            CreateOwnKeyboard(KeyboardHandler.KeyboardType.FullKeyboard);
             
             // Set custom prompt if not using configuration
             if (!useConfigurationSettings)
@@ -140,7 +145,7 @@ namespace AbxrLib.Runtime.UI.Examples
         /// </summary>
         public void CreatePinPad()
         {
-            if (_keyboardActive)
+            if (_keyboardActive || KeyboardHandler.IsOpen)
             {
                 Logcat.Warning("KeyboardExample - Keyboard already active. Destroy current keyboard first.");
                 UpdateStatusText("Keyboard already active - Destroy current keyboard first");
@@ -156,7 +161,7 @@ namespace AbxrLib.Runtime.UI.Examples
                 "pin_pad");
             
             // Create the PIN pad
-            KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+            CreateOwnKeyboard(KeyboardHandler.KeyboardType.PinPad);
             
             // Set custom prompt if not using configuration
             if (!useConfigurationSettings)
@@ -173,10 +178,10 @@ namespace AbxrLib.Runtime.UI.Examples
         /// </summary>
         public void DestroyKeyboard()
         {
-            if (!_keyboardActive)
+            if (!_createdKeyboard || IsSdkWaitingForInput())
             {
-                Logcat.Warning("KeyboardExample - No keyboard to destroy");
-                UpdateStatusText("No keyboard to destroy");
+                Logcat.Warning("KeyboardExample - No keyboard of this example's to destroy");
+                UpdateStatusText("No keyboard of this example's to destroy");
                 return;
             }
             
@@ -194,12 +199,30 @@ namespace AbxrLib.Runtime.UI.Examples
             UpdateStatusText("Keyboard Destroyed");
         }
         
+        /// <summary>True while the SDK waits for sign-in or pairing input, or redeems a passcode, so the open keyboard is its prompt.</summary>
+        private static bool IsSdkWaitingForInput() =>
+            Abxr.IsAuthInputRequestPending()
+            || Abxr.GetPairingState() is Abxr.PairingState.Prompting or Abxr.PairingState.Redeeming;
+
+        /// <summary>
+        /// Creates a keyboard this example owns. Create returns without one when a keyboard is already open, so ownership
+        /// comes from OnKeyboardCreated firing during the call, not from the call itself.
+        /// </summary>
+        private void CreateOwnKeyboard(KeyboardHandler.KeyboardType type)
+        {
+            _creating = true;
+            try { KeyboardHandler.Create(type); }
+            finally { _creating = false; }
+        }
+
         /// <summary>
         /// Called when a keyboard is created
         /// </summary>
         private void OnKeyboardCreated()
         {
             _keyboardActive = true;
+            // Only this example's own Create call claims a keyboard. One the SDK opens doesn't, and OnKeyboardDestroyed clears it.
+            if (_creating) _createdKeyboard = true;
             Logcat.Info("KeyboardExample - Keyboard created successfully");
             
             // Log analytics event
@@ -224,6 +247,7 @@ namespace AbxrLib.Runtime.UI.Examples
         private void OnKeyboardDestroyed()
         {
             _keyboardActive = false;
+            _createdKeyboard = false;
             Logcat.Info("KeyboardExample - Keyboard destroyed successfully");
             
             // Log analytics event
@@ -277,7 +301,7 @@ namespace AbxrLib.Runtime.UI.Examples
         private void UpdateButtonStates()
         {
             bool canCreate = !_keyboardActive;
-            bool canDestroy = _keyboardActive;
+            bool canDestroy = _createdKeyboard && !IsSdkWaitingForInput(); // never the SDK's prompt
             
             if (createFullKeyboardButton != null)
             {

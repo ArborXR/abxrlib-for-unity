@@ -78,15 +78,22 @@ namespace AbxrLib.Runtime.UI.Keyboard
         /// </summary>
         public static void OnSceneChanged()
         {
-            if (_isManagingLaserPointers)
-            {
-                ForceCleanup();
-            }
-            else
-            {
-                // Just clean up any orphaned references
-                CleanupDestroyedReferences();
-            }
+            bool wasManaging = _isManagingLaserPointers;
+            // Always start over: the old scene's interactors are gone, and a still-valid cache would never look for the new scene's.
+            ForceCleanup();
+            if (!wasManaging || !KeyboardHandler.IsOpen) return;
+            // A keyboard or PIN pad outlives the scene, so it needs the new scene's rays. Wait a frame: this runs before
+            // the new scene's Start, where a rig can still switch its rays off.
+            var runner = KeyboardManager.Instance;
+            // A PIN pad the QR scanner hid is inactive and can't run it, but the scan panel's Cancel still needs rays now.
+            if (runner != null && runner.isActiveAndEnabled) runner.StartCoroutine(EnableAfterAFrame());
+            else EnableLaserPointersForInteraction();
+        }
+
+        private static System.Collections.IEnumerator EnableAfterAFrame()
+        {
+            yield return null;
+            if (KeyboardHandler.IsOpen) EnableLaserPointersForInteraction();
         }
 
         /// <summary>
