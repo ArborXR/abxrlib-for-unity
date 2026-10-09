@@ -31,43 +31,91 @@ namespace AbxrLib.Runtime.Services.Pairing
     internal interface IPairingRedeemClient
     {
         /// <summary>
-        /// POSTs the JSON body once and reports what came back. Never retries: every successful redeem creates an
-        /// app instance, so a retry after a lost response would leave an orphan in the Portal.
+        /// POSTs the JSON body once and reports what came back, exactly once, even when the request can't start or
+        /// never gets an answer. Never retries: every successful redeem creates an app instance, so a retry after a
+        /// lost response would leave an orphan in the Portal.
         /// </summary>
         void Send(string url, string json, Action<PairingHttpResponse> onComplete);
     }
 
     internal sealed class UnityWebRequestPairingClient : IPairingRedeemClient
     {
-        private readonly MonoBehaviour _runner;
+        /// <summary>How long past requestTimeoutSeconds the client gives up on its own, where UnityWebRequest.timeout isn't honoured.</summary>
+        internal const double TimeoutGraceSeconds = 5;
 
-        internal UnityWebRequestPairingClient(MonoBehaviour runner)
+        private readonly MonoBehaviour _runner;
+        private readonly double? _answerDeadlineSeconds;
+
+        /// <param name="answerDeadlineSeconds">Tests shorten the client's own deadline; otherwise it's the request timeout plus <see cref="TimeoutGraceSeconds"/>.</param>
+        internal UnityWebRequestPairingClient(MonoBehaviour runner, double? answerDeadlineSeconds = null)
         {
             _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+            _answerDeadlineSeconds = answerDeadlineSeconds;
         }
 
-        public void Send(string url, string json, Action<PairingHttpResponse> onComplete) =>
-            _runner.StartCoroutine(SendCoroutine(url, json, onComplete));
-
-        private static IEnumerator SendCoroutine(string url, string json, Action<PairingHttpResponse> onComplete)
+        public void Send(string url, string json, Action<PairingHttpResponse> onComplete)
         {
-            PairingHttpResponse response;
-            using (var request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST))
+            // StartCoroutine on an inactive GameObject logs an error and runs nothing, so no answer would ever come.
+            if (!_runner || !_runner.gameObject.activeInHierarchy)
             {
+                onComplete?.Invoke(NoResponse("the SDK's GameObject is inactive, so the request never started."));
+                return;
+            }
+            _runner.StartCoroutine(SendCoroutine(url, json, _answerDeadlineSeconds, onComplete));
+        }
+
+        private static IEnumerator SendCoroutine(string url, string json, double? answerDeadlineSeconds, Action<PairingHttpResponse> onComplete)
+        {
+            UnityWebRequest request = null;
+            double waitSeconds = 0;
+            string failure = null;
+            try
+            {
+                int timeout = Configuration.Instance.requestTimeoutSeconds;
+                request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST);
                 Utils.BuildRequest(request, json);
                 // Laravel answers a validation failure with a 422 only when the request asks for JSON; otherwise it redirects.
                 request.SetRequestHeader("Accept", "application/json");
-                request.timeout = Configuration.Instance.requestTimeoutSeconds;
-                yield return request.SendWebRequest();
+                request.timeout = timeout;
+                request.SendWebRequest();
+                waitSeconds = answerDeadlineSeconds ?? timeout + TimeoutGraceSeconds;
+            }
+            catch (Exception ex)
+            {
+                failure = $"the request couldn't be sent ({ex.Message}).";
+            }
+            if (failure != null)
+            {
+                request?.Dispose();
+                onComplete?.Invoke(NoResponse(failure));
+                yield break;
+            }
 
-                response = new PairingHttpResponse(
-                    request.responseCode,
-                    request.downloadHandler?.text,
-                    request.GetResponseHeader("Retry-After"),
-                    request.result == UnityWebRequest.Result.ConnectionError,
-                    request.error);
+            PairingHttpResponse response;
+            using (request)
+            {
+                double deadline = Time.realtimeSinceStartupAsDouble + waitSeconds;
+                while (!request.isDone && Time.realtimeSinceStartupAsDouble < deadline)
+                    yield return null;
+
+                if (!request.isDone)
+                {
+                    request.Abort();
+                    response = NoResponse($"no answer after {waitSeconds:0.#}s.");
+                }
+                else
+                {
+                    response = new PairingHttpResponse(
+                        request.responseCode,
+                        request.downloadHandler?.text,
+                        request.GetResponseHeader("Retry-After"),
+                        request.result == UnityWebRequest.Result.ConnectionError,
+                        request.error);
+                }
             }
             onComplete?.Invoke(response);
         }
+
+        private static PairingHttpResponse NoResponse(string detail) => new PairingHttpResponse(0, null, networkError: true, errorDetail: detail);
     }
 }
