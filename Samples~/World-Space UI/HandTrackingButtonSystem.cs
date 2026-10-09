@@ -159,11 +159,9 @@ namespace AbxrLib.Runtime.UI
             
             string eventName = $"{analyticsPrefix}_{buttonName.ToLowerInvariant().Replace(" ", "_")}";
             
-            // Log interaction for analytics
-            Abxr.EventInteractionComplete(eventName, 
-                Abxr.InteractionType.Select, 
-                Abxr.InteractionResult.Neutral, 
-                buttonName);
+            // Log interaction for analytics. The sample records it, so AbxrObserver reports it as automatic.
+            using (AbxrObserver.AutomaticScope())
+                Abxr.EventInteractionComplete(eventName, Abxr.InteractionType.Select, Abxr.InteractionResult.Neutral, buttonName);
             
             Logcat.Debug($"HandTrackingButtonSystem - Hand tracking button '{buttonName}' activated, logged as '{eventName}'");
             

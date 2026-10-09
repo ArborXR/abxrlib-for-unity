@@ -140,11 +140,15 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             Destroy(_pollInstance);
             Destroy(_panelInstance);
             if (Callbacks.TryGetValue(_prompt, out var callback)) callback.Invoke(response);
-            Abxr.Event(PollEventString, new Dictionary<string, string>
+            // The SDK records the answer to the app's PollUser, so AbxrObserver reports it as automatic.
+            using (AbxrObserver.AutomaticScope())
             {
-                [PollQuestionString] = _prompt,
-                [PollResponseString] = response
-            });
+                Abxr.Event(PollEventString, new Dictionary<string, string>
+                {
+                    [PollQuestionString] = _prompt,
+                    [PollResponseString] = response
+                });
+            }
             ProcessNextPoll();
         }
     

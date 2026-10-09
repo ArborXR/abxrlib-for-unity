@@ -148,11 +148,9 @@ namespace AbxrLib.Runtime.UI
             string buttonName = customButtons[buttonIndex].name;
             string eventName = $"{analyticsPrefix}_{buttonName.ToLowerInvariant().Replace(" ", "_")}";
             
-            // Log interaction for analytics
-            Abxr.EventInteractionComplete(eventName, 
-                Abxr.InteractionType.Select, 
-                Abxr.InteractionResult.Neutral, 
-                buttonName);
+            // Log interaction for analytics. The sample records it, so AbxrObserver reports it as automatic.
+            using (AbxrObserver.AutomaticScope())
+                Abxr.EventInteractionComplete(eventName, Abxr.InteractionType.Select, Abxr.InteractionResult.Neutral, buttonName);
             
             Logcat.Debug($"CustomButtonSystem - Button '{buttonName}' clicked, logged as '{eventName}'");
             

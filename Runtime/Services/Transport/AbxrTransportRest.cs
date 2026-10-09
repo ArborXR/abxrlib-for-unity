@@ -154,43 +154,46 @@ namespace AbxrLib.Runtime.Services.Transport
             }
         }
 
-        public void AddEvent(string name, Dictionary<string, string> meta)
+        public bool AddEvent(string name, Dictionary<string, string> meta, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-            var p = new EventPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
+            var p = new EventPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>(), RecordId = recordId };
             lock (_lock)
             {
-                if (IsQueueAtLimit(_eventPayloads, "Event")) return;
+                if (IsQueueAtLimit(_eventPayloads, "Event")) return false;
                 _eventPayloads.Add(p);
                 if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt) _nextDataSendAt = 0;
             }
+            return true;
         }
 
-        public void AddTelemetry(string name, Dictionary<string, string> meta)
+        public bool AddTelemetry(string name, Dictionary<string, string> meta, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-            var p = new TelemetryPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
+            var p = new TelemetryPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>(), RecordId = recordId };
             lock (_lock)
             {
-                if (IsQueueAtLimit(_telemetryPayloads, "Telemetry")) return;
+                if (IsQueueAtLimit(_telemetryPayloads, "Telemetry")) return false;
                 _telemetryPayloads.Add(p);
                 if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt) _nextDataSendAt = 0;
             }
+            return true;
         }
 
-        public void AddLog(string logLevel, string text, Dictionary<string, string> meta)
+        public bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-            var p = new LogPayload { timestamp = iso, preciseTimestamp = t, logLevel = logLevel, text = text, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
+            var p = new LogPayload { timestamp = iso, preciseTimestamp = t, logLevel = logLevel, text = text, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>(), RecordId = recordId };
             lock (_lock)
             {
-                if (IsQueueAtLimit(_logPayloads, "Log")) return;
+                if (IsQueueAtLimit(_logPayloads, "Log")) return false;
                 _logPayloads.Add(p);
                 if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt) _nextDataSendAt = 0;
             }
+            return true;
         }
 
         public void ForceSend()
@@ -199,7 +202,7 @@ namespace AbxrLib.Runtime.Services.Transport
             _nextStorageSendAt = 0;
         }
 
-        public void StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy)
+        public bool StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
@@ -209,14 +212,16 @@ namespace AbxrLib.Runtime.Services.Transport
                 keepPolicy = Utils.PascalToCamelCase(policy.ToString()),
                 name = name,
                 data = new List<Dictionary<string, string>> { entry ?? new Dictionary<string, string>() },
-                scope = Utils.PascalToCamelCase(scope.ToString())
+                scope = Utils.PascalToCamelCase(scope.ToString()),
+                RecordId = recordId
             };
             lock (_lock)
             {
-                if (IsQueueAtLimit(_storagePayloads, "Storage")) return;
+                if (IsQueueAtLimit(_storagePayloads, "Storage")) return false;
                 _storagePayloads.Add(p);
                 if (_storagePayloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt) _nextStorageSendAt = 0;
             }
+            return true;
         }
 
         public IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)
@@ -297,11 +302,11 @@ namespace AbxrLib.Runtime.Services.Transport
                 _logPayloads.Clear();
                 _storagePayloads.Clear();
             }
-            if (data != null) PostWithoutWaiting(DataPath, JsonConvert.SerializeObject(data), "data");
-            if (storage != null) PostWithoutWaiting(StoragePath, JsonConvert.SerializeObject(storage), "storage");
+            if (data != null) PostWithoutWaiting(DataPath, JsonConvert.SerializeObject(data), "data", RecordIds(data.@event, data.telemetry, data.basicLog));
+            if (storage != null) PostWithoutWaiting(StoragePath, JsonConvert.SerializeObject(storage), "storage", RecordIds(storage: storage.data));
         }
 
-        private void PostWithoutWaiting(string path, string json, string kind)
+        private void PostWithoutWaiting(string path, string json, string kind, List<long> recordIds)
         {
             var request = new UnityWebRequest(RestUri(path), "POST");
             Utils.BuildRequest(request, json);
@@ -309,8 +314,10 @@ namespace AbxrLib.Runtime.Services.Transport
             request.timeout = Configuration.Instance.requestTimeoutSeconds;
             request.SendWebRequest().completed += _ =>
             {
-                if (request.result != UnityWebRequest.Result.Success)
+                bool sent = request.result == UnityWebRequest.Result.Success;
+                if (!sent)
                     Logcat.Warning($"Quit flush ({kind}) failed ({request.responseCode}): {request.error}");
+                ReportSent(recordIds, sent, request.responseCode, request.error);
                 request.Dispose();
             };
         }
@@ -348,8 +355,10 @@ namespace AbxrLib.Runtime.Services.Transport
                 request.timeout = Configuration.Instance.requestTimeoutSeconds;
                 var op = request.SendWebRequest();
                 while (!op.isDone) { Thread.Sleep(1); }
-                if (request.result != UnityWebRequest.Result.Success)
+                bool sent = request.result == UnityWebRequest.Result.Success;
+                if (!sent)
                     Logcat.Warning($"Sync flush (data) failed ({request.responseCode}): {request.error}");
+                ReportSent(RecordIds(events, telemetries, logs), sent, request.responseCode, request.error);
             }
             finally
             {
@@ -384,8 +393,10 @@ namespace AbxrLib.Runtime.Services.Transport
                 request.timeout = Configuration.Instance.requestTimeoutSeconds;
                 var op = request.SendWebRequest();
                 while (!op.isDone) { Thread.Sleep(1); }
-                if (request.result != UnityWebRequest.Result.Success)
+                bool sent = request.result == UnityWebRequest.Result.Success;
+                if (!sent)
                     Logcat.Warning($"Sync flush (storage) failed ({request.responseCode}): {request.error}");
+                ReportSent(RecordIds(storage: toSend), sent, request.responseCode, request.error);
             }
             finally
             {
@@ -395,14 +406,17 @@ namespace AbxrLib.Runtime.Services.Transport
 
         public void ClearAllPending()
         {
+            List<long> dropped;
             lock (_lock)
             {
                 _sessionGeneration++;
+                dropped = RecordIds(_eventPayloads, _telemetryPayloads, _logPayloads, _storagePayloads);
                 _eventPayloads.Clear();
                 _telemetryPayloads.Clear();
                 _logPayloads.Clear();
                 _storagePayloads.Clear();
             }
+            AbxrObserver.Sent(dropped, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.SessionEnded);
         }
 
         /// <summary>For testing only. Returns a copy of pending event payloads.</summary>
@@ -471,6 +485,42 @@ namespace AbxrLib.Runtime.Services.Transport
             return true;
         }
 
+        /// <summary>
+        /// Puts a failed batch back at the front of its queue in its original order, as far as the queue has room, and adds
+        /// the ids of the entries that didn't fit to dropped. Call under _lock.
+        /// </summary>
+        private void Requeue<T>(List<T> queue, List<T> batch, string queueType, Func<T, long> recordId, List<long> dropped)
+        {
+            // Back to front, so each Insert(0) leaves the batch in the order it was recorded.
+            for (int i = batch.Count - 1; i >= 0; i--)
+            {
+                if (IsQueueAtLimit(queue, queueType)) AbxrObserver.AddId(dropped, recordId(batch[i]));
+                else queue.Insert(0, batch[i]);
+            }
+        }
+
+        /// <summary>The observer ids carried by these payloads, or null when no send handler is attached (no list is built).</summary>
+        private static List<long> RecordIds(List<EventPayload> events = null, List<TelemetryPayload> telemetries = null, List<LogPayload> logs = null, List<StoragePayload> storage = null)
+        {
+            if (!AbxrObserver.HasSendHandler) return null;
+            var ids = new List<long>();
+            if (events != null) foreach (var p in events) AbxrObserver.AddId(ids, p.RecordId);
+            if (telemetries != null) foreach (var p in telemetries) AbxrObserver.AddId(ids, p.RecordId);
+            if (logs != null) foreach (var p in logs) AbxrObserver.AddId(ids, p.RecordId);
+            if (storage != null) foreach (var p in storage) AbxrObserver.AddId(ids, p.RecordId);
+            return ids;
+        }
+
+        private static void ReportSent(List<long> recordIds, bool sent, long responseCode, string error)
+        {
+            AbxrObserver.Sent(recordIds, sent ? AbxrObserver.SendStatus.Sent : AbxrObserver.SendStatus.Failed, (int)responseCode, sent ? null : error);
+        }
+
+        private static void ReportSessionEnded(List<long> recordIds)
+        {
+            AbxrObserver.Sent(recordIds, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.SessionEnded);
+        }
+
         private IEnumerator SendData()
         {
             if (Time.time - _lastDataCallTime < Configuration.Instance.maxCallFrequencySeconds) yield break;
@@ -497,15 +547,21 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             string json;
             try { json = JsonConvert.SerializeObject(new DataPayloadWrapper { @event = events, telemetry = telemetries, basicLog = logs }); }
-            catch (Exception ex) { Logcat.Error($"Data serialization failed: {ex.Message}"); yield break; }
+            catch (Exception ex)
+            {
+                Logcat.Error($"Data serialization failed: {ex.Message}");
+                ReportSent(RecordIds(events, telemetries, logs), false, 0, ex.Message);
+                yield break;
+            }
             int generation = _sessionGeneration;
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
             string lastError = "";
+            long lastStatus = 0;
             while (retryCount <= maxRetries && !success)
             {
-                if (SessionEndedSince(generation, "data")) yield break;
+                if (SessionEndedSince(generation, "data")) { ReportSessionEnded(RecordIds(events, telemetries, logs)); yield break; }
                 UnityWebRequest request = null;
                 bool created = false;
                 bool dataRetryWait = false;
@@ -526,23 +582,31 @@ namespace AbxrLib.Runtime.Services.Transport
                 yield return request.SendWebRequest();
                 try
                 {
+                    lastStatus = request.responseCode;
                     if (request.result == UnityWebRequest.Result.Success) { success = true; }
                     else { lastError = request.error; if (IsDataRetryableError(request)) { retryCount++; yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds); continue; } break; }
                 }
                 finally { request?.Dispose(); }
             }
-            if (!success)
+            var recordIds = RecordIds(events, telemetries, logs);
+            if (success)
             {
-                if (SessionEndedSince(generation, "data")) yield break;
-                Logcat.Error($"Data POST failed after {retryCount} attempts: {lastError}");
-                _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
-                lock (_lock)
-                {
-                    foreach (var p in events) { if (!IsQueueAtLimit(_eventPayloads, "Event")) _eventPayloads.Insert(0, p); }
-                    foreach (var p in telemetries) { if (!IsQueueAtLimit(_telemetryPayloads, "Telemetry")) _telemetryPayloads.Insert(0, p); }
-                    foreach (var p in logs) { if (!IsQueueAtLimit(_logPayloads, "Log")) _logPayloads.Insert(0, p); }
-                }
+                ReportSent(recordIds, true, lastStatus, null);
+                yield break;
             }
+            if (SessionEndedSince(generation, "data")) { ReportSessionEnded(recordIds); yield break; }
+            Logcat.Error($"Data POST failed after {retryCount} attempts: {lastError}");
+            _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
+            var dropped = recordIds != null ? new List<long>() : null;
+            lock (_lock)
+            {
+                Requeue(_eventPayloads, events, "Event", p => p.RecordId, dropped);
+                Requeue(_telemetryPayloads, telemetries, "Telemetry", p => p.RecordId, dropped);
+                Requeue(_logPayloads, logs, "Log", p => p.RecordId, dropped);
+            }
+            // Report only after the requeue: a handler that ends the session must clear this batch, not have it queued after.
+            ReportSent(recordIds, false, lastStatus, lastError);
+            AbxrObserver.Sent(dropped, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.QueueFull);
         }
 
         private static bool IsDataRetryableError(UnityWebRequest request)
@@ -577,15 +641,21 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             string json;
             try { json = JsonConvert.SerializeObject(new StoragePayloadWrapper { data = toSend }); }
-            catch (Exception ex) { Logcat.Error($"Storage serialization failed: {ex.Message}"); yield break; }
+            catch (Exception ex)
+            {
+                Logcat.Error($"Storage serialization failed: {ex.Message}");
+                ReportSent(RecordIds(storage: toSend), false, 0, ex.Message);
+                yield break;
+            }
             int generation = _sessionGeneration;
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
             string lastError = "";
+            long lastStatus = 0;
             while (retryCount <= maxRetries && !success)
             {
-                if (SessionEndedSince(generation, "storage")) yield break;
+                if (SessionEndedSince(generation, "storage")) { ReportSessionEnded(RecordIds(storage: toSend)); yield break; }
                 UnityWebRequest request = null;
                 bool created = false;
                 bool storageRetryWait = false;
@@ -606,18 +676,26 @@ namespace AbxrLib.Runtime.Services.Transport
                 yield return request.SendWebRequest();
                 try
                 {
+                    lastStatus = request.responseCode;
                     if (request.result == UnityWebRequest.Result.Success) success = true;
                     else { lastError = request.error; if (IsStorageRetryableError(request)) { retryCount++; yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds); continue; } break; }
                 }
                 finally { request?.Dispose(); }
             }
-            if (!success)
+            var recordIds = RecordIds(storage: toSend);
+            if (success)
             {
-                if (SessionEndedSince(generation, "storage")) yield break;
-                Logcat.Error($"Storage POST failed after {retryCount} attempts: {lastError}");
-                _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
-                lock (_lock) { foreach (var p in toSend) { if (!IsQueueAtLimit(_storagePayloads, "Storage")) _storagePayloads.Insert(0, p); } }
+                ReportSent(recordIds, true, lastStatus, null);
+                yield break;
             }
+            if (SessionEndedSince(generation, "storage")) { ReportSessionEnded(recordIds); yield break; }
+            Logcat.Error($"Storage POST failed after {retryCount} attempts: {lastError}");
+            _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
+            var dropped = recordIds != null ? new List<long>() : null;
+            lock (_lock) { Requeue(_storagePayloads, toSend, "Storage", p => p.RecordId, dropped); }
+            // After the requeue, as for data.
+            ReportSent(recordIds, false, lastStatus, lastError);
+            AbxrObserver.Sent(dropped, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.QueueFull);
         }
 
         private static bool IsStorageRetryableError(UnityWebRequest request)
