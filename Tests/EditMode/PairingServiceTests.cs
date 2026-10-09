@@ -631,10 +631,24 @@ public class PairingServiceTests
 
         service.SubmitInput("111111");
 
+        Assert.AreEqual(1, _requests.Count);
         Assert.AreEqual("pairingPasscode", _requests[0].type);
-        Assert.AreEqual(PairingOutcomes.UnavailableMessage, _requests[0].error);
-        Assert.AreEqual(2, _client.Sent.Count, "The new passcode goes out once the lost one has settled.");
-        Assert.AreEqual(Abxr.PairingState.Redeeming, service.State);
+        Assert.AreEqual(PairingOutcomes.UnavailableMessage, _requests[0].error, "The person sees what went wrong with the lost redeem.");
+        Assert.AreEqual(1, _client.Sent.Count, "Input sent during a redeem isn't an answer, even the one that settles it.");
+        Assert.AreEqual(Abxr.PairingState.Prompting, service.State);
+    }
+
+    [Test]
+    public void AnEmptySubmit_OnAnUnansweredPromptRedeem_ShowsUnavailableNotInvalidPasscode()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service);
+        _host.Now += PastTheDeadline;
+
+        service.SubmitInput("");
+
+        Assert.AreEqual(Abxr.PairingRedeemError.Unavailable, service.LastRedeemResult.Error);
+        Assert.AreEqual(PairingOutcomes.UnavailableMessage, _requests[_requests.Count - 1].error);
     }
 
     [Test]

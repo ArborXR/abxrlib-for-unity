@@ -253,11 +253,12 @@ namespace AbxrLib.Runtime.Services.Pairing
                 CancelPairing();
                 return;
             }
-            SettleStalledRedeem();
             if (IsPromptRedeemInFlight)
             {
-                // A name step's "**skip**" answers a question that isn't open until the redeem comes back.
-                Logcat.Warning("Pairing input was submitted while a passcode is being redeemed, so it was ignored.");
+                // Input sent during a redeem isn't an answer, a name step's "**skip**" included: that question isn't open
+                // until the redeem comes back. Past the deadline it settles the lost redeem, whose error the prompt shows.
+                if (!SettleStalledRedeem())
+                    Logcat.Warning("Pairing input was submitted while a passcode is being redeemed, so it was ignored.");
                 return;
             }
             if (State != Abxr.PairingState.Prompting)
@@ -403,12 +404,13 @@ namespace AbxrLib.Runtime.Services.Pairing
 
         /// <summary>
         /// Settles a redeem whose answer never came, once its deadline passes. Pairing has no Update, so every call that
-        /// Redeeming would refuse checks first, and a lost answer can't hold the rest of the launch.
+        /// Redeeming would refuse checks first, and a lost answer can't hold the rest of the launch. True when it settled one.
         /// </summary>
-        private void SettleStalledRedeem()
+        private bool SettleStalledRedeem()
         {
-            if (State != Abxr.PairingState.Redeeming || _abandonRedeem == null || _host.Now < _redeemDeadline) return;
+            if (State != Abxr.PairingState.Redeeming || _abandonRedeem == null || _host.Now < _redeemDeadline) return false;
             _abandonRedeem();
+            return true;
         }
 
         private void OnRedeemResponse(int attempt, string deviceName, PairingHttpResponse response, Action<Abxr.PairingRedeemResult> onComplete)
