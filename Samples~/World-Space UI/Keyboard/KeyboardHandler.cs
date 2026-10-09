@@ -205,11 +205,15 @@ namespace AbxrLib.Runtime.UI.Keyboard
             StartInputGuard();
         }
 
-        /// <summary>The keypad's Back button while pairing. False when this PIN pad has no gate, so the button means "Not now".</summary>
+        /// <summary>
+        /// The keypad's Back button while pairing. False when this PIN pad has no gate, so the button means "Not now".
+        /// Does nothing while a passcode is being redeemed: its answer, an error or the name step, belongs on the keypad.
+        /// </summary>
         public static bool ReturnToPairingGate()
         {
             KeyboardManager manager = PinPadManager();
             if (manager == null || manager.pairingGate == null) return false;
+            if (Abxr.GetPairingState() == Abxr.PairingState.Redeeming) return true;
             _gatePassed = false;
             ShowView(manager, PinPadView.Gate);
             StartInputGuard();
