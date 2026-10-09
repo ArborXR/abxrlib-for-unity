@@ -49,8 +49,11 @@ namespace AbxrLib.Runtime.Services.Pairing
 
         string PairingUrl { get; }
 
-        /// <summary>Seconds on a clock that never runs backwards, for the Retry-After gate.</summary>
+        /// <summary>Seconds on a clock that never runs backwards, for the Retry-After gate and the redeem deadline.</summary>
         double Now { get; }
+
+        /// <summary>The redeem client's request timeout. The service waits past it before deciding an answer is lost.</summary>
+        double RequestTimeoutSeconds { get; }
 
         PairingDeviceMetadata DeviceMetadata { get; }
     }
@@ -81,6 +84,11 @@ namespace AbxrLib.Runtime.Services.Pairing
         private const string UnsupportedPlatform = "pairing runs only in Android and WebGL builds.";
         /// <summary>How many prompts an app handler may re-request from inside its own callback before the SDK stops re-asking.</summary>
         private const int MaxNestedInputRequests = 8;
+        /// <summary>
+        /// How long past the request timeout a redeem may go unanswered before the service settles it as Unavailable.
+        /// The client gives up on its own well before this; the deadline covers a client whose answer never comes.
+        /// </summary>
+        internal const double StalledRedeemSlackSeconds = 30;
 
         private enum PromptStep { Passcode, DeviceName, JoinDevice }
 
@@ -103,6 +111,9 @@ namespace AbxrLib.Runtime.Services.Pairing
         private bool _redeemFromPrompt;
         private bool _cancelRequested;
         private int _inputRequestDepth;
+        private double _redeemDeadline;
+        /// <summary>Settles the redeem in flight as if no answer came. Null once it has settled.</summary>
+        private Action _abandonRedeem;
 
         // The open prompt's answers so far, so a failure re-asks only the step it's about. Forgotten when the prompt closes.
         private PromptStep _step;
@@ -191,6 +202,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// <summary>Opens the pairing prompt. False, with a warning that says why, unless the app is Unpaired and can show it.</summary>
         internal bool StartPairing()
         {
+            SettleStalledRedeem();
             string refusal = StartRefusal();
             if (refusal != null)
             {
@@ -219,6 +231,8 @@ namespace AbxrLib.Runtime.Services.Pairing
             {
                 _cancelRequested = true;
                 AbxrUi.AuthUi?.Hide();
+                // After the flag, so an answer that's past its deadline settles as dismissed rather than re-prompting.
+                SettleStalledRedeem();
             }
             else
             {
@@ -234,11 +248,16 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// </summary>
         internal void SubmitInput(string input)
         {
+            if (IsPromptRedeemInFlight && input == SkipInput && _step == PromptStep.Passcode)
+            {
+                CancelPairing();
+                return;
+            }
+            SettleStalledRedeem();
             if (IsPromptRedeemInFlight)
             {
                 // A name step's "**skip**" answers a question that isn't open until the redeem comes back.
-                if (input == SkipInput && _step == PromptStep.Passcode) CancelPairing();
-                else Logcat.Warning("Pairing input was submitted while a passcode is being redeemed, so it was ignored.");
+                Logcat.Warning("Pairing input was submitted while a passcode is being redeemed, so it was ignored.");
                 return;
             }
             if (State != Abxr.PairingState.Prompting)
@@ -314,6 +333,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// <summary>skipDeviceName applies only without a name: it answers the name step with "no name".</summary>
         private void Redeem(string input, string deviceNameInput, bool skipDeviceName, bool joinExisting, Action<Abxr.PairingRedeemResult> onComplete)
         {
+            SettleStalledRedeem();
             string deviceName = PairingOutcomes.NormalizeDeviceName(deviceNameInput);
             bool skip = skipDeviceName && deviceName == null;
             string refusal = RedeemRefusal() ?? (joinExisting && deviceName == null ? "joinExistingDevice needs the name of the device to join." : null);
@@ -361,15 +381,40 @@ namespace AbxrLib.Runtime.Services.Pairing
             _cancelRequested = false;
             State = Abxr.PairingState.Redeeming;
             int attempt = ++_redeemAttempt;
-            _client.Send(
-                PairingOutcomes.RedeemUrl(_host.PairingUrl),
-                PairingOutcomes.RedeemBody(_host.AppToken, passcode, _host.DeviceMetadata, deviceName, skip, joinExisting),
-                response => OnRedeemResponse(attempt, deviceName, response, onComplete));
+            _redeemDeadline = _host.Now + _host.RequestTimeoutSeconds + StalledRedeemSlackSeconds;
+            _abandonRedeem = () => OnRedeemResponse(attempt, deviceName,
+                NoAnswer($"no answer within {_host.RequestTimeoutSeconds + StalledRedeemSlackSeconds:0}s."), onComplete);
+            try
+            {
+                _client.Send(
+                    PairingOutcomes.RedeemUrl(_host.PairingUrl),
+                    PairingOutcomes.RedeemBody(_host.AppToken, passcode, _host.DeviceMetadata, deviceName, skip, joinExisting),
+                    response => OnRedeemResponse(attempt, deviceName, response, onComplete));
+            }
+            catch (Exception ex)
+            {
+                // Ignored by OnRedeemResponse when the client already answered before throwing.
+                Logcat.Warning($"Sending the pairing redeem threw: {ex}");
+                OnRedeemResponse(attempt, deviceName, NoAnswer($"the request couldn't be sent ({ex.Message})."), onComplete);
+            }
+        }
+
+        private static PairingHttpResponse NoAnswer(string detail) => new PairingHttpResponse(0, null, networkError: true, errorDetail: detail);
+
+        /// <summary>
+        /// Settles a redeem whose answer never came, once its deadline passes. Pairing has no Update, so every call that
+        /// Redeeming would refuse checks first, and a lost answer can't hold the rest of the launch.
+        /// </summary>
+        private void SettleStalledRedeem()
+        {
+            if (State != Abxr.PairingState.Redeeming || _abandonRedeem == null || _host.Now < _redeemDeadline) return;
+            _abandonRedeem();
         }
 
         private void OnRedeemResponse(int attempt, string deviceName, PairingHttpResponse response, Action<Abxr.PairingRedeemResult> onComplete)
         {
             if (attempt != _redeemAttempt || State != Abxr.PairingState.Redeeming) return;
+            _abandonRedeem = null;
 
             var result = PairingOutcomes.Classify(response, DateTime.UtcNow, out string token, out string instanceId, deviceName);
             LogRedeemOutcome(result, response, instanceId);
@@ -459,6 +504,7 @@ namespace AbxrLib.Runtime.Services.Pairing
                 return;
             }
 
+            SettleStalledRedeem();
             switch (State)
             {
                 case Abxr.PairingState.Redeeming:
@@ -482,6 +528,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// <summary>Deletes the stored pairing. From Paired that means Unpaired, with no prompt; whether to ask again is the app's call.</summary>
         internal void ClearPairing()
         {
+            SettleStalledRedeem();
             if (State == Abxr.PairingState.Redeeming)
             {
                 Logcat.Warning("ClearPairing() ignored: a passcode is being redeemed.");

@@ -574,6 +574,126 @@ public class PairingServiceTests
         Assert.IsFalse(service.IsPromptRedeemInFlight, "With no prompt, OnInputSubmitted still goes to auth.");
     }
 
+    // ── A redeem whose answer never comes ─────────────────────────
+
+    private const double PastTheDeadline = 30 + AbxrPairingService.StalledRedeemSlackSeconds + 1;
+
+    [Test]
+    public void AnUnansweredRedeem_BeforeItsDeadline_StillRefusesStartPairing()
+    {
+        var service = CreateUnpaired();
+        var results = new List<Abxr.PairingRedeemResult>();
+        service.RedeemPairingPasscode("483921", results.Add);
+
+        _host.Now += PastTheDeadline - 2;
+
+        Assert.IsFalse(service.StartPairing());
+        Assert.AreEqual(Abxr.PairingState.Redeeming, service.State);
+        Assert.IsEmpty(results);
+    }
+
+    [Test]
+    public void AnUnansweredRedeem_PastItsDeadline_SettlesAsUnavailable()
+    {
+        var service = CreateUnpaired();
+        var results = new List<Abxr.PairingRedeemResult>();
+        service.RedeemPairingPasscode("483921", results.Add);
+
+        _host.Now += PastTheDeadline;
+
+        Assert.IsTrue(service.StartPairing(), "A lost answer doesn't hold Redeeming for the rest of the launch.");
+        Assert.AreEqual(1, results.Count, "The headless onComplete still fires.");
+        Assert.AreEqual(Abxr.PairingRedeemError.Unavailable, results[0].Error);
+    }
+
+    [Test]
+    public void AnUnansweredRedeem_PastItsDeadline_NoLongerBlocksClearPairingOrSetAppInstanceToken()
+    {
+        var service = CreateUnpaired();
+        service.RedeemPairingPasscode("483921", _ => { });
+        _host.Now += PastTheDeadline;
+
+        service.ClearPairing();
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+
+        service.RedeemPairingPasscode("483921", _ => { });
+        _host.Now += PastTheDeadline;
+        service.SetAppInstanceToken(Token, InstanceId);
+        Assert.AreEqual(Abxr.PairingState.Paired, service.State);
+    }
+
+    [Test]
+    public void AnUnansweredPromptRedeem_PastItsDeadline_ReopensThePromptWithTheError()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service);
+        _host.Now += PastTheDeadline;
+
+        service.SubmitInput("111111");
+
+        Assert.AreEqual("pairingPasscode", _requests[0].type);
+        Assert.AreEqual(PairingOutcomes.UnavailableMessage, _requests[0].error);
+        Assert.AreEqual(2, _client.Sent.Count, "The new passcode goes out once the lost one has settled.");
+        Assert.AreEqual(Abxr.PairingState.Redeeming, service.State);
+    }
+
+    [Test]
+    public void NotNow_OnAnUnansweredPromptRedeem_PastItsDeadline_DismissesAtOnce()
+    {
+        var service = CreatePrompting();
+        SubmitPrompt(service);
+        _host.Now += PastTheDeadline;
+
+        service.SubmitInput("**skip**");
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Dismissed) }, _events);
+        Assert.IsEmpty(_requests, "The cancel isn't undone by re-prompting with the lost answer's error.");
+    }
+
+    [Test]
+    public void AnAnswerArrivingAfterTheDeadlineSettled_IsIgnored()
+    {
+        var service = CreateUnpaired();
+        service.RedeemPairingPasscode("483921", _ => { });
+        _host.Now += PastTheDeadline;
+        service.ClearPairing();
+
+        _client.Respond(Ok());
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+        Assert.AreEqual(0, _store.Saves);
+    }
+
+    [Test]
+    public void ASendThatThrows_SettlesAsUnavailable()
+    {
+        var service = CreateUnpaired();
+        _client.Throw = new InvalidOperationException("boom");
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        service.RedeemPairingPasscode("483921", results.Add);
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, service.State);
+        Assert.AreEqual(1, results.Count);
+        Assert.AreEqual(Abxr.PairingRedeemError.Unavailable, results[0].Error);
+    }
+
+    [Test]
+    public void ASendThatAnswersThenThrows_SettlesOnce()
+    {
+        var service = CreateUnpaired();
+        _client.AnswerBeforeThrowing = Ok();
+        _client.Throw = new InvalidOperationException("boom");
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        service.RedeemPairingPasscode("483921", results.Add);
+
+        Assert.AreEqual(Abxr.PairingState.Paired, service.State);
+        Assert.AreEqual(1, results.Count);
+        Assert.IsTrue(results[0].Success);
+    }
+
     [Test]
     public void AResponseArrivingTwice_IsHandledOnce()
     {
@@ -1410,6 +1530,7 @@ public class PairingServiceTests
         public string AppToken { get; set; } = "app.token.jwt";
         public string PairingUrl { get; set; } = "https://api.xrdm.dev/";
         public double Now { get; set; } = 1000;
+        public double RequestTimeoutSeconds { get; set; } = 30;
         public PairingDeviceMetadata DeviceMetadata { get; } = new PairingDeviceMetadata
         {
             Model = "PICO 4", Manufacturer = "Pico", OsVersion = "Android OS 12", AppVersion = "1.0.0", SdkVersion = "3.0.0"
@@ -1461,7 +1582,16 @@ public class PairingServiceTests
     {
         public readonly List<(string url, string json, Action<PairingHttpResponse> onComplete)> Sent = new List<(string, string, Action<PairingHttpResponse>)>();
 
-        public void Send(string url, string json, Action<PairingHttpResponse> onComplete) => Sent.Add((url, json, onComplete));
+        /// <summary>Thrown from Send, after the request is recorded and, with AnswerBeforeThrowing, answered.</summary>
+        public Exception Throw;
+        public PairingHttpResponse? AnswerBeforeThrowing;
+
+        public void Send(string url, string json, Action<PairingHttpResponse> onComplete)
+        {
+            Sent.Add((url, json, onComplete));
+            if (AnswerBeforeThrowing.HasValue) onComplete(AnswerBeforeThrowing.Value);
+            if (Throw != null) throw Throw;
+        }
 
         /// <summary>Answers the latest request.</summary>
         public void Respond(PairingHttpResponse response) => Sent[Sent.Count - 1].onComplete(response);

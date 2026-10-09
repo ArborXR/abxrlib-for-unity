@@ -570,6 +570,7 @@ namespace AbxrLib.Runtime
             public string AppToken => _subsystem._authService?.AppTokenForPairing ?? "";
             public string PairingUrl => Configuration.Instance.pairingUrl;
             public double Now => Time.realtimeSinceStartupAsDouble;
+            public double RequestTimeoutSeconds => Configuration.Instance.requestTimeoutSeconds;
             public PairingDeviceMetadata DeviceMetadata => PairingDeviceMetadata.Current();
         }
 
