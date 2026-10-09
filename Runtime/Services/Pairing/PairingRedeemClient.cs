@@ -31,9 +31,10 @@ namespace AbxrLib.Runtime.Services.Pairing
     internal interface IPairingRedeemClient
     {
         /// <summary>
-        /// POSTs the JSON body once and reports what came back, exactly once, even when the request can't start or
-        /// never gets an answer. Never retries: every successful redeem creates an app instance, so a retry after a
-        /// lost response would leave an orphan in the Portal.
+        /// POSTs the JSON body once and reports what came back, exactly once while the client's runner stays active,
+        /// even when the request can't start or never gets an answer. A runner deactivated mid-request stops its
+        /// coroutine, so the service keeps its own deadline too. Never retries: every successful redeem creates an app
+        /// instance, so a retry after a lost response would leave an orphan in the Portal.
         /// </summary>
         void Send(string url, string json, Action<PairingHttpResponse> onComplete);
     }
