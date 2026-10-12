@@ -21,7 +21,7 @@ using UnityEngine.TestTools;
 public class AuthRetryTests : AbxrPlayModeTestBase
 {
     private static readonly AuthTransportResult Offline =
-        new AuthTransportResult(false, "No response body.", false, 0, networkError: true);
+        new AuthTransportResult(false, null, false, 0, networkError: true);
     private static readonly AuthTransportResult Unauthorized =
         new AuthTransportResult(false, "{\"detail\":\"Invalid app token\"}", true, 401);
     /// <summary>A valid success without a token: the backend wants user authentication next (AuthResponse.IsValidSuccess).</summary>
@@ -229,7 +229,7 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     [UnityTest]
     public IEnumerator DeviceAuth_UnauthorizedWithoutErrorBody_ReportsARefusal()
     {
-        // What the REST transport produces for a bare 401: the body is normalized to "No response body."
+        // What the REST transport produces for a bare 401: the empty body passes through as is.
         var transport = UseScriptedTransport(AbxrTransportRest.ToAuthResult(UnityWebRequest.Result.ProtocolError, 401, ""));
         string reported = null;
         Abxr.OnAuthCompleted += (success, error) => reported = error;

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // Pins which device-auth failures latch the session as rejected and which retry. Every REST failure used to latch:
-// the transport never passes an empty body, and any non-empty body counted as an explicit error, so a headset that
+// the transport never passed an empty body, and any non-empty body counted as an explicit error, so a headset that
 // was offline at launch sent no data for the whole session. REST rows run through the transport's real mapping.
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Services.Transport;
@@ -47,7 +47,16 @@ public class AuthFailureClassificationTests
 
         Assert.IsTrue(result.NetworkError);
         Assert.AreEqual(0, result.StatusCode);
-        Assert.IsNotEmpty(result.Body, "Failure bodies are normalized to non-empty, which is what the old rule latched on.");
+        Assert.IsEmpty(result.Body, "The transport passes an empty body through; a placeholder would read as an API error.");
+        Assert.IsFalse(AbxrAuthService.IsCredentialRejection(result));
+    }
+
+    [Test]
+    public void Rest_NullBody_PassesThroughAndRetries()
+    {
+        var result = AbxrTransportRest.ToAuthResult(UnityWebRequest.Result.ConnectionError, 0, null);
+
+        Assert.IsNull(result.Body);
         Assert.IsFalse(AbxrAuthService.IsCredentialRejection(result));
     }
 
@@ -68,7 +77,11 @@ public class AuthFailureClassificationTests
     [TestCase("ArborInsightsClient.Bind failed")]
     [TestCase("ArborInsightsClient service not ready after bind")]
     [TestCase("{\"result\":0}")]
-    [TestCase("No response body.")]
+    [TestCase("")]
     public void Service_FailureWithoutApiError_Retries(string body)
         => Assert.IsFalse(ServiceLatches(body), body);
+
+    [Test]
+    public void Service_NullBody_Retries()
+        => Assert.IsFalse(ServiceLatches(null));
 }
