@@ -8,7 +8,6 @@
  * - User authentication and session management
  * - Data storage and retrieval
  * - Telemetry collection
- * - AI proxy functionality
  * - Exit polling and user feedback
  * 
  * The Abxr class serves as the main entry point for all AbxrLib functionality,
@@ -668,35 +667,6 @@ public static partial class Abxr
 		X?.StorageRemoveMultipleEntries(scope);
 	
 	
-	// ── AI Proxy ────────────────────────────────────────────────────────────────────────────────────────────────────
-	
-	/// <summary>
-	/// Send a prompt to the LLM provider
-	/// StartCoroutine(AIProxy(prompt, llmProvider, result => {
-	///	    Logcat.Info("Result: " + result);
-	/// }));
-	/// </summary>
-	/// <param name="prompt">The prompt to send</param>
-	/// <param name="llmProvider">The LLM being used</param>
-	/// <param name="callback">Return value when finished</param>
-	/// <returns>The string returned by the LLM</returns>
-	public static IEnumerator AIProxy(string prompt, string llmProvider, Action<string> callback) =>
-		X?.AIProxy(prompt, llmProvider, callback);
-	
-	///  <summary>
-	///  Send a prompt to the LLM provider
-	///  StartCoroutine(AIProxy(prompt, llmProvider, result => {
-	/// 	    Logcat.Info("Result: " + result);
-	///  }));
-	///  </summary>
-	///  <param name="prompt">The prompt to send</param>
-	///  <param name="pastMessages">Previous messages sent to the LLM</param>
-	///  <param name="llmProvider">The LLM being used</param>
-	///  <param name="callback">Return value when finished</param>
-	///  <returns>The string returned by the LLM</returns>
-	public static IEnumerator AIProxy(string prompt, List<string> pastMessages, string llmProvider, Action<string> callback) =>
-		X?.AIProxy(prompt, pastMessages, llmProvider, callback);
-
 	/// <summary>
 	/// Register a super metadata that will be automatically included in all events
 	/// super metadata persist across app sessions and are stored locally
@@ -834,7 +804,7 @@ public static partial class Abxr
 	/// <summary>
 	/// Sets the Insights REST base URL at runtime (e.g. staging vs production). Allowed only before authentication has been started for the first time this run
 	/// (call before <see cref="StartAuthentication"/> or any path that calls into auth). After the first auth flow starts, the URL cannot be changed until the app restarts.
-	/// Updates <see cref="Configuration.Instance"/>; also refreshes the LLM proxy URL and syncs ArborInsightsClient when the JNI bridge is initialized (Android).
+	/// Updates <see cref="Configuration.Instance"/>; also syncs ArborInsightsClient when the JNI bridge is initialized (Android).
 	/// </summary>
 	/// <returns>True if the URL was applied; false if validation failed or authentication has already started (<paramref name="errorMessage"/> explains why).</returns>
 	public static bool TrySetRestUrl(string restUrl, out string errorMessage)

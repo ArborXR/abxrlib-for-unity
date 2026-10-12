@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using AbxrLib.Runtime.Core;
-using AbxrLib.Runtime.Services.AI;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.Services.Data;
 using AbxrLib.Runtime.Services.Auth;
@@ -98,7 +97,6 @@ namespace AbxrLib.Runtime
         private volatile IAbxrTransport _transport;
         private bool _transportSelectionComplete;
         private Coroutine _transportSelectionCoroutine;
-        private AIProxyApi _aiProxyApi;
         private SceneChangeDetector _sceneChangeDetector;
         private HeadsetDetector _headsetDetector;
 
@@ -186,7 +184,6 @@ namespace AbxrLib.Runtime
             _authService.SetTransportGetter(() => _transport);
             _dataService = new AbxrDataService(this, () => _transport);
             _telemetryService = new AbxrTelemetryService(this);
-            _aiProxyApi = new AIProxyApi(_authService);
             _storageService = new AbxrStorageService(_authService, this, () => _transport);
 
             _transportSelectionComplete = false;
@@ -337,7 +334,6 @@ namespace AbxrLib.Runtime
 	        PlayerPrefs.Save();
 	        _assessmentStarted = false;
 	        _currentModuleIndex = 0;
-	        AIProxyApi.ClearPastMessages();
 	        _authService.ClearSessionAndPrepareForNew();
         }
         
@@ -655,7 +651,6 @@ internal void StartNewSession()
 			if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 			_assessmentStarted = false;
 			_currentModuleIndex = 0;
-			AIProxyApi.ClearPastMessages();
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 			// When using ArborInsightsClient, unbind then bind to clear session-related connection state and get a fresh connection.
@@ -1121,7 +1116,7 @@ internal void StartNewSession()
 			_authService?.SetRuntimeAuthAuthSecret(authSecret);
 		}
 
-		/// <summary>After <see cref="Configuration.Instance"/>.restUrl changes: sync the device client JNI session when bound. REST transport and LLM proxy read <c>restUrl</c> when building each request.</summary>
+		/// <summary>After <see cref="Configuration.Instance"/>.restUrl changes: sync the device client JNI session when bound. The REST transport reads <c>restUrl</c> when building each request.</summary>
 		internal void NotifyRestUrlChanged()
 		{
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -1247,16 +1242,6 @@ internal void StartNewSession()
 			StartCoroutine(_storageService.Delete(scope, ""));
 		}
 
-		internal IEnumerator AIProxy(string prompt, string llmProvider, Action<string> callback)
-		{
-			yield return _aiProxyApi.SendPrompt(prompt, llmProvider, null, callback);
-		}
-		
-		internal IEnumerator AIProxy(string prompt, List<string> pastMessages, string llmProvider, Action<string> callback)
-		{
-			yield return _aiProxyApi.SendPrompt(prompt, llmProvider, pastMessages, callback);
-		}
-		
 		internal void PollUser(string prompt, PollType pollType, List<string> responses, Action<string> callback)
 		{
 			// Validate prompt

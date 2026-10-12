@@ -164,9 +164,6 @@ namespace AbxrLib.Runtime.Services.Platform
 		public static int EventLevelStart(String szLevelName, Dictionary<String, String> dictMeta) => _client.Call<int>("eventLevelStart", szLevelName, Utils.DictToString(dictMeta));
 		public static int EventLevelComplete(String szLevelName, String szScore, Dictionary<String, String> dictMeta) => _client.Call<int>("eventLevelComplete", szLevelName, szScore, Utils.DictToString(dictMeta));
 		// ---
-		public static int AddAIProxy(String szPrompt, String szPastMessages, String szLMMProvider) => _client.Call<int>("addAIProxy", szPrompt, szPastMessages, szLMMProvider);
-		public static int AddAIProxyBlocking(String szPrompt, String szPastMessages, String szLMMProvider) => _client.Call<int>("addAIProxyBlocking", szPrompt, szPastMessages, szLMMProvider);
-		// ---
 		public static int AddTelemetryEntry(String szName, Dictionary<String, String> dictMeta) => _client.Call<int>("addTelemetryEntry", szName, Utils.DictToString(dictMeta));
 		public static int AddTelemetryEntryBlocking(String szName, Dictionary<String, String> dictMeta) => _client.Call<int>("addTelemetryEntryBlocking", szName, Utils.DictToString(dictMeta));
 		// ---
@@ -460,9 +457,6 @@ namespace AbxrLib.Runtime.Services.Platform
 		// ---
 		public static int EventLevelStart(String szLevelName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventLevelStart(szLevelName ?? "", dictMeta);
 		public static int EventLevelComplete(String szLevelName, String szScore, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.EventLevelComplete(szLevelName ?? "", szScore ?? "", dictMeta);
-		// ---
-		public static int AddAIProxy(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightsClientBridge.AddAIProxy(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
-		public static int AddAIProxyBlocking(String szPrompt, String szPastMessages, String szLMMProvider) => ArborInsightsClientBridge.AddAIProxyBlocking(szPrompt ?? "", szPastMessages ?? "", szLMMProvider ?? "");
 		// ---
 		public static int AddTelemetryEntry(String szName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.AddTelemetryEntry(szName ?? "", dictMeta);
 		public static int AddTelemetryEntryBlocking(String szName, Dictionary<String, String> dictMeta) => ArborInsightsClientBridge.AddTelemetryEntryBlocking(szName ?? "", dictMeta);

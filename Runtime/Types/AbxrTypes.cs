@@ -347,14 +347,6 @@ namespace AbxrLib.Runtime.Types
     }
     
     [Serializable]
-    public class AIPromptPayload
-    {
-        public string prompt;
-        public string llmProvider;
-        public List<string> pastMessages;
-    }
-    
-    [Serializable]
     public class StoragePayload
     {
         public string timestamp;
