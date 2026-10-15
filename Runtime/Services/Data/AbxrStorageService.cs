@@ -30,9 +30,18 @@ namespace AbxrLib.Runtime.Services.Data
 
         public void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
         {
-            if (!_authService.Authenticated) return;
-            if (scope == Abxr.StorageScope.User && _authService.ResponseData?.UserId == null) return;
-            _getTransport()?.StorageAdd(name ?? "", entry ?? new Dictionary<string, string>(), scope, policy);
+            name ??= "";
+            entry ??= new Dictionary<string, string>();
+            // User-scoped storage needs a signed-in user; device scope only needs the app to be authenticated.
+            var drop = !_authService.Authenticated ? AbxrObserver.DropReason.NotAuthenticated
+                : scope == Abxr.StorageScope.User && _authService.ResponseData?.UserId == null ? AbxrObserver.DropReason.NoUser
+                : AbxrObserver.DropReason.None;
+            var transport = drop == AbxrObserver.DropReason.None ? _getTransport() : null;
+            if (!AbxrObserver.IsObserved) { transport?.StorageAdd(name, entry, scope, policy); return; }
+            long id = AbxrObserver.NextId();
+            AbxrDataService.Report(id, AbxrObserver.RecordKind.Storage, name, null, entry, transport,
+                transport?.StorageAdd(name, entry, scope, policy, id),
+                drop == AbxrObserver.DropReason.None ? AbxrObserver.DropReason.NotRecording : drop);
         }
 
         public IEnumerator Get(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> callback)
