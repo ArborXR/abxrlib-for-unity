@@ -38,6 +38,8 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
     internal const string AuthFailureAppIdNotSet = "Authentication failure: App identification not set.";
     internal const string AuthFailureOrgUnavailable = "Authentication failure: Organization identification unavailable.";
     internal const string AuthFailureInitialRequestFailed = "Authentication failure: Initial authentication request failed";
+    /// <summary>No org credential and no pairing is a quiet state, not a failure (SDK-59 RFC D2): one Info line, no error.</summary>
+    internal const string NoOrgIdentityLog = "Not authenticating: No organization identity.";
 
     /// <summary>Auth mechanism "none" so device auth tests skip user authentication (PIN/input).</summary>
     private static AuthMechanism AuthMechanismNone => new AuthMechanism { type = "none", prompt = "", domain = "" };
@@ -104,13 +106,13 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         bool deviceCanSupplyOrg = false;
         yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
         if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
+            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgId/authSecret from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -121,13 +123,13 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         bool deviceCanSupplyOrg = false;
         yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
         if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
+            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (authSecret from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -159,13 +161,13 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         bool deviceCanSupplyOrg = false;
         yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
         if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
+            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgId/authSecret from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -176,13 +178,13 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         bool deviceCanSupplyOrg = false;
         yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
         if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
+            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (authSecret from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -193,7 +195,7 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         bool deviceCanSupplyOrg = false;
         yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
         if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
+            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (deviceCanSupplyOrg)
@@ -216,7 +218,7 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgId/authSecret from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -233,7 +235,7 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (authSecret from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -265,13 +267,13 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         bool deviceCanSupplyOrg = false;
         yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
         if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
+            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgToken from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -314,13 +316,13 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         bool deviceCanSupplyOrg = false;
         yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
         if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
+            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (dynamic orgToken from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -331,7 +333,7 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         bool deviceCanSupplyOrg = false;
         yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
         if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
+            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
         if (deviceCanSupplyOrg)
@@ -354,7 +356,7 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         if (deviceCanSupplyOrg)
             Assert.IsTrue(success, "With MDM or device service, auth should succeed (org token/credentials from device).");
         else
-            Assert.IsFalse(success, "Without MDM, auth should fail with Organization identification unavailable.");
+            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
     }
 
     [UnityTest]
@@ -401,7 +403,10 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
         // With unitTestDeviceId & unitTestFingerprint set: we build a valid dynamic org token from overrides → auth can pass. Without them we use configured authSecret + random device ID → backend rejects the token → auth fails. When device can supply org (MDM or ArborInsights), auth can succeed.
         if (!deviceCanSupplyOrg && !hasUnitTestDeviceCredentials)
         {
-            if (Application.isEditor)
+            // Empty overrides (a host with no unit-test org settings) supply no identity at all, which is quiet.
+            if (string.IsNullOrEmpty(ConfigOrgId) || string.IsNullOrEmpty(ConfigAuthSecret))
+                LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
+            else if (Application.isEditor)
                 LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureOrgUnavailable)));
             else
                 LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(AuthFailureInitialRequestFailed)));

@@ -65,6 +65,8 @@ KeyboardHandler.SetPrompt("Please enter your credentials");
 KeyboardHandler.Destroy();
 ```
 
+Keyboards and PIN pads survive scene loads, so a sign-in or pairing prompt stays open while the app changes scenes. A keyboard your code creates stays too, until you call `KeyboardHandler.Destroy()`. The new scene needs its own `EventSystem` (and an XR UI input module for rays) for the keyboard to take input.
+
 ### Keyboard Events
 
 ```csharp

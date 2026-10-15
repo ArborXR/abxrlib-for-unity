@@ -112,6 +112,7 @@ namespace AbxrLib.Runtime.Core
         public string appToken;
         public string orgToken;
         public string restUrl = "https://lib-backend.xrdm.app/";
+        public string pairingUrl = "https://api.xrdm.app/";
         public bool authUIFollowCamera = true;
         public bool enableDirectTouchInteraction = true;
         public float authUIDistanceFromCamera = 1.0f;
@@ -125,6 +126,7 @@ namespace AbxrLib.Runtime.Core
         public bool enableAutoAdvanceModules = true;
         public bool enableReturnTo = true;
         public bool enablePinPadGuestAccess = true;
+        public bool enablePairingDismiss = true;
         public bool recordIpAddress = false;
         public GameObject KeyboardPrefab;
         public GameObject PinPrefab;
@@ -228,6 +230,7 @@ namespace AbxrLib.Runtime.Core
             c.appToken = a.appToken;
             c.orgToken = a.orgToken;
             c.restUrl = a.restUrl;
+            c.pairingUrl = a.pairingUrl;
             c.authUIFollowCamera = a.authUIFollowCamera;
             c.enableDirectTouchInteraction = a.enableDirectTouchInteraction;
             c.authUIDistanceFromCamera = a.authUIDistanceFromCamera;
@@ -241,6 +244,7 @@ namespace AbxrLib.Runtime.Core
             c.enableAutoAdvanceModules = a.enableAutoAdvanceModules;
             c.enableReturnTo = a.enableReturnTo;
             c.enablePinPadGuestAccess = a.enablePinPadGuestAccess;
+            c.enablePairingDismiss = a.enablePairingDismiss;
             c.recordIpAddress = a.recordIpAddress;
             c.KeyboardPrefab = a.KeyboardPrefab;
             c.PinPrefab = a.PinPrefab;

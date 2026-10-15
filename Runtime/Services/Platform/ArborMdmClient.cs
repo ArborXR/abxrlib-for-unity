@@ -63,6 +63,36 @@ namespace AbxrLib.Runtime.Services.Platform
 
         public bool IsConnected() => ServiceWrapper != null;
 
+        /// <summary>Package name of the ArborXR client APK, whose service this class binds to.</summary>
+        private const string ClientApkPackageName = "app.xrdm.client";
+
+        /// <summary>
+        /// True when the ArborXR client APK is installed. The bind retries forever when it isn't, so this is the only way to
+        /// know whether waiting for it can pay off. The AAR's manifest declares the package query Android 11+ needs.
+        /// </summary>
+        public static bool IsClientPackageInstalled()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                if (activity == null) return false;
+                using var packageManager = activity.Call<AndroidJavaObject>("getPackageManager");
+                if (packageManager == null) return false;
+                using var info = packageManager.Call<AndroidJavaObject>("getPackageInfo", ClientApkPackageName, 0);
+                return true;
+            }
+            catch
+            {
+                // getPackageInfo throws NameNotFoundException for a package that isn't installed.
+                return false;
+            }
+#else
+            return false;
+#endif
+        }
+
         private void Connect()
         {
             using var unityPlayerClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");

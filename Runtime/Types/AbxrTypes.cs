@@ -83,6 +83,15 @@ namespace AbxrLib.Runtime.Types
         }
 
         /// <summary>
+        /// True when some source (config, the ArborXR client, an override, an intent, or a URL) supplied an org credential:
+        /// an org token, or an org id with its auth secret (legacy, or what a dynamic org token is built from). An org id
+        /// alone doesn't count, since GetOrgId() falls back to the configured one even where it isn't used.
+        /// Well-formedness is IsValid()'s job.
+        /// </summary>
+        public bool HasOrgCredential() =>
+            !string.IsNullOrEmpty(orgToken) || (!string.IsNullOrEmpty(orgId) && !string.IsNullOrEmpty(authSecret));
+
+        /// <summary>
         /// Shared auth-field validation used by both Configuration.IsValid() and RuntimeAuthConfig.IsValid().
         /// Returns null if valid, or a short error message (e.g. "App identification not set."). Configuration prefixes with "Authentication error: " when setting LastValidationErrorMessage.
         /// </summary>
@@ -184,6 +193,12 @@ namespace AbxrLib.Runtime.Types
         public string appToken; // omit when using legacy credentials
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string orgToken;
+        /// <summary>Paired mode (SDK-60): the stored app instance's token, sent with appToken in place of an org credential.</summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string appInstanceToken;
+        /// <summary>Managed with a stored pairing: the app instance this install used to be, so a later migration can link its data. Never the token.</summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string priorAppInstanceId;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string buildType; // Production (Custom APK) sends "production" to API
         public string deviceId;
@@ -222,6 +237,11 @@ namespace AbxrLib.Runtime.Types
         /// <summary>When set in auth_handoff payload, the app that receives it should call LaunchAppWithAuthHandoff(this value) when assessment completes (return-to-launcher flow). Cleared after use.</summary>
         public string ReturnToPackage;
         public List<ModuleData> Modules;
+        /// <summary>Paired mode (INS-511): the paired device's current name, so a rename in the Portal reaches the SDK. Null when the instance has none.</summary>
+        public string DeviceName;
+        /// <summary>Set by Json.NET when the response had a deviceName key at all, so a backend that doesn't send it can't clear the stored name.</summary>
+        [JsonIgnore]
+        public bool DeviceNameSpecified;
 
         /// <summary>Single rule for both REST and service transports: response is a valid auth success (full success or second-stage required). Full success = Token or Modules present. Second-stage required = AppId present but no token/modules (proceed to config and PIN prompt). Error payloads (e.g. {"message":"..."}) have no AppId/Token/Modules.</summary>
         public static bool IsValidSuccess(AuthResponse r)

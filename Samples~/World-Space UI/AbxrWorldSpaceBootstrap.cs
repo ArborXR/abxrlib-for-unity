@@ -61,21 +61,47 @@ namespace AbxrLib.Runtime.UI
     {
         public void Show(AuthUiKind kind)
         {
-            if (kind == AuthUiKind.PinPad)
+            // Pairing moves between the PIN pad and the keyboard, so it shows only the surface its step uses.
+            switch (kind)
             {
-                // Create early-returns when an instance already exists, even one the QR scanner hid while
-                // scanning - ShowPinPad is what re-activates it. Together they cover both halves of the
-                // interface's contract: create if missing, reveal if hidden.
-                KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
-                KeyboardHandler.ShowPinPad();
-            }
-            else
-            {
-                KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+                case AuthUiKind.PinPad:
+                case AuthUiKind.PairingPasscode:
+                    if (kind == AuthUiKind.PairingPasscode) KeyboardHandler.DestroyKeyboard();
+                    // Create early-returns when an instance already exists, even one the QR scanner hid while
+                    // scanning - ShowPinPad is what re-activates it. Together they cover both halves of the
+                    // interface's contract: create if missing, reveal if hidden.
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+                    KeyboardHandler.SetPairingMode(kind == AuthUiKind.PairingPasscode);
+                    if (kind == AuthUiKind.PairingPasscode) KeyboardHandler.ShowPairingPasscode();
+                    KeyboardHandler.ShowPinPad();
+                    break;
+                case AuthUiKind.PairingDeviceJoin:
+                    KeyboardHandler.DestroyKeyboard();
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+                    KeyboardHandler.SetPairingMode(true);
+                    if (KeyboardHandler.ShowPairingConfirm())
+                    {
+                        KeyboardHandler.ShowPinPad();
+                        break;
+                    }
+                    // A PIN pad without the confirm panel: type the existing name on the keyboard instead.
+                    KeyboardHandler.DestroyPinPad();
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+                    KeyboardHandler.SetDeviceNameMode(skippable: true, joinByTyping: true);
+                    break;
+                case AuthUiKind.PairingDeviceName:
+                case AuthUiKind.PairingDeviceNameRequired:
+                    KeyboardHandler.DestroyPinPad();
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+                    KeyboardHandler.SetDeviceNameMode(skippable: kind == AuthUiKind.PairingDeviceName);
+                    break;
+                default:
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+                    break;
             }
         }
 
-        public void SetPrompt(string prompt) => KeyboardHandler.SetPrompt(prompt);
+        public void SetPrompt(string prompt) => KeyboardHandler.SetStepPrompt(prompt);
 
         public void Hide() => KeyboardHandler.Destroy();
 

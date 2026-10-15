@@ -19,6 +19,11 @@ namespace AbxrLib.Runtime.Core
                 return _deviceModel;
             }
         }
+
+        private static string _manufacturer;
+
+        /// <summary>The device maker on Android (e.g. "Oculus", "Pico"). Empty elsewhere, including WebGL, where the browser doesn't say.</summary>
+        public static string manufacturer => _manufacturer ??= GetManufacturer();
         
 #if UNITY_WEBGL && !UNITY_EDITOR
         [DllImport("__Internal")] private static extern string AbxrDetectDeviceModel();
@@ -68,6 +73,16 @@ namespace AbxrLib.Runtime.Core
             deviceModel = AbxrDetectDeviceModel() ?? "Unknown Browser";
 #endif
             return deviceModel;
+        }
+
+        private static string GetManufacturer()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            string value = GetSystemProperty("ro.product.manufacturer");
+            return value == "Unknown" ? "" : value ?? "";
+#else
+            return "";
+#endif
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR

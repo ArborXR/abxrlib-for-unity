@@ -43,6 +43,7 @@ namespace AbxrLib.Editor
                 CheckTextMeshPro(),
                 CheckRequiredPackages(),
                 CheckArborMdmClient(),
+                CheckPairing(),
                 CheckHeadsetSdk(),
                 CheckAndroidPlayerSettings()
             };
@@ -946,6 +947,90 @@ namespace AbxrLib.Editor
                 Severity = Severity.Warning,
                 FixLabel = "Turn ArborMdmClient on",
                 Fix = EnableArborMdmClient
+            };
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Passcode pairing (MDM-less)
+        //
+        // The Editor can't see the device or browser, so this reads the project only: whether code calls the pairing
+        // API, whether anything can show the prompt, and the two pairing settings. None of it is a build-blocking
+        // Problem, so the build hook stays quiet. GetPairingState() answers the rest at runtime.
+        // ---------------------------------------------------------------------------------------------------------
+
+        private static readonly string[] PairingCalls = { "StartPairing(", "RedeemPairingPasscode(" };
+
+        /// <summary>A text scan of Assets/**/*.cs. A call made only from a precompiled DLL is missed, and the row says so.</summary>
+        internal static bool ProjectCallsPairing() => ProjectScriptsContain(PairingCalls);
+
+        private static bool ProjectScriptsContain(string[] needles)
+        {
+            foreach (string path in Directory.EnumerateFiles(Application.dataPath, "*.cs", SearchOption.AllDirectories))
+            {
+                string text;
+                try { text = File.ReadAllText(path); }
+                catch (IOException) { continue; }
+                catch (UnauthorizedAccessException) { continue; }
+                if (needles.Any(needle => text.Contains(needle))) return true;
+            }
+            return false;
+        }
+
+        private static Check CheckPairing()
+        {
+            var config = Core.TryGetLoadedConfig();
+            if (config == null) return null;
+
+            var notes = new List<string>();
+            BuildTarget target = EditorUserBuildSettings.activeBuildTarget;
+            if (target != BuildTarget.Android && target != BuildTarget.WebGL)
+                notes.Add("The active build target isn't Android or WebGL, so pairing compiles out and StartPairing() returns false.");
+            if (!config.enablePairingDismiss)
+                notes.Add("Enable Pairing Dismiss is off, so the default prompt has no Not now. A prompt opened at launch can't be closed by someone without a passcode.");
+            string Notes() => notes.Count == 0 ? "" : "\n" + string.Join("\n", notes);
+
+            if (!Utils.IsValidUrl(config.pairingUrl))
+            {
+                return new Check
+                {
+                    Title = "Pairing URL isn't a valid URL",
+                    Detail = $"Passcode pairing redeems at the Pairing URL, and \"{config.pairingUrl}\" isn't an http:// or " +
+                             "https:// URL, so every redeem fails as a build problem. The default is https://api.xrdm.app/." + Notes(),
+                    Severity = Severity.Warning
+                };
+            }
+
+            if (!ProjectCallsPairing())
+            {
+                return new Check
+                {
+                    Title = "Passcode pairing isn't wired in",
+                    Detail = "No script in Assets/ calls Abxr.StartPairing() or Abxr.RedeemPairingPasscode(), so the pairing " +
+                             "prompt never shows and a headset with no organization stays quiet. That's fine for apps used " +
+                             "only on ArborXR-managed headsets. A call made only from a precompiled DLL isn't detected." + Notes(),
+                    Severity = Severity.Info
+                };
+            }
+
+            if (!WorldSpaceUiIsInstalled() && !ProjectScriptsContain(new[] { "OnInputRequested" }))
+            {
+                return new Check
+                {
+                    Title = "Nothing can show the pairing prompt",
+                    Detail = "Code calls the pairing API, but the world-space UI isn't installed and no script assigns " +
+                             "Abxr.OnInputRequested, so StartPairing() returns false. Import the world-space UI, or show your " +
+                             "own prompt from Abxr.OnInputRequested and answer with Abxr.OnInputSubmitted." + Notes(),
+                    Severity = Severity.Warning,
+                    FixLabel = "Import world-space UI",
+                    Fix = ImportWorldSpaceUi
+                };
+            }
+
+            return new Check
+            {
+                Title = "Passcode pairing wired in",
+                Detail = "The app can offer pairing when nothing else identifies its organization." + Notes(),
+                Severity = notes.Count == 0 ? Severity.Ok : Severity.Info
             };
         }
 
