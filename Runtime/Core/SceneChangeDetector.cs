@@ -37,7 +37,7 @@ namespace AbxrLib.Runtime.Core
             
             if (Configuration.Instance.enableSceneEvents)
             {
-                Abxr.Event("Scene Changed", new Dictionary<string, string> { ["Scene Name"] = newScene.name });
+                using (AbxrObserver.AutomaticScope()) Abxr.Event("Scene Changed", new Dictionary<string, string> { ["Scene Name"] = newScene.name });
             }
         }
     
@@ -45,7 +45,7 @@ namespace AbxrLib.Runtime.Core
         {
             if (Configuration.Instance.enableSceneEvents)
             {
-                Abxr.Event("Scene Loaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
+                using (AbxrObserver.AutomaticScope()) Abxr.Event("Scene Loaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
             }
         }
     
@@ -53,7 +53,7 @@ namespace AbxrLib.Runtime.Core
         {
             if (Configuration.Instance.enableSceneEvents)
             {
-                Abxr.Event("Scene Unloaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
+                using (AbxrObserver.AutomaticScope()) Abxr.Event("Scene Unloaded", new Dictionary<string, string> { ["Scene Name"] = scene.name });
             }
         }
     }
