@@ -3798,6 +3798,7 @@ MonoBehaviour:
   pairingGate: {fileID: 4474043640740242901}
   gateConnectButton: {fileID: 3497990846266431751}
   gateNotNowButton: {fileID: 8400979101717030395}
+  gateFooter: {fileID: 8765150997555389112}
   pairingConfirm: {fileID: 6245757424844539594}
   confirmTitle: {fileID: 1022997656651548021}
   confirmJoinButton: {fileID: 2268056954407112945}

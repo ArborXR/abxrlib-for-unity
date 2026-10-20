@@ -179,6 +179,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 if (!pairing) ApplyPinPadGuestAccessSetting(_pinPadInstance);
             }
             if (manager.gateNotNowButton != null) manager.gateNotNowButton.gameObject.SetActive(dismissAllowed);
+            if (manager.gateFooter != null) manager.gateFooter.SetActive(dismissAllowed);
 
             if (pairing && manager.qrCodeButton != null) manager.qrCodeButton.gameObject.SetActive(false);
             else if (!pairing)
