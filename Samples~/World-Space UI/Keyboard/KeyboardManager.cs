@@ -32,6 +32,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public GameObject pairingGate;
         public Button gateConnectButton;
         public Button gateNotNowButton;
+        [Tooltip("The line under the gate's buttons that explains Not now. Hidden with Not now when dismissing is off.")]
+        public GameObject gateFooter;
         [Tooltip("Asks whether to add this app to a headset that already has the name. Without it the person types the name on the keyboard.")]
         public GameObject pairingConfirm;
         public TextMeshProUGUI confirmTitle;
