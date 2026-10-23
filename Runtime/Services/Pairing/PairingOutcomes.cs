@@ -53,7 +53,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         // Default copy (RFC D13). Product owns the wording; ISVs replace it by branching on the error.
         internal const string InvalidPasscodeMessage = "That passcode wasn't recognized. Check it and try again.";
         internal const string DeviceNameRequestedMessage = "Give this connection a name, or skip.";
-        internal const string DeviceNameRequiredMessage = "Your organization requires a name for this headset.";
+        internal const string DeviceNameRequiredMessage = "Your organization requires a name for this device.";
         internal const string DeviceNameInvalidMessage = "That name can't be used. Use 1 to 64 characters.";
         internal const string BuildRejectedMessage = "This app can't pair right now. Contact the app's developer.";
         internal const string UnavailableMessage = "Can't reach the pairing service. Check the connection and try again.";

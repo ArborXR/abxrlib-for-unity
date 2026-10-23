@@ -712,10 +712,10 @@ namespace AbxrLib.Runtime.Services.Pairing
                     Logcat.Debug("The pairing passcode wasn't accepted.");
                     break;
                 case Abxr.PairingRedeemError.DeviceNameRequested:
-                    Logcat.Debug("This passcode allows a name for the headset.");
+                    Logcat.Debug("This passcode allows a name for the device.");
                     break;
                 case Abxr.PairingRedeemError.DeviceNameRequired:
-                    Logcat.Debug("This passcode requires a name for the headset.");
+                    Logcat.Debug("This passcode requires a name for the device.");
                     break;
                 case Abxr.PairingRedeemError.DeviceNameInvalid:
                     Logcat.Debug($"The pairing service didn't accept the device name{detail}.");

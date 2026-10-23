@@ -169,16 +169,16 @@ public static partial class Abxr
 		/// <summary>The passcode is wrong, expired, or revoked. These can't be told apart, on purpose.</summary>
 		InvalidPasscode,
 		/// <summary>
-		/// The passcode is valid and allows a name for the headset. Ask for one with the option to skip, then redeem
+		/// The passcode is valid and allows a name for the device. Ask for one with the option to skip, then redeem
 		/// again with the name, or with a null name to skip. Nothing was created yet.
 		/// </summary>
 		DeviceNameRequested,
-		/// <summary>The passcode requires a name for the headset, and none was given. Ask for one, without the option to skip.</summary>
+		/// <summary>The passcode requires a name for the device, and none was given. Ask for one, without the option to skip.</summary>
 		DeviceNameRequired,
 		/// <summary>The name can't be used, for example because it's longer than 64 characters.</summary>
 		DeviceNameInvalid,
 		/// <summary>
-		/// A paired device in the organization already has this name, for example from another app on this headset.
+		/// A paired device in the organization already has this name, for example from another app.
 		/// DeviceName holds its name. Confirm with the person, then redeem again with joinExistingDevice to add this app to it.
 		/// </summary>
 		DeviceNameExists,
@@ -389,7 +389,7 @@ public static partial class Abxr
 	/// type is "text" | "pin" | "email"; error is empty on first request and may contain a previous failure message on retry.
 	/// The pairing prompt (StartPairing) uses the same handler, with type "pairingPasscode", then "pairingDeviceName"
 	/// (Skip allowed) or "pairingDeviceNameRequired" when the passcode allows naming, and "pairingDeviceJoin" when the name
-	/// is taken: domain carries that name, and submitting it adds this app to that headset.
+	/// is taken: domain carries that name, and submitting it adds this app to that device.
 	/// </summary>
 	public static Action<string, string, string, string> OnInputRequested //(type, prompt, domain, error)
 	{
@@ -441,7 +441,7 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Redeems a passcode from the app's own UI, with no prompt. Valid while Unpaired or while the prompt is open.
-	/// onComplete always fires, refused calls included. When the passcode allows naming the headset, the result is
+	/// onComplete always fires, refused calls included. When the passcode allows naming the device, the result is
 	/// DeviceNameRequested (offer a Skip) or DeviceNameRequired (no Skip): ask for a name, then call the overload that takes one.
 	/// </summary>
 	public static void RedeemPairingPasscode(string passcode, Action<PairingRedeemResult> onComplete)
@@ -453,7 +453,7 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Redeems a passcode with the person's answer to the name step. A null or blank deviceName skips naming. After
-	/// DeviceNameExists, confirm with the person, then call again with joinExistingDevice true to add this app to that headset.
+	/// DeviceNameExists, confirm with the person, then call again with joinExistingDevice true to add this app to that device.
 	/// </summary>
 	public static void RedeemPairingPasscode(string passcode, string deviceName, bool joinExistingDevice, Action<PairingRedeemResult> onComplete)
 	{
@@ -465,7 +465,7 @@ public static partial class Abxr
 	/// <summary>The last redeem's outcome, refused calls included, for a custom UI answering OnInputRequested. Default when none has run.</summary>
 	public static PairingRedeemResult GetLastPairingRedeemResult() => X?.Pairing?.LastRedeemResult ?? default;
 
-	/// <summary>The name of the headset this app is paired on, or null when it has none or the app isn't paired. Renames in the Portal arrive at the next session.</summary>
+	/// <summary>The name of the device this app is paired on, or null when it has none or the app isn't paired. Renames in the Portal arrive at the next session.</summary>
 	public static string GetPairedDeviceName() => X?.Pairing?.DeviceName;
 
 	/// <summary>
