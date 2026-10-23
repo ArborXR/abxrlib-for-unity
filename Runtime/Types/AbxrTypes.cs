@@ -337,7 +337,7 @@ namespace AbxrLib.Runtime.Types
         public long preciseTimestamp;
         public string name;
         public Dictionary<string, string> meta;
-        /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
+        /// <summary>Observer record id, left out of the request JSON (0 when nobody observed). See AbxrObserver.</summary>
         [JsonIgnore] internal long RecordId;
     }
 
@@ -348,7 +348,7 @@ namespace AbxrLib.Runtime.Types
         public long preciseTimestamp;
         public string name;
         public Dictionary<string, string> meta;
-        /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
+        /// <summary>Observer record id, left out of the request JSON (0 when nobody observed). See AbxrObserver.</summary>
         [JsonIgnore] internal long RecordId;
     }
 
@@ -360,7 +360,7 @@ namespace AbxrLib.Runtime.Types
         public string logLevel;
         public string text;
         public Dictionary<string, string> meta;
-        /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
+        /// <summary>Observer record id, left out of the request JSON (0 when nobody observed). See AbxrObserver.</summary>
         [JsonIgnore] internal long RecordId;
     }
 
@@ -380,7 +380,7 @@ namespace AbxrLib.Runtime.Types
         public string name;
         public List<Dictionary<string, string>> data;
         public string scope;
-        /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
+        /// <summary>Observer record id, left out of the request JSON (0 when nobody observed). See AbxrObserver.</summary>
         [JsonIgnore] internal long RecordId;
     }
     
