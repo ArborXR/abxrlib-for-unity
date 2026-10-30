@@ -239,6 +239,29 @@ public class SessionReplayerTests
     }
 
     [Test]
+    public void ASessionTheBackendKeepsFailing_IsPassedAfterThreeTries_SoTheNextOneUploads()
+    {
+        Sealed("s1", events: "first");
+        Sealed("s2", events: "second");
+
+        for (int run = 1; run < SessionReplayer.MaxFailedTriesPerLaunch; run++)
+        {
+            _host.SignInResults.Enqueue(Status(500));
+            Run();
+            _replayer.ResumeNow();
+        }
+        Assert.AreEqual(SessionReplayer.MaxFailedTriesPerLaunch - 1, _host.SignIns.Count, "Each try stops at the failing session.");
+
+        _host.SignInResults.Enqueue(Status(500));
+        _host.SignInResults.Enqueue(Token("t2"));
+        Run();
+
+        Assert.AreEqual("s2", _host.SignIns.Last().sessionId, "The last failed try moves on to the next session.");
+        Assert.AreEqual(1, _queue.PendingSessions, "s2 uploaded; s1 waits for the next launch.");
+        Assert.IsFalse(_replayer.ShouldRun(_host.Now + SessionReplayer.RetryAfterOfflineSeconds), "s1 isn't tried again this launch.");
+    }
+
+    [Test]
     public void RevokedInstance_RevokesThePairing()
     {
         Sealed("s1");

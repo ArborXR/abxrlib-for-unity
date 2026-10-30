@@ -31,17 +31,22 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
     /// first. It runs once the live session's device auth has succeeded, which proves the connection, and never touches
     /// the live session. Outcomes: 429 waits for Retry-After and carries on; a revoked instance revokes the pairing, which
     /// drops everything; 403 (suspended) stops and keeps everything; any other refusal skips the session this launch and
-    /// drops it after three launches; offline or 5xx stops until the next try.
+    /// drops it after three launches; offline or 5xx stops until the next try, and after three such tries a launch moves
+    /// on to the next session.
     /// </summary>
     internal sealed class SessionReplayer
     {
         /// <summary>How long to wait after a replay stopped because the device went offline.</summary>
         internal const float RetryAfterOfflineSeconds = 60f;
+        /// <summary>Tries a launch gives one session that fails without a refusal (5xx, timeout, offline) before moving past it.</summary>
+        internal const int MaxFailedTriesPerLaunch = 3;
 
         private readonly DurableRecordQueue _queue;
         private readonly IReplayHost _host;
         /// <summary>Sessions whose sign-in was refused this launch. They're tried again next launch.</summary>
         private readonly HashSet<string> _skippedThisLaunch = new HashSet<string>();
+        /// <summary>Tries this launch that ended offline or with a server error, per session.</summary>
+        private readonly Dictionary<string, int> _failedTries = new Dictionary<string, int>();
         private float _nextAttemptAt;
         private int _runGeneration;
 
@@ -139,9 +144,11 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                             keepGoing(false);
                             yield break;
                         case SignInKind.Suspended:
-                        case SignInKind.Offline:
                             _nextAttemptAt = _host.Now + RetryAfterOfflineSeconds;
                             keepGoing(false);
+                            yield break;
+                        case SignInKind.Offline:
+                            keepGoing(FailedTry(session));
                             yield break;
                         default: // Refused
                             _queue.MarkReplayFailed(session);
@@ -189,11 +196,29 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                         keepGoing(false);
                         yield break;
                     default:
-                        _nextAttemptAt = _host.Now + RetryAfterOfflineSeconds;
-                        keepGoing(false);
+                        keepGoing(FailedTry(session));
                         yield break;
                 }
             }
+        }
+
+        /// <summary>
+        /// A try that ended offline or with a server error. Waits before the next run, and after a few tries this launch
+        /// moves past the session (it's tried again next launch), so one session the backend keeps failing on doesn't hold
+        /// up the ones behind it. True when the run goes on to the next session.
+        /// </summary>
+        private bool FailedTry(StoredSession session)
+        {
+            _failedTries.TryGetValue(session.SessionId, out int tries);
+            _failedTries[session.SessionId] = ++tries;
+            if (tries < MaxFailedTriesPerLaunch)
+            {
+                _nextAttemptAt = _host.Now + RetryAfterOfflineSeconds;
+                return false;
+            }
+            Logcat.Warning($"Offline session {session.SessionId} failed to upload {tries} times. It's tried again next launch.");
+            _skippedThisLaunch.Add(session.SessionId);
+            return true;
         }
 
         private enum SignInKind { Success, RateLimited, Offline, Revoked, Suspended, Refused }
