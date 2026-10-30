@@ -234,15 +234,14 @@ void OnRecordCreated(AbxrObserver.Record record)
 
 void OnRecordsSent(AbxrObserver.SendResult result)
 {
-    // Sent or Failed (REST, with the HTTP status), HandedToService (the ArborXR client app sends it), or Dropped.
+    // Sent or Failed (with the HTTP status), or Dropped.
     Debug.Log($"{result.Status} {string.Join(",", result.RecordIds)} {result.HttpStatus} {result.Error}");
 }
 ```
 
 - Both events are raised on the main thread, in release builds too. With no handler attached, the SDK does no extra work.
 - A record that isn't kept says why in `DropReason`: `NotRecording` (unpaired, no pairing prompt open), `QueueFull`, or for storage `NotAuthenticated` or `NoUser`.
-- REST reports one result per batch. A failed batch is usually queued again, so a record can report `Failed` and later `Sent`; treat the latest result as its status. In this version, a batch that fails as the session ends (`EndSession`, or the app quitting) isn't queued again, and records lost after they were queued report `Dropped` with `SessionEnded` or `QueueFull`. A later version may keep unsent records past the session end, so don't treat session end as the point every record has its final result. The exception: records still queued when the SDK switches to the ArborXR client app at startup get no result.
-- On Android with the ArborXR client app, records report `HandedToService`: the client app sends them, and the SDK can't see the outcome.
+- REST reports one result per batch. A failed batch is usually queued again, so a record can report `Failed` and later `Sent`; treat the latest result as its status. In this version, a batch that fails as the session ends (`EndSession`, or the app quitting) isn't queued again, and records lost after they were queued report `Dropped` with `SessionEnded` or `QueueFull`. A later version may keep unsent records past the session end, so don't treat session end as the point every record has its final result. The exception: records sent through the Insights device service (`app.xrdi.client`, Android only, when it's installed) get no send result, because the service sends them itself. That includes records still queued when the SDK switches to it at startup.
 - Records never carry tokens or secrets.
 
 ---

@@ -57,8 +57,6 @@ public static class AbxrObserver
 		/// version may retry such a batch.
 		/// </summary>
 		Failed,
-		/// <summary>The record went to the ArborXR client app, which sends it. The SDK can't see whether that send succeeds.</summary>
-		HandedToService,
 		/// <summary>The record was queued but will never be sent. DropReason says why.</summary>
 		Dropped
 	}
@@ -243,13 +241,6 @@ public static class AbxrObserver
 			data != null ? new Dictionary<string, string>(data) : new Dictionary<string, string>(),
 			automatic, dropReason, DateTime.UtcNow);
 		Raise(handler, record, "OnRecordCreated");
-	}
-
-	/// <summary>Raises <see cref="OnRecordsSent"/> for one record.</summary>
-	internal static void Sent(long id, SendStatus status, int httpStatus = 0, string error = null, DropReason dropReason = DropReason.None)
-	{
-		if (id == 0 || OnRecordsSent == null) return;
-		Sent(new List<long> { id }, status, httpStatus, error, dropReason);
 	}
 
 	/// <summary>Raises <see cref="OnRecordsSent"/>. Skipped when the list is empty, which is what a batch made while nobody observed produces.</summary>
