@@ -26,8 +26,6 @@ namespace AbxrLib.Runtime.Services.Data
 
         public void ForceSend() => _getTransport()?.ForceSend();
 
-        public void ClearAllPending() => _getTransport()?.ClearAllPending();
-
         public void Add(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
         {
             name ??= "";

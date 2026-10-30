@@ -171,7 +171,7 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         AbxrObserver.OnRecordsSent += result =>
         {
             if (result.Status != AbxrObserver.SendStatus.Failed) return;
-            AbxrSubsystem.Instance.RestTransportForTesting.ClearAllPending();
+            AbxrSubsystem.Instance.RestTransportForTesting.ClearAllPending(AbxrObserver.DropReason.Cleared);
             cleared = true;
         };
         SimulateAuth();
@@ -186,7 +186,7 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
             "The failed batch stays queued until the handler clears it.");
         var last = ResultFor(id).Value;
         Assert.AreEqual(AbxrObserver.SendStatus.Dropped, last.Status, "Clearing it from inside the handler must still report it, after the handler returns.");
-        Assert.AreEqual(AbxrObserver.DropReason.SessionEnded, last.DropReason);
+        Assert.AreEqual(AbxrObserver.DropReason.Cleared, last.DropReason);
     }
 
     [UnityTest]

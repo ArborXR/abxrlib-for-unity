@@ -393,7 +393,7 @@ public class AbxrObserverTests
         public IEnumerator StorageDeleteCoroutine(Abxr.StorageScope scope, string name, Action<bool> onComplete) { yield break; }
         public void OnQuit() { }
         public void SealSession() { }
-        public void ClearAllPending(AbxrObserver.DropReason reason = AbxrObserver.DropReason.SessionEnded) { }
+        public void ClearAllPending(AbxrObserver.DropReason reason) { }
         public void SaveSignIn(SavedSignIn signIn) { }
         public Abxr.UploadStatus GetUploadStatus() => default;
         public List<EventPayload> GetPendingEventsForTesting() => new List<EventPayload>();

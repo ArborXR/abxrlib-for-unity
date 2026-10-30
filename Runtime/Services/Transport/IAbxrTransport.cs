@@ -75,7 +75,7 @@ namespace AbxrLib.Runtime.Services.Transport
         void SealSession();
 
         /// <summary>Deletes every queued session, the live one included, and reports their records dropped for reason (unpair, revoke, clear, ClearQueuedData). Service: no-op.</summary>
-        void ClearAllPending(AbxrObserver.DropReason reason = AbxrObserver.DropReason.SessionEnded);
+        void ClearAllPending(AbxrObserver.DropReason reason);
 
         /// <summary>Saves the live session's sign-in (no credentials) so the session can be signed in again later. Service: no-op.</summary>
         void SaveSignIn(SavedSignIn signIn);

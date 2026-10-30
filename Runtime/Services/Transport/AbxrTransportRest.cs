@@ -382,7 +382,7 @@ namespace AbxrLib.Runtime.Services.Transport
             RaiseUploadStatus(force: true);
         }
 
-        public void ClearAllPending(AbxrObserver.DropReason reason = AbxrObserver.DropReason.SessionEnded)
+        public void ClearAllPending(AbxrObserver.DropReason reason)
         {
             List<long> dropped;
             int pending;

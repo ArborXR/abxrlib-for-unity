@@ -233,7 +233,7 @@ namespace AbxrLib.Runtime.Services.Transport
             // No-op; the service owns its session.
         }
 
-        public void ClearAllPending(AbxrObserver.DropReason reason = AbxrObserver.DropReason.SessionEnded)
+        public void ClearAllPending(AbxrObserver.DropReason reason)
         {
             // No-op; service session is cleared on Unbind.
         }
