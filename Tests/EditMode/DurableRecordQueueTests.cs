@@ -235,6 +235,28 @@ public class DurableRecordQueueTests
     }
 
     [Test]
+    public void WhileWritesFail_RecordsHeldInMemoryAreCapped()
+    {
+        var q = new DurableRecordQueue(_root, () => _now, () => _retentionDays, () => _budget, maxBufferedWhileWriteFails: () => 3);
+        q.Load();
+        q.SaveSignIn(SignIn("s"));
+        // A full disk: nothing under the root can be written.
+        Directory.Delete(_root, true);
+        File.WriteAllText(_root, "not a folder");
+        try
+        {
+            Assert.IsTrue(q.Add("s", Event("a")));
+            q.Flush();
+            Assert.IsTrue(q.Add("s", Event("b")));
+            Assert.IsTrue(q.Add("s", Event("c")));
+
+            Assert.IsFalse(q.Add("s", Event("d")), "Over the cap the record is refused (QueueFull) instead of growing memory.");
+            Assert.AreEqual(3, q.PendingRecords);
+        }
+        finally { File.Delete(_root); }
+    }
+
+    [Test]
     public void Load_RecoversASummaryKilledMidRename()
     {
         var q = NewQueue();

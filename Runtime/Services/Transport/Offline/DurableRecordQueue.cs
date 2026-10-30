@@ -112,6 +112,9 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         private long _diskBytes;
         private bool _overBudget;
         private bool _warnedWriteFailure;
+        /// <summary>True while appends fail (a full disk), so records held in memory are capped like 3.0's lists.</summary>
+        private bool _writeFailing;
+        private readonly Func<int> _maxBufferedWhileWriteFails;
         private bool _warnedOverBudget;
 
         /// <summary>Raised when records are dropped without being sent: (session, record count, reason, observer ids of this run's records).</summary>
@@ -121,12 +124,14 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
 
         internal string Root => _root;
 
-        internal DurableRecordQueue(string root, Func<DateTime> utcNow = null, Func<int> retentionDays = null, Func<long> budgetBytes = null)
+        internal DurableRecordQueue(string root, Func<DateTime> utcNow = null, Func<int> retentionDays = null, Func<long> budgetBytes = null,
+            Func<int> maxBufferedWhileWriteFails = null)
         {
             _root = root ?? throw new ArgumentNullException(nameof(root));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _retentionDays = retentionDays ?? (() => Configuration.Instance.offlineRetentionDays);
             _budgetBytes = budgetBytes ?? (() => Configuration.Instance.offlineDiskBudgetMB * 1024L * 1024L);
+            _maxBufferedWhileWriteFails = maxBufferedWhileWriteFails ?? (() => Configuration.Instance.maximumCachedItems);
         }
 
         /// <summary>The default root, persistentDataPath/abxrlib/queue.</summary>
@@ -246,6 +251,9 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             }
             var session = LiveFor(sessionId);
             var file = FileOf(record.Kind);
+            // Records can't reach disk, so nothing reads them back to send either; hold no more than 3.0's queue did.
+            int max = _writeFailing ? _maxBufferedWhileWriteFails() : 0;
+            if (max > 0 && session.BufferedCounts[(int)file] >= max) return false;
             session.Buffers[(int)file].Append(ToLine(record)).Append('\n');
             session.BufferedCounts[(int)file]++;
             long observerId = record.ObserverId;
@@ -516,10 +524,12 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                     session.SummaryDirty = true;
                 }
                 _warnedWriteFailure = false;
+                _writeFailing = false;
             }
             catch (Exception ex)
             {
                 // Kept in memory; the next tick tries again.
+                _writeFailing = true;
                 if (!_warnedWriteFailure)
                 {
                     _warnedWriteFailure = true;
