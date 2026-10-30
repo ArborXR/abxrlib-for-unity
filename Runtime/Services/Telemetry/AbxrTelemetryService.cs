@@ -37,6 +37,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
 
         public void Start()
         {
+            if (_coroutines != null) return; // already running
             try
             {
                 _leftController  = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
