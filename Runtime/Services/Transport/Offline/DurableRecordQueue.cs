@@ -508,7 +508,9 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                     using (var fs = new FileStream(FilePath(session, f), FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
                     {
                         long before = fs.Length;
-                        try { fs.Write(bytes, 0, bytes.Length); }
+                        // Flushed here: FileStream buffers small writes, so a full disk would otherwise throw from Dispose,
+                        // past the truncate.
+                        try { fs.Write(bytes, 0, bytes.Length); fs.Flush(); }
                         catch
                         {
                             // The buffer is written again next tick: a partial write left behind would add lines no count
