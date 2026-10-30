@@ -149,6 +149,31 @@ public class DurableRecordQueueTests
     }
 
     [Test]
+    public void ASessionThatNeverSignedIn_IsDroppedWhenSealed_NotLeftWaiting()
+    {
+        var q = NewQueue();
+        q.Add("unpaired", Event("a"));
+
+        q.SealLive();
+
+        Assert.AreEqual(0, q.PendingSessions, "It can never be signed in again, so it isn't counted as waiting to upload.");
+        Assert.AreEqual(("unpaired", 1, AbxrObserver.DropReason.IdentityChanged), _dropped.Single());
+    }
+
+    [Test]
+    public void Load_DropsAKilledSessionThatNeverSignedIn()
+    {
+        var q = NewQueue();
+        q.Add("killed-early", Event("a"));
+        q.Flush();
+
+        var reloaded = NewQueue();
+
+        Assert.AreEqual(0, reloaded.PendingSessions);
+        Assert.AreEqual(AbxrObserver.DropReason.IdentityChanged, _dropped.Single().reason);
+    }
+
+    [Test]
     public void Load_SealsASessionTheAppWasKilledIn_AndKeepsItsRecords()
     {
         var q = NewQueue();
@@ -187,7 +212,8 @@ public class DurableRecordQueueTests
     {
         Directory.CreateDirectory(_root);
         File.WriteAllText(Path.Combine(_root, "s-old.json"),
-            "{\"sessionId\":\"old\",\"created\":\"2026-10-28T12:00:00Z\",\"records\":{\"acked\":0,\"count\":1,\"ackedCount\":0}}");
+            "{\"sessionId\":\"old\",\"created\":\"2026-10-28T12:00:00Z\",\"records\":{\"acked\":0,\"count\":1,\"ackedCount\":0}," +
+            "\"signIn\":{\"payload\":{\"sessionId\":\"old\"},\"appKey\":\"app-1\",\"orgKey\":\"org-1\",\"instanceKey\":\"\"}}");
         File.WriteAllText(Path.Combine(_root, "s-old.records.jsonl"), DurableRecordQueue.ToLine(Event("a")) + "\n");
 
         var q = NewQueue();

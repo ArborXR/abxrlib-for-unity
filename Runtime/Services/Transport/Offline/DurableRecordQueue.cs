@@ -204,6 +204,7 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             _sessions.Sort((a, b) => a.Summary.created.CompareTo(b.Summary.created));
             foreach (var s in _sessions) WriteSummaryIfDirty(s);
             DeleteFinished();
+            foreach (var s in _sessions.ToList()) DropIfNeverSignedIn(s);
             EnforceRetention();
             EnforceBudget();
         }
@@ -302,7 +303,20 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             WriteSummaryIfDirty(session);
             // Nothing left to send: there's nothing to replay either.
             if (session.Pending == 0) Delete(session);
+            else DropIfNeverSignedIn(session);
             return null;
+        }
+
+        /// <summary>
+        /// A session nothing signed in for (auth never started: unpaired with no prompt, or ended or killed first) can't
+        /// be signed in again, so it's dropped now rather than counted as waiting to upload. True when it was dropped.
+        /// </summary>
+        private bool DropIfNeverSignedIn(StoredSession session)
+        {
+            if (session.SignIn?.payload != null) return false;
+            Logcat.Info($"Dropped offline session {session.SessionId}: it never signed in, so it can't be signed in again.");
+            Drop(session, AbxrObserver.DropReason.IdentityChanged);
+            return true;
         }
 
         public List<long> ClearAll()
