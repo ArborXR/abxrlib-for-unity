@@ -223,6 +223,35 @@ public class DurableRecordQueueTests
     }
 
     [Test]
+    public void Load_DeletesASummaryWriteThatNeverFinished()
+    {
+        Directory.CreateDirectory(_root);
+        string tmp = Path.Combine(_root, "s-killed.json.tmp");
+        File.WriteAllText(tmp, "{\"sessionId\":");
+
+        NewQueue();
+
+        Assert.IsFalse(File.Exists(tmp));
+    }
+
+    [Test]
+    public void Summary_IsRewrittenInPlace_AsRecordsAreAcknowledged()
+    {
+        var q = NewQueue();
+        q.SaveSignIn(SignIn("s"));
+        q.Add("s", Event("a"));
+        q.Add("s", Event("b"));
+        q.SealLive();
+        var session = q.SealedSessions().Single();
+        var chunk = q.Peek(session, RecordStream.Data, 1);
+
+        q.Ack(chunk);
+
+        Assert.AreEqual(1, NewQueue().PendingRecords, "The replaced summary carries the new acknowledged offset.");
+        Assert.IsEmpty(Directory.GetFiles(_root, "*.tmp"));
+    }
+
+    [Test]
     public void Load_DeletesRecordFilesWithNoSummary()
     {
         Directory.CreateDirectory(_root);

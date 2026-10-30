@@ -190,6 +190,8 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                     foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
                         _diskBytes += FileLength(FilePath(session, f));
                 }
+                // A summary write the app was killed in the middle of.
+                foreach (var path in Directory.GetFiles(_root, SummaryPrefix + "*.json.tmp")) TryDelete(path);
                 foreach (var path in Directory.GetFiles(_root, SummaryPrefix + "*.jsonl"))
                 {
                     string name = Path.GetFileName(path);
@@ -595,12 +597,20 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             {
                 Directory.CreateDirectory(_root);
                 long before = FileLength(path);
-                File.WriteAllText(tmp, JsonConvert.SerializeObject(session.Summary));
+                // On disk before the rename, so a power cut can't leave an empty summary (Load would delete the session).
+                using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write))
+                {
+                    byte[] bytes = new UTF8Encoding(false).GetBytes(JsonConvert.SerializeObject(session.Summary));
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
                 if (!File.Exists(path)) File.Move(tmp, path);
                 else
                 {
+                    // A summary that can't be replaced stays stale, and a stale count can make Load delete the session, so
+                    // any failure falls back to delete and move.
                     try { File.Replace(tmp, path, null); }
-                    catch (PlatformNotSupportedException) { File.Delete(path); File.Move(tmp, path); }
+                    catch (Exception) { File.Delete(path); File.Move(tmp, path); }
                 }
                 _diskBytes += FileLength(path) - before;
                 session.SummaryDirty = false;
