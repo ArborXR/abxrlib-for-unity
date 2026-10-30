@@ -647,7 +647,8 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             }
             catch (Exception ex)
             {
-                TryDelete(tmp);
+                // With the summary already deleted by the fallback, the temp file is the only copy: Load recovers it.
+                if (File.Exists(path)) TryDelete(tmp);
                 if (!_warnedWriteFailure)
                 {
                     _warnedWriteFailure = true;
