@@ -240,10 +240,26 @@ void OnRecordsSent(AbxrObserver.SendResult result)
 ```
 
 - Both events are raised on the main thread, in release builds too. With no handler attached, the SDK does no extra work.
-- A record that isn't kept says why in `DropReason`: `NotRecording` (unpaired, no pairing prompt open), `QueueFull`, or for storage `NotAuthenticated` or `NoUser`.
-- REST reports one result per batch. A failed batch is usually queued again, so a record can report `Failed` and later `Sent`; treat the latest result as its status. A batch that fails as the session ends (`EndSession`, or the app quitting) isn't queued again. Records lost after they were queued report `Dropped` with `SessionEnded` or `QueueFull`. The exception: records still queued when the SDK switches to the ArborXR client app at startup get no result.
+- A record that isn't kept says why in `DropReason`: `NotRecording` (unpaired, no pairing prompt open), `QueueFull` (the offline queue is at its disk budget, or on WebGL a queue is full), or for storage `NotAuthenticated` or `NoUser`.
+- REST reports one result per batch. A batch that fails (offline, a timeout, a server error) stays queued, so a record can report `Failed` and later `Sent`; treat the latest result as its status. A record the backend refuses is dropped on its own as `Rejected`, and the rest of its batch is sent.
+- Ending a session (`EndSession`, `StartNewSession`, or the app quitting) keeps what it didn't send: it waits on disk and uploads as that session once the device is online. Records lost after they were queued report `Dropped` with `Revoked`, `Cleared` (`ClearPairing` or `Abxr.ClearQueuedData()`), `Retention`, `Rejected` or `IdentityChanged`. Observer ids last one app run, so records an earlier run queued get no result here; watch `Abxr.OnUploadStatusChanged` for those. On WebGL nothing is kept: ending a session drops its records as `SessionEnded`, and a batch that fails as the session ends isn't queued again. The exception: records still queued when the SDK switches to the ArborXR client app at startup get no result.
 - On Android with the ArborXR client app, records report `HandedToService`: the client app sends them, and the SDK can't see the outcome.
 - Records never carry tokens or secrets.
+
+### Offline Capture
+
+On headsets and desktop, the SDK keeps what it records on disk until the backend accepts it, grouped by session. A session recorded offline, or ended before it could send everything, is signed in again as itself and uploaded once the device is online. WebGL stays online-only.
+
+- **Ending a session keeps its data.** `EndSession`, `StartNewSession` and quitting close the session; its records upload later. Only a revoked or cleared pairing, or `Abxr.ClearQueuedData()`, deletes queued data. A session recorded as a different app, organization or paired instance than the one online now is dropped instead of uploaded.
+- **Signing in offline.** When the org's last config asked for an email or text sign-in, the person can sign in offline: `OnAuthCompleted(true)` fires, the session records, and the answer is sent once the device is online (without a second `OnAuthCompleted`). A PIN needs a connection: offline, `OnAuthCompleted(false, "A connection is needed to sign in with a PIN.")` fires and the PIN pad appears once the device is online.
+- **Automatic telemetry** follows both `enableAutomaticTelemetry` and the org's setting from its last config. On a headset's first launch, it waits for the config.
+- **Limits.** `Offline Retention Days` (default 30, up to 90) and `Offline Disk Budget MB` (default 50) in the AbxrLib config. Over the budget, the oldest telemetry goes first, then the oldest sessions.
+- **Upload progress.** `Abxr.GetUploadStatus()`, `Abxr.GetPendingUploadCount()` and `Abxr.OnUploadStatusChanged` say what's waiting, for example to tell someone it's safe to turn the headset off.
+
+```csharp
+Abxr.OnUploadStatusChanged += status =>
+    uploadLabel.text = status.AllUploaded ? "All data uploaded" : $"{status.PendingRecords} records waiting to upload";
+```
 
 ---
 
