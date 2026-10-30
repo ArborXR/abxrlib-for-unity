@@ -56,7 +56,7 @@ Use **app token** and **org token** for authentication. In **Analytics for XR �
 
 ### 2.3 Optional: Android + ArborInsightsClient
 
-The **Enable ArborInsightsClient** setting (Analytics for XR → Configuration → Advanced, on by default) routes authentication and data through the device-side ArborInsightsClient service where that service is present, and falls back to REST everywhere else — so the setting is safe to leave on. The ArborInsightsClient APK and its client AAR are **not yet generally available**; there is nothing to install today, and this section will gain setup steps when they ship.
+The **Enable ArborInsightsClient** setting (Analytics for XR → Configuration → Advanced, on by default) routes authentication and data through the device-side ArborInsightsClient service where that service is present, and falls back to REST everywhere else — so the setting is safe to leave on. The setting is **deprecated**: the ArborInsightsClient service was never released and is being removed, and from 3.1 the setting does nothing. There is nothing to install; leave it as it is.
 
 ---
 
