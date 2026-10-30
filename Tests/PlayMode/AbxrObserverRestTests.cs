@@ -162,6 +162,33 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator Batch_RequestRefused403_KeepsTheRecordsQueued_AndReportsFailed() => RequestRefusedKeepsRecords(403);
+
+    [UnityTest]
+    public IEnumerator Batch_RequestRefused404_KeepsTheRecordsQueued_AndReportsFailed() => RequestRefusedKeepsRecords(404);
+
+    /// <summary>A refusal of the request itself (suspended, wrong URL) must not split the chunk and drop every record.</summary>
+    private IEnumerator RequestRefusedKeepsRecords(int status)
+    {
+        _server.StatusCode = status;
+        ModifyConfig("sendNextBatchWaitSeconds", 60);
+        SimulateAuth();
+        foreach (var name in new[] { "a", "b", "c" }) Abxr.Event(name, null, sendTelemetry: false);
+        AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
+
+        yield return WaitFor(() => ResultFor(Single("a").Id).HasValue, 5f);
+
+        foreach (var name in new[] { "a", "b", "c" })
+        {
+            var result = ResultFor(Single(name).Id).Value;
+            Assert.AreEqual(AbxrObserver.SendStatus.Failed, result.Status, name);
+            Assert.AreEqual(status, result.HttpStatus, name);
+        }
+        Assert.AreEqual(1, _server.Bodies(DataPath).Count(), "One request: a refused request isn't split.");
+        CollectionAssert.AreEquivalent(new[] { "a", "b", "c" }, AbxrSubsystem.Instance.GetPendingEventsForTesting().Select(e => e.name));
+    }
+
+    [UnityTest]
     public IEnumerator Batch_Failed_HandlerThatClearsTheQueue_DoesNotCarryTheBatchIntoTheNextSession()
     {
         _server.StatusCode = 503;

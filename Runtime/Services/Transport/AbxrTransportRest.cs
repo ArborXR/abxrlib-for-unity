@@ -22,7 +22,7 @@ namespace AbxrLib.Runtime.Services.Transport
     {
         /// <summary>The backend answered for every record: accepted, or refused one by one. Acknowledge the chunk.</summary>
         Done,
-        /// <summary>No answer after the retries (offline, timeout, 408, 5xx). Leave it queued for later.</summary>
+        /// <summary>No answer after the retries (offline, timeout, 408, 5xx), or the request itself was refused (403, 404, ...). Leave it queued for later.</summary>
         Retry,
         /// <summary>429: wait RetryAfterSeconds.</summary>
         RateLimited,
@@ -661,9 +661,10 @@ namespace AbxrLib.Runtime.Services.Transport
 
         /// <summary>
         /// Uploads records signed with token and secret, and reports each record's result to the observer. Offline, a
-        /// timeout, 408 or 5xx retries a few times and then gives up (Retry). 429 and 401 return at once. Any other 4xx
-        /// splits the records in halves until the backend's refusal is down to single records, which are dropped as
-        /// Rejected, so one bad record can't hold up the others or come back forever.
+        /// timeout, 408 or 5xx retries a few times and then gives up (Retry). 429 and 401 return at once. 400, 413 and 422
+        /// split the records in halves until the backend's refusal is down to single records, which are dropped as
+        /// Rejected, so one bad record can't hold up the others or come back forever. Any other 4xx refuses the request,
+        /// not a record, so it returns Retry and the records stay queued.
         /// </summary>
         internal IEnumerator Upload(RecordStream stream, List<QueuedRecord> records, string token, string secret, Func<bool> stillValid, Action<ChunkResult> done)
         {
@@ -732,7 +733,20 @@ namespace AbxrLib.Runtime.Services.Transport
                     done(new ChunkResult(ChunkOutcome.Unauthorized));
                     yield break;
                 }
+                // Only 400, 413 and 422 say something in the body is wrong. Any other refusal (403 suspended, 404 wrong URL,
+                // ...) refuses the request itself: splitting would drop every record, so the chunk stays queued instead.
+                bool bodyRefused = status == 400 || status == 413 || status == 422;
                 bool transient = result == UnityWebRequest.Result.ConnectionError || status == 0 || status == 408 || status >= 500;
+                if (!bodyRefused && !transient)
+                {
+                    if (valid)
+                    {
+                        Logcat.Warning($"{kind} POST was refused ({status}: {error}). The records stay queued.");
+                        ReportSent(QueuedRecord.ObserverIds(records), false, status, error);
+                    }
+                    done(new ChunkResult(valid ? ChunkOutcome.Retry : ChunkOutcome.Cancelled));
+                    yield break;
+                }
                 if (transient)
                 {
                     if (retries < maxRetries && valid)
@@ -750,7 +764,7 @@ namespace AbxrLib.Runtime.Services.Transport
                     yield break;
                 }
 
-                // Refused (400, 403, 413, 422, ...): retrying the same body gets the same answer.
+                // Body refused (400, 413, 422): retrying the same body gets the same answer.
                 if (records.Count == 1)
                 {
                     // One error per chunk, which release builds keep; the chunk's other refusals go to debug.
