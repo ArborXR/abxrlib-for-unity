@@ -262,6 +262,23 @@ public class SessionReplayerTests
     }
 
     [Test]
+    public void NoConnection_IsNotAFailedTry_SoTheSessionUploadsOnceOnline()
+    {
+        Sealed("s1");
+        for (int run = 0; run < SessionReplayer.MaxFailedTriesPerLaunch + 2; run++)
+        {
+            _host.SignInResults.Enqueue(new AuthTransportResult(false, null, false, 0, networkError: true));
+            Run();
+            _replayer.ResumeNow();
+        }
+
+        _host.SignInResults.Enqueue(Token("t1"));
+        Run();
+
+        Assert.AreEqual(0, _queue.PendingSessions, "A wifi drop doesn't park the session until the next launch.");
+    }
+
+    [Test]
     public void RevokedInstance_RevokesThePairing()
     {
         Sealed("s1");

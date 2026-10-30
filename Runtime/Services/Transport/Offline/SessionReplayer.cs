@@ -31,14 +31,14 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
     /// first. It runs once the live session's device auth has succeeded, which proves the connection, and never touches
     /// the live session. Outcomes: 429 waits for Retry-After and carries on; a revoked instance revokes the pairing, which
     /// drops everything; 403 (suspended) stops and keeps everything; any other refusal skips the session this launch and
-    /// drops it after three launches; offline or 5xx stops until the next try, and after three such tries a launch moves
+    /// drops it after three launches; offline or 5xx stops until the next try, and after three 5xx tries a launch moves
     /// on to the next session.
     /// </summary>
     internal sealed class SessionReplayer
     {
         /// <summary>How long to wait after a replay stopped because the device went offline.</summary>
         internal const float RetryAfterOfflineSeconds = 60f;
-        /// <summary>Tries a launch gives one session that fails without a refusal (5xx, timeout, offline) before moving past it.</summary>
+        /// <summary>Tries a launch gives one session the backend fails on (5xx, timeout) before moving past it. Having no connection doesn't count.</summary>
         internal const int MaxFailedTriesPerLaunch = 3;
 
         private readonly DurableRecordQueue _queue;
@@ -147,6 +147,11 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                             _nextAttemptAt = _host.Now + RetryAfterOfflineSeconds;
                             keepGoing(false);
                             yield break;
+                        case SignInKind.NoConnection:
+                            // Losing the connection says nothing about this session, so it isn't a failed try.
+                            _nextAttemptAt = _host.Now + RetryAfterOfflineSeconds;
+                            keepGoing(false);
+                            yield break;
                         case SignInKind.Offline:
                             keepGoing(FailedTry(session));
                             yield break;
@@ -195,6 +200,10 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                     case ChunkOutcome.Cancelled:
                         keepGoing(false);
                         yield break;
+                    case ChunkOutcome.NoConnection:
+                        _nextAttemptAt = _host.Now + RetryAfterOfflineSeconds;
+                        keepGoing(false);
+                        yield break;
                     default:
                         keepGoing(FailedTry(session));
                         yield break;
@@ -203,7 +212,7 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         }
 
         /// <summary>
-        /// A try that ended offline or with a server error. Waits before the next run, and after a few tries this launch
+        /// A try that ended with a server error. Waits before the next run, and after a few tries this launch
         /// moves past the session (it's tried again next launch), so one session the backend keeps failing on doesn't hold
         /// up the ones behind it. True when the run goes on to the next session.
         /// </summary>
@@ -221,7 +230,8 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             return true;
         }
 
-        private enum SignInKind { Success, RateLimited, Offline, Revoked, Suspended, Refused }
+        /// <summary>Offline: the backend failed (408, 5xx). NoConnection: no answer at all.</summary>
+        private enum SignInKind { Success, RateLimited, Offline, NoConnection, Revoked, Suspended, Refused }
 
         private struct SignInOutcome
         {
@@ -268,7 +278,12 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                     done(new SignInOutcome { Kind = SignInKind.RateLimited, RetryAfterSeconds = result.RetryAfterSeconds > 0 ? result.RetryAfterSeconds : 60 });
                     yield break;
                 }
-                if (result.NetworkError || result.StatusCode == 0 || result.StatusCode == 408 || result.StatusCode >= 500)
+                if (result.NetworkError || result.StatusCode == 0)
+                {
+                    done(new SignInOutcome { Kind = SignInKind.NoConnection });
+                    yield break;
+                }
+                if (result.StatusCode == 408 || result.StatusCode >= 500)
                 {
                     done(new SignInOutcome { Kind = SignInKind.Offline });
                     yield break;

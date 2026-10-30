@@ -22,8 +22,10 @@ namespace AbxrLib.Runtime.Services.Transport
     {
         /// <summary>The backend answered for every record: accepted, or refused one by one. Acknowledge the chunk.</summary>
         Done,
-        /// <summary>No answer after the retries (offline, timeout, 408, 5xx), or the request itself was refused (403, 404, ...). Leave it queued for later.</summary>
+        /// <summary>The backend failed after the retries (timeout, 408, 5xx), or refused the request itself (403, 404, ...). Leave it queued for later.</summary>
         Retry,
+        /// <summary>No answer at all after the retries: the device is offline. Leave it queued for later.</summary>
+        NoConnection,
         /// <summary>429: wait RetryAfterSeconds.</summary>
         RateLimited,
         /// <summary>401: the token no longer works.</summary>
@@ -698,6 +700,7 @@ namespace AbxrLib.Runtime.Services.Transport
                     SetNextSend(stream, Time.time + result.RetryAfterSeconds);
                     break;
                 case ChunkOutcome.Retry:
+                case ChunkOutcome.NoConnection:
                     // Waits sendNextBatchWaitSeconds (set when this send started) instead of resending as records arrive.
                     _backingOff[(int)stream] = true;
                     break;
@@ -824,7 +827,8 @@ namespace AbxrLib.Runtime.Services.Transport
                         Logcat.Warning($"{kind} POST failed after {retries + 1} attempts ({(status > 0 ? $"HTTP {status}" : error)}). The records stay queued.");
                         ReportSent(QueuedRecord.ObserverIds(records), false, status, error);
                     }
-                    done(new ChunkResult(valid ? ChunkOutcome.Retry : ChunkOutcome.Cancelled));
+                    bool noConnection = result == UnityWebRequest.Result.ConnectionError || status == 0;
+                    done(new ChunkResult(!valid ? ChunkOutcome.Cancelled : noConnection ? ChunkOutcome.NoConnection : ChunkOutcome.Retry));
                     yield break;
                 }
 
