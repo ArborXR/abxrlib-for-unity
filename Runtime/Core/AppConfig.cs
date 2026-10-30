@@ -104,6 +104,12 @@ namespace AbxrLib.Runtime.Core
         public int maximumCachedItems = 1024;
         public bool retainLocalAfterSent;
 
+        [Header("Offline")]
+        [Tooltip("Days a session recorded offline is kept on the device waiting to upload (1 to 90). Older sessions are deleted.")]
+        public int offlineRetentionDays = 30;
+        [Tooltip("Disk space the offline queue may use, in MB. Over it, the oldest telemetry is deleted first, then the oldest sessions.")]
+        public int offlineDiskBudgetMB = 50;
+
         [Tooltip("When enabled, the app will use the ArborInsightsClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used. Set in the Unity asset only; not overridden by GET /v1/storage/config.")]
         public bool enableArborInsightsClient = true;
 
@@ -151,6 +157,8 @@ namespace AbxrLib.Runtime.Core
             ClampInt(nameof(storageEntriesPerSendAttempt), ref storageEntriesPerSendAttempt, 1, 1000, 16);
             ClampInt(nameof(pruneSentItemsOlderThanHours), ref pruneSentItemsOlderThanHours, 0, 8760, 12);
             ClampInt(nameof(maximumCachedItems), ref maximumCachedItems, 10, 10000, 1024);
+            ClampInt(nameof(offlineRetentionDays), ref offlineRetentionDays, 1, 90, 30);
+            ClampInt(nameof(offlineDiskBudgetMB), ref offlineDiskBudgetMB, 5, 2048, 50);
             ClampInt(nameof(maxDictionarySize), ref maxDictionarySize, 5, 1000, 50);
             ClampFloat(nameof(positionTrackingPeriodSeconds), ref positionTrackingPeriodSeconds, 0.1f, 60f, 1f);
             ClampFloat(nameof(frameRateTrackingPeriodSeconds), ref frameRateTrackingPeriodSeconds, 0.1f, 60f, 0.5f);

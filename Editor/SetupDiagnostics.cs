@@ -112,6 +112,8 @@ namespace AbxrLib.Editor
             new ReportedField("pruneSentItemsOlderThanHours", c => c.pruneSentItemsOlderThanHours),
             new ReportedField("maximumCachedItems", c => c.maximumCachedItems),
             new ReportedField("retainLocalAfterSent", c => c.retainLocalAfterSent),
+            new ReportedField("offlineRetentionDays", c => c.offlineRetentionDays),
+            new ReportedField("offlineDiskBudgetMB", c => c.offlineDiskBudgetMB),
             new ReportedField("enableArborInsightsClient", c => c.enableArborInsightsClient),
             new ReportedField("enableArborMdmClient", c => c.enableArborMdmClient),
             new ReportedField("enableLearnerLauncherMode", c => c.enableLearnerLauncherMode),

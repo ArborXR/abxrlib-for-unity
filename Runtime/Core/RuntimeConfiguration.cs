@@ -143,6 +143,8 @@ namespace AbxrLib.Runtime.Core
         public int pruneSentItemsOlderThanHours = 12;
         public int maximumCachedItems = 1024;
         public bool retainLocalAfterSent;
+        public int offlineRetentionDays = 30;
+        public int offlineDiskBudgetMB = 50;
         public bool enableArborInsightsClient = true;
         public bool enableArborMdmClient = true;
         public bool enableLearnerLauncherMode = false;
@@ -191,6 +193,8 @@ namespace AbxrLib.Runtime.Core
             ClampInt(ref storageEntriesPerSendAttempt, 1, 1000, 16);
             ClampInt(ref pruneSentItemsOlderThanHours, 0, 8760, 12);
             ClampInt(ref maximumCachedItems, 10, 10000, 1024);
+            ClampInt(ref offlineRetentionDays, 1, 90, 30);
+            ClampInt(ref offlineDiskBudgetMB, 5, 2048, 50);
             ClampInt(ref maxDictionarySize, 5, 1000, 50);
             ClampFloat(ref positionTrackingPeriodSeconds, 0.1f, 60f, 1f);
             ClampFloat(ref frameRateTrackingPeriodSeconds, 0.1f, 60f, 0.5f);
@@ -261,6 +265,8 @@ namespace AbxrLib.Runtime.Core
             c.pruneSentItemsOlderThanHours = a.pruneSentItemsOlderThanHours;
             c.maximumCachedItems = a.maximumCachedItems;
             c.retainLocalAfterSent = a.retainLocalAfterSent;
+            c.offlineRetentionDays = a.offlineRetentionDays;
+            c.offlineDiskBudgetMB = a.offlineDiskBudgetMB;
             c.enableArborInsightsClient = a.enableArborInsightsClient;
             c.enableArborMdmClient = a.enableArborMdmClient;
             c.enableLearnerLauncherMode = a.enableLearnerLauncherMode;
