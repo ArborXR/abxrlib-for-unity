@@ -164,7 +164,7 @@ namespace AbxrLib.Runtime.Services.Pairing
                     : Failure(Abxr.PairingRedeemError.Unavailable);
             }
             if (status == 400) return Failure(Abxr.PairingRedeemError.InvalidPasscode);
-            if (status == 429) return RateLimited(ParseRetryAfter(response.RetryAfter, nowUtc));
+            if (status == 429) return RateLimited(Utils.ParseRetryAfter(response.RetryAfter, nowUtc, DefaultRetryAfterSeconds));
             if (status == 408 || status >= 500) return Failure(Abxr.PairingRedeemError.Unavailable);
             if (status == 409 || status == 422)
             {
@@ -206,21 +206,6 @@ namespace AbxrLib.Runtime.Services.Pairing
         internal static Abxr.PairingRedeemResult Refused(string reason) =>
             new Abxr.PairingRedeemResult(false, Abxr.PairingRedeemError.InvalidState, 0, reason);
 
-        /// <summary>Retry-After as delta-seconds or an HTTP date, clamped to [1, 3600].</summary>
-        internal static int ParseRetryAfter(string header, DateTime nowUtc)
-        {
-            if (!string.IsNullOrWhiteSpace(header))
-            {
-                string value = header.Trim();
-                if (int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int seconds))
-                    return Clamp(seconds);
-                if (DateTime.TryParseExact(value, "r", CultureInfo.InvariantCulture,
-                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out DateTime retryAt))
-                    return Clamp((int)Math.Ceiling((retryAt - nowUtc).TotalSeconds));
-            }
-            return DefaultRetryAfterSeconds;
-        }
-
         /// <summary>The server's error text, for logs only. The person sees the default copy.</summary>
         internal static string ServerError(string body) => ReadError(body)?.Error;
 
@@ -249,6 +234,5 @@ namespace AbxrLib.Runtime.Services.Pairing
             return true;
         }
 
-        private static int Clamp(int seconds) => Math.Min(Math.Max(seconds, 1), MaxRetryAfterSeconds);
     }
 }

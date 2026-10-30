@@ -624,6 +624,32 @@ namespace AbxrLib.Runtime.Core
             return "0.0.0.0";
         }
     
+        /// <summary>Retry-After as delta-seconds or an HTTP date, clamped to [1, 3600]. defaultSeconds when missing or unreadable.</summary>
+        internal static int ParseRetryAfter(string header, DateTime nowUtc, int defaultSeconds = 60)
+        {
+            if (!string.IsNullOrWhiteSpace(header))
+            {
+                string value = header.Trim();
+                if (int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int seconds))
+                    return ClampRetryAfter(seconds);
+                DateTime? retryAt = ParseHttpDate(value);
+                if (retryAt.HasValue)
+                    return ClampRetryAfter((int)Math.Ceiling((retryAt.Value - nowUtc).TotalSeconds));
+            }
+            return defaultSeconds;
+        }
+
+        /// <summary>An HTTP date (RFC 1123, as in Date and Retry-After) in UTC, or null.</summary>
+        internal static DateTime? ParseHttpDate(string header)
+        {
+            if (string.IsNullOrWhiteSpace(header)) return null;
+            return DateTime.TryParseExact(header.Trim(), "r", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out DateTime value)
+                ? value : (DateTime?)null;
+        }
+
+        private static int ClampRetryAfter(int seconds) => Math.Min(Math.Max(seconds, 1), 3600);
+
         public static void BuildRequest(UnityWebRequest request, string json)
         {
             byte[] bodyRaw = Encoding.UTF8.GetBytes(json);

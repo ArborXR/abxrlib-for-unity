@@ -3,6 +3,7 @@
 // Retry-After, and the request.
 using System;
 using System.Linq;
+using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Pairing;
 using NUnit.Framework;
 
@@ -216,13 +217,13 @@ public class PairingOutcomesTests
     [TestCase("", 60)]
     [TestCase(null, 60)]
     public void ParseRetryAfter_ReadsDeltaSeconds(string header, int expected) =>
-        Assert.AreEqual(expected, PairingOutcomes.ParseRetryAfter(header, Now));
+        Assert.AreEqual(expected, Utils.ParseRetryAfter(header, Now));
 
     [Test]
     public void ParseRetryAfter_ReadsAnHttpDate()
     {
-        Assert.AreEqual(90, PairingOutcomes.ParseRetryAfter(Now.AddSeconds(90).ToString("r"), Now));
-        Assert.AreEqual(1, PairingOutcomes.ParseRetryAfter(Now.AddSeconds(-30).ToString("r"), Now));
+        Assert.AreEqual(90, Utils.ParseRetryAfter(Now.AddSeconds(90).ToString("r"), Now));
+        Assert.AreEqual(1, Utils.ParseRetryAfter(Now.AddSeconds(-30).ToString("r"), Now));
     }
 
     // ── Request ───────────────────────────────────────────────────
