@@ -80,8 +80,8 @@ namespace AbxrLib.Runtime.Services.Transport
         private int _clearGeneration;
         /// <summary>The session a live chunk is out for, so a replay doesn't send the same records at the same time.</summary>
         private string _inFlightSessionId;
-        /// <summary>The streams a live chunk is out for, so the quit/EndSession flush doesn't send those records a second time.</summary>
-        private readonly bool[] _liveInFlight = new bool[2];
+        /// <summary>The live chunk out for each stream, so the quit/EndSession flush doesn't send those records a second time.</summary>
+        private readonly RecordChunk[] _liveInFlight = new RecordChunk[2];
         /// <summary>Set after a live 401 asks auth for a fresh token, so a second 401 waits instead of asking again.</summary>
         private bool _liveReSignRequested;
         private int _uploadedThisRun;
@@ -433,13 +433,20 @@ namespace AbxrLib.Runtime.Services.Transport
 #endif
 
         /// <summary>WebGL quit flush (see <see cref="OnQuit"/>). Signs each chunk with the still-valid session token and lets the browser finish the request. One attempt, no re-queue: a retry or a re-queued chunk would go out after this session's auth is cleared.</summary>
-        private void SendPendingWithoutWaiting()
+        internal void SendPendingWithoutWaiting()
         {
             if (!TryGetLiveToken(out string token, out string secret)) return;
             foreach (var stream in new[] { RecordStream.Data, RecordStream.Storage })
             {
-                // A chunk already out holds the oldest records: sending from the acked offset would send them again.
-                if (IsLiveInFlight(stream)) continue;
+                var inFlight = _liveInFlight[(int)stream];
+                if (inFlight != null)
+                {
+                    // A chunk already out holds the oldest records. In memory, the session's records are dropped as soon as
+                    // this returns, so send everything else now; on disk, the rest is sealed and replayed.
+                    if (_queue.IsDurable) continue;
+                    SendAllButInFlight(stream, inFlight, token, secret);
+                    continue;
+                }
                 while (true)
                 {
                     RecordChunk chunk;
@@ -451,6 +458,26 @@ namespace AbxrLib.Runtime.Services.Transport
                     }
                     PostWithoutWaiting(chunk, token, secret);
                 }
+            }
+        }
+
+        private void SendAllButInFlight(RecordStream stream, RecordChunk inFlight, string token, string secret)
+        {
+            var rest = new List<QueuedRecord>();
+            lock (_lock)
+            {
+                var all = _queue.PeekLive(stream, int.MaxValue);
+                if (all == null) return;
+                var sending = new HashSet<QueuedRecord>(inFlight.Records);
+                rest.AddRange(all.Records.Where(r => !sending.Contains(r)));
+            }
+            int size = ChunkSize(stream);
+            for (int i = 0; i < rest.Count; i += size)
+            {
+                var chunk = new RecordChunk { SessionId = inFlight.SessionId, Stream = stream };
+                chunk.Records.AddRange(rest.GetRange(i, Math.Min(size, rest.Count - i)));
+                lock (_lock) { _queue.Ack(chunk); }
+                PostWithoutWaiting(chunk, token, secret);
             }
         }
 
@@ -628,7 +655,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
             int generation = _clearGeneration;
             _inFlightSessionId = chunk.SessionId;
-            _liveInFlight[(int)stream] = true;
+            _liveInFlight[(int)stream] = chunk;
             ChunkResult result = default;
             // The token is the one the chunk's session signed in with. It stays valid after the session ends, so a chunk
             // that was out when the session was sealed still finishes as that session.
@@ -639,7 +666,7 @@ namespace AbxrLib.Runtime.Services.Transport
             finally
             {
                 _inFlightSessionId = null;
-                _liveInFlight[(int)stream] = false;
+                _liveInFlight[(int)stream] = null;
             }
 
             switch (result.Outcome)
@@ -671,7 +698,7 @@ namespace AbxrLib.Runtime.Services.Transport
             }
         }
 
-        private bool IsLiveInFlight(RecordStream stream) => _liveInFlight[(int)stream];
+        private bool IsLiveInFlight(RecordStream stream) => _liveInFlight[(int)stream] != null;
 
         private void SetNextSend(RecordStream stream, float at)
         {

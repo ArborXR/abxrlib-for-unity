@@ -259,33 +259,22 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             if (max <= 0 || PendingLive(stream) == 0) return null;
             var chunk = new RecordChunk { Stream = stream };
-            var counts = new int[4];
             foreach (var list in stream == RecordStream.Storage ? new[] { _storage } : new[] { _events, _logs, _telemetry })
-            {
                 for (int i = 0; i < list.Count && chunk.Records.Count < max; i++)
-                {
                     chunk.Records.Add(list[i]);
-                    counts[(int)list[i].Kind]++;
-                }
-            }
-            chunk.End = counts;
             return chunk;
         }
 
         public void Ack(RecordChunk chunk)
         {
-            if (!(chunk?.End is int[] counts)) return;
-            // The chunk is the front of each list unless the lists were cleared since it was read; check before removing.
-            foreach (QueuedKind kind in Enum.GetValues(typeof(QueuedKind)))
-            {
-                var (list, _) = ListFor(kind);
-                int n = Math.Min(counts[(int)kind], list.Count);
-                int matched = 0;
-                for (int i = 0; i < n; i++)
-                    if (chunk.Records.Contains(list[i])) matched++;
-                    else break;
-                list.RemoveRange(0, matched);
-            }
+            if (chunk == null || chunk.Records.Count == 0) return;
+            // Removes the chunk's own records wherever they are: usually the front of each list, but the WebGL quit flush
+            // acknowledges what's behind a chunk still out, and a clear may have emptied the lists since it was read.
+            var acked = new HashSet<QueuedRecord>(chunk.Records);
+            _events.RemoveAll(acked.Contains);
+            _logs.RemoveAll(acked.Contains);
+            _telemetry.RemoveAll(acked.Contains);
+            _storage.RemoveAll(acked.Contains);
         }
 
         public void Flush() { }

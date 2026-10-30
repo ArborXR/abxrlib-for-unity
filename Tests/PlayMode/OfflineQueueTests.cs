@@ -139,6 +139,37 @@ public class OfflineQueueTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator InMemory_QuitFlushWhileAChunkIsOut_SendsEverythingBehindIt_Once()
+    {
+        // WebGL's queue: the session's records are dropped as soon as the quit flush returns, so it can't leave the rest
+        // of a stream for later the way the disk queue does.
+        ModifyConfig("dataEntriesPerSendAttempt", 2);
+        SimulateAuth();
+        var transport = new AbxrTransportRest(AbxrSubsystem.Instance.AuthServiceForTesting, AbxrSubsystem.Instance, new MemoryRecordQueue());
+        try
+        {
+            var names = new[] { "m1", "m2", "m3", "m4", "m5" };
+            foreach (var name in names) transport.AddEvent(name, new Dictionary<string, string>());
+            _server.HoldResponses = true;
+            transport.ForceSend();
+            yield return WaitFor(() => _server.Bodies(DataPath).Any(b => b.Contains("\"m1\"")), 5f);
+
+            transport.SendPendingWithoutWaiting();
+            transport.SealSession();
+            _server.HoldResponses = false;
+            yield return WaitFor(() => names.All(n => _server.Bodies(DataPath).Any(b => b.Contains("\"" + n + "\""))), 5f);
+
+            foreach (var name in names)
+                Assert.AreEqual(1, _server.Bodies(DataPath).Count(b => b.Contains("\"" + name + "\"")), name + " reached the backend once.");
+        }
+        finally
+        {
+            _server.HoldResponses = false;
+            transport.Stop();
+        }
+    }
+
+    [UnityTest]
     public IEnumerator StartNewSession_SealsTheOldSession_AndTheNewOneStartsEmpty()
     {
         _offline = true;
