@@ -80,6 +80,8 @@ namespace AbxrLib.Runtime.Services.Transport
         private int _clearGeneration;
         /// <summary>The session a live chunk is out for, so a replay doesn't send the same records at the same time.</summary>
         private string _inFlightSessionId;
+        /// <summary>The streams a live chunk is out for, so the quit/EndSession flush doesn't send those records a second time.</summary>
+        private readonly bool[] _liveInFlight = new bool[2];
         /// <summary>Set after a live 401 asks auth for a fresh token, so a second 401 waits instead of asking again.</summary>
         private bool _liveReSignRequested;
         private int _uploadedThisRun;
@@ -436,6 +438,8 @@ namespace AbxrLib.Runtime.Services.Transport
             if (!TryGetLiveToken(out string token, out string secret)) return;
             foreach (var stream in new[] { RecordStream.Data, RecordStream.Storage })
             {
+                // A chunk already out holds the oldest records: sending from the acked offset would send them again.
+                if (IsLiveInFlight(stream)) continue;
                 while (true)
                 {
                     RecordChunk chunk;
@@ -480,6 +484,9 @@ namespace AbxrLib.Runtime.Services.Transport
             float deadline = Time.realtimeSinceStartup + QuitFlushBudgetSeconds;
             foreach (var stream in new[] { RecordStream.Data, RecordStream.Storage })
             {
+                // A chunk already out holds the oldest records: sending from the acked offset would send them again. The
+                // rest of that stream is sealed with the session and replayed once the chunk has its answer.
+                if (IsLiveInFlight(stream)) continue;
                 while (Time.realtimeSinceStartup < deadline)
                 {
                     RecordChunk chunk;
@@ -595,32 +602,45 @@ namespace AbxrLib.Runtime.Services.Transport
             SetNextSend(stream, Time.time + Configuration.Instance.sendNextBatchWaitSeconds);
             if (!TryGetLiveToken(out string token, out string secret)) yield break;
 
+            // The token belongs to the session that's live now. If the session ends between chunks, the next live session's
+            // records wait for its own token.
+            string sessionId = null;
             for (int sent = 0; sent < MaxChunksPerSend && !_stopped; sent++)
             {
                 bool more = false;
-                yield return SendLiveChunk(stream, token, secret, m => more = m);
+                yield return SendLiveChunk(stream, token, secret, sessionId, id => sessionId = id, m => more = m);
                 if (!more) yield break;
             }
             SetNextSend(stream, 0);
         }
 
         /// <summary>Sends the live session's next chunk. more is true when it was accepted and more is waiting.</summary>
-        private IEnumerator SendLiveChunk(RecordStream stream, string token, string secret, Action<bool> more)
+        private IEnumerator SendLiveChunk(RecordStream stream, string token, string secret, string expectedSessionId, Action<string> sessionId, Action<bool> more)
         {
             more(false);
             RecordChunk chunk;
             lock (_lock) { chunk = _queue.PeekLive(stream, ChunkSize(stream)); }
             if (chunk == null) yield break;
+            if (expectedSessionId != null && chunk.SessionId != expectedSessionId) yield break;
+            sessionId(chunk.SessionId);
             // Nothing readable in it (lines a kill left torn): acknowledge without sending.
             if (chunk.Records.Count == 0) { Acknowledge(chunk); more(true); yield break; }
 
             int generation = _clearGeneration;
             _inFlightSessionId = chunk.SessionId;
+            _liveInFlight[(int)stream] = true;
             ChunkResult result = default;
             // The token is the one the chunk's session signed in with. It stays valid after the session ends, so a chunk
             // that was out when the session was sealed still finishes as that session.
-            yield return Upload(chunk.Stream, chunk.Records, token, secret, () => generation == _clearGeneration && !_stopped, r => result = r);
-            _inFlightSessionId = null;
+            try
+            {
+                yield return Upload(chunk.Stream, chunk.Records, token, secret, () => generation == _clearGeneration && !_stopped, r => result = r);
+            }
+            finally
+            {
+                _inFlightSessionId = null;
+                _liveInFlight[(int)stream] = false;
+            }
 
             switch (result.Outcome)
             {
@@ -650,6 +670,8 @@ namespace AbxrLib.Runtime.Services.Transport
                     break;
             }
         }
+
+        private bool IsLiveInFlight(RecordStream stream) => _liveInFlight[(int)stream];
 
         private void SetNextSend(RecordStream stream, float at)
         {

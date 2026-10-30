@@ -119,6 +119,26 @@ public class OfflineQueueTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator EndSession_WhileAChunkIsOut_DoesNotSendItsRecordsAgain()
+    {
+        SimulateAuth();
+        Abxr.Event("in_flight_1", null, sendTelemetry: false);
+        Abxr.Event("in_flight_2", null, sendTelemetry: false);
+        _server.HoldResponses = true;
+        AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
+        yield return WaitFor(() => _server.Bodies(DataPath).Count >= 1, 5f);
+        Assert.AreEqual(1, _server.Bodies(DataPath).Count, "The live chunk is out.");
+
+        Abxr.EndSession();
+
+        Assert.AreEqual(1, _server.Bodies(DataPath).Count(b => b.Contains("\"in_flight_1\"")), "The EndSession flush leaves the chunk that's out alone.");
+        _server.HoldResponses = false;
+        yield return WaitFor(() => Queue.SealedSessions().Count == 0, 10f);
+        foreach (var name in new[] { "in_flight_1", "in_flight_2" })
+            Assert.AreEqual(1, _server.Bodies(DataPath).Count(b => b.Contains("\"" + name + "\"")), name + " reached the backend once.");
+    }
+
+    [UnityTest]
     public IEnumerator StartNewSession_SealsTheOldSession_AndTheNewOneStartsEmpty()
     {
         _offline = true;
