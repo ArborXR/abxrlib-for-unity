@@ -112,7 +112,9 @@ namespace AbxrLib.Editor
             new ReportedField("pruneSentItemsOlderThanHours", c => c.pruneSentItemsOlderThanHours),
             new ReportedField("maximumCachedItems", c => c.maximumCachedItems),
             new ReportedField("retainLocalAfterSent", c => c.retainLocalAfterSent),
+#pragma warning disable CS0618 // Obsolete, but still reported while it still has an effect.
             new ReportedField("enableArborInsightsClient", c => c.enableArborInsightsClient),
+#pragma warning restore CS0618
             new ReportedField("enableArborMdmClient", c => c.enableArborMdmClient),
             new ReportedField("enableLearnerLauncherMode", c => c.enableLearnerLauncherMode),
             new ReportedField("enableAutomaticTelemetry", c => c.enableAutomaticTelemetry),

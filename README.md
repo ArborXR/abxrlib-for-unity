@@ -100,6 +100,8 @@ It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`, and Te
 > 3. `Abxr.AIProxy` has been removed, along with `AIProxyApi` and `AIPromptPayload`. The backend endpoint it called is no longer served, so every call already returned `null`. Call your LLM provider directly with your own keys.
 >
 > Beyond these, 3.0 adds new public API (the `AbxrUi` registry and its interfaces) without touching anything else you already call.
+>
+> One deprecation: `enableArborInsightsClient` is now `[Obsolete]`. The Insights device service it turns on is being removed, and from 3.1 the setting does nothing. Leave it as it is; nothing changes in 3.0.
 
 ---
 

@@ -238,8 +238,10 @@ namespace AbxrLib.Editor
             if (showAdvanced)
             {
                 EditorGUI.indentLevel++;
+#pragma warning disable CS0618 // Obsolete, but still editable until 3.1 makes it a no-op.
                 config.enableArborInsightsClient = EditorGUILayout.Toggle(new GUIContent(
                     "Enable ArborInsightsClient", "When enabled, the app will use the ArborInsightsClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used."), config.enableArborInsightsClient);
+#pragma warning restore CS0618
 
                 config.enableArborMdmClient = EditorGUILayout.Toggle(new GUIContent(
                     "Enable ArborMdmClient", "When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only."), config.enableArborMdmClient);
@@ -358,7 +360,9 @@ namespace AbxrLib.Editor
                 config.maximumCachedItems = defaultConfig.maximumCachedItems;
                 config.retainLocalAfterSent = defaultConfig.retainLocalAfterSent;
                 config.maxDictionarySize = defaultConfig.maxDictionarySize;
+#pragma warning disable CS0618
                 config.enableArborInsightsClient = defaultConfig.enableArborInsightsClient;
+#pragma warning restore CS0618
                 config.enableArborMdmClient = defaultConfig.enableArborMdmClient;
                 config.enableLearnerLauncherMode = defaultConfig.enableLearnerLauncherMode;
                 config.enableAutomaticTelemetry = defaultConfig.enableAutomaticTelemetry;
