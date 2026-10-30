@@ -50,7 +50,9 @@ public static class AbxrObserver
 		/// <summary>The backend refused the record, or refused to sign in its session on three launches.</summary>
 		Rejected,
 		/// <summary>The session was recorded as a different app, organization or paired instance than the one uploading, or never signed in.</summary>
-		IdentityChanged
+		IdentityChanged,
+		/// <summary>The organization turned telemetry off, so Abxr.Telemetry records aren't kept.</summary>
+		TelemetryOff
 	}
 
 	public enum SendStatus

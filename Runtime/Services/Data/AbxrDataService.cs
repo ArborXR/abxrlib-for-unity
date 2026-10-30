@@ -47,6 +47,13 @@ namespace AbxrLib.Runtime.Services.Data
             Report(id, AbxrObserver.RecordKind.Telemetry, name, null, meta, transport, transport?.AddTelemetry(name, meta, id));
         }
 
+        /// <summary>Reports a telemetry record that isn't kept (the org turned telemetry off) to the observer, without queuing it.</summary>
+        public void DropTelemetry(string name, Dictionary<string, string> meta, AbxrObserver.DropReason reason)
+        {
+            if (!AbxrObserver.IsObserved) return;
+            Report(AbxrObserver.NextId(), AbxrObserver.RecordKind.Telemetry, name ?? "", null, meta ?? new Dictionary<string, string>(), null, null, reason);
+        }
+
         public void AddLog(string logLevel, string text, Dictionary<string, string> meta)
         {
             logLevel ??= "info";

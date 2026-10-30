@@ -140,6 +140,7 @@ namespace AbxrLib.Runtime
         private bool _authoredAutomaticTelemetry;
         /// <summary>The org's automatic telemetry setting: from the last config, then this launch's. Null when nothing was ever cached.</summary>
         private bool? _orgAutomaticTelemetry;
+        private bool _loggedTelemetryOff;
         private bool _automaticTelemetryRunning;
         /// <summary>The app called Abxr.TrackAutoTelemetry, which runs the collector whatever its own setting says.</summary>
         private bool _automaticTelemetryRequestedByApp;
@@ -1099,7 +1100,16 @@ internal void StartNewSession()
         internal void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
         {
             // The org turned telemetry off (offline RFC D4).
-            if (_orgAutomaticTelemetry == false) return;
+            if (_orgAutomaticTelemetry == false)
+            {
+                if (!_loggedTelemetryOff)
+                {
+                    _loggedTelemetryOff = true;
+                    Logcat.Info("Telemetry is off for this organization, so Abxr.Telemetry records aren't kept.");
+                }
+                _dataService.DropTelemetry(telemetryName, telemetryData, AbxrObserver.DropReason.TelemetryOff);
+                return;
+            }
             telemetryData ??= new Dictionary<string, string>();
             if (Configuration.Instance.enableSceneEvents)
                 telemetryData["sceneName"] = SceneChangeDetector.CurrentSceneName;

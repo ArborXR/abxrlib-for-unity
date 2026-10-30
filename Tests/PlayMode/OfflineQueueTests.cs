@@ -287,7 +287,9 @@ public class OfflineQueueTests : AbxrPlayModeTestBase
             Abxr.Event("with snapshot?");
             yield return null;
 
-            Assert.IsFalse(created.Any(r => r.Kind == AbxrObserver.RecordKind.Telemetry), "No telemetry while the org has it off.");
+            var telemetry = created.Where(r => r.Kind == AbxrObserver.RecordKind.Telemetry).ToList();
+            Assert.AreEqual("Heart Rate", telemetry.Single().Name, "The app's telemetry call is reported, and nothing automatic.");
+            Assert.AreEqual(AbxrObserver.DropReason.TelemetryOff, telemetry.Single().DropReason, "Not kept while the org has telemetry off, and the observer says why.");
             Assert.IsTrue(created.Any(r => r.Name == "with snapshot?"), "Events still record.");
 
             AbxrSubsystem.Instance.AuthServiceForTesting.OnConfigReceived(new ConfigPayload { enableAutomaticTelemetry = true });
