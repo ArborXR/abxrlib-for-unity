@@ -235,6 +235,40 @@ public class DurableRecordQueueTests
     }
 
     [Test]
+    public void Load_RecoversASummaryKilledMidRename()
+    {
+        var q = NewQueue();
+        q.SaveSignIn(SignIn("s"));
+        q.Add("s", Event("a"));
+        q.SealLive();
+        string summary = Directory.GetFiles(_root, "s-*.json").Single();
+        File.Move(summary, summary + ".tmp"); // the old summary deleted, the new one not yet renamed
+
+        var reloaded = NewQueue();
+
+        Assert.AreEqual("s", reloaded.SealedSessions().Single().SessionId);
+        Assert.AreEqual(1, reloaded.PendingRecords);
+    }
+
+    [Test]
+    public void Load_CountsLinesWrittenAfterTheLastSummaryWrite()
+    {
+        var q = NewQueue();
+        q.SaveSignIn(SignIn("s"));
+        q.Add("s", Event("a"));
+        q.Flush();
+        // Killed after an append, before its summary write.
+        File.AppendAllText(Directory.GetFiles(_root, "*.records.jsonl").Single(), DurableRecordQueue.ToLine(Event("b")) + "\n");
+
+        var reloaded = NewQueue();
+        var session = reloaded.SealedSessions().Single();
+        reloaded.Ack(reloaded.Peek(session, RecordStream.Data, 1));
+
+        Assert.AreEqual(1, reloaded.PendingRecords, "b is still waiting once a is acknowledged.");
+        CollectionAssert.AreEqual(new[] { "b" }, reloaded.Peek(session, RecordStream.Data, 10).Records.Select(NameOf));
+    }
+
+    [Test]
     public void Summary_IsRewrittenInPlace_AsRecordsAreAcknowledged()
     {
         var q = NewQueue();

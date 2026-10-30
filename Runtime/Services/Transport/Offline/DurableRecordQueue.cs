@@ -147,6 +147,7 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             try
             {
                 Directory.CreateDirectory(_root);
+                RecoverSummaryWrites();
                 var keep = new HashSet<string>();
                 foreach (var path in Directory.GetFiles(_root, SummaryPrefix + "*.json"))
                 {
@@ -184,14 +185,20 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                         summary.sealedAt = _utcNow();
                         session.SummaryDirty = true;
                     }
+                    // The files are the truth: a kill between an append and its summary write leaves the count behind,
+                    // and a session whose count says it's done would be deleted with lines still unsent.
+                    foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
+                    {
+                        var state = summary.State(f);
+                        int count = state.ackedCount + CountLines(FilePath(session, f), state.acked);
+                        if (count != state.count) { state.count = count; session.SummaryDirty = true; }
+                    }
                     keep.Add(key);
                     _sessions.Add(session);
                     _diskBytes += new FileInfo(path).Length;
                     foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
                         _diskBytes += FileLength(FilePath(session, f));
                 }
-                // A summary write the app was killed in the middle of.
-                foreach (var path in Directory.GetFiles(_root, SummaryPrefix + "*.json.tmp")) TryDelete(path);
                 foreach (var path in Directory.GetFiles(_root, SummaryPrefix + "*.jsonl"))
                 {
                     string name = Path.GetFileName(path);
@@ -302,7 +309,7 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             FlushSession(session);
             session.Summary.sealedAt = _utcNow();
             session.SummaryDirty = true;
-            WriteSummaryIfDirty(session);
+            WriteSummaryIfDirty(session, durable: true);
             // Nothing left to send: there's nothing to replay either.
             if (session.Pending == 0) Delete(session);
             else DropIfNeverSignedIn(session);
@@ -491,7 +498,17 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                     if (session.BufferedCounts[i] == 0) continue;
                     byte[] bytes = Encoding.UTF8.GetBytes(session.Buffers[i].ToString());
                     using (var fs = new FileStream(FilePath(session, f), FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
-                        fs.Write(bytes, 0, bytes.Length);
+                    {
+                        long before = fs.Length;
+                        try { fs.Write(bytes, 0, bytes.Length); }
+                        catch
+                        {
+                            // The buffer is written again next tick: a partial write left behind would add lines no count
+                            // knows about.
+                            try { fs.SetLength(before); } catch (IOException) { }
+                            throw;
+                        }
+                    }
                     _diskBytes += bytes.Length;
                     session.Summary.State(f).count += session.BufferedCounts[i];
                     session.Buffers[i].Clear();
@@ -588,7 +605,8 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             if (_diskBytes < 0) _diskBytes = 0;
         }
 
-        private void WriteSummaryIfDirty(StoredSession session)
+        /// <summary>Writes the summary when it changed. durable forces it to the device first (sealing), which costs milliseconds, so routine writes skip it: Load recounts the files.</summary>
+        private void WriteSummaryIfDirty(StoredSession session, bool durable = false)
         {
             if (!session.SummaryDirty || !_sessions.Contains(session)) return;
             string path = SummaryPath(session);
@@ -597,12 +615,12 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             {
                 Directory.CreateDirectory(_root);
                 long before = FileLength(path);
-                // On disk before the rename, so a power cut can't leave an empty summary (Load would delete the session).
+                // A sealed summary goes to the device before the rename, so a power cut can't leave it empty.
                 using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write))
                 {
                     byte[] bytes = new UTF8Encoding(false).GetBytes(JsonConvert.SerializeObject(session.Summary));
                     stream.Write(bytes, 0, bytes.Length);
-                    stream.Flush(true);
+                    if (durable) stream.Flush(true);
                 }
                 if (!File.Exists(path)) File.Move(tmp, path);
                 else
@@ -682,6 +700,47 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         /// Up to max complete lines from offset, each with the byte offset just past it. A last line with no newline (torn by
         /// a kill, or still being written) isn't returned.
         /// </summary>
+        /// <summary>Complete (newline-terminated) lines from offset to the end of the file.</summary>
+        internal static int CountLines(string path, long offset)
+        {
+            if (!File.Exists(path)) return 0;
+            int lines = 0;
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            {
+                if (offset >= fs.Length) return 0;
+                fs.Position = offset;
+                var buffer = new byte[16 * 1024];
+                int read;
+                while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
+                    for (int i = 0; i < read; i++)
+                        if (buffer[i] == (byte)'\n') lines++;
+            }
+            return lines;
+        }
+
+        /// <summary>
+        /// A summary write the app was killed in: a temp file whose summary is missing was mid-rename (the delete-and-move
+        /// fallback), so it's the only copy and becomes the summary if it reads. Any other temp file is stale.
+        /// </summary>
+        private void RecoverSummaryWrites()
+        {
+            foreach (var tmp in Directory.GetFiles(_root, SummaryPrefix + "*.json.tmp"))
+            {
+                string path = tmp.Substring(0, tmp.Length - ".tmp".Length);
+                try
+                {
+                    if (!File.Exists(path))
+                    {
+                        JObject.Parse(File.ReadAllText(tmp));
+                        File.Move(tmp, path);
+                        continue;
+                    }
+                }
+                catch (Exception) { /* unreadable: deleted below */ }
+                TryDelete(tmp);
+            }
+        }
+
         internal static List<(string line, long end)> ReadLines(string path, long offset, int max)
         {
             var result = new List<(string, long)>();
