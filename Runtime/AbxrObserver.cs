@@ -127,7 +127,7 @@ public static class AbxrObserver
 	/// <summary>Raised on the main thread for every record the SDK creates, including the ones it doesn't keep.</summary>
 	public static event Action<Record> OnRecordCreated;
 
-	/// <summary>Raised on the main thread when records are sent, fail to send, are handed to the ArborXR client app, or are dropped after being queued.</summary>
+	/// <summary>Raised on the main thread when records are sent, fail to send, or are dropped after being queued.</summary>
 	public static event Action<SendResult> OnRecordsSent;
 
 	// Main thread only, like the rest of the record path.
