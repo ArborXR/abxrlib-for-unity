@@ -36,6 +36,10 @@ public static partial class Abxr
 	/// credentials during those retries, the SDK stops retrying without firing again.
 	/// At the PIN or email step, each failed submission fires 'false', even one that failed for lack of a connection,
 	/// and the SDK asks for the input again.
+	/// Offline on a headset or desktop, when the organization's last config asked for an email or text sign-in, the SDK
+	/// asks for it anyway and fires 'true' once it's answered; the session records, and signs in online later without
+	/// firing again. With a PIN sign-in it fires 'false' with "A connection is needed to sign in with a PIN." and shows
+	/// the PIN pad once the device is online.
 	/// </summary>
 	public static Action<bool, string> OnAuthCompleted;
 
@@ -512,14 +516,79 @@ public static partial class Abxr
 	/// Start a new session with a fresh session identifier
 	/// Generates a new session ID and performs fresh authentication
 	/// Useful for starting new training experiences or resetting user context
+	/// What the ended session recorded is kept: on headsets and desktop, anything not yet sent stays on disk and uploads
+	/// as that session once the device is online. On WebGL it's dropped.
 	/// </summary>
 	public static void StartNewSession() => X?.StartNewSession();
 
 	/// <summary>
 	/// Ends the current session: sends all data (including closing any running assessment/objective/interaction),
 	/// then clears session state. Does not start a new session. Call StartAuthentication() when ready for a fresh session.
+	/// What it can't send right away is kept: on headsets and desktop it stays on disk and uploads as this session once the
+	/// device is online. On WebGL it's dropped.
 	/// </summary>
 	public static void EndSession() => X?.EndSession();
+
+	// ── Offline upload ────────────────────────────────────────────────────────────────────────────
+
+	/// <summary>What the SDK still has to upload. Records recorded offline wait on disk, grouped by session, until the device is online.</summary>
+	public readonly struct UploadStatus : IEquatable<UploadStatus>
+	{
+		/// <summary>Sessions with records waiting, the current one included.</summary>
+		public int PendingSessions { get; }
+		/// <summary>Records waiting, across every session.</summary>
+		public int PendingRecords { get; }
+		/// <summary>Records the backend accepted (or refused for good) since the app started.</summary>
+		public int UploadedRecords { get; }
+		/// <summary>True when nothing is waiting.</summary>
+		public bool AllUploaded => PendingRecords == 0;
+
+		public UploadStatus(int pendingSessions, int pendingRecords, int uploadedRecords)
+		{
+			PendingSessions = pendingSessions;
+			PendingRecords = pendingRecords;
+			UploadedRecords = uploadedRecords;
+		}
+
+		public bool Equals(UploadStatus other) =>
+			PendingSessions == other.PendingSessions && PendingRecords == other.PendingRecords && UploadedRecords == other.UploadedRecords;
+
+		public override bool Equals(object obj) => obj is UploadStatus other && Equals(other);
+
+		public override int GetHashCode() => (PendingSessions * 397 ^ PendingRecords) * 397 ^ UploadedRecords;
+	}
+
+	/// <summary>
+	/// Raised on the main thread when what's waiting to upload changes: about once a second while records are recorded or
+	/// sent, and at once when everything has uploaded. Use it to show upload progress, or to tell someone it's safe to
+	/// turn the headset off.
+	/// </summary>
+	public static event Action<UploadStatus> OnUploadStatusChanged;
+
+	internal static void RaiseUploadStatusChanged(UploadStatus status)
+	{
+		try
+		{
+			OnUploadStatusChanged?.Invoke(status);
+		}
+		catch (Exception ex)
+		{
+			Logcat.Error($"An OnUploadStatusChanged handler threw: {ex}");
+		}
+	}
+
+	/// <summary>Records waiting to upload, across every session. 0 when everything has uploaded.</summary>
+	public static int GetPendingUploadCount() => X?.GetUploadStatus().PendingRecords ?? 0;
+
+	/// <summary>What's waiting to upload. See <see cref="UploadStatus"/>.</summary>
+	public static UploadStatus GetUploadStatus() => X?.GetUploadStatus() ?? default;
+
+	/// <summary>
+	/// Deletes every record the SDK hasn't uploaded yet, from every session, the current one included, without unpairing
+	/// or ending the session (offline RFC D9). Use it when a headset's queued data must not reach the organization, for
+	/// example after a test run. Not undoable.
+	/// </summary>
+	public static void ClearQueuedData() => X?.ClearQueuedData();
 	
 	
 	// ── Custom Events ───────────────────────────────────────────────────────────────────────────────────────────────

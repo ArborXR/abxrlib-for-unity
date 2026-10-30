@@ -142,10 +142,6 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Assert.AreEqual("fallback@example.com", userData["email"]);
         Assert.IsFalse(userData.ContainsKey("userId"));
         Assert.IsNull(Abxr.GetAnonymizedUserId());
-        // Simulated auth does not set transport auth headers; flush logs this. We EndSession here and expect the log so TearDown does not run EndSession (avoids unhandled log).
-        RunEndSessionInTearDown = false;
-        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Cannot set auth headers - authentication tokens are missing")));
-        Abxr.EndSession();
     }
 
     [Test]

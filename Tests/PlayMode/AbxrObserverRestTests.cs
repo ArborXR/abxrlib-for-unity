@@ -1,6 +1,8 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode tests for AbxrObserver (SDK-64) through the public Abxr methods and the real REST transport, which sends to
 // a local HTTP listener so each test picks the backend's answer. AbxrObserverTests (EditMode) covers the scope rules.
+// From 3.1 an ended session is kept and uploaded later (offline RFC D2), and a refused record is dropped as Rejected
+// instead of being queued again; OfflineQueueTests covers the rest of the queue.
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -23,7 +25,7 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
     private const string DataPath = "/v1/collect/data";
     private const string StoragePath = "/v1/storage";
 
-    private LocalServer _server;
+    private LocalRestServer _server;
     private List<AbxrObserver.Record> _created;
     private List<AbxrObserver.SendResult> _sent;
 
@@ -37,7 +39,7 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         _sent = new List<AbxrObserver.SendResult>();
         AbxrObserver.OnRecordCreated += _created.Add;
         AbxrObserver.OnRecordsSent += _sent.Add;
-        _server = new LocalServer();
+        _server = new LocalRestServer();
         ModifyConfig("restUrl", _server.Url);
     }
 
@@ -111,11 +113,12 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         Assert.AreEqual(200, result.HttpStatus);
         Assert.IsNull(result.Error);
         CollectionAssert.Contains(result.RecordIds, second, "One POST carries both records, so one result names both.");
-        Assert.IsFalse(_server.Bodies(DataPath).Any(b => b.Contains("RecordId")), "The observer id must never reach the backend.");
+        Assert.IsFalse(_server.Bodies(DataPath).Any(b => b.Contains("ObserverId")), "The observer id must never reach the backend.");
+        Assert.IsTrue(_server.Bodies(DataPath).All(b => b.Contains("\"recordId\"")), "Each record carries its UUID for the backend's duplicate check.");
     }
 
     [UnityTest]
-    public IEnumerator Batch_Refused_ReportsFailedWithTheStatusAndError_AndQueuesItAgain()
+    public IEnumerator Batch_Refused_DropsTheRecordAsRejected_WithTheStatus()
     {
         _server.StatusCode = 400;
         ModifyConfig("sendNextBatchWaitSeconds", 60); // one attempt in this test
@@ -128,18 +131,42 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         yield return WaitFor(() => ResultFor(id).HasValue, 5f);
 
         var result = ResultFor(id).Value;
-        Assert.AreEqual(AbxrObserver.SendStatus.Failed, result.Status);
+        Assert.AreEqual(AbxrObserver.SendStatus.Dropped, result.Status);
+        Assert.AreEqual(AbxrObserver.DropReason.Rejected, result.DropReason);
         Assert.AreEqual(400, result.HttpStatus);
         Assert.IsFalse(string.IsNullOrEmpty(result.Error));
-        Assert.IsTrue(AbxrSubsystem.Instance.GetPendingEventsForTesting().Any(e => e.name == "refused"), "A failed batch goes back in the queue.");
+        yield return WaitFor(() => AbxrSubsystem.Instance.GetPendingEventsForTesting().All(e => e.name != "refused"), 2f);
+        Assert.IsFalse(AbxrSubsystem.Instance.GetPendingEventsForTesting().Any(e => e.name == "refused"), "A refused record never comes back.");
     }
 
     [UnityTest]
-    public IEnumerator Batch_Refused_HandlerThatEndsTheSession_DoesNotCarryTheBatchIntoTheNextOne()
+    public IEnumerator Batch_Refused_IsolatesTheRefusedRecord_AndSendsTheRest()
     {
-        _server.StatusCode = 400;
+        // The backend refuses any body that carries the bad record, so the transport splits the chunk until it's alone.
+        _server.Respond = (path, body) => path == DataPath && body.Contains("\"bad\"") ? new LocalRestServer.Answer(422) : (LocalRestServer.Answer?)null;
         ModifyConfig("sendNextBatchWaitSeconds", 60);
         LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Data POST failed")));
+        SimulateAuth();
+        foreach (var name in new[] { "a", "b", "bad", "c", "d" }) Abxr.Event(name, null, sendTelemetry: false);
+        AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
+
+        yield return WaitFor(() => new[] { "a", "b", "bad", "c", "d" }.All(n => ResultFor(Single(n).Id).HasValue), 10f);
+
+        foreach (var name in new[] { "a", "b", "c", "d" })
+            Assert.AreEqual(AbxrObserver.SendStatus.Sent, ResultFor(Single(name).Id).Value.Status, name);
+        var bad = ResultFor(Single("bad").Id).Value;
+        Assert.AreEqual(AbxrObserver.SendStatus.Dropped, bad.Status);
+        Assert.AreEqual(AbxrObserver.DropReason.Rejected, bad.DropReason);
+        Assert.AreEqual(422, bad.HttpStatus);
+        Assert.IsEmpty(AbxrSubsystem.Instance.GetPendingEventsForTesting(), "Every record got a final answer.");
+    }
+
+    [UnityTest]
+    public IEnumerator Batch_Failed_HandlerThatClearsTheQueue_DoesNotCarryTheBatchIntoTheNextSession()
+    {
+        _server.StatusCode = 503;
+        ModifyConfig("sendNextBatchWaitSeconds", 60);
+        ModifyConfig("sendRetriesOnFailure", 0);
         bool cleared = false;
         AbxrObserver.OnRecordsSent += result =>
         {
@@ -156,39 +183,33 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
 
         Assert.IsTrue(cleared);
         Assert.IsFalse(AbxrSubsystem.Instance.GetPendingEventsForTesting().Any(e => e.name == "old_session"),
-            "The failed batch must be queued before the handler runs, so ending the session clears it.");
+            "The failed batch stays queued until the handler clears it.");
         var last = ResultFor(id).Value;
         Assert.AreEqual(AbxrObserver.SendStatus.Dropped, last.Status, "Clearing it from inside the handler must still report it, after the handler returns.");
         Assert.AreEqual(AbxrObserver.DropReason.SessionEnded, last.DropReason);
     }
 
     [UnityTest]
-    public IEnumerator Batch_Refused_WithNoRoomToQueueItAgain_ReportsTheOverflowDropped()
+    public IEnumerator Batch_Failed_StaysQueued_AndReportsFailed()
     {
-        _server.StatusCode = 400;
+        _server.StatusCode = 503;
         ModifyConfig("sendNextBatchWaitSeconds", 60);
-        ModifyConfig("maximumCachedItems", 1);
-        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Data POST failed")));
-        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Event queue limit reached (1).")));
+        ModifyConfig("sendRetriesOnFailure", 0);
         SimulateAuth();
-        Abxr.Event("kept", null, sendTelemetry: false);
-        long kept = Single("kept").Id;
-        _server.HoldResponses = true;
+        Abxr.Event("offline", null, sendTelemetry: false);
+        long id = Single("offline").Id;
         AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
-        yield return WaitFor(() => _server.Bodies(DataPath).Count > 0, 5f);
-        // Fills the queue while the server holds the batch's answer, so the refused batch has no room to come back.
-        Abxr.Event("newer", null, sendTelemetry: false);
-        _server.HoldResponses = false;
 
-        yield return WaitFor(() => _sent.Any(s => s.Status == AbxrObserver.SendStatus.Dropped && s.RecordIds.Contains(kept)), 5f);
+        yield return WaitFor(() => ResultFor(id).HasValue, 5f);
 
-        // Auto telemetry can share the one-item queues, so look for the result that names this record.
-        var dropped = _sent.Single(s => s.Status == AbxrObserver.SendStatus.Dropped && s.RecordIds.Contains(kept));
-        Assert.AreEqual(AbxrObserver.DropReason.QueueFull, dropped.DropReason);
+        var result = ResultFor(id).Value;
+        Assert.AreEqual(AbxrObserver.SendStatus.Failed, result.Status);
+        Assert.AreEqual(503, result.HttpStatus);
+        Assert.IsTrue(AbxrSubsystem.Instance.GetPendingEventsForTesting().Any(e => e.name == "offline"), "A failed batch stays queued.");
     }
 
     [UnityTest]
-    public IEnumerator SessionEndingDuringARetry_ReportsTheBatchDropped()
+    public IEnumerator QueueClearedDuringARetry_ReportsTheBatchDroppedOnce()
     {
         _server.StatusCode = 503; // retried
         ModifyConfig("sendRetryIntervalSeconds", 1);
@@ -199,27 +220,39 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
         yield return WaitFor(() => _server.Bodies(DataPath).Count > 0, 5f);
 
-        AbxrSubsystem.Instance.RestTransportForTesting.ClearAllPending();
+        Abxr.ClearQueuedData();
         yield return WaitFor(() => ResultFor(id).HasValue, 5f);
+        yield return new WaitForSecondsRealtime(1.5f); // the retry wakes up and must stop quietly
 
         var result = ResultFor(id).Value;
         Assert.AreEqual(AbxrObserver.SendStatus.Dropped, result.Status);
-        Assert.AreEqual(AbxrObserver.DropReason.SessionEnded, result.DropReason);
+        Assert.AreEqual(AbxrObserver.DropReason.Cleared, result.DropReason);
         Assert.AreEqual(1, _sent.Count(s => s.RecordIds.Contains(id)), "A dropped batch reports once, never as failed too.");
     }
 
     [Test]
-    public void QueuedRecords_ClearedWhenTheSessionEnds_ReportDropped()
+    public void QueuedRecords_KeptWhenTheSessionEnds()
+    {
+        // Not authenticated, so nothing is sent.
+        Abxr.Event("queued", null, sendTelemetry: false);
+
+        Abxr.EndSession();
+
+        Assert.IsFalse(_sent.Any(s => s.RecordIds.Contains(Single("queued").Id)), "An ended session is kept for upload, not dropped.");
+    }
+
+    [Test]
+    public void QueuedRecords_ClearedByClearQueuedData_ReportDropped()
     {
         // Not authenticated, so nothing is sent and both stay queued.
         Abxr.Event("queued", null, sendTelemetry: false);
         Abxr.Telemetry("Heart Rate", new Dictionary<string, string> { ["bpm"] = "80" });
 
-        AbxrSubsystem.Instance.RestTransportForTesting.ClearAllPending();
+        Abxr.ClearQueuedData();
 
         var result = _sent.Single();
         Assert.AreEqual(AbxrObserver.SendStatus.Dropped, result.Status);
-        Assert.AreEqual(AbxrObserver.DropReason.SessionEnded, result.DropReason);
+        Assert.AreEqual(AbxrObserver.DropReason.Cleared, result.DropReason);
         CollectionAssert.AreEquivalent(new[] { Single("queued").Id, Single("Heart Rate").Id }, result.RecordIds);
     }
 
@@ -278,60 +311,5 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
         float deadline = Time.realtimeSinceStartup + timeoutSeconds;
         while (!condition() && Time.realtimeSinceStartup < deadline)
             yield return null;
-    }
-
-    /// <summary>Answers every request with <see cref="StatusCode"/> and keeps each request's path and body.</summary>
-    private sealed class LocalServer : IDisposable
-    {
-        private readonly HttpListener _listener = new HttpListener();
-        private readonly ConcurrentQueue<(string path, string body)> _requests = new ConcurrentQueue<(string, string)>();
-        public string Url { get; }
-        public volatile int StatusCode = 200;
-        private readonly ManualResetEventSlim _released = new ManualResetEventSlim(true);
-
-        /// <summary>While true, requests are recorded but not answered, so a test can act while a send is in flight.</summary>
-        public bool HoldResponses
-        {
-            get => !_released.IsSet;
-            set { if (value) _released.Reset(); else _released.Set(); }
-        }
-
-        public LocalServer()
-        {
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            int port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-            Url = $"http://127.0.0.1:{port}/";
-            _listener.Prefixes.Add(Url);
-            _listener.Start();
-            _listener.BeginGetContext(OnRequest, null);
-        }
-
-        public List<string> Bodies(string path) => _requests.Where(r => r.path == path).Select(r => r.body).ToList();
-
-        private void OnRequest(IAsyncResult ar)
-        {
-            HttpListenerContext context;
-            try { context = _listener.EndGetContext(ar); }
-            catch { return; } // stopped
-            try { _listener.BeginGetContext(OnRequest, null); } catch { /* stopped */ }
-
-            string body;
-            using (var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8))
-                body = reader.ReadToEnd();
-            _requests.Enqueue((context.Request.Url.AbsolutePath, body));
-            _released.Wait(TimeSpan.FromSeconds(10));
-            context.Response.StatusCode = StatusCode;
-            byte[] bytes = Encoding.UTF8.GetBytes("{}");
-            context.Response.OutputStream.Write(bytes, 0, bytes.Length);
-            context.Response.Close();
-        }
-
-        public void Dispose()
-        {
-            _released.Set();
-            try { _listener.Stop(); _listener.Close(); } catch { /* already closed */ }
-        }
     }
 }

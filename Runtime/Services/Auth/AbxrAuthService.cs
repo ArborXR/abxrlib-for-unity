@@ -180,6 +180,33 @@ namespace AbxrLib.Runtime.Services.Auth
 
         internal void SetPairedCredential(IPairedCredential pairing) => _pairing = pairing;
 
+        /// <summary>The org settings an offline launch needs (offline RFC D4, D7). Null when nothing attached it.</summary>
+        private OfflineSettingsCache _offlineSettings;
+        internal void SetOfflineSettings(OfflineSettingsCache settings) => _offlineSettings = settings;
+
+        /// <summary>Raised when GET config arrives, with the config as received, so the subsystem can apply the org's telemetry setting.</summary>
+        internal Action<ConfigPayload> OnConfigReceived;
+
+        /// <summary>
+        /// Raised instead of <see cref="OnSucceeded"/> when a session that already reported success offline (a cached email or
+        /// text sign-in) finishes signing in online, so the app doesn't hear OnAuthCompleted(true) twice.
+        /// </summary>
+        internal Action OnSucceededAfterOfflineSignIn;
+
+        internal const string PinNeedsConnectionMessage = "A connection is needed to sign in with a PIN.";
+
+        /// <summary>The app, org and paired instance this session signs in as: the offline settings cache's key.</summary>
+        private string _identityKey;
+        internal string IdentityKeyForTesting => _identityKey;
+        /// <summary>The offline sign-in prompt is open: the next submit is saved, not sent.</summary>
+        private bool _offlinePromptPending;
+        /// <summary>This session reported OnAuthCompleted(true) from an offline sign-in, which the online sign-in completes later.</summary>
+        private bool _offlineSignInReported;
+        /// <summary>The offline sign-in was skipped (guest access), so the online one skips the prompt too.</summary>
+        private bool _offlineSignInSkipped;
+        /// <summary>What SetUserData added after an offline sign-in, synced once the session signs in online.</summary>
+        private Dictionary<string, string> _offlineUserData;
+
         /// <summary>The App Token a pairing redeem proves the build with. Empty in legacy (app id) mode, which can't pair.</summary>
         internal string AppTokenForPairing => _runtimeAuth.useAppTokens ? _runtimeAuth.appToken ?? "" : "";
 
@@ -249,6 +276,11 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
             _runtimeAuth.CopyAuthFieldsTo(_payload);
+            // Offline RFC D8: the title the session started with, so a replay days later files it under that name. A paired
+            // headset's name lives in the Portal and isn't sent.
+            string deviceTitle = _pairedInstanceId == null ? Abxr.GetDeviceTitle() : null;
+            _payload.deviceTitle = string.IsNullOrEmpty(deviceTitle) ? null : deviceTitle;
+            _identityKey = OfflineSettingsCache.KeyOf(_payload);
 
             // Auth handoff (intent / CLI / test inject): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
             CheckAuthHandoff();
@@ -310,6 +342,88 @@ namespace AbxrLib.Runtime.Services.Auth
 
         public void SetSessionId(string sessionId) => _payload.sessionId = sessionId;
 
+        /// <summary>The session records are filed under. Null between a cleared session and the next sign-in attempt.</summary>
+        internal string SessionId => _payload.sessionId;
+
+        // ── Offline queue (offline RFC) ──────────────────────────────
+
+        /// <summary>True once this session finished signing in online, so the backend already knows its user.</summary>
+        private bool _signedInOnline;
+
+        /// <summary>
+        /// Saves the live session's sign-in without credentials, so the session can be signed in again if it ends before
+        /// its records are sent: at session start, on a login answer, on SetUserData, after device auth, and in AuthSucceeded.
+        /// </summary>
+        private void SaveSignIn()
+        {
+            if (string.IsNullOrEmpty(_payload.sessionId)) return;
+            var transport = _getTransport?.Invoke();
+            if (transport == null || transport.IsServiceTransport) return;
+            bool hasLogin = !string.IsNullOrEmpty(_enteredAuthValue) && (_authMechanism?.type == "email" || _authMechanism?.type == "text");
+            transport.SaveSignIn(new SavedSignIn
+            {
+                payload = SavedSignIn.WithoutCredentials(_payload),
+                loginType = hasLogin ? _authMechanism.type : null,
+                loginValue = hasLogin ? _enteredAuthValue : null,
+                userData = _userData != null ? new Dictionary<string, string>(_userData) : null,
+                signedInOnline = _signedInOnline,
+                appKey = SavedSignIn.AppKeyOf(_payload),
+                orgKey = SavedSignIn.OrgKeyOf(_payload),
+                instanceKey = SavedSignIn.InstanceKeyOf(_payload)
+            });
+        }
+
+        /// <summary>The live session's credentials, for signing an earlier session in again. Null before anything was sent.</summary>
+        internal AuthPayload CredentialsForReplay()
+        {
+            if (string.IsNullOrEmpty(_payload.appToken) && string.IsNullOrEmpty(_payload.appId)) return null;
+            return new AuthPayload
+            {
+                appId = _payload.appId,
+                orgId = _payload.orgId,
+                authSecret = _payload.authSecret,
+                appToken = _payload.appToken,
+                orgToken = _payload.orgToken,
+                appInstanceToken = _payload.appInstanceToken,
+                buildType = _payload.buildType,
+                deviceId = _payload.deviceId
+            };
+        }
+
+        /// <summary>lib-backend's revoked-instance 401, while paired. A replayed sign-in can find a revoke first.</summary>
+        internal bool IsPairedInstanceRevoked(AuthTransportResult result) =>
+            _pairedInstanceId != null && result.StatusCode == 401 && IsInstanceTokenRejection(result.Body);
+
+        /// <summary>A replayed sign-in found the instance revoked: the same as device auth finding it (the pairing service drops the queue).</summary>
+        internal void RevokePairingFromReplay()
+        {
+            if (_pairedInstanceId == null) return;
+            Logcat.Warning("A replayed offline session found this app instance revoked.");
+            _pairing?.Revoke(_pairedInstanceId);
+        }
+
+        /// <summary>
+        /// The live token stopped working mid-session (a 401 on upload). Signs the same session in again with its user
+        /// data, as SetUserData does, without reporting to the app.
+        /// </summary>
+        internal void RefreshSessionToken()
+        {
+            if (!Authenticated || _stopping || _attemptActive) return;
+            _attemptActive = true;
+            _runner.StartCoroutine(CoRefreshSessionToken());
+        }
+
+        private IEnumerator CoRefreshSessionToken()
+        {
+            _setUserDataReAuthActive = true;
+            yield return AuthRequestCoroutine((success, errorMsg) =>
+            {
+                _setUserDataReAuthActive = false;
+                _attemptActive = false;
+                if (!success) Logcat.Warning($"Couldn't refresh the session's token: {errorMsg}");
+            }, withRetry: false);
+        }
+
         /// <summary>
         /// Submit user input when there is an outstanding OnInputRequested. Called by subsystem (Abxr.OnInputSubmitted).
         /// If no input was requested, this is a no-op. Empty or whitespace-only input is rejected and OnInputRequested is re-invoked with an error (no transport call).
@@ -327,16 +441,19 @@ namespace AbxrLib.Runtime.Services.Auth
                 _inputRequestPending = false;
                 Logcat.Warning("Skipping user authentication.");
                 AbxrUi.AuthUi?.Hide();
-                AuthSucceeded();
+                if (_offlinePromptPending) CompleteOfflineSignIn(null);
+                else AuthSucceeded();
                 return;
             }
             
             _inputRequestPending = false;
-            KeyboardAuthenticate(input);
+            if (_offlinePromptPending) CompleteOfflineSignIn(input);
+            else KeyboardAuthenticate(input);
         }
         
-        private void RequestKeyboardInput(bool firstAttempt = true)
+        private void RequestKeyboardInput(bool firstAttempt = true, bool online = false)
         {
+            if (online) _offlinePromptPending = false;
             _inputRequestPending = true;
             OnInputRequested?.Invoke(_authMechanism.type, _authMechanism.prompt, _authMechanism.domain, firstAttempt ? "" : "Authentication Failed");
         }
@@ -356,7 +473,61 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
             _inputRequestPending = false;
-            KeyboardAuthenticate(input);
+            if (_offlinePromptPending) CompleteOfflineSignIn(input);
+            else KeyboardAuthenticate(input);
+        }
+
+        /// <summary>
+        /// Offline RFC D7: device auth can't reach the backend, and the org's last config asked for an email or text sign-in.
+        /// The person signs in now; the answer is saved with the session and sent once online. A cached PIN policy can't
+        /// work this way, since a PIN is checked by the backend and never saved.
+        /// </summary>
+        private bool TryStartOfflineSignIn()
+        {
+            // WebGL stays online-only, as in 3.0: nothing it records offline outlives the page.
+            if (_offlineSettings == null || !_offlineSettings.IsPersistent) return false;
+            var mechanism = _offlineSettings?.Get(_identityKey)?.authMechanism;
+            string type = mechanism?.type ?? "";
+            if (type != "email" && type != "text") return false;
+            _authMechanism = CopyAuthMechanism(mechanism);
+            _offlinePromptPending = true;
+            Logcat.Info($"Offline: signing in with the {type} sign-in this organization used last. It's sent when the device is online.");
+            RequestKeyboardInput();
+            return true;
+        }
+
+        /// <summary>The cached policy is a PIN, which needs a connection.</summary>
+        private bool CachedPolicyIsPin()
+        {
+            if (_offlineSettings == null || !_offlineSettings.IsPersistent) return false;
+            string type = _offlineSettings?.Get(_identityKey)?.authMechanism?.type ?? "";
+            return string.Equals(type, "assessmentPin", StringComparison.OrdinalIgnoreCase) || string.Equals(type, "pin", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void CloseOfflinePrompt()
+        {
+            if (!_offlinePromptPending) return;
+            _offlinePromptPending = false;
+            _inputRequestPending = false;
+            AbxrUi.AuthUi?.Hide();
+        }
+
+        /// <summary>Saves the offline answer (null when skipped) and reports the session signed in, without a token yet.</summary>
+        private void CompleteOfflineSignIn(string input)
+        {
+            _offlinePromptPending = false;
+            if (input == null) _offlineSignInSkipped = true;
+            else
+            {
+                _enteredAuthValue = input;
+                if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && !input.Contains("@"))
+                    _enteredAuthValue += "@" + _authMechanism.domain;
+            }
+            _offlineSignInReported = true;
+            SaveSignIn();
+            AbxrUi.AuthUi?.Hide();
+            Logcat.Info("Signed in offline. The session records now and uploads once the device is online.");
+            OnSucceeded?.Invoke();
         }
 
         public void KeyboardAuthenticate(string input)
@@ -379,6 +550,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     _enteredAuthValue = input;
                     if (_authMechanism.type == "email" && !string.IsNullOrEmpty(_authMechanism.domain) && input != null && !input.Contains("@"))
                         _enteredAuthValue += "@" + _authMechanism.domain;
+                    SaveSignIn();
                 }
 
                 _authMechanism.prompt = originalPrompt;
@@ -402,6 +574,9 @@ namespace AbxrLib.Runtime.Services.Auth
 
                     // Signal auth completed (failed) so the app gets OnAuthCompleted(false, message). Then re-invoke OnInputRequested so the UI can show the error and let the user try again.
                     int generation = _sessionGeneration;
+                    // The app hears false now, so a later success must report true again, even after an offline sign-in.
+                    _offlineSignInReported = false;
+                    _offlineSignInSkipped = false;
                     OnFailed?.Invoke("Authentication failed");
                     // The app's OnAuthCompleted handler ended or restarted the session: don't ask again in it. Clearing it
                     // closed the prompt and reset IsUserAuthSubmitInFlight.
@@ -421,19 +596,34 @@ namespace AbxrLib.Runtime.Services.Auth
                 Logcat.Error("Cannot set auth headers - authentication tokens are missing");
                 return;
             }
+            SignRequest(request, ResponseData.Token, ResponseData.Secret, json);
+        }
 
-            request.SetRequestHeader("Authorization", "Bearer " + ResponseData.Token);
-        
-            string unixTimeSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        /// <summary>
+        /// The server's clock minus this device's, from the Date header of the last sign-in answer. The backend refuses a
+        /// request whose timestamp is far from its own clock, and a headset that was offline for weeks can drift.
+        /// </summary>
+        internal static TimeSpan ClockOffset { get; private set; }
+
+        internal static void RecordServerDate(DateTime serverUtc) => ClockOffset = serverUtc - DateTime.UtcNow;
+
+        internal static void ResetClockOffsetForTesting() => ClockOffset = TimeSpan.Zero;
+
+        /// <summary>Signs a request with a session's token and secret. A replayed session signs with its own, not the live session's.</summary>
+        internal static void SignRequest(UnityWebRequest request, string token, string secret, string json = null)
+        {
+            request.SetRequestHeader("Authorization", "Bearer " + token);
+
+            string unixTimeSeconds = (DateTimeOffset.UtcNow + ClockOffset).ToUnixTimeSeconds().ToString();
             request.SetRequestHeader("x-abxrlib-timestamp", unixTimeSeconds);
-        
-            string hashString = ResponseData.Token + ResponseData.Secret + unixTimeSeconds;
+
+            string hashString = token + secret + unixTimeSeconds;
             if (!string.IsNullOrEmpty(json))
             {
                 uint crc = Utils.ComputeCRC(json);
                 hashString += crc;
             }
-        
+
             request.SetRequestHeader("x-abxrlib-hash", Utils.ComputeSha256Hash(hashString));
         }
         
@@ -480,10 +670,16 @@ namespace AbxrLib.Runtime.Services.Auth
                     authError = err;
                 }, withRetry: true, onRetrying: message =>
                 {
-                    reportedRetrying = true;
                     // Runs inside the retry loop: an exception from an app's handler would end the loop and leave the
                     // attempt marked active, so every later StartAuthentication() would be ignored for the session.
-                    try { OnFailed?.Invoke(message); }
+                    try
+                    {
+                        // Offline with a cached email or text policy: sign in now and report success once answered. Nothing
+                        // was reported false, so a refusal later still reports it.
+                        if (TryStartOfflineSignIn()) return;
+                        reportedRetrying = true;
+                        OnFailed?.Invoke(CachedPolicyIsPin() ? PinNeedsConnectionMessage : message);
+                    }
                     catch (Exception ex) { Logcat.Error($"An OnAuthCompleted handler threw while device authentication was retrying: {ex}"); }
                 }));
                 // EndSession or StartNewSession cleared the session this attempt belonged to (possibly while it was retrying).
@@ -494,6 +690,10 @@ namespace AbxrLib.Runtime.Services.Auth
                     string message = !string.IsNullOrEmpty(authError)
                         ? authError
                         : "Initial authentication request failed";
+                    // An offline sign-in can't finish now: close its prompt, and report false even after its true, since the
+                    // session will never upload.
+                    CloseOfflinePrompt();
+                    _offlineSignInReported = false;
                     if (!reportedRetrying)
                         OnFailed?.Invoke(message);
                     else if (_credentialsRejectedByApi)
@@ -554,8 +754,14 @@ namespace AbxrLib.Runtime.Services.Auth
                 {
                     if (TryCompleteUserAuthUsingMdmSsoIdentity())
                         AuthSucceeded();
+                    else if (_offlineSignInSkipped)
+                        AuthSucceeded();
+                    else if (_offlineSignInReported && !string.IsNullOrEmpty(_enteredAuthValue)
+                             && (_authMechanism.type == "email" || _authMechanism.type == "text"))
+                        // The person answered while offline: send that answer instead of asking again.
+                        KeyboardAuthenticate(_enteredAuthValue);
                     else
-                        RequestKeyboardInput();
+                        RequestKeyboardInput(online: true);
                 }
             }
             else
@@ -666,6 +872,8 @@ namespace AbxrLib.Runtime.Services.Auth
             int maxRetryIntervalSeconds = Math.Max(MaxAuthRetryIntervalSeconds, retryIntervalSeconds);
             bool announcedRetrying = false;
             var transport = _getTransport();
+            // The session starts here: what it recorded can be signed in again later, even if this request never gets through.
+            if (withRetry) SaveSignIn();
 
             while (true)
             {
@@ -699,6 +907,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 AuthTransportResult result = default;
                 yield return transport.AuthRequestCoroutine(_payload, r => result = r);
+                if (result.ServerDate.HasValue) RecordServerDate(result.ServerDate.Value);
 
                 // The session was cleared while the request was in flight: drop the response instead of applying it to the new session.
                 if (generation != _sessionGeneration) yield break;
@@ -763,7 +972,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
                 // Transient (offline, timeout, 408/429, 5xx): retry, doubling the wait so a fleet backs off during an outage.
                 string logDetail = ExtractAuthErrorMessage(result.Body) ?? "No response body.";
-                Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {retryIntervalSeconds} seconds...");
+                int waitSeconds = result.StatusCode == 429 && result.RetryAfterSeconds > 0 ? result.RetryAfterSeconds : retryIntervalSeconds;
+                Logcat.Warning($"AuthRequest failed: {logDetail} Retrying in {waitSeconds} seconds...");
                 if (!announcedRetrying)
                 {
                     // Report the first failure of the attempt (OnAuthCompleted(false)) so the app can start without auth, as it
@@ -774,7 +984,13 @@ namespace AbxrLib.Runtime.Services.Auth
                     string reason = result.NetworkError ? "no connection" : result.StatusCode > 0 ? $"HTTP {result.StatusCode}" : "no usable response";
                     onRetrying?.Invoke($"Device authentication failed ({reason}); the SDK is retrying in the background.");
                 }
-                // Real time, so an app that sets Time.timeScale to 0 while it waits for auth still gets its retries.
+                // Real time, so an app that sets Time.timeScale to 0 while it waits for auth still gets its retries. A 429
+                // waits as long as the backend asked instead of doubling, which a rate limit would only refuse again.
+                if (result.StatusCode == 429 && result.RetryAfterSeconds > 0)
+                {
+                    yield return new WaitForSecondsRealtime(result.RetryAfterSeconds);
+                    continue;
+                }
                 yield return new WaitForSecondsRealtime(retryIntervalSeconds);
                 retryIntervalSeconds = Math.Min(retryIntervalSeconds * 2, maxRetryIntervalSeconds);
             }
@@ -992,6 +1208,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     if (config != null)
                     {
                         Configuration.Instance.ApplyConfigPayload(config);
+                        OnConfigReceived?.Invoke(config);
                         // Use GET config only when _runtimeAuth.authMechanism not already set (e.g. by tests). Apply learner launcher only when we just filled from config.
                         bool filledFromConfig = _runtimeAuth.authMechanism == null || string.IsNullOrEmpty(_runtimeAuth.authMechanism.type);
                         if (filledFromConfig)
@@ -1006,6 +1223,13 @@ namespace AbxrLib.Runtime.Services.Auth
                         }
                         
                         _authMechanism = CopyAuthMechanism(_runtimeAuth.authMechanism);
+                        // What an offline launch uses (offline RFC D4, D7). Only the org's own config, not one a test injected.
+                        if (filledFromConfig)
+                            _offlineSettings?.Save(_identityKey, new CachedOrgSettings
+                            {
+                                authMechanism = new AuthMechanism { type = _authMechanism.type, prompt = _authMechanism.prompt, domain = _authMechanism.domain },
+                                automaticTelemetry = config.enableAutomaticTelemetry
+                            });
                         string authType = _authMechanism?.type ?? "";
                         if (!string.IsNullOrEmpty(authType) && !string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase))
                         {
@@ -1098,6 +1322,8 @@ namespace AbxrLib.Runtime.Services.Auth
         {
             _attemptActive = false;
             Authenticated = true;
+            // Signed in online (config failed, the policy is now none, SSO, handoff) before the person answered offline.
+            CloseOfflinePrompt();
             bool ssoUserDataChanged = false;
             if (ResponseData != null)
             {
@@ -1111,11 +1337,24 @@ namespace AbxrLib.Runtime.Services.Auth
                     ssoUserDataChanged = MergeSsoAccessTokenIntoUserData(ResponseData.UserData);
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
             }
-            OnSucceeded?.Invoke();
+            _signedInOnline = !string.IsNullOrEmpty(ResponseData?.Token);
+            SaveSignIn();
+            var offlineUserData = _offlineUserData;
+            _offlineUserData = null;
+            if (_offlineSignInReported)
+            {
+                // The app heard OnAuthCompleted(true) when the person signed in offline.
+                _offlineSignInReported = false;
+                _offlineSignInSkipped = false;
+                OnSucceededAfterOfflineSignIn?.Invoke();
+            }
+            else
+                OnSucceeded?.Invoke();
             Logcat.Info("Authenticated successfully");
-            // Push merged MDM SSO claims to the API via the same transport as SetUserData (custom re-auth); completion is OnUserDataSyncCompleted only.
-            if (ssoUserDataChanged)
-                SetUserData(null, null);
+            // Push merged MDM SSO claims, and user data set while offline, to the API via the same transport as SetUserData
+            // (custom re-auth); completion is OnUserDataSyncCompleted only.
+            if (ssoUserDataChanged || offlineUserData != null)
+                SetUserData(null, offlineUserData);
         }
 
         /// <summary>For handoff receivers and GET-config failure: no keyboard/PIN; keep Configuration asset defaults for other fields.</summary>
@@ -1173,6 +1412,8 @@ namespace AbxrLib.Runtime.Services.Auth
             bool ssoUserDataChanged = MergeSsoAccessTokenIntoUserData(ResponseData.UserData);
             if (ResponseData.UserData != null)
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
+            _signedInOnline = !string.IsNullOrEmpty(ResponseData.Token);
+            SaveSignIn();
             OnSucceeded?.Invoke();
             if (ssoUserDataChanged)
                 SetUserData(null, null);
@@ -1196,6 +1437,11 @@ namespace AbxrLib.Runtime.Services.Auth
             IsUserAuthSubmitInFlight = false;
             _userData = null;
             _credentialsRejectedByApi = false;
+            _signedInOnline = false;
+            _offlinePromptPending = false;
+            _offlineSignInReported = false;
+            _offlineSignInSkipped = false;
+            _offlineUserData = null;
             _deviceAuthDeferredByHandoff = false;
             _ssoUserDataMergedBeforeAuthSucceeded = false;
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -1345,6 +1591,19 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <param name="additionalUserData">Optional key-value pairs to merge with existing UserData (overwrites existing keys). May be empty to clear all userData.</param>
         public void SetUserData(string id = null, Dictionary<string, string> additionalUserData = null)
         {
+            if (!Authenticated && _offlineSignInReported)
+            {
+                // Signed in offline: keep it with the session (a replay sends it) and sync it once online.
+                _offlineUserData ??= new Dictionary<string, string>();
+                if (!string.IsNullOrEmpty(id)) _offlineUserData["id"] = id;
+                if (additionalUserData != null)
+                    foreach (var kvp in additionalUserData) _offlineUserData[kvp.Key] = kvp.Value;
+                _userData ??= new Dictionary<string, string>();
+                foreach (var kvp in _offlineUserData) _userData[kvp.Key] = kvp.Value;
+                SaveSignIn();
+                Logcat.Info("Offline: the user data is saved with the session and synced once the device is online.");
+                return;
+            }
             if (!Authenticated)
             {
                 Logcat.Warning("Cannot set user data - not authenticated. Call Authenticate() first.");
@@ -1374,6 +1633,7 @@ namespace AbxrLib.Runtime.Services.Auth
             }
 
             _userData = merged;
+            SaveSignIn();
 
             // Reauthenticate to sync with server. Do not fire OnSucceeded/OnAuthCompleted (users think they are just updating user reference).
             // Completion is reported via OnUserDataSyncCompleted only; tests and optional app code can subscribe there.

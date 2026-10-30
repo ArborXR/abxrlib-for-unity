@@ -4,8 +4,11 @@
 // Tests that assert on queue contents are skipped when using ArborInsightsClient (device) transport.
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
+using AbxrLib.Runtime.Services.Transport;
+using AbxrLib.Runtime.Services.Transport.Offline;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
@@ -30,7 +33,7 @@ public class EventTrackingTests : AbxrPlayModeTestBase
     // ── Session end ───────────────────────────────────────────────────────
 
     [UnityTest]
-    public IEnumerator EndSession_DuringASendRetry_DropsTheBatchInsteadOfRequeuingIt()
+    public IEnumerator EndSession_DuringASendRetry_KeepsTheBatchWithItsOwnSession()
     {
         // Nothing listens on port 1, so each attempt is a connection error, which the transport retries.
         ModifyConfig("restUrl", "http://127.0.0.1:1/");
@@ -39,29 +42,35 @@ public class EventTrackingTests : AbxrPlayModeTestBase
         SimulateAuth();
         Abxr.Event("stale_batch", null, sendTelemetry: false);
         AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
-
-        float deadline = Time.realtimeSinceStartup + 5f;
-        while (PendingEvents.Count > 0 && Time.realtimeSinceStartup < deadline)
-            yield return null;
-        Assert.AreEqual(0, PendingEvents.Count, "The transport should have taken the batch to send.");
+        yield return new WaitForSeconds(0.5f); // the send is out and retrying
 
         Abxr.EndSession();
         yield return new WaitForSeconds(5f); // past every retry the ended session had left
 
-        Assert.AreEqual(0, PendingEvents.Count, "A batch from an ended session must not go back in the queue for the next one.");
+        Assert.AreEqual(0, PendingEvents.Count, "A batch from an ended session must not go out with the next one.");
+        var queue = (DurableRecordQueue)AbxrSubsystem.Instance.RestTransportForTesting.QueueForTesting;
+        var ended = queue.SealedSessions();
+        Assert.AreEqual(1, ended.Count, "Offline RFC D2: the ended session keeps it, to upload as itself later.");
+        CollectionAssert.Contains(queue.Peek(ended[0], RecordStream.Data, 100).Records.Select(r => (r.Payload as EventPayload)?.name).ToList(), "stale_batch");
     }
 
-    // ── Queue limit ───────────────────────────────────────────────────────
+    // ── Queue limit (the in-memory queue WebGL uses) ──────────────────────
+
+    private static bool AddEvent(MemoryRecordQueue queue, string name) =>
+        queue.Add(null, new QueuedRecord(QueuedKind.Event, new EventPayload { name = name }));
 
     [Test]
     public void AFullQueue_WarnsOnceAndDropsTheRest()
     {
         ModifyConfig("maximumCachedItems", 2);
         LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Event queue limit reached (2).")));
+        var queue = new MemoryRecordQueue();
 
-        for (int i = 0; i < 5; i++) Abxr.Event($"event_{i}", null, sendTelemetry: false);
+        int kept = 0;
+        for (int i = 0; i < 5; i++) if (AddEvent(queue, $"event_{i}")) kept++;
 
-        Assert.AreEqual(2, PendingEvents.Count);
+        Assert.AreEqual(2, kept);
+        Assert.AreEqual(2, queue.PendingRecords);
         LogAssert.NoUnexpectedReceived();
     }
 
@@ -70,15 +79,27 @@ public class EventTrackingTests : AbxrPlayModeTestBase
     {
         ModifyConfig("maximumCachedItems", 1);
         LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Event queue limit reached (1).")));
-        Abxr.Event("first", null, sendTelemetry: false);
-        Abxr.Event("dropped", null, sendTelemetry: false);
+        var queue = new MemoryRecordQueue();
+        AddEvent(queue, "first");
+        AddEvent(queue, "dropped");
 
-        AbxrSubsystem.Instance.RestTransportForTesting.ClearAllPending();
+        queue.Ack(queue.PeekLive(RecordStream.Data, 10));
         LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("Event queue limit reached (1).")));
-        Abxr.Event("second", null, sendTelemetry: false);
-        Abxr.Event("dropped_again", null, sendTelemetry: false);
+        AddEvent(queue, "second");
+        AddEvent(queue, "dropped_again");
 
         LogAssert.NoUnexpectedReceived();
+    }
+
+    [Test]
+    public void InMemory_ASealedSessionIsDropped()
+    {
+        var queue = new MemoryRecordQueue();
+        AddEvent(queue, "webgl");
+
+        queue.SealLive();
+
+        Assert.AreEqual(0, queue.PendingRecords, "WebGL can't sign an ended session in again, so it isn't kept.");
     }
 
     // ── Generic Event ─────────────────────────────────────────────────────

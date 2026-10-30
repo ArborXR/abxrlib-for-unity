@@ -5,10 +5,12 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Services.Auth;
+using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
@@ -28,6 +30,31 @@ public class AbxrPlayModeTestBase
 
     // Config field name -> saved value; restore in TearDown so test overrides are not persisted.
     private Dictionary<string, object> _savedConfig = new Dictionary<string, object>();
+
+    /// <summary>This test's offline queue folder, deleted in TearDown, so no test sees another's queued sessions.</summary>
+    protected string QueueRoot { get; private set; }
+
+    /// <summary>
+    /// Points the offline queue at a fresh folder. Seeds the cached org settings with automatic telemetry on, as if an
+    /// earlier launch had received the config, so tests keep 3.0's telemetry behavior; tests of the cache overwrite it.
+    /// </summary>
+    private void UseFreshQueueRoot()
+    {
+        QueueRoot = Path.Combine(Application.temporaryCachePath, "abxrlib-test-queue", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(QueueRoot);
+        File.WriteAllText(Path.Combine(QueueRoot, "settings.json"),
+            "{\"last\":\"seed\",\"entries\":{\"seed\":{\"automaticTelemetry\":true}}}");
+        AbxrTransportRest.QueueRootForTesting = QueueRoot;
+    }
+
+    private void DeleteQueueRoot()
+    {
+        AbxrTransportRest.QueueRootForTesting = null;
+        AbxrAuthService.ResetClockOffsetForTesting();
+        if (QueueRoot == null) return;
+        try { Directory.Delete(QueueRoot, true); } catch (Exception) { /* a file still open; the temp folder is cleaned eventually */ }
+        QueueRoot = null;
+    }
 
     [SetUp]
     public void BaseSetUp()
@@ -59,6 +86,8 @@ public class AbxrPlayModeTestBase
 
         // Apply enableAutoStartAuthentication = false via RuntimeAuthConfig when the subsystem is created, so we never modify the Configuration asset (avoids leaving the user's config file changed if TearDown doesn't run).
         AbxrSubsystem.NextRuntimeAuthConfigForTesting = new RuntimeAuthConfig { enableAutoStartAuthentication = false };
+
+        UseFreshQueueRoot();
 
         // Subsystem creation can be deferred by derived fixtures (e.g. device authentication tests set config then create).
         CreateSubsystemIfNeeded();
@@ -257,6 +286,8 @@ public class AbxrPlayModeTestBase
         // DestroyImmediate calls OnDestroy synchronously, which sets AbxrSubsystem.Instance = null.
         if (SubsystemGO != null)
             UnityEngine.Object.DestroyImmediate(SubsystemGO);
+
+        DeleteQueueRoot();
 
         // Clean up statics so the next test starts fresh.
         AbxrAuthService.ClearAuthHandoffForTesting();

@@ -224,6 +224,57 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator Revoke_DeletesTheQueuedSessions()
+    {
+        Start(pairedAs: InstanceId, Unauthorized);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Pairing revoked")));
+        var queue = QueueAnEndedSession();
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual(0, queue.PendingRecords, "Offline RFC D5: a revoke deletes what the instance queued.");
+    }
+
+    [UnityTest]
+    public IEnumerator Suspension_KeepsTheQueuedSessions()
+    {
+        Start(pairedAs: InstanceId, Forbidden);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Access suspended")));
+        var queue = QueueAnEndedSession();
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(queue.PendingRecords > 0, "Offline RFC D5: a suspension keeps them for when access comes back.");
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_DeletesTheQueuedSessions()
+    {
+        Start(pairedAs: InstanceId, Authorized);
+        ModifyConfig("restUrl", "http://127.0.0.1:1/"); // ending the paired session's sends fail fast
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        var queue = QueueAnEndedSession();
+
+        Abxr.ClearPairing();
+
+        Assert.AreEqual(0, queue.PendingRecords, "Offline RFC D6: a cleared pairing's records don't go to the next one.");
+    }
+
+    /// <summary>A session an earlier launch ended before it could send, on disk in the REST transport's queue.</summary>
+    private static IRecordQueue QueueAnEndedSession()
+    {
+        var queue = AbxrSubsystem.Instance.RestTransportForTesting.QueueForTesting;
+        queue.SaveSignIn(new SavedSignIn { payload = new AuthPayload { sessionId = "earlier" } });
+        queue.Add("earlier", new QueuedRecord(QueuedKind.Event, new EventPayload { name = "queued", recordId = Guid.NewGuid().ToString() }));
+        queue.SealLive();
+        Assert.IsTrue(queue.PendingRecords > 0);
+        return queue;
+    }
+
+    [UnityTest]
     public IEnumerator PairedBootstrap_FastApiDefault401_Revokes()
     {
         Start(pairedAs: InstanceId, new AuthTransportResult(false, "{\"detail\":\"Invalid AppInstanceToken\"}", true, 401));

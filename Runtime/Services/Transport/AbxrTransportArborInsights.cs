@@ -76,19 +76,19 @@ namespace AbxrLib.Runtime.Services.Transport
         }
 
         // The client app queues and sends, so these always accept the record. The data service reports it as handed to the service.
-        public bool AddEvent(string name, Dictionary<string, string> meta, long recordId = 0)
+        public bool AddEvent(string name, Dictionary<string, string> meta, long observerId = 0)
         {
             ArborInsightsClient.Event(name ?? "", meta ?? new Dictionary<string, string>());
             return true;
         }
 
-        public bool AddTelemetry(string name, Dictionary<string, string> meta, long recordId = 0)
+        public bool AddTelemetry(string name, Dictionary<string, string> meta, long observerId = 0)
         {
             ArborInsightsClient.AddTelemetryEntry(name ?? "", meta ?? new Dictionary<string, string>());
             return true;
         }
 
-        public bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long recordId = 0)
+        public bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long observerId = 0)
         {
             var dict = meta ?? new Dictionary<string, string>();
             string level = (logLevel ?? "").ToUpperInvariant();
@@ -106,7 +106,7 @@ namespace AbxrLib.Runtime.Services.Transport
             try { ArborInsightsClient.ForceSendUnsent(); } catch { /* ignore */ }
         }
 
-        public bool StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy, long recordId = 0)
+        public bool StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy, long observerId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
@@ -228,10 +228,19 @@ namespace AbxrLib.Runtime.Services.Transport
             ArborInsightsClient.Unbind();
         }
 
-        public void ClearAllPending()
+        public void SealSession()
+        {
+            // No-op; the service owns its session.
+        }
+
+        public void ClearAllPending(AbxrObserver.DropReason reason = AbxrObserver.DropReason.SessionEnded)
         {
             // No-op; service session is cleared on Unbind.
         }
+
+        public void SaveSignIn(SavedSignIn signIn) { }
+
+        public global::Abxr.UploadStatus GetUploadStatus() => default;
 
         public List<EventPayload> GetPendingEventsForTesting() => new List<EventPayload>();
         public List<LogPayload> GetPendingLogsForTesting() => new List<LogPayload>();

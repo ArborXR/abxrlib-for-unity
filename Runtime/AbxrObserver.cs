@@ -39,8 +39,18 @@ public static class AbxrObserver
 		NotAuthenticated,
 		/// <summary>User-scoped storage needs a signed-in user.</summary>
 		NoUser,
-		/// <summary>The session ended (EndSession, StartNewSession, or a pairing change) before the record was sent.</summary>
-		SessionEnded
+		/// <summary>The session ended (EndSession, StartNewSession, or a pairing change) before the record was sent. WebGL only: elsewhere an ended session is kept and uploaded later.</summary>
+		SessionEnded,
+		/// <summary>The backend revoked this app's pairing, so its queued records were deleted.</summary>
+		Revoked,
+		/// <summary>Queued too long (Offline Retention Days), or the queue went over its disk budget (Offline Disk Budget MB).</summary>
+		Retention,
+		/// <summary>The pairing was cleared (Abxr.ClearPairing), or the app called Abxr.ClearQueuedData.</summary>
+		Cleared,
+		/// <summary>The backend refused the record, or refused to sign in its session on three launches.</summary>
+		Rejected,
+		/// <summary>The session was recorded as a different app, organization or paired instance than the one uploading, or never signed in.</summary>
+		IdentityChanged
 	}
 
 	public enum SendStatus
@@ -48,9 +58,9 @@ public static class AbxrObserver
 		/// <summary>The backend accepted the batch.</summary>
 		Sent,
 		/// <summary>
-		/// The batch failed after its retries. Usually it goes back in the queue, and any record that no longer fits gets a
-		/// separate Dropped result. A batch sent as the session ends (EndSession, or the app quitting) isn't queued again,
-		/// so Failed is its last result.
+		/// The batch failed after its retries (offline, a timeout, or a server error). It stays queued and is sent again
+		/// later, so another result follows. On WebGL, a batch sent as the session ends isn't queued again, so Failed is its
+		/// last result.
 		/// </summary>
 		Failed,
 		/// <summary>The record went to the ArborXR client app, which sends it. The SDK can't see whether that send succeeds.</summary>

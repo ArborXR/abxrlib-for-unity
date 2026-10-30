@@ -11,6 +11,9 @@ using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Services.Telemetry;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Services.Transport;
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+using AbxrLib.Runtime.Services.Transport.Offline;
+#endif
 using AbxrLib.Runtime.Core.UI;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -90,6 +93,8 @@ namespace AbxrLib.Runtime
 
         /// <summary>For testing only. The pairing service, for its state and stored pairing.</summary>
         internal AbxrPairingService PairingServiceForTesting => _pairingService;
+        internal OfflineSettingsCache OfflineSettingsForTesting => _offlineSettings;
+        internal bool AutomaticTelemetryRunningForTesting => _automaticTelemetryRunning;
         internal AbxrPairingService Pairing => _pairingService;
 
         /// <summary>For testing only. True when ArborMdmClient is available and connected (e.g. on Android device with MDM). Used to decide expected auth outcome in environment-dependent tests.</summary>
@@ -129,6 +134,23 @@ namespace AbxrLib.Runtime
         private PairingHost _pairingHost;
         private AbxrDataService _dataService;
         private AbxrTelemetryService _telemetryService;
+        /// <summary>The org settings an offline launch needs (offline RFC D4, D7).</summary>
+        private OfflineSettingsCache _offlineSettings;
+        /// <summary>The app's own enableAutomaticTelemetry, before a config overwrote it.</summary>
+        private bool _authoredAutomaticTelemetry;
+        /// <summary>The org's automatic telemetry setting: from the last config, then this launch's. Null when nothing was ever cached.</summary>
+        private bool? _orgAutomaticTelemetry;
+        private bool _automaticTelemetryRunning;
+        /// <summary>The app called Abxr.TrackAutoTelemetry, which runs the collector whatever its own setting says.</summary>
+        private bool _automaticTelemetryRequestedByApp;
+
+        /// <summary>Where the offline queue and its settings live. WebGL keeps nothing between launches.</summary>
+        private static string OfflineRoot =>
+#if UNITY_WEBGL && !UNITY_EDITOR
+            null;
+#else
+            AbxrTransportRest.QueueRootForTesting ?? DurableRecordQueue.DefaultRoot;
+#endif
         private ArborMdmClient _arborMdmClient;
 #if UNITY_ANDROID && !UNITY_EDITOR
 	    private ArborInsightsClient _arborInsightsClient;
@@ -241,6 +263,9 @@ namespace AbxrLib.Runtime
             _pairingService.OnStateChanged = OnPairingStateChanged;
             _pairingService.OnInputRequested = OnInputRequestedDispatch;
             _authService.SetPairedCredential(_pairingService);
+            _offlineSettings = new OfflineSettingsCache(OfflineRoot);
+            _authService.SetOfflineSettings(_offlineSettings);
+            _authService.OnConfigReceived = OnConfigReceived;
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
             _dataService = new AbxrDataService(this, () => _transport, () => IsRecording);
@@ -263,6 +288,7 @@ namespace AbxrLib.Runtime
             _authService.OnInputRequested = (type, prompt, domain, error) =>
                 _signInShownBySdkUi = DispatchInputRequest(type, prompt, domain, error);
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
+            _authService.OnSucceededAfterOfflineSignIn = () => HandleAuthCompleted(true, reportToApp: false);
             _authService.OnFailed = error =>
             {
                 Logcat.Error($"Authentication failure: {error}");
@@ -331,11 +357,35 @@ namespace AbxrLib.Runtime
             else
                 Logcat.Info("Auto-start auth is disabled. Call Abxr.StartAuthentication() manually when ready.");
 
-            // Telemetry collector
-            if (settings.enableAutomaticTelemetry)
-            {
-                _telemetryService.Start();
-            }
+            // Telemetry collector: the app's setting and the org's (offline RFC D4), the org's from the last config until this
+            // launch's arrives.
+            _authoredAutomaticTelemetry = settings.enableAutomaticTelemetry;
+            var cached = _offlineSettings.GetLast();
+            _orgAutomaticTelemetry = cached == null ? (bool?)null : cached.automaticTelemetry ?? true;
+            ApplyAutomaticTelemetry();
+        }
+
+        /// <summary>
+        /// The org's telemetry setting allows automatic telemetry and per-event snapshots. With nothing cached on a headset
+        /// (its first launch, or offline since a re-pair) they wait for the config; WebGL caches nothing and starts as before.
+        /// </summary>
+        private bool OrgAllowsAutomaticTelemetry => _orgAutomaticTelemetry ?? !_offlineSettings.IsPersistent;
+
+        private void ApplyAutomaticTelemetry()
+        {
+            // TrackAutoTelemetry needs only the org not to have turned it off, as it did before the org setting was cached.
+            bool on = (_authoredAutomaticTelemetry && OrgAllowsAutomaticTelemetry)
+                      || (_automaticTelemetryRequestedByApp && _orgAutomaticTelemetry != false);
+            if (on == _automaticTelemetryRunning) return;
+            if (on) _telemetryService.Start();
+            else _telemetryService.Stop();
+            _automaticTelemetryRunning = on;
+        }
+
+        private void OnConfigReceived(ConfigPayload config)
+        {
+            _orgAutomaticTelemetry = config.enableAutomaticTelemetry ?? true;
+            ApplyAutomaticTelemetry();
         }
 
         private void OnDestroy()
@@ -380,6 +430,12 @@ namespace AbxrLib.Runtime
         {
 	        if (!hasFocus) SendAll();
         }
+
+        /// <summary>A headset going to sleep may never come back to this process, so buffered records go to disk now.</summary>
+        private void OnApplicationPause(bool paused)
+        {
+	        if (paused) SendAll();
+        }
         
         private void OnApplicationQuit()
         {
@@ -400,7 +456,8 @@ namespace AbxrLib.Runtime
 	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync, except on WebGL, where it sends without waiting).
 	        SendAll();
             _transport?.OnQuit();
-	        _transport?.ClearAllPending();
+	        // Close and keep (offline RFC D2): what the session didn't send uploads as this session once the device is online.
+	        _transport?.SealSession();
 	        _superMetaData.Clear();
 	        PlayerPrefs.DeleteKey(SuperMetaDataPrefsKey);
 	        PlayerPrefs.Save();
@@ -501,7 +558,18 @@ namespace AbxrLib.Runtime
             // attempt finishes later as the old instance. A revoke needs none of this, since it ends the attempt that
             // found it, and that attempt still has to report.
             if (reason == Abxr.PairingChangeReason.Cleared || reason == Abxr.PairingChangeReason.Paired)
+            {
                 EndSessionOfPreviousPairing();
+                // Offline RFC D6: the old pairing's unsent records don't go to the next one, and neither do its cached settings.
+                // A new pairing keeps what was recorded while its prompt was open (SDK-60 decision 1); nothing had signed in for
+                // it, so it becomes the new pairing's first session. A session an earlier identity recorded is dropped when
+                // the replay checks its identity.
+                if (reason == Abxr.PairingChangeReason.Cleared) _transport?.ClearAllPending(AbxrObserver.DropReason.Cleared);
+                _offlineSettings?.Clear();
+            }
+            // Offline RFC D5: a revoke deletes what the instance queued. A 403 suspension keeps it.
+            if (reason == Abxr.PairingChangeReason.Revoked)
+                _transport?.ClearAllPending(AbxrObserver.DropReason.Revoked);
 
             if (state == Abxr.PairingState.Unpaired) StopRecordingWhileUnpaired();
             if (state == Abxr.PairingState.Paired)
@@ -534,7 +602,9 @@ namespace AbxrLib.Runtime
         private void StopRecordingWhileUnpaired()
         {
             if (!_pairingService.CanPair) return;
-            _transport?.ClearAllPending();
+            // Ends what was recorded while identity was resolving or the prompt was open. Earlier sessions stay: a managed
+            // headset whose ArborXR client was slow this launch still uploads them next launch.
+            _transport?.SealSession();
             Logcat.Info("Not recording: this app isn't paired with an organization. Recording starts when the pairing prompt opens.");
         }
 
@@ -618,7 +688,8 @@ namespace AbxrLib.Runtime
 
         internal Texture GetQRScanCameraTexture() => AbxrUi.QrScanner?.GetCameraTexture();
 
-        private void HandleAuthCompleted(bool success, string errorMessage = null)
+        /// <param name="reportToApp">False when a session that reported success offline finishes signing in online: the app already heard true.</param>
+        private void HandleAuthCompleted(bool success, string errorMessage = null, bool reportToApp = true)
         {
 	        // Start default assessment tracking if no assessments are currently running
 	        // This ensures duration tracking starts immediately after authentication
@@ -626,6 +697,9 @@ namespace AbxrLib.Runtime
 	        // Failures run this too. When 'false' comes before 'true' (a device auth that retried, a wrong PIN), 'true' restarts
 	        // the DEFAULT start, so its duration covers only the time after auth succeeded; only 'true' starts the timer.
 	        // Use lock to prevent race condition with concurrent EventAssessmentStart calls
+	        // The online completion of an offline sign-in keeps the DEFAULT start from when the person signed in.
+	        if (reportToApp)
+	        {
 	        lock (_assessmentStartTimesLock)
 	        {
 		        if (_assessmentStartTimes.Count == 0)
@@ -639,8 +713,8 @@ namespace AbxrLib.Runtime
 			        _assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
 		        }
 	        }
-	        
 	        Abxr.OnAuthCompleted?.Invoke(success, errorMessage);
+	        }
 	        if (!success) return;
 
 	        var modules = _authService.ResponseData.Modules;
@@ -853,8 +927,9 @@ namespace AbxrLib.Runtime
 internal void StartNewSession()
         {
 			Configuration.ClearRuntimeConfig();
-			// Clear in-memory batchers so no previous-session events/telemetry/logs/storage are sent with the new session.
-			_transport?.ClearAllPending();
+			// End the previous session's queue so none of its records are sent with the new session. They're kept and upload
+			// as the previous session (offline RFC D2); on WebGL they're dropped.
+			_transport?.SealSession();
 
 			// Super metadata is per-session; clear in-memory and persisted value.
 			_superMetaData.Clear();
@@ -1010,10 +1085,21 @@ internal void StartNewSession()
 			_dataService.AddLog(logLevelString, logMessage, metadata);
 		}
         
-        internal void TrackAutoTelemetry() => _telemetryService.Start();
+        internal void TrackAutoTelemetry()
+        {
+            if (_orgAutomaticTelemetry == false)
+            {
+                Logcat.Info("Automatic telemetry is off for this organization, so TrackAutoTelemetry was ignored.");
+                return;
+            }
+            _automaticTelemetryRequestedByApp = true;
+            ApplyAutomaticTelemetry();
+        }
         
         internal void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
         {
+            // The org turned telemetry off (offline RFC D4).
+            if (_orgAutomaticTelemetry == false) return;
             telemetryData ??= new Dictionary<string, string>();
             if (Configuration.Instance.enableSceneEvents)
                 telemetryData["sceneName"] = SceneChangeDetector.CurrentSceneName;
@@ -1042,7 +1128,7 @@ internal void StartNewSession()
             }
 		
             _dataService.AddEvent(eventName, metadata);
-            if (sendTelemetry)
+            if (sendTelemetry && OrgAllowsAutomaticTelemetry)
             {
 	            _telemetryService.RecordLocationData();
 	            _telemetryService.RecordSystemInfo();
@@ -1923,6 +2009,11 @@ internal void StartNewSession()
             }
         }
 		
+        internal Abxr.UploadStatus GetUploadStatus() => _transport?.GetUploadStatus() ?? default;
+
+        /// <summary>Abxr.ClearQueuedData (offline RFC D9): deletes every queued record without unpairing or ending the session.</summary>
+        internal void ClearQueuedData() => _transport?.ClearAllPending(AbxrObserver.DropReason.Cleared);
+
         private void SendAll()
         {
 	        _dataService?.ForceSend();

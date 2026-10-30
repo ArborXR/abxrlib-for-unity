@@ -217,6 +217,9 @@ namespace AbxrLib.Runtime.Types
         public string abxrLibType;
         public string abxrLibVersion;
         public string buildFingerprint;
+        /// <summary>The device's title at session start (offline RFC D8), so a replayed sign-in files the session under the name it had then. Managed headsets only.</summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string deviceTitle;
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public Dictionary<string, string> authMechanism;
     }
@@ -337,8 +340,10 @@ namespace AbxrLib.Runtime.Types
         public long preciseTimestamp;
         public string name;
         public Dictionary<string, string> meta;
+        /// <summary>Unique id for the backend's duplicate check (INS-527), created when the record is queued and kept across retries and launches.</summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string recordId;
         /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
-        [JsonIgnore] internal long RecordId;
+        [JsonIgnore] internal long ObserverId;
     }
 
     [Serializable]
@@ -348,8 +353,10 @@ namespace AbxrLib.Runtime.Types
         public long preciseTimestamp;
         public string name;
         public Dictionary<string, string> meta;
+        /// <summary>Unique id for the backend's duplicate check (INS-527), created when the record is queued and kept across retries and launches.</summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string recordId;
         /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
-        [JsonIgnore] internal long RecordId;
+        [JsonIgnore] internal long ObserverId;
     }
 
     [Serializable]
@@ -360,8 +367,10 @@ namespace AbxrLib.Runtime.Types
         public string logLevel;
         public string text;
         public Dictionary<string, string> meta;
+        /// <summary>Unique id for the backend's duplicate check (INS-527), created when the record is queued and kept across retries and launches.</summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string recordId;
         /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
-        [JsonIgnore] internal long RecordId;
+        [JsonIgnore] internal long ObserverId;
     }
 
     [Serializable]
@@ -380,8 +389,10 @@ namespace AbxrLib.Runtime.Types
         public string name;
         public List<Dictionary<string, string>> data;
         public string scope;
+        /// <summary>Unique id for the backend's duplicate check (INS-527), created when the record is queued and kept across retries and launches.</summary>
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string recordId;
         /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
-        [JsonIgnore] internal long RecordId;
+        [JsonIgnore] internal long ObserverId;
     }
     
     [Serializable]
