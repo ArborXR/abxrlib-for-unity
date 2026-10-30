@@ -162,6 +162,30 @@ public class AbxrObserverRestTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator Batch_RateLimited_WaitsForRetryAfter_EvenAsTheQueueFills()
+    {
+        _server.Respond = (path, body) => path == DataPath ? new LocalRestServer.Answer(429, "{}", "30") : (LocalRestServer.Answer?)null;
+        ModifyConfig("dataEntriesPerSendAttempt", 2);
+        ModifyConfig("maxCallFrequencySeconds", 0.1f);
+        SimulateAuth();
+        Abxr.Event("first", null, sendTelemetry: false);
+        Abxr.Event("second", null, sendTelemetry: false);
+        AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
+        yield return WaitFor(() => _server.Bodies(DataPath).Count > 0, 5f);
+
+        // A full queue and ForceSend both ask to send now; a 429's Retry-After still wins.
+        float until = Time.realtimeSinceStartup + 2f;
+        for (int i = 0; Time.realtimeSinceStartup < until; i++)
+        {
+            Abxr.Event("more" + i, null, sendTelemetry: false);
+            AbxrSubsystem.Instance.RestTransportForTesting.ForceSend();
+            yield return null;
+        }
+
+        Assert.AreEqual(1, _server.Bodies(DataPath).Count, "Nothing more goes out during Retry-After.");
+    }
+
+    [UnityTest]
     public IEnumerator Batch_RequestRefused403_KeepsTheRecordsQueued_AndReportsFailed() => RequestRefusedKeepsRecords(403);
 
     [UnityTest]

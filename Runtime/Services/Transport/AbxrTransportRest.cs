@@ -70,6 +70,10 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private float _nextDataSendAt;
         private float _nextStorageSendAt;
+        /// <summary>Per stream, when a 429's Retry-After ends. Nothing sends that stream before it, ForceSend included.</summary>
+        private readonly float[] _rateLimitedUntil = new float[2];
+        /// <summary>Per stream, true after a live send failed until one gets through, so a full queue doesn't resend at once.</summary>
+        private readonly bool[] _backingOff = new bool[2];
         private float _lastDataCallTime;
         private float _lastStorageCallTime;
         private Coroutine _tickCoroutine;
@@ -290,7 +294,8 @@ namespace AbxrLib.Runtime.Services.Transport
             lock (_lock)
             {
                 if (!_queue.Add(_authService.SessionId, record)) return false;
-                if (_queue.PendingLive(record.Stream) >= ChunkSize(record.Stream)) SetNextSend(record.Stream, 0);
+                if (!_backingOff[(int)record.Stream] && _queue.PendingLive(record.Stream) >= ChunkSize(record.Stream))
+                    SetNextSend(record.Stream, 0);
             }
             return true;
         }
@@ -622,6 +627,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private IEnumerator SendLive(RecordStream stream)
         {
+            if (Time.time < _rateLimitedUntil[(int)stream]) yield break;
             bool storage = stream == RecordStream.Storage;
             float lastCall = storage ? _lastStorageCallTime : _lastDataCallTime;
             if (Time.time - lastCall < Configuration.Instance.maxCallFrequencySeconds) yield break;
@@ -674,6 +680,7 @@ namespace AbxrLib.Runtime.Services.Transport
                 case ChunkOutcome.Done:
                     Acknowledge(chunk);
                     _liveReSignRequested = false;
+                    _backingOff[(int)stream] = false;
                     // The device is online: send the rest without waiting, and let a replay start.
                     bool pending;
                     lock (_lock) { pending = _queue.PendingLive(stream) > 0; }
@@ -684,7 +691,13 @@ namespace AbxrLib.Runtime.Services.Transport
                     RaiseUploadStatus();
                     break;
                 case ChunkOutcome.RateLimited:
+                    _rateLimitedUntil[(int)stream] = Time.time + result.RetryAfterSeconds;
+                    _backingOff[(int)stream] = true;
                     SetNextSend(stream, Time.time + result.RetryAfterSeconds);
+                    break;
+                case ChunkOutcome.Retry:
+                    // Waits sendNextBatchWaitSeconds (set when this send started) instead of resending as records arrive.
+                    _backingOff[(int)stream] = true;
                     break;
                 case ChunkOutcome.Unauthorized:
                     // The token stopped working before re-auth polling replaced it. Ask once for a new one for this session.
