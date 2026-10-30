@@ -58,6 +58,7 @@ namespace AbxrLib.Runtime.Services.Transport
         /// <summary>How long quit (or EndSession) may block sending the live session before the rest is left for replay.</summary>
         private const float QuitFlushBudgetSeconds = 3f;
         private static readonly WaitForSeconds WaitQuarterSecond = new WaitForSeconds(0.25f);
+        private readonly WaitForSecondsRealtime WaitQuarterSecondRealtime = new WaitForSecondsRealtime(0.25f);
 
         private readonly AbxrAuthService _authService;
         private readonly MonoBehaviour _runner;
@@ -615,7 +616,8 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             while (!_stopped)
             {
-                yield return WaitQuarterSecond;
+                // Real time: a pause menu that sets Time.timeScale to 0 mustn't keep records off disk.
+                yield return WaitQuarterSecondRealtime;
                 if (_stopped) yield break;
                 lock (_lock) { _queue.Flush(); }
                 RaiseUploadStatus();
