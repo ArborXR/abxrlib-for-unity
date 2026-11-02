@@ -79,7 +79,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         internal const string JoinDeviceInputType = "pairingDeviceJoin";
 
         private const string PasscodePrompt = "Pairing Passcode";
-        private const string DeviceNamePrompt = "Give this connection a name.";
+        private const string DeviceNamePrompt = "Give this device a name.";
         private const string SkipInput = "**skip**";
         private const string UnsupportedPlatform = "pairing runs only in Android and WebGL builds.";
         /// <summary>How many prompts an app handler may re-request from inside its own callback before the SDK stops re-asking.</summary>
