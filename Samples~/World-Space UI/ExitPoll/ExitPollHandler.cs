@@ -139,6 +139,16 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             panelText.text = _prompt;
         }
 
+        // The poll and its backdrop share a plane, so left to distance the backdrop can draw over the poll: on a flat
+        // screen, where both are centred on the view, it does.
+        private static void DrawPollOverBackdrop()
+        {
+            if (!_pollInstance || !_panelInstance) return;
+            Canvas pollCanvas = _pollInstance.GetComponentInChildren<Canvas>();
+            Canvas panelCanvas = _panelInstance.GetComponentInChildren<Canvas>();
+            if (pollCanvas && panelCanvas) pollCanvas.sortingOrder = panelCanvas.sortingOrder + 1;
+        }
+
         private static void ProcessPoll()
         {
             _isProcessing = true;
@@ -148,6 +158,7 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             CreatePanel(_panelPrefab);
             CreatePoll(poll.Item2);
             FaceCamera.FitTogether(_panelInstance, _pollInstance); // The poll sits on its backdrop, so they fit as one.
+            DrawPollOverBackdrop();
             Polls.RemoveAt(0);
             Responses.Remove(_prompt);
         }
