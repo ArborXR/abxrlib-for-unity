@@ -147,6 +147,7 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             _prompt = poll.Item1;
             CreatePanel(_panelPrefab);
             CreatePoll(poll.Item2);
+            FaceCamera.FitTogether(_panelInstance, _pollInstance); // The poll sits on its backdrop, so they fit as one.
             Polls.RemoveAt(0);
             Responses.Remove(_prompt);
         }

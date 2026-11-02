@@ -38,7 +38,7 @@ namespace AbxrLib.Runtime.UI
         private Configuration config;
 
         // Flat-screen fit: where the visible content sits around the pivot, in metres along the panel's own axes at its
-        // prefab scale. Measured once.
+        // prefab scale. Measured once, or given by FitTogether.
         private Vector3 _prefabScale;
         private bool _contentMeasured;
         private Vector2 _contentCenter;
@@ -149,6 +149,31 @@ namespace AbxrLib.Runtime.UI
 
                 // face the camera - ensure perfect perpendicular alignment
                 transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
+            }
+        }
+
+        /// <summary>
+        /// Gives every panel the same flat-screen fit, sized to hold all of them, so panels that are placed at the same
+        /// point stay lined up (the exit poll and its backdrop). Call it before their Start.
+        /// </summary>
+        public static void FitTogether(params GameObject[] roots)
+        {
+            if (XRSettings.isDeviceActive) return;
+            var panels = new System.Collections.Generic.List<FaceCamera>();
+            Vector2 min = Vector2.positiveInfinity, max = Vector2.negativeInfinity;
+            foreach (var root in roots)
+            {
+                var panel = root != null ? root.GetComponent<FaceCamera>() : null;
+                if (panel == null) continue;
+                panel.MeasureContent();
+                min = Vector2.Min(min, panel._contentCenter - panel._contentHalfExtents);
+                max = Vector2.Max(max, panel._contentCenter + panel._contentHalfExtents);
+                panels.Add(panel);
+            }
+            foreach (var panel in panels)
+            {
+                panel._contentCenter = (min + max) / 2f;
+                panel._contentHalfExtents = (max - min) / 2f;
             }
         }
 
