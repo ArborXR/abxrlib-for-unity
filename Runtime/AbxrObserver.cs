@@ -39,7 +39,10 @@ public static class AbxrObserver
 		NotAuthenticated,
 		/// <summary>User-scoped storage needs a signed-in user.</summary>
 		NoUser,
-		/// <summary>The session ended (EndSession, StartNewSession, or a pairing change) before the record was sent.</summary>
+		/// <summary>
+		/// The session ended (EndSession, StartNewSession, or a pairing change) before the record was sent. In this version,
+		/// records still unsent at session end are dropped; a later version may keep them and send them afterwards.
+		/// </summary>
 		SessionEnded
 	}
 
@@ -49,12 +52,11 @@ public static class AbxrObserver
 		Sent,
 		/// <summary>
 		/// The batch failed after its retries. Usually it goes back in the queue, and any record that no longer fits gets a
-		/// separate Dropped result. A batch sent as the session ends (EndSession, or the app quitting) isn't queued again,
-		/// so Failed is its last result.
+		/// separate Dropped result. In this version, a batch sent as the session ends (EndSession, or the app quitting)
+		/// isn't queued again, so Failed is its last result. Treat the latest result as a record's status, since a later
+		/// version may retry such a batch.
 		/// </summary>
 		Failed,
-		/// <summary>The record went to the ArborXR client app, which sends it. The SDK can't see whether that send succeeds.</summary>
-		HandedToService,
 		/// <summary>The record was queued but will never be sent. DropReason says why.</summary>
 		Dropped
 	}
@@ -62,7 +64,7 @@ public static class AbxrObserver
 	/// <summary>One record, as the SDK built it.</summary>
 	public readonly struct Record
 	{
-		/// <summary>Unique for this app run. Matches the ids in <see cref="SendResult.RecordIds"/>.</summary>
+		/// <summary>Matches the ids in <see cref="SendResult.RecordIds"/>. In this version, ids are unique only within one app run, so don't store them or compare them across launches.</summary>
 		public long Id { get; }
 		public RecordKind Kind { get; }
 		/// <summary>The Abxr method the app called, for example "EventAssessmentComplete". Null when <see cref="Automatic"/>.</summary>
@@ -125,7 +127,7 @@ public static class AbxrObserver
 	/// <summary>Raised on the main thread for every record the SDK creates, including the ones it doesn't keep.</summary>
 	public static event Action<Record> OnRecordCreated;
 
-	/// <summary>Raised on the main thread when records are sent, fail to send, are handed to the ArborXR client app, or are dropped after being queued.</summary>
+	/// <summary>Raised on the main thread when records are sent, fail to send, or are dropped after being queued.</summary>
 	public static event Action<SendResult> OnRecordsSent;
 
 	// Main thread only, like the rest of the record path.
@@ -239,13 +241,6 @@ public static class AbxrObserver
 			data != null ? new Dictionary<string, string>(data) : new Dictionary<string, string>(),
 			automatic, dropReason, DateTime.UtcNow);
 		Raise(handler, record, "OnRecordCreated");
-	}
-
-	/// <summary>Raises <see cref="OnRecordsSent"/> for one record.</summary>
-	internal static void Sent(long id, SendStatus status, int httpStatus = 0, string error = null, DropReason dropReason = DropReason.None)
-	{
-		if (id == 0 || OnRecordsSent == null) return;
-		Sent(new List<long> { id }, status, httpStatus, error, dropReason);
 	}
 
 	/// <summary>Raises <see cref="OnRecordsSent"/>. Skipped when the list is empty, which is what a batch made while nobody observed produces.</summary>

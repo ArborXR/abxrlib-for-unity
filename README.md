@@ -100,6 +100,8 @@ It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`, and Te
 > 3. `Abxr.AIProxy` has been removed, along with `AIProxyApi` and `AIPromptPayload`. The backend endpoint it called is no longer served, so every call already returned `null`. Call your LLM provider directly with your own keys.
 >
 > Beyond these, 3.0 adds new public API (the `AbxrUi` registry and its interfaces) without touching anything else you already call.
+>
+> One deprecation: `enableArborInsightsClient` is now `[Obsolete]`. The Insights device service it turns on is being removed, and from 3.1 the setting does nothing. Leave it as it is; nothing changes in 3.0.
 
 ---
 
@@ -139,7 +141,7 @@ On the legacy scheme, the MDM supplies Org ID and Auth Secret at runtime, so onl
 
 #### Headsets without ArborXR MDM (passcode pairing)
 
-On an Android headset or in a WebGL build with no ArborXR client and no org token, the app has no organization to report to. It runs as usual and stays quiet: no data is recorded or sent, and `OnAuthCompleted` fires once with `false` and *"No organization identity"*. The app can offer pairing instead. An org admin creates a pairing passcode in the ArborXR Portal (the app's **Insights Hub** → **Pairing Passcodes**), and someone on the headset types it in once. The pairing is stored on the device, so later launches authenticate on their own.
+On an Android headset or in a WebGL build with no ArborXR client and no org token, the app has no organization to report to. It runs as usual and stays quiet: no data is recorded or sent, and `OnAuthCompleted` fires once with `false` and *"No organization identity"*. The app can offer pairing instead. An org admin creates a pairing passcode in the ArborXR Portal (the app's **Insights Hub** → **Pairing Passcodes**), and someone types it into the app once. The pairing is stored on the device, so later launches authenticate on their own.
 
 The SDK never prompts by itself. Call `Abxr.StartPairing()` when your app wants to offer pairing, either at launch or from your own settings menu:
 
@@ -158,11 +160,11 @@ void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason rea
 }
 ```
 
-- **The prompt** uses the [Sign-in UI](#sign-in-ui-optional) when it's imported: a short screen that says what pairing does, with **Not now** to close it, then the PIN pad for the passcode, then the keyboard if the passcode lets the person name the headset. If another app on the headset already used the name, it asks whether to add this app to that headset. To draw your own, handle `Abxr.OnInputRequested`, whose `type` is `pairingPasscode`, `pairingDeviceName`, `pairingDeviceNameRequired`, or `pairingDeviceJoin`, and answer with `Abxr.OnInputSubmitted`. Call `Abxr.CancelPairing()` to close it. Or skip the prompt entirely with `Abxr.RedeemPairingPasscode(passcode, result => ...)`, which reports a typed `PairingRedeemResult`.
+- **The prompt** uses the [Sign-in UI](#sign-in-ui-optional) when it's imported: a short screen that says what pairing does, with **Not now** to close it, then the PIN pad for the passcode, then the keyboard if the passcode lets the person name the device. If another app already used the name, it asks whether to add this app to that device. To draw your own, handle `Abxr.OnInputRequested`, whose `type` is `pairingPasscode`, `pairingDeviceName`, `pairingDeviceNameRequired`, or `pairingDeviceJoin`, and answer with `Abxr.OnInputSubmitted`. Call `Abxr.CancelPairing()` to close it. Or skip the prompt entirely with `Abxr.RedeemPairingPasscode(passcode, result => ...)`, which reports a typed `PairingRedeemResult`.
 - **Too many attempts:** after repeated wrong passcodes, the pairing service makes the app wait (its Retry-After, from 1 second to an hour, or 60 seconds when it sends none). Until the wait is over, the SDK refuses redeems itself without contacting the service. The Sign-in UI counts down *"Too many attempts. Try again in N seconds."* on its own, but a custom prompt gets that text once, with `OnInputRequested`, so show the wait yourself: when the request arrives and `Abxr.GetLastPairingRedeemResult().Error` is `Abxr.PairingRedeemError.RateLimited`, start counting down from its `RetryAfterSeconds` right then. It's the wait at the moment of the result, not a live value. With `RedeemPairingPasscode`, do the same with the result passed to your callback, when the callback runs.
-- **Headset names** are set per passcode in the Portal. When a passcode allows naming, the headset asks for a name after the passcode is accepted, and every app paired with that name joins the same headset. `Abxr.GetPairedDeviceName()` returns it.
+- **Device names** are set per passcode in the Portal. When a passcode allows naming, the prompt asks for a name after the passcode is accepted, and every app paired with that name joins the same device. `Abxr.GetPairedDeviceName()` returns it.
 - **Settings:** **Pairing URL** is the Portal API that redeems passcodes (`https://api.xrdm.app/`). **Enable Pairing Dismiss** shows **Not now** on the default prompt; leave it on, or someone without a passcode can't close a prompt your app opens at launch.
-- **Removing a pairing:** revoking the app instance in the Portal removes the pairing on the headset at its next sign-in (`OnPairingStateChanged` reports `Revoked`). `Abxr.ClearPairing()` removes it from the app.
+- **Removing a pairing:** revoking the app instance in the Portal removes the pairing on the device at its next sign-in (`OnPairingStateChanged` reports `Revoked`). `Abxr.ClearPairing()` removes it from the app.
 - Each launch's identity is decided once, at the first authentication. An org credential set after that (a late `SetOrgId`, for example) is ignored for the launch, and the SDK logs a warning. If your app only gets the credential after an async step, turn off **Enable Auto Start Authentication** and call `Abxr.StartAuthentication()` once it's set.
 - With **Enable Auto Start Authentication** off, the SDK decides the app's identity when you call `Abxr.StartAuthentication()`. Until then the state is `Resolving` and `StartPairing()` returns false.
 - Pairing runs only in Android and WebGL builds. When the ArborXR client or an org token identifies the organization, it wins, and pairing doesn't apply.
@@ -234,15 +236,14 @@ void OnRecordCreated(AbxrObserver.Record record)
 
 void OnRecordsSent(AbxrObserver.SendResult result)
 {
-    // Sent or Failed (REST, with the HTTP status), HandedToService (the ArborXR client app sends it), or Dropped.
+    // Sent or Failed (with the HTTP status), or Dropped.
     Debug.Log($"{result.Status} {string.Join(",", result.RecordIds)} {result.HttpStatus} {result.Error}");
 }
 ```
 
 - Both events are raised on the main thread, in release builds too. With no handler attached, the SDK does no extra work.
 - A record that isn't kept says why in `DropReason`: `NotRecording` (unpaired, no pairing prompt open), `QueueFull`, or for storage `NotAuthenticated` or `NoUser`.
-- REST reports one result per batch. A failed batch is usually queued again, so a record can report `Failed` and later `Sent`; treat the latest result as its status. A batch that fails as the session ends (`EndSession`, or the app quitting) isn't queued again. Records lost after they were queued report `Dropped` with `SessionEnded` or `QueueFull`. The exception: records still queued when the SDK switches to the ArborXR client app at startup get no result.
-- On Android with the ArborXR client app, records report `HandedToService`: the client app sends them, and the SDK can't see the outcome.
+- REST reports one result per batch. A failed batch is usually queued again, so a record can report `Failed` and later `Sent`; treat the latest result as its status. In this version, a batch that fails as the session ends (`EndSession`, or the app quitting) isn't queued again, and records lost after they were queued report `Dropped` with `SessionEnded` or `QueueFull`. A later version may keep unsent records past the session end, so don't treat session end as the point every record has its final result. The exception: records sent through the Insights device service (`app.xrdi.client`, Android only, when it's installed) get no send result, because the service sends them itself. Records still queued when the SDK switches to it at startup are never sent and get no result either.
 - Records never carry tokens or secrets.
 
 ---

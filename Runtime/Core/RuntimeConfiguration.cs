@@ -143,6 +143,7 @@ namespace AbxrLib.Runtime.Core
         public int pruneSentItemsOlderThanHours = 12;
         public int maximumCachedItems = 1024;
         public bool retainLocalAfterSent;
+        [Obsolete("The Insights device service (app.xrdi.client) is being removed. From 3.1 this setting does nothing.")]
         public bool enableArborInsightsClient = true;
         public bool enableArborMdmClient = true;
         public bool enableLearnerLauncherMode = false;
@@ -261,7 +262,9 @@ namespace AbxrLib.Runtime.Core
             c.pruneSentItemsOlderThanHours = a.pruneSentItemsOlderThanHours;
             c.maximumCachedItems = a.maximumCachedItems;
             c.retainLocalAfterSent = a.retainLocalAfterSent;
+#pragma warning disable CS0618 // Obsolete, but still copied until 3.1 makes it a no-op.
             c.enableArborInsightsClient = a.enableArborInsightsClient;
+#pragma warning restore CS0618
             c.enableArborMdmClient = a.enableArborMdmClient;
             c.enableLearnerLauncherMode = a.enableLearnerLauncherMode;
             c.enableAutomaticTelemetry = a.enableAutomaticTelemetry;
