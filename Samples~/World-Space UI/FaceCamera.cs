@@ -43,6 +43,7 @@ namespace AbxrLib.Runtime.UI
         private bool _contentMeasured;
         private Vector2 _contentCenter;
         private Vector2 _contentHalfExtents;
+        private bool _flatScaled;
 
         private void Awake() => _prefabScale = transform.localScale;
 
@@ -87,6 +88,7 @@ namespace AbxrLib.Runtime.UI
                 FitToFlatScreen();
                 return;
             }
+            UndoFlatScreenFit();
             
 #if UNITY_EDITOR
             Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
@@ -135,6 +137,7 @@ namespace AbxrLib.Runtime.UI
                 faceCamera = Abxr.AuthUIFollowCamera;
             }
             
+            if (XRSettings.isDeviceActive) UndoFlatScreenFit();
             if (faceCamera && !XRSettings.isDeviceActive)
             {
                 FitToFlatScreen();
@@ -189,10 +192,22 @@ namespace AbxrLib.Runtime.UI
                 ? FlatScreenFit.Scale(_contentHalfExtents, distanceFromCamera, view.fieldOfView, view.aspect)
                 : 1f;
             transform.localScale = _prefabScale * scale;
+            _flatScaled = true;
 
             Vector3 target = cam.position + cam.forward * distanceFromCamera;
             Quaternion rotation = Quaternion.LookRotation(cam.forward, cam.up); // Square to the screen, whatever the pitch.
             transform.SetPositionAndRotation(target - rotation * (_contentCenter * scale), rotation);
+        }
+
+        /// <summary>
+        /// Puts a panel fitted to a flat screen back to its headset size once an XR device is active, for example when
+        /// an app starts XR after the panel opened. Leaves the scale alone otherwise, so it never fights an app's own.
+        /// </summary>
+        private void UndoFlatScreenFit()
+        {
+            if (!_flatScaled) return;
+            transform.localScale = _prefabScale;
+            _flatScaled = false;
         }
 
         /// <summary>
