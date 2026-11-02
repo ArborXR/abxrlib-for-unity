@@ -133,6 +133,8 @@ namespace AbxrLib.Runtime.UI.ExitPoll
         {
             _panelInstance = Instantiate(prefab);
             DontDestroyOnLoad(_panelInstance); // Outlives a scene load, like the poll.
+            // The backdrop has nothing to press, and on a flat screen its raycaster would compete with the poll's for taps.
+            foreach (var raycaster in _panelInstance.GetComponentsInChildren<GraphicRaycaster>()) raycaster.enabled = false;
             TextMeshProUGUI panelText = _panelInstance.GetComponentInChildren<TextMeshProUGUI>();
             panelText.text = _prompt;
         }
