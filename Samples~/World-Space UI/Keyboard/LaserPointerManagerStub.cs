@@ -65,6 +65,15 @@ namespace AbxrLib.Runtime.UI.Keyboard
         }
 
         /// <summary>
+        /// Bounces the ray interactors for one frame so their hover state refreshes.
+        /// Stub implementation - finishes at once.
+        /// </summary>
+        public static System.Collections.IEnumerator RefreshInteractorHover()
+        {
+            yield break;
+        }
+
+        /// <summary>
         /// Restores laser pointers to their original state before keyboard/PIN pad interaction.
         /// Stub implementation - no-op.
         /// </summary>

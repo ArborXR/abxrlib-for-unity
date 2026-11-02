@@ -314,6 +314,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public static void OnSceneChanged() => LaserPointerManagerStub.OnSceneChanged();
         public static bool IsXRInteractionToolkitAvailable() => LaserPointerManagerStub.IsXRInteractionToolkitAvailable();
         public static void EnsureTrackedDeviceGraphicRaycasterOnCanvases(GameObject root) => LaserPointerManagerStub.EnsureTrackedDeviceGraphicRaycasterOnCanvases(root);
+        public static System.Collections.IEnumerator RefreshInteractorHover() => LaserPointerManagerStub.RefreshInteractorHover();
         public static void EnableLaserPointersForInteraction() => LaserPointerManagerStub.EnableLaserPointersForInteraction();
         public static void RestoreLaserPointerStates() => LaserPointerManagerStub.RestoreLaserPointerStates();
         public static bool IsManagingLaserPointers => LaserPointerManagerStub.IsManagingLaserPointers;
