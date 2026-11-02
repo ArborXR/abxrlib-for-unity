@@ -141,7 +141,7 @@ On the legacy scheme, the MDM supplies Org ID and Auth Secret at runtime, so onl
 
 #### Headsets without ArborXR MDM (passcode pairing)
 
-On an Android headset or in a WebGL build with no ArborXR client and no org token, the app has no organization to report to. It runs as usual and stays quiet: no data is recorded or sent, and `OnAuthCompleted` fires once with `false` and *"No organization identity"*. The app can offer pairing instead. An org admin creates a pairing passcode in the ArborXR Portal (the app's **Insights Hub** → **Pairing Passcodes**), and someone on the headset types it in once. The pairing is stored on the device, so later launches authenticate on their own.
+On an Android headset or in a WebGL build with no ArborXR client and no org token, the app has no organization to report to. It runs as usual and stays quiet: no data is recorded or sent, and `OnAuthCompleted` fires once with `false` and *"No organization identity"*. The app can offer pairing instead. An org admin creates a pairing passcode in the ArborXR Portal (the app's **Insights Hub** → **Pairing Passcodes**), and someone types it into the app once. The pairing is stored on the device, so later launches authenticate on their own.
 
 The SDK never prompts by itself. Call `Abxr.StartPairing()` when your app wants to offer pairing, either at launch or from your own settings menu:
 
