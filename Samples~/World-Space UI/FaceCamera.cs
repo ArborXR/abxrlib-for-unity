@@ -1,7 +1,11 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.Scripting;
+using UnityEngine.UI;
+using UnityEngine.XR;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.UI;
 
 namespace AbxrLib.Runtime.UI
 {
@@ -32,6 +36,15 @@ namespace AbxrLib.Runtime.UI
         
         private Transform cam;
         private Configuration config;
+
+        // Flat-screen fit: where the visible content sits around the pivot, in metres along the panel's own axes at its
+        // prefab scale. Measured once.
+        private Vector3 _prefabScale;
+        private bool _contentMeasured;
+        private Vector2 _contentCenter;
+        private Vector2 _contentHalfExtents;
+
+        private void Awake() => _prefabScale = transform.localScale;
 
         private void OnEnable() => SceneManager.activeSceneChanged += OnActiveSceneChanged;
         private void OnDisable() => SceneManager.activeSceneChanged -= OnActiveSceneChanged;
@@ -67,6 +80,12 @@ namespace AbxrLib.Runtime.UI
             else
             {
                 faceCamera = Abxr.AuthUIFollowCamera;
+            }
+
+            if (!XRSettings.isDeviceActive)
+            {
+                FitToFlatScreen();
+                return;
             }
             
 #if UNITY_EDITOR
@@ -116,7 +135,11 @@ namespace AbxrLib.Runtime.UI
                 faceCamera = Abxr.AuthUIFollowCamera;
             }
             
-            if (faceCamera)
+            if (faceCamera && !XRSettings.isDeviceActive)
+            {
+                FitToFlatScreen();
+            }
+            else if (faceCamera)
             {
                 // Position the pinpad directly in front of the camera at the specified distance
                 Vector3 targetPos = cam.position + cam.forward * distanceFromCamera;
@@ -127,6 +150,56 @@ namespace AbxrLib.Runtime.UI
                 // face the camera - ensure perfect perpendicular alignment
                 transform.rotation = Quaternion.LookRotation(transform.position - cam.position, Vector3.up);
             }
+        }
+
+        /// <summary>
+        /// On a flat screen the panel, sized in metres for a headset, overflows the view. Centre its content on the view
+        /// direction, whose camera may look down at the scene, and shrink it until it fits.
+        /// </summary>
+        private void FitToFlatScreen()
+        {
+            if (!_contentMeasured) MeasureContent();
+            Camera view = cam.GetComponent<Camera>();
+            float scale = view != null && !view.orthographic
+                ? FlatScreenFit.Scale(_contentHalfExtents, distanceFromCamera, view.fieldOfView, view.aspect)
+                : 1f;
+            transform.localScale = _prefabScale * scale;
+
+            Vector3 target = cam.position + cam.forward * distanceFromCamera;
+            Quaternion rotation = Quaternion.LookRotation(target - cam.position, Vector3.up);
+            transform.SetPositionAndRotation(target - rotation * (_contentCenter * scale), rotation);
+        }
+
+        /// <summary>
+        /// Measures the panel's visible chrome around its pivot. Text is left out: its boxes can be wider than the panels
+        /// they sit on.
+        /// </summary>
+        private void MeasureContent()
+        {
+            Vector3 currentScale = transform.localScale;
+            transform.localScale = _prefabScale;
+            Canvas.ForceUpdateCanvases(); // Lays out buttons added since the panel was created.
+
+            Vector2 min = Vector2.positiveInfinity, max = Vector2.negativeInfinity;
+            var corners = new Vector3[4];
+            foreach (var graphic in GetComponentsInChildren<Graphic>())
+            {
+                if (!graphic.enabled || graphic.color.a <= 0f || graphic is TMP_Text || graphic is Text) continue;
+                graphic.rectTransform.GetWorldCorners(corners);
+                foreach (var corner in corners)
+                {
+                    Vector3 offset = corner - transform.position;
+                    var point = new Vector2(Vector3.Dot(offset, transform.right), Vector3.Dot(offset, transform.up));
+                    min = Vector2.Min(min, point);
+                    max = Vector2.Max(max, point);
+                }
+            }
+            transform.localScale = currentScale;
+
+            _contentMeasured = true;
+            if (min.x > max.x) return; // Nothing to measure, so nothing to fit.
+            _contentCenter = (min + max) / 2f;
+            _contentHalfExtents = (max - min) / 2f;
         }
     }
 }
