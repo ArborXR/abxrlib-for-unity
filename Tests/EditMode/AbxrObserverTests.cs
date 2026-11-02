@@ -199,15 +199,16 @@ public class AbxrObserverTests
     }
 
     [Test]
-    public void SendHandlerThatRecords_OnTheServiceTransport_DoesNotLoop()
+    public void SendHandlerThatRecords_DoesNotLoop()
     {
-        _transport.IsServiceTransport = true;
         AbxrObserver.OnRecordsSent += s => { _sent.Add(s); _data.AddLog("info", "sent", null); };
 
         _data.AddEvent("e", null);
+        AbxrObserver.Sent(new List<long> { _transport.Added[0].recordId }, AbxrObserver.SendStatus.Sent);
 
         Assert.AreEqual(1, _sent.Count);
         Assert.AreEqual(2, _transport.Added.Count);
+        Assert.AreEqual(0, _transport.Added[1].recordId, "A record made inside a handler gets no id, so it never reports.");
     }
 
     [Test]
@@ -296,38 +297,23 @@ public class AbxrObserverTests
     }
 
     [Test]
-    public void ServiceTransport_ReportsHandedToService()
+    public void ServiceTransport_NoSendResult()
     {
         Observe();
         _transport.IsServiceTransport = true;
         _data.AddLog("info", "hello", null);
 
-        Assert.AreEqual(1, _sent.Count);
-        Assert.AreEqual(AbxrObserver.SendStatus.HandedToService, _sent[0].Status);
-        CollectionAssert.AreEqual(new[] { _created[0].Id }, _sent[0].RecordIds);
-        Assert.AreEqual(0, _sent[0].HttpStatus);
-    }
-
-    [Test]
-    public void ServiceTransport_DroppedRecord_IsNotHandedToService()
-    {
-        Observe();
-        _transport.IsServiceTransport = true;
-        _recording = false;
-        _data.AddEvent("e", null);
-
-        Assert.AreEqual(0, _sent.Count);
+        Assert.AreEqual(AbxrObserver.DropReason.None, _created[0].DropReason);
+        Assert.AreEqual(0, _sent.Count, "The service sends on its own, so the SDK never learns the outcome.");
     }
 
     [Test]
     public void OnlySendHandler_StillGetsIds()
     {
         AbxrObserver.OnRecordsSent += _sent.Add;
-        _transport.IsServiceTransport = true;
         _data.AddEvent("e", null);
 
-        Assert.AreNotEqual(0, _transport.Added[0].recordId);
-        CollectionAssert.AreEqual(new[] { _transport.Added[0].recordId }, _sent[0].RecordIds);
+        Assert.AreNotEqual(0, _transport.Added[0].recordId, "Batches carry ids even when nothing listens for created records.");
     }
 
     [Test]

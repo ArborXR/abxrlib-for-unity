@@ -61,7 +61,7 @@ namespace AbxrLib.Runtime.Services.Pairing
     /// <summary>
     /// Passcode pairing (SDK-60): the state machine, the stored app instance, the redeem, the prompt's steps, the
     /// Retry-After gate, and the state events. The prompt asks for the passcode and sends it alone. When the passcode
-    /// allows naming the headset, the Portal asks for a name (INS-511), and when that name belongs to a paired device
+    /// allows naming the device, the Portal asks for a name (INS-511), and when that name belongs to a paired device
     /// already, the prompt asks whether to add this app to it.
     /// Pairing is something the app asks for; nothing here prompts on its own. Main thread only, like the rest of the SDK.
     /// </summary>
@@ -79,7 +79,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         internal const string JoinDeviceInputType = "pairingDeviceJoin";
 
         private const string PasscodePrompt = "Pairing Passcode";
-        private const string DeviceNamePrompt = "Give this connection a name.";
+        private const string DeviceNamePrompt = "Give this device a name.";
         private const string SkipInput = "**skip**";
         private const string UnsupportedPlatform = "pairing runs only in Android and WebGL builds.";
         /// <summary>How many prompts an app handler may re-request from inside its own callback before the SDK stops re-asking.</summary>
@@ -283,7 +283,7 @@ namespace AbxrLib.Runtime.Services.Pairing
                 return;
             }
 
-            // Alone: the Portal asks for a name only when this passcode allows naming the headset.
+            // Alone: the Portal asks for a name only when this passcode allows naming the device.
             Redeem(input, null, false, false, null);
         }
 
@@ -318,7 +318,7 @@ namespace AbxrLib.Runtime.Services.Pairing
         /// <summary>
         /// The headless redeem, for an app's own UI. Valid while Unpaired or Prompting. onComplete always fires, and
         /// fires before this returns when the call is refused or the passcode is malformed. When the passcode allows
-        /// naming the headset, the result is DeviceNameRequested or DeviceNameRequired: ask for a name, then call the
+        /// naming the device, the result is DeviceNameRequested or DeviceNameRequired: ask for a name, then call the
         /// overload that takes one.
         /// </summary>
         internal void RedeemPairingPasscode(string passcode, Action<Abxr.PairingRedeemResult> onComplete) =>
@@ -712,10 +712,10 @@ namespace AbxrLib.Runtime.Services.Pairing
                     Logcat.Debug("The pairing passcode wasn't accepted.");
                     break;
                 case Abxr.PairingRedeemError.DeviceNameRequested:
-                    Logcat.Debug("This passcode allows a name for the headset.");
+                    Logcat.Debug("This passcode allows a name for the device.");
                     break;
                 case Abxr.PairingRedeemError.DeviceNameRequired:
-                    Logcat.Debug("This passcode requires a name for the headset.");
+                    Logcat.Debug("This passcode requires a name for the device.");
                     break;
                 case Abxr.PairingRedeemError.DeviceNameInvalid:
                     Logcat.Debug($"The pairing service didn't accept the device name{detail}.");

@@ -728,7 +728,7 @@ public class PairingServiceTests
         Assert.AreEqual(1, _events.Count);
     }
 
-    // ── Naming the headset (INS-511) ──────────────────────────────
+    // ── Naming the device (INS-511) ──────────────────────────────
 
     [Test]
     public void APasscodeWithoutNaming_PairsWithoutANameStep()
@@ -755,7 +755,7 @@ public class PairingServiceTests
         Assert.AreEqual(Abxr.PairingState.Prompting, service.State);
         Assert.AreEqual(1, _requests.Count);
         Assert.AreEqual("pairingDeviceName", _requests[0].type);
-        Assert.AreEqual("Give this connection a name.", _requests[0].prompt);
+        Assert.AreEqual("Give this device a name.", _requests[0].prompt);
         Assert.AreEqual("", _requests[0].error, "Being asked for a name isn't an error.");
         Assert.AreEqual(Abxr.PairingRedeemError.DeviceNameRequested, service.LastRedeemResult.Error);
         Assert.IsEmpty(_events);

@@ -222,7 +222,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         }
 
         /// <summary>
-        /// The join step: the PIN pad's confirm panel, labelled with the existing headset's name. False when the PIN
+        /// The join step: the PIN pad's confirm panel, labelled with the existing device's name. False when the PIN
         /// pad has none, so the caller falls back to typing the name on the keyboard.
         /// </summary>
         public static bool ShowPairingConfirm()

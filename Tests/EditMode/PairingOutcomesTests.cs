@@ -176,7 +176,7 @@ public class PairingOutcomesTests
         Assert.AreEqual("That passcode wasn't recognized. Check it and try again.", Classify(new PairingHttpResponse(400, null)).Message);
         Assert.AreEqual("This app can't pair right now. Contact the app's developer.", Classify(new PairingHttpResponse(401, null)).Message);
         Assert.AreEqual("Can't reach the pairing service. Check the connection and try again.", Classify(new PairingHttpResponse(503, null)).Message);
-        Assert.AreEqual("Your organization requires a name for this headset.", PairingOutcomes.Failure(Abxr.PairingRedeemError.DeviceNameRequired).Message);
+        Assert.AreEqual("Your organization requires a name for this device.", PairingOutcomes.Failure(Abxr.PairingRedeemError.DeviceNameRequired).Message);
         Assert.AreEqual("That name can't be used. Use 1 to 64 characters.", PairingOutcomes.Failure(Abxr.PairingRedeemError.DeviceNameInvalid).Message);
     }
 
