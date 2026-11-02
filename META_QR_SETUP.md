@@ -23,7 +23,7 @@ Both are runtime permissions. When someone taps "Scan QR Code", AbxrLib asks for
 
 - AbxrLib uses `WebCamTexture` for the passthrough camera; the feed is shown in a world-space Canvas overlay.
 - Supported devices: **Quest 3, Quest 3S, Quest Pro** (Quest 2 is not supported).
-- The "Scan QR Code" button is shown on supported devices. Tapping it asks for any permission that isn't granted yet; if one is denied, the scan panel says so and the PIN pad comes back.
+- The "Scan QR Code" button is shown on supported devices. Tapping it asks for any permission that isn't granted yet. If camera access is denied, no scan starts and the PIN pad stays up; if Headset Cameras is denied, the scan panel says so and the PIN pad comes back.
 
 ## Troubleshooting
 
