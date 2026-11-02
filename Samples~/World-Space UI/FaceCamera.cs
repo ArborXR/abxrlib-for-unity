@@ -191,7 +191,7 @@ namespace AbxrLib.Runtime.UI
             transform.localScale = _prefabScale * scale;
 
             Vector3 target = cam.position + cam.forward * distanceFromCamera;
-            Quaternion rotation = Quaternion.LookRotation(target - cam.position, Vector3.up);
+            Quaternion rotation = Quaternion.LookRotation(cam.forward, cam.up); // Square to the screen, whatever the pitch.
             transform.SetPositionAndRotation(target - rotation * (_contentCenter * scale), rotation);
         }
 
