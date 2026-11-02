@@ -728,7 +728,7 @@ public class PairingServiceTests
         Assert.AreEqual(1, _events.Count);
     }
 
-    // ── Naming the headset (INS-511) ──────────────────────────────
+    // ── Naming the device (INS-511) ──────────────────────────────
 
     [Test]
     public void APasscodeWithoutNaming_PairsWithoutANameStep()
