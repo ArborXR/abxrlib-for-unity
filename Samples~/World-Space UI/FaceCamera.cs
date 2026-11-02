@@ -137,7 +137,8 @@ namespace AbxrLib.Runtime.UI
                 faceCamera = Abxr.AuthUIFollowCamera;
             }
             
-            if (XRSettings.isDeviceActive) UndoFlatScreenFit();
+            // XR started after a flat fit: put the panel back where and how big a headset expects it, follow or not.
+            if (_flatScaled && XRSettings.isDeviceActive) PlaceInFrontOfCamera();
             if (faceCamera && !XRSettings.isDeviceActive)
             {
                 FitToFlatScreen();
@@ -201,7 +202,7 @@ namespace AbxrLib.Runtime.UI
 
         /// <summary>
         /// Puts a panel fitted to a flat screen back to its headset size once an XR device is active, for example when
-        /// an app starts XR after the panel opened. Leaves the scale alone otherwise, so it never fights an app's own.
+        /// an app starts XR after the panel opened. Touches only a scale the flat fit set.
         /// </summary>
         private void UndoFlatScreenFit()
         {
