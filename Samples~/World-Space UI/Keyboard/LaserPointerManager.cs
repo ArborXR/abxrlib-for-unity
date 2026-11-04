@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.UI.ExitPoll;
 
 #if XR_TOOLKIT_AVAILABLE
 #if XR_TOOLKIT_3_OR_NEWER
@@ -81,11 +82,12 @@ namespace AbxrLib.Runtime.UI.Keyboard
             bool wasManaging = _isManagingLaserPointers;
             // Always start over: the old scene's interactors are gone, and a still-valid cache would never look for the new scene's.
             ForceCleanup();
-            if (!wasManaging || !KeyboardHandler.IsOpen) return;
-            // A keyboard or PIN pad outlives the scene, so it needs the new scene's rays. Wait a frame: this runs before
-            // the new scene's Start, where a rig can still switch its rays off.
-            var runner = KeyboardManager.Instance;
-            // A PIN pad the QR scanner hid is inactive and can't run it, but the scan panel's Cancel still needs rays now.
+            if (!wasManaging || !NeedsRays) return;
+            // A keyboard, PIN pad or exit poll outlives the scene, so it needs the new scene's rays. Wait a frame: this
+            // runs before the new scene's Start, where a rig can still switch its rays off.
+            MonoBehaviour runner = KeyboardManager.Instance;
+            if (runner == null || !runner.isActiveAndEnabled) runner = ExitPollHandler.Instance;
+            // A PIN pad the QR scanner hid is inactive and can't run it. With no runner, the scan panel's Cancel still needs rays now.
             if (runner != null && runner.isActiveAndEnabled) runner.StartCoroutine(EnableAfterAFrame());
             else EnableLaserPointersForInteraction();
         }
@@ -93,8 +95,10 @@ namespace AbxrLib.Runtime.UI.Keyboard
         private static System.Collections.IEnumerator EnableAfterAFrame()
         {
             yield return null;
-            if (KeyboardHandler.IsOpen) EnableLaserPointersForInteraction();
+            if (NeedsRays) EnableLaserPointersForInteraction();
         }
+
+        private static bool NeedsRays => KeyboardHandler.IsOpen || ExitPollHandler.IsOpen;
 
         /// <summary>
         /// Checks if XR Interaction Toolkit is available and properly configured.
@@ -310,6 +314,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
         public static void OnSceneChanged() => LaserPointerManagerStub.OnSceneChanged();
         public static bool IsXRInteractionToolkitAvailable() => LaserPointerManagerStub.IsXRInteractionToolkitAvailable();
         public static void EnsureTrackedDeviceGraphicRaycasterOnCanvases(GameObject root) => LaserPointerManagerStub.EnsureTrackedDeviceGraphicRaycasterOnCanvases(root);
+        public static System.Collections.IEnumerator RefreshInteractorHover() => LaserPointerManagerStub.RefreshInteractorHover();
         public static void EnableLaserPointersForInteraction() => LaserPointerManagerStub.EnableLaserPointersForInteraction();
         public static void RestoreLaserPointerStates() => LaserPointerManagerStub.RestoreLaserPointerStates();
         public static bool IsManagingLaserPointers => LaserPointerManagerStub.IsManagingLaserPointers;

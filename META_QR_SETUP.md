@@ -12,6 +12,8 @@ AbxrLib automatically adds to AndroidManifest.xml:
 - `android.permission.CAMERA`
 - `horizonos.permission.HEADSET_CAMERA`
 
+Both are runtime permissions. When someone taps "Scan QR Code", AbxrLib asks for `CAMERA` and then for Headset Cameras, one after the other. Allowing the first doesn't grant the second.
+
 ### 2. Device Settings (On Quest)
 
 1. Put on the headset and go to **Settings > Privacy > Camera Access** (or **Privacy & Safety > App Permissions > Headset Cameras**, depending on firmware).
@@ -21,20 +23,20 @@ AbxrLib automatically adds to AndroidManifest.xml:
 
 - AbxrLib uses `WebCamTexture` for the passthrough camera; the feed is shown in a world-space Canvas overlay.
 - Supported devices: **Quest 3, Quest 3S, Quest Pro** (Quest 2 is not supported).
-- The "Scan QR Code" button is shown or hidden based on device support and whether both `CAMERA` and `HEADSET_CAMERA` are granted. Once permissions are granted, the button can appear without restarting the app (some firmware may require a restart).
+- The "Scan QR Code" button is shown on supported devices. Tapping it asks for any permission that isn't granted yet. If camera access is denied, no scan starts and the PIN pad stays up; if Headset Cameras is denied, the scan panel says so and the PIN pad comes back.
 
 ## Troubleshooting
 
 ### "Scan QR Code" Button Not Visible
 
 - **Device:** Button only appears on Quest 3, 3S, or Pro.
-- **Permissions:** Enable camera for your app in Quest Settings (Privacy / Camera Access or Headset Cameras). The button should appear when both permissions are granted.
-- **Logs:** Look for `[AbxrLib] QR Code button hidden - QR scanning not available`, `Device '...' is not supported for QR code reading`, or `HEADSET_CAMERA permission check failed`. If permissions were just enabled, try closing and reopening the PIN pad.
+- **Logs:** Look for `QR Code button hidden - no supported QR scanner is active for this device`. On a supported device you'll see `Device '...' is supported for QR code reading`.
 
 ### Black Camera Feed
 
 - Confirm camera is enabled for the app in Quest Settings.
-- Allow a few seconds for the camera to start; if it stays black, re-check permissions and look for `[AbxrLib] HEADSET_CAMERA permission not granted` or `Camera permission denied` in logs.
+- Allow a few seconds for the camera to start; if it stays black, re-check permissions and look for `Quest QR scanner requires the Headset Cameras permission` or `camera permission denied` in logs.
+- If the Headset Cameras dialog never appears and the permission is denied at once, a device policy may be blocking it. Check the headset's Settings > Privacy & Safety > App Permissions > Headset Cameras, and any camera restrictions in your MDM.
 
 ### OpenXR Errors
 

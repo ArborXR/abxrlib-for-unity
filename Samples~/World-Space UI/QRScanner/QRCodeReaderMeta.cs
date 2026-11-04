@@ -29,6 +29,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
         private const int RequestedWidth = 1920;
         private const int RequestedHeight = 1080;
         private const int RequestedFps = 30;
+        private const string HeadsetCameraPermission = "horizonos.permission.HEADSET_CAMERA";
 
         private static readonly string[] SupportedDevices =
         {
@@ -70,7 +71,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
         ///   1. Check that the required OpenXR features are enabled.
         ///   2. Apply the first-grant warmup delay.
         ///   3. Wait for app focus to return after the permission dialog.
-        ///   4. Verify the Meta headset-camera permission.
+        ///   4. Ask for the Meta headset-camera permission if it isn't granted yet, then verify it.
         /// </summary>
         protected override IEnumerator OnPermissionGranted(Action<bool> setResult)
         {
@@ -89,6 +90,14 @@ namespace AbxrLib.Runtime.Core.QRScanner
             yield return StartCoroutine(WaitForAppFocusCoroutine());
             yield return null;
             yield return new WaitForEndOfFrame();
+
+            // Allowing CAMERA doesn't grant this one: Horizon OS asks for Headset Cameras separately.
+            if (!HasHeadsetCameraPermission()) yield return StartCoroutine(RequestHeadsetCameraPermissionCoroutine());
+            if (!IsInitializing)
+            {
+                setResult(false); // Cancelled while the dialog was up.
+                yield break;
+            }
 
             _headsetPermissionChecked = true;
             if (!HasHeadsetCameraPermission())
@@ -478,6 +487,34 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
         // ── Meta-specific helpers ─────────────────────────────────────────────────────
 
+        /// <summary>
+        /// Asks for Headset Cameras on its own: Unity's Permission class handles one request at a time, so it can't share
+        /// the CAMERA request.
+        /// </summary>
+        private IEnumerator RequestHeadsetCameraPermissionCoroutine()
+        {
+            bool? granted = null;
+            var callbacks = new UnityEngine.Android.PermissionCallbacks();
+            callbacks.PermissionGranted += _ => granted = true;
+            callbacks.PermissionDenied  += _ => granted = false;
+            UnityEngine.Android.Permission.RequestUserPermission(HeadsetCameraPermission, callbacks);
+
+            while (!granted.HasValue)
+            {
+                if (!IsInitializing) yield break;
+                yield return null;
+            }
+
+            if (!granted.Value)
+            {
+                Logcat.Warning("Quest QR scanner: Headset Cameras permission denied.");
+                yield break;
+            }
+
+            // The camera may not start until the app has focus back from the dialog.
+            yield return StartCoroutine(WaitForAppFocusCoroutine());
+        }
+
         private static bool HasHeadsetCameraPermission()
         {
             try
@@ -486,7 +523,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
                 using AndroidJavaObject activity    = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
                 using AndroidJavaObject pkgManager  = activity.Call<AndroidJavaObject>("getPackageManager");
                 int check = pkgManager.Call<int>("checkPermission",
-                    "horizonos.permission.HEADSET_CAMERA",
+                    HeadsetCameraPermission,
                     activity.Call<string>("getPackageName"));
                 return check == 0;
             }
