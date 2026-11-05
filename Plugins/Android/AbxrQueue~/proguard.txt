@@ -1,0 +1,2 @@
+# The SDK calls this class from C# through JNI, so minification must keep it whole.
+-keep class com.arborxr.abxrlib.queue.AbxrQueueDatabase { public *; }

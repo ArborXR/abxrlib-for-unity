@@ -148,11 +148,26 @@ namespace AbxrLib.Runtime.Services.Transport
 #if UNITY_WEBGL && !UNITY_EDITOR
             return new MemoryRecordQueue();
 #else
-            var queue = new DurableRecordQueue(QueueRootForTesting ?? DurableRecordQueue.DefaultRoot);
+            var queue = new DurableRecordQueue(CreateStore());
             queue.Load();
             return queue;
 #endif
         }
+
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+        /// <summary>SQLite on Android headsets, append-only files on desktop and in the Editor (offline RFC D13).</summary>
+        private static IQueueStore CreateStore()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (QueueRootForTesting == null)
+            {
+                var sqlite = SqliteQueueStore.TryOpen();
+                if (sqlite != null) return sqlite;
+            }
+#endif
+            return new FileQueueStore(QueueRootForTesting ?? DurableRecordQueue.DefaultRoot);
+        }
+#endif
 
         internal IRecordQueue QueueForTesting => _queue;
 
