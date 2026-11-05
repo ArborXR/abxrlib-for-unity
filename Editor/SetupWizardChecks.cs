@@ -846,7 +846,17 @@ namespace AbxrLib.Editor
             if (scene.isLoaded)
                 return scene.GetRootGameObjects().Any(root => root.GetComponentInChildren(eventSystemType, true) != null);
 
-            return YamlHasEventSystem(ReadProjectFile(scenePath), guid => ReadProjectFile(AssetDatabase.GUIDToAssetPath(guid)));
+            return YamlHasEventSystem(ReadProjectFile(scenePath), ReadPrefabByGuid);
+        }
+
+        /// <summary>
+        /// Only a .prefab file can hold an EventSystem. A scene also instances models (.fbx, .blend), which can be
+        /// hundreds of megabytes and carry no components of their own: anything added to one is saved in the scene.
+        /// </summary>
+        private static string ReadPrefabByGuid(string guid)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            return path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase) ? ReadProjectFile(path) : null;
         }
 
         private static string ReadProjectFile(string assetPath)
