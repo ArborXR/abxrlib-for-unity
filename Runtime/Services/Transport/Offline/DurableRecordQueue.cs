@@ -4,7 +4,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Types;
 using Newtonsoft.Json;
@@ -12,7 +11,7 @@ using Newtonsoft.Json.Linq;
 
 namespace AbxrLib.Runtime.Services.Transport.Offline
 {
-    /// <summary>One of a session's three record files.</summary>
+    /// <summary>One of a session's three record streams.</summary>
     internal enum QueueFile
     {
         /// <summary>Events and logs.</summary>
@@ -21,18 +20,18 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         Storage
     }
 
-    /// <summary>How much of one record file the backend has answered for.</summary>
+    /// <summary>How much of one record stream the backend has answered for.</summary>
     [Serializable]
     internal sealed class QueueFileState
     {
-        /// <summary>Byte offset up to which every record has been accepted or permanently refused.</summary>
+        /// <summary>Position (a byte offset in a file, a row id in SQLite) up to which every record has been accepted or permanently refused.</summary>
         public long acked;
-        /// <summary>Lines written and lines acknowledged, for upload status.</summary>
+        /// <summary>Records written and records acknowledged, for upload status.</summary>
         public int count;
         public int ackedCount;
 
         [JsonIgnore] public int Pending => Math.Max(0, count - ackedCount);
-        /// <summary>Bumped when the file is emptied (compaction, the disk budget), so a chunk read before can't acknowledge offsets of the new contents.</summary>
+        /// <summary>Bumped when the stream is emptied (compaction, the disk budget), so a chunk read before can't acknowledge positions of the new contents.</summary>
         [JsonIgnore] public int epoch;
 
         internal void Reset()
@@ -44,7 +43,7 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         }
     }
 
-    /// <summary>A session's summary file: everything needed to sign it in again and to find where its upload got to.</summary>
+    /// <summary>A session's summary: everything needed to sign it in again and to find where its upload got to.</summary>
     [Serializable]
     internal sealed class SessionSummary
     {
@@ -52,7 +51,7 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
 
         public int formatVersion = CurrentFormat;
         public string sessionId;
-        /// <summary>Names the session's files. Random, so a session ID the app set can't make a bad file name.</summary>
+        /// <summary>Names the session in the store. Random, so a session ID the app set can't make a bad file name.</summary>
         public string fileKey;
         public DateTime created;
         public DateTime? sealedAt;
@@ -75,32 +74,35 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
     internal sealed class StoredSession
     {
         public SessionSummary Summary;
-        internal readonly StringBuilder[] Buffers = { new StringBuilder(), new StringBuilder(), new StringBuilder() };
-        internal readonly int[] BufferedCounts = new int[3];
+        internal readonly List<string>[] Buffers = { new List<string>(), new List<string>(), new List<string>() };
         internal bool SummaryDirty;
 
         public string SessionId => Summary.sessionId;
         public bool IsSealed => Summary.sealedAt.HasValue;
         public SavedSignIn SignIn => Summary.signIn;
-        public int Pending => Summary.records.Pending + Summary.telemetry.Pending + Summary.storage.Pending + BufferedCounts.Sum();
-        internal bool HasBuffered => BufferedCounts[0] + BufferedCounts[1] + BufferedCounts[2] > 0;
+        public int Pending => Summary.records.Pending + Summary.telemetry.Pending + Summary.storage.Pending + Buffered(QueueFile.Records)
+                              + Buffered(QueueFile.Telemetry) + Buffered(QueueFile.Storage);
+        internal int Buffered(QueueFile file) => Buffers[(int)file].Count;
+        internal bool HasBuffered => Buffers[0].Count + Buffers[1].Count + Buffers[2].Count > 0;
     }
 
     /// <summary>
-    /// The durable queue (offline RFC, SDK section). Each session is a summary file plus three append-only JSON-lines
-    /// files (events and logs, telemetry, storage) under persistentDataPath/abxrlib/queue/. Records are buffered in memory
-    /// and written once per transport tick; the backend's answers move a byte offset per file, and a sealed session is
-    /// deleted once every file is acknowledged. Start-up reads only the summaries; records stream from disk when sent.
-    /// Main thread only.
+    /// The durable queue (offline RFC, SDK section). Each session has a summary and three record streams (events and logs,
+    /// telemetry, storage) in an <see cref="IQueueStore"/>: SQLite on Android headsets, append-only files on desktop and in
+    /// the Editor (D13). Records are buffered in memory and written once per transport tick; the backend's answers move a
+    /// position per stream, and a sealed session is deleted once every stream is acknowledged. Start-up reads only the
+    /// summaries; records are read back a chunk at a time when sent. Main thread only.
     /// </summary>
     internal sealed class DurableRecordQueue : IRecordQueue
     {
         internal const int MaxFailedReplays = 3;
-        /// <summary>A live file that's been fully acknowledged is emptied once it reaches this size, so a long session online doesn't fill the budget.</summary>
-        internal const long CompactAtBytes = 256 * 1024;
-        private const string SummaryPrefix = "s-";
+        /// <summary>
+        /// Largest record the queue keeps, in UTF-16 characters (about the same in bytes for this JSON). One SQLite query
+        /// result has to fit Android's 2 MB CursorWindow, so a record never comes near it.
+        /// </summary>
+        internal const int MaxRecordChars = 512 * 1024;
 
-        private readonly string _root;
+        private readonly IQueueStore _store;
         private readonly Func<DateTime> _utcNow;
         private readonly Func<int> _retentionDays;
         private readonly Func<long> _budgetBytes;
@@ -116,33 +118,40 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         private bool _writeFailing;
         private readonly Func<int> _maxBufferedWhileWriteFails;
         private bool _warnedOverBudget;
+        private bool _warnedTooLarge;
 
         /// <summary>Raised when records are dropped without being sent: (session, record count, reason, observer ids of this run's records).</summary>
         internal Action<string, int, AbxrObserver.DropReason, List<long>> OnDropped;
 
         public bool IsDurable => true;
 
-        internal string Root => _root;
+        internal IQueueStore Store => _store;
 
         internal DurableRecordQueue(string root, Func<DateTime> utcNow = null, Func<int> retentionDays = null, Func<long> budgetBytes = null,
             Func<int> maxBufferedWhileWriteFails = null)
+            : this(new FileQueueStore(root), utcNow, retentionDays, budgetBytes, maxBufferedWhileWriteFails)
         {
-            _root = root ?? throw new ArgumentNullException(nameof(root));
+        }
+
+        internal DurableRecordQueue(IQueueStore store, Func<DateTime> utcNow = null, Func<int> retentionDays = null, Func<long> budgetBytes = null,
+            Func<int> maxBufferedWhileWriteFails = null)
+        {
+            _store = store ?? throw new ArgumentNullException(nameof(store));
             _utcNow = utcNow ?? (() => DateTime.UtcNow);
             _retentionDays = retentionDays ?? (() => Configuration.Instance.offlineRetentionDays);
             _budgetBytes = budgetBytes ?? (() => Configuration.Instance.offlineDiskBudgetMB * 1024L * 1024L);
             _maxBufferedWhileWriteFails = maxBufferedWhileWriteFails ?? (() => Configuration.Instance.maximumCachedItems);
         }
 
-        /// <summary>The default root, persistentDataPath/abxrlib/queue.</summary>
+        /// <summary>The default folder, persistentDataPath/abxrlib/queue: the file store's root, and where the offline settings cache lives.</summary>
         internal static string DefaultRoot => Path.Combine(UnityEngine.Application.persistentDataPath, "abxrlib", "queue");
 
         // ── Start-up ─────────────────────────────────────────────
 
         /// <summary>
-        /// Reads every summary. A session left unsealed (the app was killed) is sealed now. A summary of a newer format is
-        /// left alone; an older one is migrated. Files with no readable summary are deleted, since nothing could sign them
-        /// in. Then retention and the disk budget are enforced.
+        /// Reads every summary. A session left unsealed (the app was killed) is sealed now, and its counts are taken from
+        /// the records actually stored. A summary of a newer format is left alone; an older one is migrated. Records with no
+        /// readable summary are deleted, since nothing could sign them in. Then retention and the disk budget are enforced.
         /// </summary>
         internal void Load()
         {
@@ -151,31 +160,21 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             _diskBytes = 0;
             try
             {
-                Directory.CreateDirectory(_root);
-                RecoverSummaryWrites();
-                var keep = new HashSet<string>();
-                foreach (var path in Directory.GetFiles(_root, SummaryPrefix + "*.json"))
+                foreach (var (key, json) in _store.ReadSummaries())
                 {
-                    if (!path.EndsWith(".json", StringComparison.Ordinal)) continue;
                     SessionSummary summary = null;
                     try
                     {
-                        var json = File.ReadAllText(path);
                         var version = JObject.Parse(json).Value<int?>("formatVersion") ?? 0;
-                        if (version > SessionSummary.CurrentFormat)
-                        {
-                            // A newer SDK wrote it (a downgrade): leave it for that SDK, and don't count it here.
-                            keep.Add(Path.GetFileNameWithoutExtension(path).Substring(SummaryPrefix.Length));
-                            continue;
-                        }
+                        // A newer SDK wrote it (a downgrade): leave it for that SDK, and don't count it here.
+                        if (version > SessionSummary.CurrentFormat) continue;
                         summary = JsonConvert.DeserializeObject<SessionSummary>(json);
                     }
                     catch (Exception ex) { Logcat.Warning($"Dropped an unreadable offline session summary: {ex.Message}"); }
 
-                    string key = Path.GetFileNameWithoutExtension(path).Substring(SummaryPrefix.Length);
                     if (summary == null || string.IsNullOrEmpty(summary.sessionId))
                     {
-                        TryDelete(path);
+                        _store.DeleteSession(key);
                         continue;
                     }
                     summary.fileKey = key;
@@ -190,30 +189,24 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                         summary.sealedAt = _utcNow();
                         session.SummaryDirty = true;
                     }
-                    // The files are the truth: a kill between an append and its summary write leaves the count behind,
-                    // and a session whose count says it's done would be deleted with lines still unsent.
+                    // The store is the truth: a kill between an append and its summary write leaves the count behind,
+                    // and a session whose count says it's done would be deleted with records still unsent.
                     foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
                     {
                         var state = summary.State(f);
-                        int count = state.ackedCount + CountLines(FilePath(session, f), state.acked);
+                        int count = state.ackedCount + _store.CountAfter(key, f, state.acked);
                         if (count != state.count) { state.count = count; session.SummaryDirty = true; }
                     }
-                    keep.Add(key);
                     _sessions.Add(session);
-                    _diskBytes += new FileInfo(path).Length;
+                    _diskBytes += _store.SummarySize(key);
                     foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
-                        _diskBytes += FileLength(FilePath(session, f));
+                        _diskBytes += _store.StreamSize(key, f);
                 }
-                foreach (var path in Directory.GetFiles(_root, SummaryPrefix + "*.jsonl"))
-                {
-                    string name = Path.GetFileName(path);
-                    string key = name.Substring(SummaryPrefix.Length, name.IndexOf('.') - SummaryPrefix.Length);
-                    if (!keep.Contains(key)) TryDelete(path);
-                }
+                _store.DeleteOrphans();
             }
             catch (Exception ex)
             {
-                Logcat.Error($"Couldn't read the offline queue at {_root}: {ex.Message}");
+                Logcat.Error($"Couldn't read the offline queue: {ex.Message}");
             }
             _sessions.Sort((a, b) => a.Summary.created.CompareTo(b.Summary.created));
             foreach (var s in _sessions) WriteSummaryIfDirty(s);
@@ -249,13 +242,22 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                 }
                 return false;
             }
+            string line = ToLine(record);
+            if (line.Length > MaxRecordChars)
+            {
+                if (!_warnedTooLarge)
+                {
+                    _warnedTooLarge = true;
+                    Logcat.Warning($"A record of {line.Length / 1024} KB is over the offline queue's {MaxRecordChars / 1024} KB limit per record, so it was dropped.");
+                }
+                return false;
+            }
             var session = LiveFor(sessionId);
             var file = FileOf(record.Kind);
             // Records can't reach disk, so nothing reads them back to send either; hold no more than 3.0's queue did.
             int max = _writeFailing ? _maxBufferedWhileWriteFails() : 0;
-            if (max > 0 && session.BufferedCounts[(int)file] >= max) return false;
-            session.Buffers[(int)file].Append(ToLine(record)).Append('\n');
-            session.BufferedCounts[(int)file]++;
+            if (max > 0 && session.Buffered(file) >= max) return false;
+            session.Buffers[(int)file].Add(line);
             long observerId = record.ObserverId;
             string recordId = record.RecordId;
             if (observerId != 0 && !string.IsNullOrEmpty(recordId)) _observerIds[recordId] = observerId;
@@ -267,8 +269,8 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             if (_live == null) return 0;
             var s = _live.Summary;
             return stream == RecordStream.Storage
-                ? s.storage.Pending + _live.BufferedCounts[(int)QueueFile.Storage]
-                : s.records.Pending + s.telemetry.Pending + _live.BufferedCounts[(int)QueueFile.Records] + _live.BufferedCounts[(int)QueueFile.Telemetry];
+                ? s.storage.Pending + _live.Buffered(QueueFile.Storage)
+                : s.records.Pending + s.telemetry.Pending + _live.Buffered(QueueFile.Records) + _live.Buffered(QueueFile.Telemetry);
         }
 
         public RecordChunk PeekLive(RecordStream stream, int max) => _live == null ? null : Peek(_live, stream, max);
@@ -286,12 +288,14 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             foreach (var part in end.Parts)
             {
                 var state = session.Summary.State(part.File);
-                if (part.Epoch != state.epoch) continue; // the file was emptied since; those records went with it
-                int newlyAcked = part.LineEnds.Count(e => e > state.acked);
+                if (part.Epoch != state.epoch) continue; // the stream was emptied since; those records went with it
+                int newlyAcked = part.Positions.Count(e => e > state.acked);
                 if (newlyAcked == 0) continue;
-                state.acked = Math.Max(state.acked, part.LineEnds[part.LineEnds.Count - 1]);
+                state.acked = Math.Max(state.acked, part.Positions[part.Positions.Count - 1]);
                 state.ackedCount = Math.Min(state.count, state.ackedCount + newlyAcked);
                 session.SummaryDirty = true;
+                try { _diskBytes -= _store.Acknowledged(session.Summary.fileKey, part.File, state.acked); }
+                catch (Exception ex) { Logcat.Debug($"Couldn't remove acknowledged offline records: {ex.Message}"); }
             }
             if (session == _live) CompactLive();
             WriteSummaryIfDirty(session);
@@ -369,7 +373,7 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             FlushSession(_live);
             var all = new List<QueuedRecord>();
             foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
-                foreach (var (line, _) in ReadLines(FilePath(_live, f), _live.Summary.State(f).acked, int.MaxValue))
+                foreach (var (line, _) in _store.Read(_live.Summary.fileKey, f, _live.Summary.State(f).acked, int.MaxValue))
                     if (TryParseLine(line, out var r)) all.Add(r);
             return all;
         }
@@ -393,13 +397,13 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             {
                 int room = max - chunk.Records.Count;
                 if (room <= 0) break;
-                var lines = ReadLines(FilePath(session, file), session.Summary.State(file).acked, room);
+                var lines = _store.Read(session.Summary.fileKey, file, session.Summary.State(file).acked, room);
                 if (lines.Count == 0) continue;
                 var part = new ChunkPart { File = file, Epoch = session.Summary.State(file).epoch };
-                foreach (var (line, lineEnd) in lines)
+                foreach (var (line, position) in lines)
                 {
-                    part.LineEnds.Add(lineEnd);
-                    // An unreadable line (a write the app was killed in the middle of) is skipped, but still acknowledged.
+                    part.Positions.Add(position);
+                    // An unreadable record (a write the app was killed in the middle of) is skipped, but still acknowledged.
                     if (!TryParseLine(line, out var record)) continue;
                     string id = record.RecordId;
                     if (id != null && _observerIds.TryGetValue(id, out long observerId)) record.ObserverId = observerId;
@@ -414,13 +418,13 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
 
         /// <summary>
         /// Deletes a sealed session that says it has records but has none to read (a summary written ahead of its data
-        /// when power was lost, or a deleted file), so a replay doesn't sign it in over and over. True when deleted.
+        /// when power was lost, or deleted records), so a replay doesn't sign it in over and over. True when deleted.
         /// </summary>
         internal bool DiscardIfNothingToSend(StoredSession session)
         {
             if (!_sessions.Contains(session)) return true;
             if (session == _live || Peek(session, RecordStream.Data, 1) != null || Peek(session, RecordStream.Storage, 1) != null) return false;
-            Logcat.Warning($"Dropped offline session {session.SessionId}: its record files have nothing left to read.");
+            Logcat.Warning($"Dropped offline session {session.SessionId}: it has no records left to read.");
             Delete(session);
             return true;
         }
@@ -447,8 +451,8 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         {
             public QueueFile File;
             public int Epoch;
-            /// <summary>The byte offset just past each line read, so an acknowledgement that overlaps an earlier one counts each line once.</summary>
-            public readonly List<long> LineEnds = new List<long>();
+            /// <summary>Each record's position, so an acknowledgement that overlaps an earlier one counts each record once.</summary>
+            public readonly List<long> Positions = new List<long>();
         }
 
         private sealed class ChunkEnd
@@ -497,34 +501,22 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         private void FlushSession(StoredSession session)
         {
             if (!session.HasBuffered) return;
+            var summary = session.Summary;
             try
             {
-                Directory.CreateDirectory(_root);
-                foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
+                // The summary as it reads once the records are in, for a store that writes both at once (SQLite).
+                foreach (QueueFile f in Enum.GetValues(typeof(QueueFile))) summary.State(f).count += session.Buffered(f);
+                string summaryAfter = JsonConvert.SerializeObject(summary);
+                foreach (QueueFile f in Enum.GetValues(typeof(QueueFile))) summary.State(f).count -= session.Buffered(f);
+
+                bool summaryWritten = _store.Append(summary.fileKey, session.Buffers, summaryAfter, (f, bytes) =>
                 {
-                    int i = (int)f;
-                    if (session.BufferedCounts[i] == 0) continue;
-                    byte[] bytes = Encoding.UTF8.GetBytes(session.Buffers[i].ToString());
-                    using (var fs = new FileStream(FilePath(session, f), FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
-                    {
-                        long before = fs.Length;
-                        // Flushed here: FileStream buffers small writes, so a full disk would otherwise throw from Dispose,
-                        // past the truncate.
-                        try { fs.Write(bytes, 0, bytes.Length); fs.Flush(); }
-                        catch
-                        {
-                            // The buffer is written again next tick: a partial write left behind would add lines no count
-                            // knows about.
-                            try { fs.SetLength(before); } catch (IOException) { }
-                            throw;
-                        }
-                    }
-                    _diskBytes += bytes.Length;
-                    session.Summary.State(f).count += session.BufferedCounts[i];
-                    session.Buffers[i].Clear();
-                    session.BufferedCounts[i] = 0;
+                    _diskBytes += bytes;
+                    summary.State(f).count += session.Buffered(f);
+                    session.Buffers[(int)f].Clear();
                     session.SummaryDirty = true;
-                }
+                });
+                if (summaryWritten) session.SummaryDirty = false;
                 _warnedWriteFailure = false;
                 _writeFailing = false;
             }
@@ -541,30 +533,28 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             WriteSummaryIfDirty(session);
         }
 
-        /// <summary>Empties a live file the backend has answered for in full once it's large, so a long online session doesn't grow on disk.</summary>
+        /// <summary>Empties a live stream the backend has answered for in full once it's large, so a long online session doesn't grow on disk.</summary>
         private void CompactLive()
         {
             foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
             {
+                if (_live.Buffered(f) > 0) continue;
                 var state = _live.Summary.State(f);
-                if (state.acked < CompactAtBytes || _live.BufferedCounts[(int)f] > 0) continue;
-                string path = FilePath(_live, f);
-                long length = FileLength(path);
-                if (length != state.acked) continue;
                 try
                 {
-                    using (var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite)) fs.SetLength(0);
-                    _diskBytes -= length;
+                    long freed = _store.TryCompact(_live.Summary.fileKey, f, state.acked);
+                    if (freed < 0) continue;
+                    _diskBytes -= freed;
                     state.Reset();
                     _live.SummaryDirty = true;
                 }
-                catch (Exception ex) { Logcat.Debug($"Couldn't compact an offline queue file: {ex.Message}"); }
+                catch (Exception ex) { Logcat.Debug($"Couldn't compact an offline queue stream: {ex.Message}"); }
             }
         }
 
         /// <summary>
-        /// Keeps the queue within its disk budget (offline RFC D3): telemetry files go first, oldest session first, then
-        /// whole sessions, oldest first. The live session's records file is never deleted; when only it is left over the
+        /// Keeps the queue within its disk budget (offline RFC D3): telemetry goes first, oldest session first, then
+        /// whole sessions, oldest first. The live session's records are never deleted; when only they are left over the
         /// budget, new records are refused until uploads make room.
         /// </summary>
         private void EnforceBudget()
@@ -575,17 +565,18 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             {
                 if (_diskBytes <= budget) break;
                 var state = s.Summary.telemetry;
-                string path = FilePath(s, QueueFile.Telemetry);
-                long length = FileLength(path);
-                if (length == 0) continue;
-                int dropped = state.Pending;
-                TryDelete(path);
-                _diskBytes -= length;
-                state.Reset();
-                s.SummaryDirty = true;
-                WriteSummaryIfDirty(s);
-                Logcat.Warning($"The offline queue is over its disk budget, so it dropped {dropped} telemetry records of session {s.SessionId}.");
-                if (dropped > 0) OnDropped?.Invoke(s.SessionId, dropped, AbxrObserver.DropReason.Retention, null);
+                try
+                {
+                    if (_store.StreamSize(s.Summary.fileKey, QueueFile.Telemetry) == 0) continue;
+                    int dropped = state.Pending;
+                    _diskBytes -= _store.DeleteStream(s.Summary.fileKey, QueueFile.Telemetry);
+                    state.Reset();
+                    s.SummaryDirty = true;
+                    WriteSummaryIfDirty(s);
+                    Logcat.Warning($"The offline queue is over its disk budget, so it dropped {dropped} telemetry records of session {s.SessionId}.");
+                    if (dropped > 0) OnDropped?.Invoke(s.SessionId, dropped, AbxrObserver.DropReason.Retention, null);
+                }
+                catch (Exception ex) { Logcat.Debug($"Couldn't drop offline telemetry: {ex.Message}"); }
             }
             foreach (var s in _sessions.Where(s => s != _live).ToList())
             {
@@ -605,50 +596,22 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
         private void Delete(StoredSession session)
         {
             _sessions.Remove(session);
-            foreach (QueueFile f in Enum.GetValues(typeof(QueueFile)))
-            {
-                string path = FilePath(session, f);
-                _diskBytes -= FileLength(path);
-                TryDelete(path);
-            }
-            string summary = SummaryPath(session);
-            _diskBytes -= FileLength(summary);
-            TryDelete(summary);
+            try { _diskBytes -= _store.DeleteSession(session.Summary.fileKey); }
+            catch (Exception ex) { Logcat.Debug($"Couldn't delete offline session {session.SessionId}: {ex.Message}"); }
             if (_diskBytes < 0) _diskBytes = 0;
         }
 
-        /// <summary>Writes the summary when it changed. durable forces it to the device first (sealing), which costs milliseconds, so routine writes skip it: Load recounts the files.</summary>
+        /// <summary>Writes the summary when it changed. durable forces it to the device first (sealing), which costs milliseconds, so routine writes skip it: Load recounts the records.</summary>
         private void WriteSummaryIfDirty(StoredSession session, bool durable = false)
         {
             if (!session.SummaryDirty || !_sessions.Contains(session)) return;
-            string path = SummaryPath(session);
-            string tmp = path + ".tmp";
             try
             {
-                Directory.CreateDirectory(_root);
-                long before = FileLength(path);
-                // A sealed summary goes to the device before the rename, so a power cut can't leave it empty.
-                using (var stream = new FileStream(tmp, FileMode.Create, FileAccess.Write))
-                {
-                    byte[] bytes = new UTF8Encoding(false).GetBytes(JsonConvert.SerializeObject(session.Summary));
-                    stream.Write(bytes, 0, bytes.Length);
-                    if (durable) stream.Flush(true);
-                }
-                if (!File.Exists(path)) File.Move(tmp, path);
-                else
-                {
-                    // A summary that can't be replaced stays stale, and a stale count can make Load delete the session, so
-                    // any failure falls back to delete and move.
-                    try { File.Replace(tmp, path, null); }
-                    catch (Exception) { File.Delete(path); File.Move(tmp, path); }
-                }
-                _diskBytes += FileLength(path) - before;
+                _diskBytes += _store.WriteSummary(session.Summary.fileKey, JsonConvert.SerializeObject(session.Summary), durable);
                 session.SummaryDirty = false;
             }
             catch (Exception ex)
             {
-                // With the summary already deleted by the fallback, the temp file is the only copy: Load recovers it.
-                if (File.Exists(path)) TryDelete(tmp);
                 if (!_warnedWriteFailure)
                 {
                     _warnedWriteFailure = true;
@@ -657,24 +620,7 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
             }
         }
 
-        private string SummaryPath(StoredSession s) => Path.Combine(_root, SummaryPrefix + s.Summary.fileKey + ".json");
-
-        private string FilePath(StoredSession s, QueueFile f) =>
-            Path.Combine(_root, SummaryPrefix + s.Summary.fileKey + "." + f.ToString().ToLowerInvariant() + ".jsonl");
-
-        private static long FileLength(string path)
-        {
-            try { return File.Exists(path) ? new FileInfo(path).Length : 0; }
-            catch { return 0; }
-        }
-
-        private static void TryDelete(string path)
-        {
-            try { if (File.Exists(path)) File.Delete(path); }
-            catch (Exception ex) { Logcat.Debug($"Couldn't delete {path}: {ex.Message}"); }
-        }
-
-        // ── Line format: {"k":"e|l|t|s","r":<payload>} ───────────
+        // ── Record format: {"k":"e|l|t|s","r":<payload>} ─────────
 
         internal static string ToLine(QueuedRecord record)
         {
@@ -707,77 +653,6 @@ namespace AbxrLib.Runtime.Services.Transport.Offline
                 return true;
             }
             catch (Exception) { return false; }
-        }
-
-        /// <summary>
-        /// Up to max complete lines from offset, each with the byte offset just past it. A last line with no newline (torn by
-        /// a kill, or still being written) isn't returned.
-        /// </summary>
-        /// <summary>Complete (newline-terminated) lines from offset to the end of the file.</summary>
-        internal static int CountLines(string path, long offset)
-        {
-            if (!File.Exists(path)) return 0;
-            int lines = 0;
-            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            {
-                if (offset >= fs.Length) return 0;
-                fs.Position = offset;
-                var buffer = new byte[16 * 1024];
-                int read;
-                while ((read = fs.Read(buffer, 0, buffer.Length)) > 0)
-                    for (int i = 0; i < read; i++)
-                        if (buffer[i] == (byte)'\n') lines++;
-            }
-            return lines;
-        }
-
-        /// <summary>
-        /// A summary write the app was killed in: a temp file whose summary is missing was mid-rename (the delete-and-move
-        /// fallback), so it's the only copy and becomes the summary if it reads. Any other temp file is stale.
-        /// </summary>
-        private void RecoverSummaryWrites()
-        {
-            foreach (var tmp in Directory.GetFiles(_root, SummaryPrefix + "*.json.tmp"))
-            {
-                string path = tmp.Substring(0, tmp.Length - ".tmp".Length);
-                try
-                {
-                    if (!File.Exists(path))
-                    {
-                        JObject.Parse(File.ReadAllText(tmp));
-                        File.Move(tmp, path);
-                        continue;
-                    }
-                }
-                catch (Exception) { /* unreadable: deleted below */ }
-                TryDelete(tmp);
-            }
-        }
-
-        internal static List<(string line, long end)> ReadLines(string path, long offset, int max)
-        {
-            var result = new List<(string, long)>();
-            if (max <= 0 || !File.Exists(path)) return result;
-            using (var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-            {
-                if (offset >= fs.Length) return result;
-                fs.Position = offset;
-                var buffer = new byte[16 * 1024];
-                var line = new MemoryStream();
-                long pos = offset;
-                int read;
-                while (result.Count < max && (read = fs.Read(buffer, 0, buffer.Length)) > 0)
-                {
-                    for (int i = 0; i < read && result.Count < max; i++)
-                    {
-                        pos++;
-                        if (buffer[i] != (byte)'\n') { line.WriteByte(buffer[i]); continue; }
-                        result.Add((Encoding.UTF8.GetString(line.GetBuffer(), 0, (int)line.Length), pos));
-                        line.SetLength(0);
-                    }
-                }
-            }
-            return result;
         }
     }
 }

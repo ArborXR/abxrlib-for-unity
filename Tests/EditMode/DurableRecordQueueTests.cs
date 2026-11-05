@@ -97,7 +97,7 @@ public class DurableRecordQueueTests
         string good = DurableRecordQueue.ToLine(Event("kept"));
         File.WriteAllText(path, good + "\n" + good.Substring(0, good.Length / 2), new UTF8Encoding(false));
 
-        var lines = DurableRecordQueue.ReadLines(path, 0, 10);
+        var lines = FileQueueStore.ReadLines(path, 0, 10);
 
         Assert.AreEqual(1, lines.Count, "The half-written line has no newline, so it isn't read.");
         Assert.AreEqual(Encoding.UTF8.GetByteCount(good) + 1, lines[0].end);
