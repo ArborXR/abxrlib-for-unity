@@ -27,7 +27,7 @@ using UnityEngine.XR;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 #endif
-#if XR_TOOLKIT_AVAILABLE
+#if XR_TOOLKIT_2_1_1_OR_NEWER
 using UnityEngine.XR.Interaction.Toolkit.UI;
 #endif
 
@@ -46,7 +46,7 @@ namespace AbxrLib.Runtime.UI
 
         private EventSystem _eventSystem;
         private float _nextOtherCheck;
-#if XR_TOOLKIT_AVAILABLE && ENABLE_INPUT_SYSTEM
+#if XR_TOOLKIT_2_1_1_OR_NEWER && ENABLE_INPUT_SYSTEM
         private DefaultInputActions _uiActions;
         private InputActionReference[] _uiActionReferences;
 #endif
@@ -75,10 +75,11 @@ namespace AbxrLib.Runtime.UI
             var eventSystem = go.AddComponent<EventSystem>();
             var fallback = go.AddComponent<EventSystemFallback>();
             fallback._eventSystem = eventSystem;
-#if XR_TOOLKIT_AVAILABLE
+#if XR_TOOLKIT_2_1_1_OR_NEWER
             // XR Interaction Toolkit's interactors reuse the XRUIInputModule on the current EventSystem, or add one
             // beside any other module, and two modules on one EventSystem fight. So with the toolkit installed, use its
-            // module and let a rig that turns on later share it.
+            // module and let a rig that turns on later share it. Older versions lack the action references (added in
+            // 2.1.0) or its own device reading (2.1.1), so they take the plain modules below.
             var module = go.AddComponent<XRUIInputModule>();
 #if ENABLE_INPUT_SYSTEM
             fallback.AssignDefaultUiActions(module);
@@ -96,7 +97,7 @@ namespace AbxrLib.Runtime.UI
             Logcat.Debug("AbxrLib - Added an EventSystem to this scene so the sign-in prompt can take input.");
         }
 
-#if XR_TOOLKIT_AVAILABLE && ENABLE_INPUT_SYSTEM
+#if XR_TOOLKIT_2_1_1_OR_NEWER && ENABLE_INPUT_SYSTEM
         /// <summary>
         /// Without action references, XRUIInputModule falls back to reading devices directly, and that reads a touch's
         /// position but never its press, so taps on a touch screen do nothing. The Input System's default UI actions
@@ -173,7 +174,7 @@ namespace AbxrLib.Runtime.UI
         private void OnDestroy()
         {
             if (_instance == this) _instance = null;
-#if XR_TOOLKIT_AVAILABLE && ENABLE_INPUT_SYSTEM
+#if XR_TOOLKIT_2_1_1_OR_NEWER && ENABLE_INPUT_SYSTEM
             if (_uiActionReferences != null)
             {
                 foreach (var reference in _uiActionReferences)

@@ -878,8 +878,10 @@ namespace AbxrLib.Editor
         /// </summary>
         internal static Type InputModuleTypeForProject()
         {
+            // XR Interaction Toolkit before 2.1 has no action references on its module, so it can't be given the
+            // default UI actions; those projects get the plain module instead.
             Type xrUi = Type.GetType(XrUiInputModuleTypeName);
-            if (xrUi != null) return xrUi;
+            if (xrUi != null && xrUi.GetProperty("pointAction") != null) return xrUi;
 #if ENABLE_INPUT_SYSTEM
             Type inputSystemUi = Type.GetType(InputSystemUiInputModuleTypeName);
             if (inputSystemUi != null) return inputSystemUi;
