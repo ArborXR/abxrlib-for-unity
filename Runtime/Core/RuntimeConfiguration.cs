@@ -145,6 +145,7 @@ namespace AbxrLib.Runtime.Core
         public bool retainLocalAfterSent;
         public int offlineRetentionDays = 30;
         public int offlineDiskBudgetMB = 50;
+        [Obsolete("The Insights device service (app.xrdi.client) is being removed. From 3.1 this setting does nothing.")]
         public bool enableArborInsightsClient = true;
         public bool enableArborMdmClient = true;
         public bool enableLearnerLauncherMode = false;
@@ -267,7 +268,9 @@ namespace AbxrLib.Runtime.Core
             c.retainLocalAfterSent = a.retainLocalAfterSent;
             c.offlineRetentionDays = a.offlineRetentionDays;
             c.offlineDiskBudgetMB = a.offlineDiskBudgetMB;
+#pragma warning disable CS0618 // Obsolete, but still copied until 3.1 makes it a no-op.
             c.enableArborInsightsClient = a.enableArborInsightsClient;
+#pragma warning restore CS0618
             c.enableArborMdmClient = a.enableArborMdmClient;
             c.enableLearnerLauncherMode = a.enableLearnerLauncherMode;
             c.enableAutomaticTelemetry = a.enableAutomaticTelemetry;

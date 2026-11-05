@@ -245,8 +245,10 @@ namespace AbxrLib.Runtime
                 _arborMdmClient.Initialize();
                 _arborMdmClientInstalled = ArborMdmClient.IsClientPackageInstalled();
             }
+#pragma warning disable CS0618 // Obsolete, but still honored until 3.1 removes the service path.
             if (Configuration.Instance.enableArborInsightsClient)
                 _arborInsightsClient = new ArborInsightsClient();
+#pragma warning restore CS0618
             if (_arborInsightsClient != null)
                 _arborInsightsClient.Start();
 #endif
@@ -275,7 +277,9 @@ namespace AbxrLib.Runtime
 
             _transportSelectionComplete = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
+#pragma warning disable CS0618 // Obsolete, but still honored until 3.1 removes the service path.
             if (Configuration.Instance.enableArborInsightsClient && _arborInsightsClient != null)
+#pragma warning restore CS0618
                 _transportSelectionCoroutine = StartCoroutine(WaitForTransportSelectionCoroutine());
             else
 #endif

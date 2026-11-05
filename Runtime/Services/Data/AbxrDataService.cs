@@ -34,7 +34,7 @@ namespace AbxrLib.Runtime.Services.Data
             var transport = RecordingTransport;
             if (!AbxrObserver.IsObserved) { transport?.AddEvent(name, meta); return; }
             long id = AbxrObserver.NextId();
-            Report(id, AbxrObserver.RecordKind.Event, name, null, meta, transport, transport?.AddEvent(name, meta, id));
+            Report(id, AbxrObserver.RecordKind.Event, name, null, meta, transport?.AddEvent(name, meta, id));
         }
 
         public void AddTelemetry(string name, Dictionary<string, string> meta)
@@ -44,14 +44,14 @@ namespace AbxrLib.Runtime.Services.Data
             var transport = RecordingTransport;
             if (!AbxrObserver.IsObserved) { transport?.AddTelemetry(name, meta); return; }
             long id = AbxrObserver.NextId();
-            Report(id, AbxrObserver.RecordKind.Telemetry, name, null, meta, transport, transport?.AddTelemetry(name, meta, id));
+            Report(id, AbxrObserver.RecordKind.Telemetry, name, null, meta, transport?.AddTelemetry(name, meta, id));
         }
 
         /// <summary>Reports a telemetry record that isn't kept (the org turned telemetry off) to the observer, without queuing it.</summary>
         public void DropTelemetry(string name, Dictionary<string, string> meta, AbxrObserver.DropReason reason)
         {
             if (!AbxrObserver.IsObserved) return;
-            Report(AbxrObserver.NextId(), AbxrObserver.RecordKind.Telemetry, name ?? "", null, meta ?? new Dictionary<string, string>(), null, null, reason);
+            Report(AbxrObserver.NextId(), AbxrObserver.RecordKind.Telemetry, name ?? "", null, meta ?? new Dictionary<string, string>(), null, reason);
         }
 
         public void AddLog(string logLevel, string text, Dictionary<string, string> meta)
@@ -62,22 +62,20 @@ namespace AbxrLib.Runtime.Services.Data
             var transport = RecordingTransport;
             if (!AbxrObserver.IsObserved) { transport?.AddLog(logLevel, text, meta); return; }
             long id = AbxrObserver.NextId();
-            Report(id, AbxrObserver.RecordKind.Log, text, logLevel, meta, transport, transport?.AddLog(logLevel, text, meta, id));
+            Report(id, AbxrObserver.RecordKind.Log, text, logLevel, meta, transport?.AddLog(logLevel, text, meta, id));
         }
 
         /// <summary>
-        /// Raises record created, then handed to service when the service transport took it: it sends on its own, so
-        /// the SDK never learns more. accepted is null when nothing was recording.
+        /// Raises record created. accepted is null when nothing was recording. The REST transport reports the send result
+        /// later, per batch; the service transport sends on its own, so its records never get one.
         /// </summary>
         internal static void Report(long id, AbxrObserver.RecordKind kind, string name, string level, Dictionary<string, string> data,
-            IAbxrTransport transport, bool? accepted, AbxrObserver.DropReason notAcceptedReason = AbxrObserver.DropReason.NotRecording)
+            bool? accepted, AbxrObserver.DropReason notAcceptedReason = AbxrObserver.DropReason.NotRecording)
         {
             var drop = accepted == null ? notAcceptedReason
                 : accepted.Value ? AbxrObserver.DropReason.None
                 : AbxrObserver.DropReason.QueueFull;
             AbxrObserver.Created(id, kind, name, level, data, drop);
-            if (drop == AbxrObserver.DropReason.None && transport.IsServiceTransport)
-                AbxrObserver.Sent(id, AbxrObserver.SendStatus.HandedToService);
         }
     }
 }

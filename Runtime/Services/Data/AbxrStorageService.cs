@@ -37,7 +37,7 @@ namespace AbxrLib.Runtime.Services.Data
             var transport = drop == AbxrObserver.DropReason.None ? _getTransport() : null;
             if (!AbxrObserver.IsObserved) { transport?.StorageAdd(name, entry, scope, policy); return; }
             long id = AbxrObserver.NextId();
-            AbxrDataService.Report(id, AbxrObserver.RecordKind.Storage, name, null, entry, transport,
+            AbxrDataService.Report(id, AbxrObserver.RecordKind.Storage, name, null, entry,
                 transport?.StorageAdd(name, entry, scope, policy, id),
                 drop == AbxrObserver.DropReason.None ? AbxrObserver.DropReason.NotRecording : drop);
         }

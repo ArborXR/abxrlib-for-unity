@@ -30,6 +30,19 @@ namespace AbxrLib.Runtime.UI.ExitPoll
         private static readonly Dictionary<string, Action<string>> Callbacks = new();
         private static bool _isProcessing;
 
+        /// <summary>True while a poll is up, including one hidden behind the keyboard.</summary>
+        public static bool IsOpen => _pollInstance;
+
+        /// <summary>Runs coroutines for LaserPointerManager when no keyboard is up. Lives under the DontDestroyOnLoad root.</summary>
+        internal static ExitPollHandler Instance { get; private set; }
+
+        private void Awake() => Instance = this;
+
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
         private void Start()
         {
             KeyboardHandler.OnKeyboardCreated += PauseExitPolling;
@@ -64,7 +77,12 @@ namespace AbxrLib.Runtime.UI.ExitPoll
         {
             // Clearing the flag after starting the next poll let another AddPoll open a second one on top of it.
             if (Polls.Count > 0) ProcessPoll();
-            else _isProcessing = false;
+            else
+            {
+                _isProcessing = false;
+                // The answer's callback may have opened a keyboard, which still needs the rays.
+                if (!KeyboardHandler.IsOpen) LaserPointerManager.RestoreLaserPointerStates();
+            }
         }
 
         /// <summary>Clears what an Editor play session left behind when domain reload is off: its polls died with it.</summary>
@@ -102,16 +120,33 @@ namespace AbxrLib.Runtime.UI.ExitPoll
                     AddButton(response, panelTransform);
                 }
             }
+            if (!_pollInstance) return;
             // An open poll must outlive a scene load: it holds the queue until it's answered.
-            if (_pollInstance) DontDestroyOnLoad(_pollInstance);
+            DontDestroyOnLoad(_pollInstance);
+            // Like the keyboard: the _Default and _Meta prefabs carry no tracked-device raycaster, and the rig's rays
+            // may be off.
+            LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_pollInstance);
+            LaserPointerManager.EnableLaserPointersForInteraction();
         }
     
         private static void CreatePanel(GameObject prefab)
         {
             _panelInstance = Instantiate(prefab);
             DontDestroyOnLoad(_panelInstance); // Outlives a scene load, like the poll.
+            // The backdrop has nothing to press, and on a flat screen its raycaster would compete with the poll's for taps.
+            foreach (var raycaster in _panelInstance.GetComponentsInChildren<GraphicRaycaster>()) raycaster.enabled = false;
             TextMeshProUGUI panelText = _panelInstance.GetComponentInChildren<TextMeshProUGUI>();
             panelText.text = _prompt;
+        }
+
+        // The poll and its backdrop share a plane, so left to distance the backdrop can draw over the poll: on a flat
+        // screen, where both are centred on the view, it does.
+        private static void DrawPollOverBackdrop()
+        {
+            if (!_pollInstance || !_panelInstance) return;
+            Canvas pollCanvas = _pollInstance.GetComponentInChildren<Canvas>();
+            Canvas panelCanvas = _panelInstance.GetComponentInChildren<Canvas>();
+            if (pollCanvas && panelCanvas) pollCanvas.sortingOrder = panelCanvas.sortingOrder + 1;
         }
 
         private static void ProcessPoll()
@@ -122,6 +157,8 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             _prompt = poll.Item1;
             CreatePanel(_panelPrefab);
             CreatePoll(poll.Item2);
+            FaceCamera.FitTogether(_panelInstance, _pollInstance); // The poll sits on its backdrop, so they fit as one.
+            DrawPollOverBackdrop();
             Polls.RemoveAt(0);
             Responses.Remove(_prompt);
         }
@@ -161,9 +198,14 @@ namespace AbxrLib.Runtime.UI.ExitPoll
 
         private static void ResumeExitPolling()
         {
-            if (_pollInstance) _pollInstance.SetActive(true);
             if (_panelInstance) _panelInstance.SetActive(true);
-            if (!_pollInstance) ProcessNextPoll();
+            if (_pollInstance)
+            {
+                _pollInstance.SetActive(true);
+                // Closing the keyboard put the rays back the way it found them.
+                LaserPointerManager.EnableLaserPointersForInteraction();
+            }
+            else ProcessNextPoll();
         }
     }
 }

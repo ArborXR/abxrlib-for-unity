@@ -342,7 +342,7 @@ namespace AbxrLib.Runtime.Types
         public Dictionary<string, string> meta;
         /// <summary>Unique id for the backend's duplicate check (INS-527), created when the record is queued and kept across retries and launches.</summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string recordId;
-        /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
+        /// <summary>Observer record id, left out of the request JSON (0 when nobody observed). See AbxrObserver.</summary>
         [JsonIgnore] internal long ObserverId;
     }
 
@@ -355,7 +355,7 @@ namespace AbxrLib.Runtime.Types
         public Dictionary<string, string> meta;
         /// <summary>Unique id for the backend's duplicate check (INS-527), created when the record is queued and kept across retries and launches.</summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string recordId;
-        /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
+        /// <summary>Observer record id, left out of the request JSON (0 when nobody observed). See AbxrObserver.</summary>
         [JsonIgnore] internal long ObserverId;
     }
 
@@ -369,7 +369,7 @@ namespace AbxrLib.Runtime.Types
         public Dictionary<string, string> meta;
         /// <summary>Unique id for the backend's duplicate check (INS-527), created when the record is queued and kept across retries and launches.</summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string recordId;
-        /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
+        /// <summary>Observer record id, left out of the request JSON (0 when nobody observed). See AbxrObserver.</summary>
         [JsonIgnore] internal long ObserverId;
     }
 
@@ -391,7 +391,7 @@ namespace AbxrLib.Runtime.Types
         public string scope;
         /// <summary>Unique id for the backend's duplicate check (INS-527), created when the record is queued and kept across retries and launches.</summary>
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string recordId;
-        /// <summary>Observer record id, never serialized (0 when nobody observed). See AbxrObserver.</summary>
+        /// <summary>Observer record id, left out of the request JSON (0 when nobody observed). See AbxrObserver.</summary>
         [JsonIgnore] internal long ObserverId;
     }
     

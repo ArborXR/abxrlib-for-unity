@@ -111,6 +111,7 @@ namespace AbxrLib.Runtime.Core
         public int offlineDiskBudgetMB = 50;
 
         [Tooltip("When enabled, the app will use the ArborInsightsClient device APK for auth and data on Android when installed. When disabled, only REST/cloud is used. Set in the Unity asset only; not overridden by GET /v1/storage/config.")]
+        [System.Obsolete("The Insights device service (app.xrdi.client) is being removed. From 3.1 this setting does nothing.")]
         public bool enableArborInsightsClient = true;
 
         [Tooltip("When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only. Set in the Unity asset only; not overridden by GET /v1/storage/config.")]

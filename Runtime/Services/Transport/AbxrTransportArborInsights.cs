@@ -75,7 +75,7 @@ namespace AbxrLib.Runtime.Services.Transport
             yield return null;
         }
 
-        // The client app queues and sends, so these always accept the record. The data service reports it as handed to the service.
+        // The client app queues and sends, so these always accept the record. Its records get no send result.
         public bool AddEvent(string name, Dictionary<string, string> meta, long observerId = 0)
         {
             ArborInsightsClient.Event(name ?? "", meta ?? new Dictionary<string, string>());

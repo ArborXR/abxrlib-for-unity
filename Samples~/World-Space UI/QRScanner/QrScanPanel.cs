@@ -60,6 +60,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
         public void Hide()
         {
             if (_root != null) _root.SetActive(false);
+            SetPreviewTexture(null); // The scanner destroys its textures when it stops.
         }
 
         public void SetStatus(string text)
@@ -69,7 +70,10 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
         public void SetPreviewTexture(Texture texture)
         {
-            if (_previewImage != null) _previewImage.texture = texture;
+            if (_previewImage == null) return;
+            _previewImage.texture = texture;
+            // A RawImage with no texture draws a white box, which reads as a broken camera.
+            _previewImage.enabled = texture != null;
         }
 
         public void SetPreviewUvRect(Rect uvRect)
