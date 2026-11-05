@@ -317,6 +317,7 @@ namespace AbxrLib.Runtime.UI.Keyboard
                 _pinPadInstance.SetActive(true);
                 LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_pinPadInstance);
                 LaserPointerManager.EnableLaserPointersForInteraction();
+                EventSystemFallback.Ensure();
                 StartInputGuard();  // Guard against accidental input
             }
         }
@@ -376,6 +377,8 @@ namespace AbxrLib.Runtime.UI.Keyboard
         
             // Enable laser pointers for keyboard/PIN pad interaction
             LaserPointerManager.EnableLaserPointersForInteraction();
+            // After the rays: an XR rig's ray interactors create their own EventSystem as they turn on.
+            EventSystemFallback.Ensure();
 
             // Block input briefly so the same gesture that opened the UI can't accidentally activate a button the moment it appears
             StartInputGuard();

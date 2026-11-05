@@ -1,5 +1,6 @@
 #if UNITY_ANDROID && !UNITY_EDITOR
 using System;
+using AbxrLib.Runtime.UI;
 using AbxrLib.Runtime.UI.Keyboard;
 using TMPro;
 using UnityEngine;
@@ -137,6 +138,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
             if (_canvas != null) _canvas.worldCamera = Camera.main;
 
             if (_canvas != null) LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_canvas.gameObject);
+            EventSystemFallback.Ensure();
         }
 
         private void LateUpdate()

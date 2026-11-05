@@ -127,6 +127,7 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             // may be off.
             LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_pollInstance);
             LaserPointerManager.EnableLaserPointersForInteraction();
+            EventSystemFallback.Ensure();
         }
     
         private static void CreatePanel(GameObject prefab)
