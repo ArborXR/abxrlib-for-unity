@@ -248,7 +248,7 @@ void OnRecordsSent(AbxrObserver.SendResult result)
 
 ### Offline Capture
 
-On headsets and desktop, the SDK keeps what it records on disk until the backend accepts it, grouped by session. A session recorded offline, or ended before it could send everything, is signed in again as itself and uploaded once the device is online. WebGL stays online-only.
+On headsets and desktop, the SDK keeps what it records on disk until the backend accepts it, grouped by session: in the OS's built-in SQLite on Android headsets, in files on desktop. It adds no library to your build. A session recorded offline, or ended before it could send everything, is signed in again as itself and uploaded once the device is online. WebGL stays online-only.
 
 - **Ending a session keeps its data.** `EndSession`, `StartNewSession` and quitting close the session; its records upload later. Only a revoked or cleared pairing, or `Abxr.ClearQueuedData()`, deletes queued data. A session recorded as a different app, organization or paired instance than the one online now is dropped instead of uploaded.
 - **Signing in offline.** When the org's last config asked for an email or text sign-in, the person can sign in offline: `OnAuthCompleted(true)` fires, the session records, and the answer is sent once the device is online (without a second `OnAuthCompleted`). A PIN needs a connection: offline, `OnAuthCompleted(false, "A connection is needed to sign in with a PIN.")` fires and the PIN pad appears once the device is online.
