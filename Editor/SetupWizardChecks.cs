@@ -790,7 +790,20 @@ namespace AbxrLib.Editor
         private const string EventSystemTypeName = "UnityEngine.EventSystems.EventSystem, UnityEngine.UI";
         private const string StandaloneInputModuleTypeName = "UnityEngine.EventSystems.StandaloneInputModule, UnityEngine.UI";
         private const string InputSystemUiInputModuleTypeName = "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem";
-        private const string XrUiInputModuleTypeName = "UnityEngine.XR.Interaction.Toolkit.UI.XRUIInputModule, Unity.XR.Interaction.Toolkit";
+        private const string XrUiInputModuleFullName = "UnityEngine.XR.Interaction.Toolkit.UI.XRUIInputModule";
+        private const string XrUiInputModuleTypeName = XrUiInputModuleFullName + ", Unity.XR.Interaction.Toolkit";
+
+        /// <summary>The Input System's own UI actions. InputSystemUIInputModule uses the same ones when it has none.</summary>
+        private const string DefaultInputActionsPath =
+            "Packages/com.unity.inputsystem/InputSystem/Plugins/PlayerInput/DefaultInputActions.inputactions";
+
+        /// <summary>XRUIInputModule's action properties and the default UI action each one gets.</summary>
+        private static readonly (string Property, string Action)[] XrUiDefaultActions =
+        {
+            ("pointAction", "UI/Point"), ("leftClickAction", "UI/Click"), ("middleClickAction", "UI/MiddleClick"),
+            ("rightClickAction", "UI/RightClick"), ("scrollWheelAction", "UI/ScrollWheel"),
+            ("navigateAction", "UI/Navigate"), ("submitAction", "UI/Submit"), ("cancelAction", "UI/Cancel")
+        };
 
         private static readonly System.Text.RegularExpressions.Regex SourcePrefabPattern =
             new(@"m_SourcePrefab: \{fileID: -?\d+, guid: ([0-9a-f]{32})");
@@ -846,8 +859,10 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// The input module that matches the project. XR Interaction Toolkit's handles rays, mouse and touch on either
-        /// input backend, and its ray interactors add one anyway, so it wins when installed. Otherwise the module for
+        /// The input module that matches the project. With XR Interaction Toolkit installed it's the toolkit's: its
+        /// interactors reuse the XRUIInputModule on the current EventSystem, or add one beside any other module, and two
+        /// modules on one EventSystem fight. On the Input System it needs action references to take a touch press (see
+        /// <see cref="AssignDefaultUiActions"/>). Otherwise the module for
         /// the Active Input Handling: Input System (or Both) gets InputSystemUIInputModule, Input Manager (old) alone
         /// gets StandaloneInputModule. The Editor's own defines follow that setting, since changing it restarts the Editor.
         /// </summary>
@@ -860,6 +875,31 @@ namespace AbxrLib.Editor
             if (inputSystemUi != null) return inputSystemUi;
 #endif
             return Type.GetType(StandaloneInputModuleTypeName);
+        }
+
+        /// <summary>
+        /// Without action references, XRUIInputModule reads devices directly on the Input System, and that reads a
+        /// touch's position but never its press, so taps on a touch screen do nothing. The default UI actions bind a
+        /// touch press as Click, alongside the mouse, pen and gamepad. Does nothing on the Input Manager (old), where the
+        /// module reads touches itself.
+        /// </summary>
+        private static void AssignDefaultUiActions(Component xrUiInputModule)
+        {
+#if ENABLE_INPUT_SYSTEM
+            // The importer stores each action's reference twice; the hidden copy only keeps old file IDs working.
+            var references = AssetDatabase.LoadAllAssetsAtPath(DefaultInputActionsPath)
+                .Where(asset => asset != null && asset.GetType().Name == "InputActionReference" &&
+                                (asset.hideFlags & HideFlags.HideInHierarchy) == 0)
+                .GroupBy(asset => asset.name)
+                .ToDictionary(group => group.Key, group => group.First());
+            Type moduleType = xrUiInputModule.GetType();
+            foreach (var (property, action) in XrUiDefaultActions)
+            {
+                var setter = moduleType.GetProperty(property);
+                if (setter != null && references.TryGetValue(action, out var reference)) setter.SetValue(xrUiInputModule, reference);
+                else Logcat.Warning($"AbxrLib - Couldn't assign {action} to the EventSystem's {property}; set it in the Inspector.");
+            }
+#endif
         }
 
         private static Check CheckEventSystem()
@@ -908,6 +948,7 @@ namespace AbxrLib.Editor
             }
 
             var eventSystem = new GameObject("EventSystem", eventSystemType, inputModuleType);
+            if (inputModuleType.FullName == XrUiInputModuleFullName) AssignDefaultUiActions(eventSystem.GetComponent(inputModuleType));
             UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(eventSystem, scene);
 
             if (wasOpen)

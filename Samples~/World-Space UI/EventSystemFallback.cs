@@ -5,7 +5,7 @@
  *
  * uGUI only delivers taps and clicks through an EventSystem, and a new scene doesn't have one. Without it the PIN pad,
  * keyboard and exit poll draw but ignore every tap. So when a prompt opens on a flat screen and no EventSystem is
- * enabled, this adds one with the input module the project's Active Input Handling supports.
+ * enabled, this adds one with an input module the project's input handling supports.
  *
  * It belongs to the scene it was added to, not to the prompt. uGUI makes the first EventSystem enabled current, and
  * XR Interaction Toolkit's interactors attach to whichever one is current when they turn on. One that followed the
@@ -23,10 +23,12 @@ using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.XR;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.UI;
+#endif
 #if XR_TOOLKIT_AVAILABLE
 using UnityEngine.XR.Interaction.Toolkit.UI;
-#elif ENABLE_INPUT_SYSTEM
-using UnityEngine.InputSystem.UI;
 #endif
 
 namespace AbxrLib.Runtime.UI
@@ -43,6 +45,10 @@ namespace AbxrLib.Runtime.UI
 
         private EventSystem _eventSystem;
         private float _nextOtherCheck;
+#if XR_TOOLKIT_AVAILABLE && ENABLE_INPUT_SYSTEM
+        private DefaultInputActions _uiActions;
+        private InputActionReference[] _uiActionReferences;
+#endif
 
         /// <summary>
         /// Adds an EventSystem for the SDK's prompts when none is enabled. Call it each time a prompt opens or survives
@@ -62,12 +68,20 @@ namespace AbxrLib.Runtime.UI
                 return;
             }
 
+            // Built inactive, so the input module enables with its actions already assigned.
             var go = new GameObject(ObjectName);
+            go.SetActive(false);
             var eventSystem = go.AddComponent<EventSystem>();
+            var fallback = go.AddComponent<EventSystemFallback>();
+            fallback._eventSystem = eventSystem;
 #if XR_TOOLKIT_AVAILABLE
-            // Handles mouse and touch for either input backend. A ray interactor that turns on later attaches to
-            // EventSystem.current and adds an XRUIInputModule if it has none, and two modules would fight.
-            go.AddComponent<XRUIInputModule>();
+            // XR Interaction Toolkit's interactors reuse the XRUIInputModule on the current EventSystem, or add one
+            // beside any other module, and two modules on one EventSystem fight. So with the toolkit installed, use its
+            // module and let a rig that turns on later share it.
+            var module = go.AddComponent<XRUIInputModule>();
+#if ENABLE_INPUT_SYSTEM
+            fallback.AssignDefaultUiActions(module);
+#endif
 #elif ENABLE_INPUT_SYSTEM
             // Input System alone, or Both. Assigns its default UI actions when enabled.
             go.AddComponent<InputSystemUIInputModule>();
@@ -75,11 +89,35 @@ namespace AbxrLib.Runtime.UI
             // Input Manager (old) alone. StandaloneInputModule throws when only the Input System is active.
             go.AddComponent<StandaloneInputModule>();
 #endif
-            _instance = go.AddComponent<EventSystemFallback>();
-            _instance._eventSystem = eventSystem;
-            _instance._nextOtherCheck = Time.unscaledTime + OtherEventSystemCheckSeconds;
+            _instance = fallback;
+            fallback._nextOtherCheck = Time.unscaledTime + OtherEventSystemCheckSeconds;
+            go.SetActive(true);
             Logcat.Debug("AbxrLib - Added an EventSystem to this scene so the sign-in prompt can take input.");
         }
+
+#if XR_TOOLKIT_AVAILABLE && ENABLE_INPUT_SYSTEM
+        /// <summary>
+        /// Without action references, XRUIInputModule falls back to reading devices directly, and that reads a touch's
+        /// position but never its press, so taps on a touch screen do nothing. The Input System's default UI actions
+        /// bind a touch press as Click, alongside the mouse, pen and gamepad.
+        /// </summary>
+        private void AssignDefaultUiActions(XRUIInputModule module)
+        {
+            _uiActions = new DefaultInputActions();
+            var ui = _uiActions.UI;
+            _uiActionReferences = new[]
+            {
+                module.pointAction = InputActionReference.Create(ui.Point),
+                module.leftClickAction = InputActionReference.Create(ui.Click),
+                module.middleClickAction = InputActionReference.Create(ui.MiddleClick),
+                module.rightClickAction = InputActionReference.Create(ui.RightClick),
+                module.scrollWheelAction = InputActionReference.Create(ui.ScrollWheel),
+                module.navigateAction = InputActionReference.Create(ui.Navigate),
+                module.submitAction = InputActionReference.Create(ui.Submit),
+                module.cancelAction = InputActionReference.Create(ui.Cancel),
+            };
+        }
+#endif
 
         /// <summary>
         /// A prompt that survives a scene load loses the EventSystem that lived in the old scene, ours included. Waits a
@@ -131,6 +169,16 @@ namespace AbxrLib.Runtime.UI
         private void OnDestroy()
         {
             if (_instance == this) _instance = null;
+#if XR_TOOLKIT_AVAILABLE && ENABLE_INPUT_SYSTEM
+            if (_uiActionReferences != null)
+            {
+                foreach (var reference in _uiActionReferences)
+                {
+                    if (reference != null) Destroy(reference);
+                }
+            }
+            _uiActions?.Dispose();
+#endif
         }
 
         /// <summary>Clears what an Editor play session left behind when domain reload is off.</summary>
