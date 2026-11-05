@@ -928,10 +928,11 @@ namespace AbxrLib.Editor
                          "takes taps and clicks only through one. On a flat screen AbxrLib adds one when a prompt " +
                          "opens, and on a headset XR Interaction Toolkit's ray interactors add their own. Add one to the " +
                          "scene so input doesn't depend on either. An EventSystem your code creates at runtime isn't " +
-                         "detected.",
+                         "detected." + (EditorApplication.isPlayingOrWillChangePlaymode ? "\nExit Play mode to add one." : ""),
                 Severity = Severity.Info,
-                FixLabel = "Add an EventSystem",
-                Fix = () => AddEventSystemToScene(scenePath)
+                // Added in Play mode, it would go into the runtime copy of the scene and be lost on exit.
+                FixLabel = EditorApplication.isPlayingOrWillChangePlaymode ? null : "Add an EventSystem",
+                Fix = EditorApplication.isPlayingOrWillChangePlaymode ? null : () => AddEventSystemToScene(scenePath)
             };
         }
 
@@ -951,6 +952,8 @@ namespace AbxrLib.Editor
 
             UnityEngine.SceneManagement.Scene scene = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(scenePath);
             bool wasOpen = scene.isLoaded;
+            // A scene listed unloaded in the Hierarchy stays listed after the save.
+            bool wasListed = scene.IsValid();
             if (!wasOpen)
             {
                 scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath,
@@ -970,7 +973,7 @@ namespace AbxrLib.Editor
             else
             {
                 UnityEditor.SceneManagement.EditorSceneManager.SaveScene(scene);
-                UnityEditor.SceneManagement.EditorSceneManager.CloseScene(scene, true);
+                UnityEditor.SceneManagement.EditorSceneManager.CloseScene(scene, removeScene: !wasListed);
             }
             Logcat.Info($"Added an EventSystem with {inputModuleType.Name} to {Path.GetFileNameWithoutExtension(scenePath)}.");
         }
