@@ -42,6 +42,7 @@ namespace AbxrLib.Runtime.UI
 
         private static EventSystemFallback _instance;
         private static bool _warnedOnHeadset;
+        private static bool _quitting;
 
         private EventSystem _eventSystem;
         private float _nextOtherCheck;
@@ -123,12 +124,15 @@ namespace AbxrLib.Runtime.UI
         /// A prompt that survives a scene load loses the EventSystem that lived in the old scene, ours included. Waits a
         /// frame, so the new scene's own EventSystem (or the one its rig creates) is enabled before deciding.
         /// </summary>
-        internal static void OnSceneChanged()
+        internal static void OnSceneChanged() => EnsureNextFrame(orNow: true);
+
+        /// <param name="orNow">Ensure at once when nothing can wait a frame. False while an object is being destroyed.</param>
+        private static void EnsureNextFrame(bool orNow)
         {
             if (!AnyPromptOpen) return;
             MonoBehaviour runner = ExitPollHandler.Instance;
             if (runner != null && runner.isActiveAndEnabled) runner.StartCoroutine(EnsureAfterAFrame());
-            else Ensure();
+            else if (orNow) Ensure();
         }
 
         private static System.Collections.IEnumerator EnsureAfterAFrame()
@@ -179,6 +183,9 @@ namespace AbxrLib.Runtime.UI
             }
             _uiActions?.Dispose();
 #endif
+            // Its scene can unload under a prompt that's still open, frames after the active scene changed: an app that
+            // loads the next scene additively, makes it active, then unloads this one. Look again once it's gone.
+            if (!_quitting) EnsureNextFrame(orNow: false);
         }
 
         /// <summary>Clears what an Editor play session left behind when domain reload is off.</summary>
@@ -187,6 +194,11 @@ namespace AbxrLib.Runtime.UI
         {
             _instance = null;
             _warnedOnHeadset = false;
+            _quitting = false;
+            Application.quitting -= OnQuitting;
+            Application.quitting += OnQuitting;
         }
+
+        private static void OnQuitting() => _quitting = true;
     }
 }
