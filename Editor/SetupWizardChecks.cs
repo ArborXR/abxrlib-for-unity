@@ -41,6 +41,7 @@ namespace AbxrLib.Editor
                 CheckDuplicateWorldSpaceImports(),
                 CheckWorldSpaceUi(),
                 CheckTextMeshPro(),
+                CheckEventSystem(),
                 CheckRequiredPackages(),
                 CheckArborMdmClient(),
                 CheckPairing(),
@@ -771,6 +772,156 @@ namespace AbxrLib.Editor
                 "Unity could not open the TextMeshPro importer.\n\n" +
                 $"WHAT TO DO: {install} in Window > Package Manager, then use " +
                 "Window > TextMeshPro > Import TMP Essential Resources.", "OK");
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // EventSystem
+        //
+        // uGUI passes taps and clicks to the sign-in prompt only through an EventSystem, and a new scene has none.
+        // The world-space UI adds one at runtime on a flat screen, and XR Interaction Toolkit's ray interactors add
+        // their own on a headset, so this is context rather than a problem. It looks only at the launch scene, where
+        // the prompt first opens, and reads the scene's file so it never has to open it.
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>GUID of uGUI's EventSystem script. The same in every com.unity.ugui release.</summary>
+        internal const string EventSystemScriptGuid = "76c392e42b5098c458856cdf6ecaaaa1";
+
+        // By name: core's Editor assembly doesn't reference uGUI, the Input System or XR Interaction Toolkit.
+        private const string EventSystemTypeName = "UnityEngine.EventSystems.EventSystem, UnityEngine.UI";
+        private const string StandaloneInputModuleTypeName = "UnityEngine.EventSystems.StandaloneInputModule, UnityEngine.UI";
+        private const string InputSystemUiInputModuleTypeName = "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem";
+        private const string XrUiInputModuleTypeName = "UnityEngine.XR.Interaction.Toolkit.UI.XRUIInputModule, Unity.XR.Interaction.Toolkit";
+
+        private static readonly System.Text.RegularExpressions.Regex SourcePrefabPattern =
+            new(@"m_SourcePrefab: \{fileID: -?\d+, guid: ([0-9a-f]{32})");
+
+        /// <summary>The first enabled scene in Build Settings, which is where the app starts. Null when there is none.</summary>
+        internal static string LaunchScenePath() => EditorBuildSettings.scenes.FirstOrDefault(scene => scene.enabled)?.path;
+
+        /// <summary>
+        /// Whether a scene or prefab file has an EventSystem, following the prefabs it instances. Null when the file
+        /// isn't text (binary serialization), since then the answer is unknown. A nested prefab that can't be read
+        /// counts as having none.
+        /// </summary>
+        /// <param name="readAssetByGuid">Returns an asset's file contents by GUID, or null when it can't be read.</param>
+        internal static bool? YamlHasEventSystem(string yaml, Func<string, string> readAssetByGuid) =>
+            YamlHasEventSystem(yaml, readAssetByGuid, new HashSet<string>());
+
+        private static bool? YamlHasEventSystem(string yaml, Func<string, string> readAssetByGuid, HashSet<string> visited)
+        {
+            if (yaml == null || !yaml.StartsWith("%YAML")) return null;
+            if (yaml.Contains("guid: " + EventSystemScriptGuid)) return true;
+            foreach (System.Text.RegularExpressions.Match match in SourcePrefabPattern.Matches(yaml))
+            {
+                string guid = match.Groups[1].Value;
+                if (!visited.Add(guid)) continue;
+                if (YamlHasEventSystem(readAssetByGuid(guid), readAssetByGuid, visited) == true) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether the scene has an EventSystem. Looks at the live scene when it's open, so unsaved edits count, and
+        /// reads the file otherwise. Null when uGUI isn't installed or the file can't be read as text.
+        /// </summary>
+        internal static bool? SceneHasEventSystem(string scenePath)
+        {
+            Type eventSystemType = Type.GetType(EventSystemTypeName);
+            if (eventSystemType == null) return null;
+
+            UnityEngine.SceneManagement.Scene scene = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(scenePath);
+            if (scene.isLoaded)
+                return scene.GetRootGameObjects().Any(root => root.GetComponentInChildren(eventSystemType, true) != null);
+
+            return YamlHasEventSystem(ReadProjectFile(scenePath), guid => ReadProjectFile(AssetDatabase.GUIDToAssetPath(guid)));
+        }
+
+        private static string ReadProjectFile(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath)) return null;
+            // Physical path, so a prefab inside a package (Packages/...) resolves to the package cache.
+            try { return File.ReadAllText(FileUtil.GetPhysicalPath(assetPath)); }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+        }
+
+        /// <summary>
+        /// The input module that matches the project. XR Interaction Toolkit's handles rays, mouse and touch on either
+        /// input backend, and its ray interactors add one anyway, so it wins when installed. Otherwise the module for
+        /// the Active Input Handling: Input System (or Both) gets InputSystemUIInputModule, Input Manager (old) alone
+        /// gets StandaloneInputModule. The Editor's own defines follow that setting, since changing it restarts the Editor.
+        /// </summary>
+        internal static Type InputModuleTypeForProject()
+        {
+            Type xrUi = Type.GetType(XrUiInputModuleTypeName);
+            if (xrUi != null) return xrUi;
+#if ENABLE_INPUT_SYSTEM
+            Type inputSystemUi = Type.GetType(InputSystemUiInputModuleTypeName);
+            if (inputSystemUi != null) return inputSystemUi;
+#endif
+            return Type.GetType(StandaloneInputModuleTypeName);
+        }
+
+        private static Check CheckEventSystem()
+        {
+            if (!WorldSpaceUiIsInstalled()) return null;
+            string scenePath = LaunchScenePath();
+            if (string.IsNullOrEmpty(scenePath)) return null;
+            // Has one, or there's no way to tell.
+            if (SceneHasEventSystem(scenePath) != false) return null;
+
+            string sceneName = Path.GetFileNameWithoutExtension(scenePath);
+            return new Check
+            {
+                Title = "Launch scene has no EventSystem",
+                Detail = $"{sceneName}, the first scene in Build Settings, has no EventSystem, and the sign-in prompt " +
+                         "takes taps and clicks only through one. On a flat screen AbxrLib adds one while a prompt is " +
+                         "open, and on a headset XR Interaction Toolkit's ray interactors add their own. Add one to the " +
+                         "scene so input doesn't depend on either. An EventSystem your code creates at runtime isn't " +
+                         "detected.",
+                Severity = Severity.Info,
+                FixLabel = "Add an EventSystem",
+                Fix = () => AddEventSystemToScene(scenePath)
+            };
+        }
+
+        /// <summary>
+        /// Adds an EventSystem with the project's input module to the scene. An open scene is only marked dirty, so
+        /// saving stays with the developer along with their other edits. A closed one is opened, saved and closed.
+        /// </summary>
+        internal static void AddEventSystemToScene(string scenePath)
+        {
+            Type eventSystemType = Type.GetType(EventSystemTypeName);
+            Type inputModuleType = InputModuleTypeForProject();
+            if (eventSystemType == null || inputModuleType == null)
+            {
+                Logcat.Warning("AbxrLib - Couldn't add an EventSystem: uGUI (com.unity.ugui) isn't installed.");
+                return;
+            }
+
+            UnityEngine.SceneManagement.Scene scene = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(scenePath);
+            bool wasOpen = scene.isLoaded;
+            if (!wasOpen)
+            {
+                scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath,
+                    UnityEditor.SceneManagement.OpenSceneMode.Additive);
+            }
+
+            var eventSystem = new GameObject("EventSystem", eventSystemType, inputModuleType);
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(eventSystem, scene);
+
+            if (wasOpen)
+            {
+                Undo.RegisterCreatedObjectUndo(eventSystem, "Add EventSystem");
+                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
+                Selection.activeGameObject = eventSystem;
+            }
+            else
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(scene);
+                UnityEditor.SceneManagement.EditorSceneManager.CloseScene(scene, true);
+            }
+            Logcat.Info($"Added an EventSystem with {inputModuleType.Name} to {Path.GetFileNameWithoutExtension(scenePath)}.");
         }
 
         /// <summary>
