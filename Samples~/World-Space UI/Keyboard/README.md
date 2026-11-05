@@ -65,7 +65,7 @@ KeyboardHandler.SetPrompt("Please enter your credentials");
 KeyboardHandler.Destroy();
 ```
 
-Keyboards and PIN pads survive scene loads, so a sign-in or pairing prompt stays open while the app changes scenes. A keyboard your code creates stays too, until you call `KeyboardHandler.Destroy()`. The new scene needs its own `EventSystem` (and an XR UI input module for rays) for the keyboard to take input.
+Keyboards and PIN pads survive scene loads, so a sign-in or pairing prompt stays open while the app changes scenes. A keyboard your code creates stays too, until you call `KeyboardHandler.Destroy()`. On a flat screen, if the new scene has no `EventSystem`, AbxrLib adds one while the prompt is open. On a headset, the new scene's rig must supply one with an XR UI input module for rays.
 
 ### Keyboard Events
 
