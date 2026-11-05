@@ -22,6 +22,7 @@ using AbxrLib.Runtime.UI.ExitPoll;
 using AbxrLib.Runtime.UI.Keyboard;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.XR;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -127,7 +128,7 @@ namespace AbxrLib.Runtime.UI
         /// </summary>
         internal static void OnSceneChanged() => EnsureNextFrame(orNow: true);
 
-        /// <param name="orNow">Ensure at once when nothing can wait a frame. False while an object is being destroyed.</param>
+        /// <param name="orNow">Ensure at once when nothing can wait a frame. False while a scene is unloading.</param>
         private static void EnsureNextFrame(bool orNow)
         {
             if (!AnyPromptOpen) return;
@@ -184,8 +185,15 @@ namespace AbxrLib.Runtime.UI
             }
             _uiActions?.Dispose();
 #endif
-            // Its scene can unload under a prompt that's still open, frames after the active scene changed: an app that
-            // loads the next scene additively, makes it active, then unloads this one. Look again once it's gone.
+        }
+
+        /// <summary>
+        /// A scene can unload under a prompt that's still open, frames after the active scene changed: an app that loads
+        /// the next scene additively, makes it active, then unloads the old one. Whatever EventSystem the old scene held,
+        /// ours or the app's, went with it, so look again.
+        /// </summary>
+        private static void OnSceneUnloaded(Scene scene)
+        {
             if (!_quitting) EnsureNextFrame(orNow: false);
         }
 
@@ -198,6 +206,8 @@ namespace AbxrLib.Runtime.UI
             _quitting = false;
             Application.quitting -= OnQuitting;
             Application.quitting += OnQuitting;
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
         }
 
         private static void OnQuitting() => _quitting = true;
