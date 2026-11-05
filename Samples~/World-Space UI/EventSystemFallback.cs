@@ -7,9 +7,11 @@
  * keyboard and exit poll draw but ignore every tap. So when a prompt opens on a flat screen and no EventSystem is
  * enabled, this adds one with the input module the project's Active Input Handling supports.
  *
- * It must not outstay the prompt. uGUI makes the first EventSystem enabled current, and every other one skips its
- * Update, so a leftover one would beat the app's own EventSystem in a later scene. It removes itself when the last
- * prompt closes, or as soon as another EventSystem is enabled.
+ * It belongs to the scene it was added to, not to the prompt. uGUI makes the first EventSystem enabled current, and
+ * XR Interaction Toolkit's interactors attach to whichever one is current when they turn on. One that followed the
+ * prompt into the next scene would be current while that scene's rig turned on, and the rig's rays would be left
+ * attached to nothing once it went. So it is left in the scene, unloads with it, and is added again in the next scene
+ * only if that one has none either. It also steps aside as soon as the app enables an EventSystem of its own.
  *
  * On a headset it adds nothing: XR Interaction Toolkit's ray interactors create an EventSystem with an XRUIInputModule
  * themselves, and the pointer and touch modules can't drive rays.
@@ -42,9 +44,6 @@ namespace AbxrLib.Runtime.UI
         private EventSystem _eventSystem;
         private float _nextOtherCheck;
 
-        /// <summary>True while the SDK's own EventSystem is up.</summary>
-        internal static bool IsActive => _instance != null;
-
         /// <summary>
         /// Adds an EventSystem for the SDK's prompts when none is enabled. Call it each time a prompt opens or survives
         /// a scene load. Does nothing when the app already has one.
@@ -64,8 +63,6 @@ namespace AbxrLib.Runtime.UI
             }
 
             var go = new GameObject(ObjectName);
-            // The prompts outlive a scene load, so their EventSystem must too.
-            DontDestroyOnLoad(go);
             var eventSystem = go.AddComponent<EventSystem>();
 #if XR_TOOLKIT_AVAILABLE
             // Handles mouse and touch for either input backend. A ray interactor that turns on later attaches to
@@ -81,12 +78,12 @@ namespace AbxrLib.Runtime.UI
             _instance = go.AddComponent<EventSystemFallback>();
             _instance._eventSystem = eventSystem;
             _instance._nextOtherCheck = Time.unscaledTime + OtherEventSystemCheckSeconds;
-            Logcat.Debug("AbxrLib - Added an EventSystem so the sign-in prompt can take input. It's removed when the prompt closes.");
+            Logcat.Debug("AbxrLib - Added an EventSystem to this scene so the sign-in prompt can take input.");
         }
 
         /// <summary>
-        /// A prompt that survives a scene load loses an EventSystem that lived in the old scene. Waits a frame, so the
-        /// old scene's EventSystem is gone and the new scene's is enabled before deciding.
+        /// A prompt that survives a scene load loses the EventSystem that lived in the old scene, ours included. Waits a
+        /// frame, so the new scene's own EventSystem (or the one its rig creates) is enabled before deciding.
         /// </summary>
         internal static void OnSceneChanged()
         {
@@ -106,12 +103,6 @@ namespace AbxrLib.Runtime.UI
 
         private void Update()
         {
-            if (!AnyPromptOpen)
-            {
-                Destroy(gameObject);
-                return;
-            }
-
             if (Time.unscaledTime < _nextOtherCheck) return;
             _nextOtherCheck = Time.unscaledTime + OtherEventSystemCheckSeconds;
             if (AnotherEventSystemEnabled()) Destroy(gameObject);

@@ -875,8 +875,8 @@ namespace AbxrLib.Editor
             {
                 Title = "Launch scene has no EventSystem",
                 Detail = $"{sceneName}, the first scene in Build Settings, has no EventSystem, and the sign-in prompt " +
-                         "takes taps and clicks only through one. On a flat screen AbxrLib adds one while a prompt is " +
-                         "open, and on a headset XR Interaction Toolkit's ray interactors add their own. Add one to the " +
+                         "takes taps and clicks only through one. On a flat screen AbxrLib adds one when a prompt " +
+                         "opens, and on a headset XR Interaction Toolkit's ray interactors add their own. Add one to the " +
                          "scene so input doesn't depend on either. An EventSystem your code creates at runtime isn't " +
                          "detected.",
                 Severity = Severity.Info,
