@@ -105,7 +105,7 @@ namespace AbxrLib.Runtime.UI
         {
             if (Time.unscaledTime < _nextOtherCheck) return;
             _nextOtherCheck = Time.unscaledTime + OtherEventSystemCheckSeconds;
-            if (AnotherEventSystemEnabled()) Destroy(gameObject);
+            if (AnotherEventSystemEnabled()) Retire();
         }
 
         private bool AnotherEventSystemEnabled()
@@ -115,6 +115,17 @@ namespace AbxrLib.Runtime.UI
                 if (eventSystem != _eventSystem && eventSystem.isActiveAndEnabled) return true;
             }
             return false;
+        }
+
+        /// <summary>
+        /// Steps aside for the app's EventSystem. Destroy waits for the end of the frame, so ours is disabled and
+        /// forgotten now: a prompt opened later this frame must not find it.
+        /// </summary>
+        private void Retire()
+        {
+            if (_instance == this) _instance = null;
+            if (_eventSystem != null) _eventSystem.enabled = false;
+            Destroy(gameObject);
         }
 
         private void OnDestroy()
