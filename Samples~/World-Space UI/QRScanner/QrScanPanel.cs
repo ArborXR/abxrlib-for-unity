@@ -41,6 +41,9 @@ namespace AbxrLib.Runtime.Core.QRScanner
         public void Show()
         {
             EnsureUiInputReady();
+            // Only once it's on screen: the panel is built hidden before the first scene loads, when no scene's own
+            // EventSystem is enabled yet, and one added then would take over from the app's.
+            EventSystemFallback.Ensure();
 
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
 
@@ -138,7 +141,6 @@ namespace AbxrLib.Runtime.Core.QRScanner
             if (_canvas != null) _canvas.worldCamera = Camera.main;
 
             if (_canvas != null) LaserPointerManager.EnsureTrackedDeviceGraphicRaycasterOnCanvases(_canvas.gameObject);
-            EventSystemFallback.Ensure();
         }
 
         private void LateUpdate()
