@@ -1,12 +1,14 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode tests using simulated auth only (no API calls): auth state, override setters, module list, session management.
 // Device auth (config, validation, handoff) is in AuthenticationDeviceTests.
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Services.Auth;
+using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
 using NUnit.Framework;
 using UnityEngine;
@@ -317,6 +319,135 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Assert.IsFalse(AbxrSubsystem.Instance.IsExitAfterAssessmentScheduledForTesting,
             "EndSession auto-closes the assessment, but the app keeps running, so it must not launch the return app or quit.");
         yield return new WaitForSeconds(2.5f); // lets a wrongly started flow finish before TearDown resets the quit simulation
+    }
+
+    // ── Auth handoff, applied once ────────────────────────────────────────
+    // Device auth goes to a scripted transport that answers offline, so a test sees which path an attempt took without the
+    // network: applying a handoff sends no auth request, and device auth sends one and reports that it is retrying.
+
+    private const string OfflineRetryingReport =
+        "Authentication failure: Device authentication failed (no connection); the SDK is retrying in the background.";
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_StartNewSession_DoesNotAdoptItAgain()
+    {
+        var transport = UseOfflineDeviceAuth();
+        var results = new List<bool>();
+        yield return AdoptFixedHandoff(results);
+
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(OfflineRetryingReport)));
+        Abxr.StartNewSession();
+        yield return WaitFor(() => results.Count >= 2, 5f);
+
+        CollectionAssert.AreEqual(new[] { true, false }, results);
+        Assert.AreEqual(1, transport.AuthCalls, "The next learner's session must run device auth, not inherit the previous learner's handoff.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_ReAuth_DoesNotReapplyIt()
+    {
+        var transport = UseOfflineDeviceAuth();
+        var results = new List<bool>();
+        yield return AdoptFixedHandoff(results);
+
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(OfflineRetryingReport)));
+        // What ReAuthPollCoroutine calls when the token is about to expire.
+        AbxrSubsystem.Instance.AuthServiceForTesting.Authenticate();
+        yield return WaitFor(() => results.Count >= 2, 5f);
+
+        CollectionAssert.AreEqual(new[] { true, false }, results);
+        Assert.AreEqual(1, transport.AuthCalls, "Re-auth must go through device auth, not re-apply the handoff and push its expiry out again.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_DeliveredWhileRunning_WithTheCurrentSession_IsIgnored()
+    {
+        var transport = UseOfflineDeviceAuth();
+        SimulateAuth();
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        // Return-to-launcher: App 2 hands the launcher's own session back while the launcher still runs.
+        AbxrAuthService.SetAuthHandoffForTesting(AbxrSubsystem.Instance.GetHandoffJsonForTesting());
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+
+        Assert.IsTrue(auth.Authenticated, "The launcher keeps its session.");
+        Assert.IsFalse(auth.SessionUsedAuthHandoff());
+        CollectionAssert.IsEmpty(results);
+
+        // It was consumed, so the launcher's next learner doesn't inherit it either.
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(OfflineRetryingReport)));
+        Abxr.StartNewSession();
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        CollectionAssert.AreEqual(new[] { false }, results);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.IsFalse(auth.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_DeliveredWhileRunning_WithAnotherSession_ReplacesTheSession()
+    {
+        var transport = UseOfflineDeviceAuth();
+        SimulateAuth();
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("next-learner-token"));
+        // The session it replaces ends the way EndSession does, so what it recorded is sent rather than dropped.
+        LogAssert.Expect(LogType.Log, new Regex(Regex.Escape("Ending session: closing running events and flushing")));
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        CollectionAssert.AreEqual(new[] { true }, results);
+        Assert.AreEqual("next-learner-token", Abxr.GetAuthResponse().Token);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        Assert.AreEqual(0, transport.AuthCalls, "The handoff replaces device auth.");
+    }
+
+    /// <summary>Routes device auth to a scripted transport that answers offline, with valid-looking legacy credentials.</summary>
+    private AuthRetryTests.ScriptedAuthTransport UseOfflineDeviceAuth()
+    {
+        var transport = new AuthRetryTests.ScriptedAuthTransport(new AuthTransportResult(false, null, false, 0, networkError: true));
+        AbxrSubsystem.Instance.AuthServiceForTesting.SetTransportGetter(() => transport);
+        SetRuntimeAuth(new RuntimeAuthConfig
+        {
+            authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "" },
+            useAppTokens = false,
+            buildType = "development",
+            appId = "12345678-1234-1234-1234-123456789012",
+            orgId = "87654321-4321-4321-4321-210987654321",
+            authSecret = "test-secret"
+        });
+        ModifyConfig("restUrl", "http://127.0.0.1:1/"); // what the sessions record goes nowhere
+        // Unit-test SSO on the host's asset would add a SetUserData re-auth after each success.
+        AbxrSubsystem.UnitTestSsoSimulationFromConfigAllowed = false;
+        return transport;
+    }
+
+    /// <summary>Authenticates with a handoff that stays for the life of the process, as the command line and a WebGL URL do.</summary>
+    private static IEnumerator AdoptFixedHandoff(List<bool> results)
+    {
+        AbxrAuthService.SetFixedAuthHandoffForTesting(HandoffJson("previous-learner-token"));
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => results.Count >= 1, 5f);
+        CollectionAssert.AreEqual(new[] { true }, results);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "The first session adopts the handoff.");
+    }
+
+    /// <summary>A launcher's handoff payload (the fields GetHandoffJson sends that a receiver reads) for a session with this token.</summary>
+    private static string HandoffJson(string token) =>
+        "{\"Token\":\"" + token + "\",\"Secret\":\"handoff-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\",\"UserId\":\"learner\",\"UserData\":{}}";
+
+    private static IEnumerator WaitFor(Func<bool> condition, float timeoutSeconds)
+    {
+        float deadline = Time.realtimeSinceStartup + timeoutSeconds;
+        while (!condition() && Time.realtimeSinceStartup < deadline)
+            yield return null;
     }
 
     // ── SetUserData ───────────────────────────────────────────────────────
