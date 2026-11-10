@@ -247,16 +247,18 @@ namespace AbxrLib.Runtime.Services.Auth
             GetQueryData();
 #endif
             // Auth handoff (intent / CLI / test inject). Read before the pairing gate, since a launcher's session is an identity
-            // too (SDK-80), and applied after validation.
-            string handoff = TakeAuthHandoffSession();
-            _authHandoffPending = handoff != null;
-            bool identified = ApplyPairingIdentity();
-            _authHandoffPending = false;
+            // too (SDK-80), and applied after validation. Only a session with a token stands in for an identity.
+            string handoff = TakeAuthHandoffSession(out bool handoffHasToken);
+            bool identified;
+            _authHandoffPending = handoffHasToken;
+            try { identified = ApplyPairingIdentity(); }
+            finally { _authHandoffPending = false; }
             if (!identified) return;
 
-            // Paired mode has no org credential by design, and neither does an unpaired app's handed-off session; the app
-            // side is still checked.
-            var validationError = _pairedInstanceId != null || (handoff != null && !_runtimeAuth.HasOrgCredential())
+            // Paired mode has no org credential by design, and neither does an app let through on a handed-off session
+            // alone; the app side is still checked.
+            bool admittedByHandoff = handoffHasToken && _pairedInstanceId == null && !_runtimeAuth.HasOrgCredential();
+            var validationError = _pairedInstanceId != null || admittedByHandoff
                 ? _runtimeAuth.IsValid() : _runtimeAuth.IsValidToSend();
             if (validationError != null)
             {
@@ -270,7 +272,22 @@ namespace AbxrLib.Runtime.Services.Auth
             if (handoff != null)
             {
                 Logcat.Info("Processing authentication handoff from external launcher");
-                ParseAuthResponse(handoff, true);
+                if (!ParseAuthResponse(handoff, true))
+                {
+                    Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+                    // Let through on the handoff alone, so there is nothing to run device authentication with.
+                    if (admittedByHandoff)
+                    {
+                        if (_pairing != null)
+                        {
+                            EndQuietly(NoIdentityMessage);
+                            return;
+                        }
+                        _attemptActive = false;
+                        OnFailed?.Invoke(_runtimeAuth.IsValidToSend() ?? NoIdentityMessage);
+                        return;
+                    }
+                }
             }
 
             // Use runtime auth mechanism for the device authentication request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
@@ -1251,27 +1268,54 @@ namespace AbxrLib.Runtime.Services.Auth
         /// For TestRunner: tests can inject payload via SetAuthHandoffForTesting so the flow can be asserted without a real intent.
         /// Invalid payload: logs and returns null (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
         /// </summary>
-        private static string TakeAuthHandoffSession()
+        /// <param name="hasToken">True when the session carries a token, which is what lets it stand in for an identity.</param>
+        private static string TakeAuthHandoffSession(out bool hasToken)
         {
+            hasToken = false;
             string handoffPayload = ReadAuthHandoff(consume: true);
             if (string.IsNullOrEmpty(handoffPayload)) return null;
-            string normalized = NormalizeHandoffPayload(handoffPayload);
+            string json = ApplicableHandoffJson(handoffPayload, out AuthResponse session);
+            hasToken = session != null && !string.IsNullOrEmpty(session.Token);
+            return json;
+        }
+
+        /// <summary>
+        /// The session JSON in a delivered auth_handoff when it can be applied, with what it deserialised to. Otherwise null,
+        /// with the reason logged: not JSON, or a session that has already expired (<see cref="HandoffTokenExpiry"/>).
+        /// Checked before anything acts on the handoff (the pairing gate, ending a running session), so applying it can't fail.
+        /// </summary>
+        private static string ApplicableHandoffJson(string payload, out AuthResponse session)
+        {
+            session = null;
+            string normalized = NormalizeHandoffPayload(payload);
             if (string.IsNullOrEmpty(normalized))
             {
                 Logcat.Warning("auth_handoff was present but could not be normalized to JSON; continuing with device authentication.");
                 return null;
             }
-            // Parsed here, before the pairing gate lets an unpaired app through on it, so applying it later can't fail.
+            AuthResponse parsed = null;
             try
             {
-                if (JsonConvert.DeserializeObject<AuthResponse>(normalized) != null) return normalized;
+                parsed = JsonConvert.DeserializeObject<AuthResponse>(normalized);
             }
             catch (Exception e)
             {
                 Logcat.Error($"Failed to parse auth response: {e.Message}");
             }
-            Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
-            return null;
+            if (parsed == null)
+            {
+                Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+                return null;
+            }
+            DateTime expiry = HandoffTokenExpiry(parsed);
+            if (expiry <= DateTime.UtcNow)
+            {
+                // Info, not Warning: release builds drop warnings.
+                Logcat.Info($"The session handed over by the launcher expired at {expiry:u}.");
+                return null;
+            }
+            session = parsed;
+            return normalized;
         }
 
         private const string AuthHandoffKey = "auth_handoff";

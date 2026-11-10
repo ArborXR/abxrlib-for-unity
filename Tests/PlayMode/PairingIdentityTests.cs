@@ -379,6 +379,35 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.AreEqual(0, transport.AuthCalls, "No device auth without an org credential.");
     }
 
+    [UnityTest]
+    public IEnumerator AnExpiredHandoff_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        // exp = 1: a token that expired in 1970.
+        AbxrAuthService.SetAuthHandoffForTesting(
+            "{\"Token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjF9.sig\",\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls, "An expired session is no identity, so there is nothing to run device auth with.");
+    }
+
+    [UnityTest]
+    public IEnumerator AHandoffWithoutAToken_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        AbxrAuthService.SetAuthHandoffForTesting("{\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
     // ── Subsystem wiring ──────────────────────────────────────────
 
     [UnityTest]
