@@ -783,6 +783,27 @@ namespace AbxrLib.Runtime.Core
         }
 
         /// <summary>
+        /// Removes an extra from the current activity's intent, so a later <see cref="GetAndroidIntentParam"/> doesn't
+        /// return it again. Unity replaces that intent with each new one it's launched with (onNewIntent).
+        /// </summary>
+        public static void RemoveAndroidIntentParam(string key)
+        {
+    #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                using var intent = activity.Call<AndroidJavaObject>("getIntent");
+                intent.Call("removeExtra", key);
+            }
+            catch (System.Exception ex)
+            {
+                Logcat.Warning($"Failed to remove Android intent parameter '{key}': {ex.Message}");
+            }
+    #endif
+        }
+
+        /// <summary>
         /// Get Android manifest metadata value by key
         /// Reads metadata from AndroidManifest.xml using ApplicationInfo
         /// </summary>

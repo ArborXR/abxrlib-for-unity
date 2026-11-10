@@ -33,6 +33,7 @@ namespace AbxrLib.Runtime
             _nextPairingStoreForTesting = null;
             _nextPairingRedeemClientForTesting = null;
             _pairingPlatformSupportedForTesting = false;
+            AbxrAuthService.ResetAppliedAuthHandoffForTesting();
             if (Instance != null) Instance._authService.ResetAuthStartedForTesting();
             Abxr.ResetQuitClosingEventDefaultsForTesting();
         }

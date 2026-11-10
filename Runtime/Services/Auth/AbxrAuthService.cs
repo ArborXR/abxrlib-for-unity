@@ -1220,28 +1220,13 @@ namespace AbxrLib.Runtime.Services.Auth
         
         /// <summary>
         /// Check for authentication handoff from external launcher apps
-        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params.
+        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params, and applies each delivery once (<see cref="ReadAuthHandoff"/>).
         /// For TestRunner: tests can inject payload via SetAuthHandoffForTesting so the flow can be asserted without a real intent.
         /// Invalid payload: logs and returns (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
         /// </summary>
         private void CheckAuthHandoff()
         {
-            string handoffPayload = null;
-            if (!string.IsNullOrEmpty(_authHandoffForTesting))
-            {
-                handoffPayload = _authHandoffForTesting;
-                _authHandoffForTesting = null;
-            }
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetCommandLineArg("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-            {
-#if UNITY_WEBGL && !UNITY_EDITOR
-                handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
-#endif
-            }
+            string handoffPayload = ReadAuthHandoff(consume: true);
             if (string.IsNullOrEmpty(handoffPayload)) return;
             string normalized = NormalizeHandoffPayload(handoffPayload);
             if (string.IsNullOrEmpty(normalized))
@@ -1252,6 +1237,44 @@ namespace AbxrLib.Runtime.Services.Auth
             Logcat.Info("Processing authentication handoff from external launcher");
             if (!ParseAuthResponse(normalized, true))
                 Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+        }
+
+        private const string AuthHandoffKey = "auth_handoff";
+
+        /// <summary>
+        /// The command-line or WebGL URL handoff already applied. Those can't be cleared and don't change while the process
+        /// runs, so each is applied once. Static because those sources belong to the process: a recreated subsystem mustn't
+        /// apply them again.
+        /// </summary>
+        private static string _appliedFixedAuthHandoff;
+
+        /// <summary>
+        /// The auth_handoff waiting to be applied, or null. With consume, nothing returns it again, so a later Authenticate()
+        /// (StartNewSession, re-auth near expiry) doesn't replay it: the intent extra is removed, and a command-line or WebGL URL
+        /// value is remembered. An intent extra present after that is a new delivery to the running app.
+        /// </summary>
+        private static string ReadAuthHandoff(bool consume)
+        {
+            if (!string.IsNullOrEmpty(_authHandoffForTesting))
+            {
+                string injected = _authHandoffForTesting;
+                if (consume) _authHandoffForTesting = null;
+                return injected;
+            }
+            string intentPayload = Utils.GetAndroidIntentParam(AuthHandoffKey);
+            if (!string.IsNullOrEmpty(intentPayload))
+            {
+                if (consume) Utils.RemoveAndroidIntentParam(AuthHandoffKey);
+                return intentPayload;
+            }
+            string fixedPayload = _fixedAuthHandoffForTesting ?? Utils.GetCommandLineArg(AuthHandoffKey);
+#if UNITY_WEBGL && !UNITY_EDITOR
+            if (string.IsNullOrEmpty(fixedPayload))
+                fixedPayload = Utils.GetQueryParam(AuthHandoffKey, Application.absoluteURL);
+#endif
+            if (string.IsNullOrEmpty(fixedPayload) || fixedPayload == _appliedFixedAuthHandoff) return null;
+            if (consume) _appliedFixedAuthHandoff = fixedPayload;
+            return fixedPayload;
         }
 
         /// <summary>
@@ -1286,13 +1309,30 @@ namespace AbxrLib.Runtime.Services.Auth
             _authHandoffForTesting = handoffJson;
         }
 
+        /// <summary>
+        /// Testing only. Stands in for a command-line or WebGL URL auth_handoff, which stays for the life of the process,
+        /// unlike the one-shot <see cref="SetAuthHandoffForTesting"/> (an intent extra, removed once read).
+        /// </summary>
+        internal static void SetFixedAuthHandoffForTesting(string handoffJson)
+        {
+            _fixedAuthHandoffForTesting = handoffJson;
+        }
+
         /// <summary>Testing only. Clears any injected auth_handoff payload.</summary>
         internal static void ClearAuthHandoffForTesting()
         {
             _authHandoffForTesting = null;
+            _fixedAuthHandoffForTesting = null;
+        }
+
+        /// <summary>Testing only. Forgets the fixed handoff already applied, as a new process would.</summary>
+        internal static void ResetAppliedAuthHandoffForTesting()
+        {
+            _appliedFixedAuthHandoff = null;
         }
 
         private static string _authHandoffForTesting;
+        private static string _fixedAuthHandoffForTesting;
 
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
 
