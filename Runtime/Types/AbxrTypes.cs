@@ -236,6 +236,8 @@ namespace AbxrLib.Runtime.Types
         public string PackageName;
         /// <summary>When set in auth_handoff payload, the app that receives it should call LaunchAppWithAuthHandoff(this value) when assessment completes (return-to-launcher flow). Cleared after use.</summary>
         public string ReturnToPackage;
+        /// <summary>Auth handoff only: when the handed-over token expires, in Unix milliseconds (GetHandoffJson writes it). Null when absent.</summary>
+        public long? TokenExpirationMs;
         public List<ModuleData> Modules;
         /// <summary>Paired mode (INS-511): the paired device's current name, so a rename in the Portal reaches the SDK. Null when the instance has none.</summary>
         public string DeviceName;
