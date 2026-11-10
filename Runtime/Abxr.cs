@@ -308,6 +308,9 @@ public static partial class Abxr
 	/// The target app must also use AbxrLib; it will adopt the active session without re-authenticating.
 	/// Call this in your OnAuthCompleted handler. The PackageName from GetAuthResponse() is the typical target.
 	/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's package) so the receiving app can return the session when assessment completes (return-to-launcher flow).
+	/// On Android 11 and later this app must be able to see the target: add a &lt;queries&gt; entry to its AndroidManifest.xml,
+	/// either &lt;package android:name="..." /&gt; for each target or an &lt;intent&gt; with action android.intent.action.MAIN and category android.intent.category.LAUNCHER.
+	/// With includeReturnToPackage, the receiving app needs an entry for this app too.
 	/// No-op on non-Android platforms.
 	/// </summary>
 	/// <param name="packageName">Android package name of the app to launch (e.g. "com.example.myapp")</param>
