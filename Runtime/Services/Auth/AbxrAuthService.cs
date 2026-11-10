@@ -111,6 +111,14 @@ namespace AbxrLib.Runtime.Services.Auth
         private string _returnToPackage;
         /// <summary>True when a valid auth_handoff was parsed; AuthenticateCoroutine skips device AuthRequestCoroutine and completes after GET config (same as normal flow).</summary>
         private bool _deviceAuthDeferredByHandoff;
+        /// <summary>True while identity settles for an attempt that read a valid auth_handoff, which it applies after validation.</summary>
+        private bool _authHandoffPending;
+
+        /// <summary>
+        /// True when this session came from an auth handoff, and while an attempt that read one settles identity. The
+        /// subsystem keeps recording for it while the app is unpaired, since the launcher's session is the opt-in (SDK-80).
+        /// </summary>
+        internal bool HasAuthHandoff => _sessionUsedAuthHandoff || _authHandoffPending;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         /// <summary>WebGL: pre-filled assessment PIN from org token JWT claim <c>pin</c> (preferred) or from <c>assessment_pin</c>/<c>assessmentPin</c> URL query. When set, GET config can be overridden to assessmentPin and the first user-auth attempt auto-submits this value.</summary>
@@ -238,10 +246,18 @@ namespace AbxrLib.Runtime.Services.Auth
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
             GetQueryData();
 #endif
-            if (!ApplyPairingIdentity()) return;
+            // Auth handoff (intent / CLI / test inject). Read before the pairing gate, since a launcher's session is an identity
+            // too (SDK-80), and applied after validation.
+            string handoff = ReadAuthHandoff();
+            _authHandoffPending = handoff != null;
+            bool identified = ApplyPairingIdentity();
+            _authHandoffPending = false;
+            if (!identified) return;
 
-            // Paired mode has no org credential by design; the app side is still checked.
-            var validationError = _pairedInstanceId != null ? _runtimeAuth.IsValid() : _runtimeAuth.IsValidToSend();
+            // Paired mode has no org credential by design, and neither does an unpaired app's handed-off session; the app
+            // side is still checked.
+            var validationError = _pairedInstanceId != null || (handoff != null && !_runtimeAuth.HasOrgCredential())
+                ? _runtimeAuth.IsValid() : _runtimeAuth.IsValidToSend();
             if (validationError != null)
             {
                 _attemptActive = false;
@@ -250,8 +266,12 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             _runtimeAuth.CopyAuthFieldsTo(_payload);
 
-            // Auth handoff (intent / CLI / test inject): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
-            CheckAuthHandoff();
+            // On success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
+            if (handoff != null)
+            {
+                Logcat.Info("Processing authentication handoff from external launcher");
+                ParseAuthResponse(handoff, true);
+            }
 
             // Use runtime auth mechanism for the device authentication request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
             _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
@@ -264,6 +284,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// Puts this attempt in the launch's identity mode (SDK-59 RFC §03). An org credential from the sources above wins,
         /// then a stored pairing, then nothing, which is quiet (D2). Settled on the launch's first attempt and held after
         /// that, so a late ArborXR client or SetOrgId takes effect next launch and one launch never sends as two identities.
+        /// An auth handoff stands in for nothing: the app stays unpaired and adopts the launcher's session (SDK-80).
         /// False when the attempt ends here, already reported.
         /// </summary>
         private bool ApplyPairingIdentity()
@@ -297,7 +318,11 @@ namespace AbxrLib.Runtime.Services.Auth
                     // without its org credential, is a misconfiguration rather than a store install, so it keeps the
                     // validation error.
                     if (_runtimeAuth.buildType == "production_custom" || _runtimeAuth.IsValid() != null) return true;
-                    return EndQuietly(NoIdentityMessage);
+                    if (!_authHandoffPending) return EndQuietly(NoIdentityMessage);
+                    // The launcher's session is the identity. An org token that arrived after the launch settled still
+                    // doesn't ride along, since a SetUserData re-auth or an onward handoff would send it.
+                    _runtimeAuth.orgToken = null;
+                    return true;
             }
         }
 
@@ -1219,12 +1244,12 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         /// <summary>
-        /// Check for authentication handoff from external launcher apps
+        /// Reads the authentication handoff from external launcher apps and returns its session JSON, or null when there is none.
         /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params.
         /// For TestRunner: tests can inject payload via SetAuthHandoffForTesting so the flow can be asserted without a real intent.
-        /// Invalid payload: logs and returns (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
+        /// Invalid payload: logs and returns null (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
         /// </summary>
-        private void CheckAuthHandoff()
+        private static string ReadAuthHandoff()
         {
             string handoffPayload = null;
             if (!string.IsNullOrEmpty(_authHandoffForTesting))
@@ -1242,16 +1267,24 @@ namespace AbxrLib.Runtime.Services.Auth
                 handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
 #endif
             }
-            if (string.IsNullOrEmpty(handoffPayload)) return;
+            if (string.IsNullOrEmpty(handoffPayload)) return null;
             string normalized = NormalizeHandoffPayload(handoffPayload);
             if (string.IsNullOrEmpty(normalized))
             {
                 Logcat.Warning("auth_handoff was present but could not be normalized to JSON; continuing with device authentication.");
-                return;
+                return null;
             }
-            Logcat.Info("Processing authentication handoff from external launcher");
-            if (!ParseAuthResponse(normalized, true))
-                Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+            // Parsed here, before the pairing gate lets an unpaired app through on it, so applying it later can't fail.
+            try
+            {
+                if (JsonConvert.DeserializeObject<AuthResponse>(normalized) != null) return normalized;
+            }
+            catch (Exception e)
+            {
+                Logcat.Error($"Failed to parse auth response: {e.Message}");
+            }
+            Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+            return null;
         }
 
         /// <summary>
