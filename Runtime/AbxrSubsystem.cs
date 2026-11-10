@@ -383,7 +383,27 @@ namespace AbxrLib.Runtime
         
         private void OnApplicationFocus(bool hasFocus)
         {
-	        if (!hasFocus) SendAll();
+	        if (!hasFocus)
+	        {
+		        SendAll();
+		        return;
+	        }
+	        AdoptAuthHandoffDeliveredWhileRunning();
+        }
+
+        /// <summary>
+        /// A launcher can hand a session to this app while it runs: a new intent, read when focus returns. A session not
+        /// started yet applies it when it authenticates. A running one ends the way EndSession does, so what it recorded is
+        /// sent with its own token, and a new session adopts the handoff.
+        /// </summary>
+        private void AdoptAuthHandoffDeliveredWhileRunning()
+        {
+	        if (_authService == null) return;
+	        if (!_authService.Authenticated && !_authService.IsAuthenticationAttemptActive) return;
+	        if (!_authService.HasNewAuthHandoff()) return;
+	        Logcat.Info("Received a new auth_handoff while running; starting the session it carries.");
+	        if (_authService.Authenticated) EndSession();
+	        StartNewSession();
         }
         
         private void OnApplicationQuit()

@@ -361,6 +361,53 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
     }
 
+    [UnityTest]
+    public IEnumerator AuthHandoff_DeliveredWhileRunning_WithTheCurrentSession_IsIgnored()
+    {
+        var transport = UseOfflineDeviceAuth();
+        SimulateAuth();
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        // Return-to-launcher: App 2 hands the launcher's own session back while the launcher still runs.
+        AbxrAuthService.SetAuthHandoffForTesting(AbxrSubsystem.Instance.GetHandoffJsonForTesting());
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+
+        Assert.IsTrue(auth.Authenticated, "The launcher keeps its session.");
+        Assert.IsFalse(auth.SessionUsedAuthHandoff());
+        CollectionAssert.IsEmpty(results);
+
+        // It was consumed, so the launcher's next learner doesn't inherit it either.
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(OfflineRetryingReport)));
+        Abxr.StartNewSession();
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        CollectionAssert.AreEqual(new[] { false }, results);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.IsFalse(auth.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_DeliveredWhileRunning_WithAnotherSession_ReplacesTheSession()
+    {
+        var transport = UseOfflineDeviceAuth();
+        SimulateAuth();
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("next-learner-token"));
+        // The session it replaces ends the way EndSession does, so what it recorded is sent rather than dropped.
+        LogAssert.Expect(LogType.Log, new Regex(Regex.Escape("Ending session: closing running events and flushing")));
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        CollectionAssert.AreEqual(new[] { true }, results);
+        Assert.AreEqual("next-learner-token", Abxr.GetAuthResponse().Token);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        Assert.AreEqual(0, transport.AuthCalls, "The handoff replaces device auth.");
+    }
+
     /// <summary>Routes device auth to a scripted transport that answers offline, with valid-looking legacy credentials.</summary>
     private AuthRetryTests.ScriptedAuthTransport UseOfflineDeviceAuth()
     {

@@ -1278,6 +1278,42 @@ namespace AbxrLib.Runtime.Services.Auth
         }
 
         /// <summary>
+        /// True when a handoff is waiting that would replace this session: one a launcher delivered to the running app (a new
+        /// intent). The caller starts a new session, whose Authenticate() applies it. A handoff carrying this session's token is
+        /// App 2 returning the launcher's own session, and one that can't be read can't be applied: both are consumed here
+        /// instead, so the session carries on and a later StartNewSession() doesn't adopt them.
+        /// </summary>
+        internal bool HasNewAuthHandoff()
+        {
+            string payload = ReadAuthHandoff(consume: false);
+            if (string.IsNullOrEmpty(payload)) return false;
+            string token = ReadHandoffToken(payload);
+            // An empty token (a launcher on the ArborInsightsClient transport) can't be matched, so it counts as new.
+            if (token != null && (token.Length == 0 || token != ResponseData?.Token)) return true;
+            ReadAuthHandoff(consume: true);
+            Logcat.Info(token == null
+                ? "Ignored an auth_handoff that could not be read; the current session continues."
+                : "Ignored an auth_handoff carrying the current session; the session continues.");
+            return false;
+        }
+
+        /// <summary>The Token in a handoff payload: empty when it has none, null when the payload can't be read.</summary>
+        private static string ReadHandoffToken(string payload)
+        {
+            string json = NormalizeHandoffPayload(payload);
+            if (string.IsNullOrEmpty(json)) return null;
+            try
+            {
+                var handoff = JsonConvert.DeserializeObject<AuthResponse>(json);
+                return handoff == null ? null : handoff.Token ?? "";
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// Returns the JSON string to use for handoff: if the value is raw JSON (starts with '{') use as-is;
         /// if it is base64-encoded JSON, decode and return the decoded string. Returns null if decoding fails or result is not JSON.
         /// </summary>
