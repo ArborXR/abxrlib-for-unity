@@ -392,14 +392,17 @@ namespace AbxrLib.Runtime
         }
 
         /// <summary>
-        /// A launcher can hand a session to this app while it runs: a new intent, read when focus returns. A session not
-        /// started yet applies it when it authenticates. A running one ends the way EndSession does, so what it recorded is
-        /// sent with its own token, and a new session adopts the handoff.
+        /// A launcher can hand a session to this app while it runs: a new intent, read when focus returns. Before the first
+        /// authentication attempt there is nothing to replace, and that attempt applies it. After it, the handoff is adopted
+        /// whatever became of the session, since nothing else would authenticate again: an app that ended quietly as unpaired,
+        /// failed, or called EndSession starts a session for it. A running one ends the way EndSession does first, so what it
+        /// recorded is sent with its own token.
         /// </summary>
         private void AdoptAuthHandoffDeliveredWhileRunning()
         {
 	        if (_authService == null) return;
-	        if (!_authService.Authenticated && !_authService.IsAuthenticationAttemptActive) return;
+	        bool sessionRunning = _authService.Authenticated || _authService.IsAuthenticationAttemptActive;
+	        if (!sessionRunning && !_authService.HasAttemptedAuthentication) return;
 	        if (!_authService.HasNewAuthHandoff()) return;
 	        Logcat.Info("Received a new auth_handoff while running; starting the session it carries.");
 	        if (_authService.Authenticated) EndSession();

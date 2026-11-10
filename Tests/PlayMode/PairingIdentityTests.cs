@@ -408,6 +408,25 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
     }
 
+    [UnityTest]
+    public IEnumerator AHandoffDeliveredAfterEndingQuietly_SignsIn()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+
+        // The hub launches the module while it is still running: a new intent, read when focus returns.
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual(2, _reports.Count);
+        Assert.IsTrue(_reports[1].success, "The module adopts the hub's session without being restarted.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        Assert.AreEqual(0, transport.AuthCalls);
+    }
+
     // ── Subsystem wiring ──────────────────────────────────────────
 
     [UnityTest]

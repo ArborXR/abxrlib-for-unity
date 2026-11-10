@@ -81,6 +81,11 @@ namespace AbxrLib.Runtime.Services.Auth
         internal bool HasAuthenticationStarted => _isAuthStarted;
         /// <summary>Testing only. Clears <see cref="HasAuthenticationStarted"/> so tests can run multiple auth scenarios in one session.</summary>
         internal void ResetAuthStartedForTesting() => _isAuthStarted = false;
+        /// <summary>
+        /// True once an <see cref="Authenticate"/> attempt has run, whatever came of it (signed in, failed, ended quietly).
+        /// An auth handoff delivered before that is applied by the first attempt; one delivered after starts a new session.
+        /// </summary>
+        internal bool HasAttemptedAuthentication { get; private set; }
         /// <summary>Testing only. Tests that invoke <see cref="OnInputRequested"/> directly bypass the request bookkeeping; this restores it.</summary>
         internal void SetInputRequestPendingForTesting(bool pending) => _inputRequestPending = pending;
         internal void SetUserAuthSubmitInFlightForTesting(bool inFlight) => IsUserAuthSubmitInFlight = inFlight;
@@ -204,6 +209,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
             _attemptActive = true;
+            HasAttemptedAuthentication = true;
             StopReAuthPolling();
             if (clearStateFirst)
                 ClearAuthenticationState();
