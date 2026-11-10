@@ -408,6 +408,27 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Assert.AreEqual(0, transport.AuthCalls, "The handoff replaces device auth.");
     }
 
+    [UnityTest]
+    public IEnumerator AuthHandoff_DeliveredWhileRunning_AlreadyExpired_IsIgnored()
+    {
+        UseOfflineDeviceAuth();
+        SimulateAuth();
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+        string token = Abxr.GetAuthResponse().Token;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        // exp = 1: a token that expired in 1970.
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("eyJhbGciOiJub25lIn0.eyJleHAiOjF9.sig"));
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return null;
+
+        Assert.IsTrue(auth.Authenticated, "A handoff that can't be applied must not cost the running session.");
+        Assert.AreEqual(token, Abxr.GetAuthResponse().Token);
+        Assert.IsFalse(auth.SessionUsedAuthHandoff());
+        CollectionAssert.IsEmpty(results);
+    }
+
     /// <summary>Routes device auth to a scripted transport that answers offline, with valid-looking legacy credentials.</summary>
     private AuthRetryTests.ScriptedAuthTransport UseOfflineDeviceAuth()
     {

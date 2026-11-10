@@ -1359,37 +1359,27 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>
         /// True when a handoff is waiting that would replace this session: one a launcher delivered to the running app (a new
         /// intent). The caller starts a new session, whose Authenticate() applies it. A handoff carrying this session's token is
-        /// App 2 returning the launcher's own session, and one that can't be read can't be applied: both are consumed here
-        /// instead, so the session carries on and a later StartNewSession() doesn't adopt them.
+        /// App 2 returning the launcher's own session, and one that can't be applied (unreadable, expired, or without a token
+        /// this transport can use) would only cost the session it replaced: both are consumed here instead, so the session
+        /// carries on and a later StartNewSession() doesn't adopt them.
         /// </summary>
         internal bool HasNewAuthHandoff()
         {
             string payload = ReadAuthHandoff(consume: false);
             if (string.IsNullOrEmpty(payload)) return false;
-            string token = ReadHandoffToken(payload);
-            // An empty token (a launcher on the ArborInsightsClient transport) can't be matched, so it counts as new.
-            if (token != null && (token.Length == 0 || token != ResponseData?.Token)) return true;
+            ApplicableHandoffJson(payload, out AuthResponse session);
+            bool hasToken = session != null && !string.IsNullOrEmpty(session.Token);
+            // A session without a token comes from a launcher on the ArborInsightsClient transport, and only that transport
+            // can use it. It can't be matched against the current session, so there it counts as new.
+            bool isNew = hasToken
+                ? session.Token != ResponseData?.Token
+                : session != null && _getTransport?.Invoke()?.IsServiceTransport == true;
+            if (isNew) return true;
             ReadAuthHandoff(consume: true);
-            Logcat.Info(token == null
-                ? "Ignored an auth_handoff that could not be read; the current session continues."
-                : "Ignored an auth_handoff carrying the current session; the session continues.");
+            Logcat.Info(hasToken
+                ? "Ignored an auth_handoff carrying the current session; the session continues."
+                : "Ignored an auth_handoff that can't be applied; the current session continues.");
             return false;
-        }
-
-        /// <summary>The Token in a handoff payload: empty when it has none, null when the payload can't be read.</summary>
-        private static string ReadHandoffToken(string payload)
-        {
-            string json = NormalizeHandoffPayload(payload);
-            if (string.IsNullOrEmpty(json)) return null;
-            try
-            {
-                var handoff = JsonConvert.DeserializeObject<AuthResponse>(json);
-                return handoff == null ? null : handoff.Token ?? "";
-            }
-            catch (JsonException)
-            {
-                return null;
-            }
         }
 
         /// <summary>
