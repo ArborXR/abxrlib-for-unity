@@ -717,7 +717,9 @@ namespace AbxrLib.Runtime
 		/// <summary>Launches another Android app and passes the current auth session via the auth_handoff intent extra.
 		/// The target app must also use AbxrLib; it will adopt the session without re-authenticating.
 		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().
-		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.</summary>
+		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.
+		/// Launches the target's launcher activity explicitly. On Android 11 and later that needs the target to be visible to this app
+		/// (a &lt;queries&gt; entry in the manifest); without it the launch falls back to an implicit MAIN intent, which doesn't resolve for a stock Unity app.</summary>
 		internal bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false)
 		{
 			if (string.IsNullOrEmpty(packageName))
@@ -731,6 +733,7 @@ namespace AbxrLib.Runtime
 				return false;
 			}
 #if UNITY_ANDROID && !UNITY_EDITOR
+			bool implicitFallback = false;
 			try
 			{
 				string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
@@ -741,10 +744,16 @@ namespace AbxrLib.Runtime
 				}
 				using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 				using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-				using var intent = new AndroidJavaObject("android.content.Intent");
 				using var intentClass = new AndroidJavaClass("android.content.Intent");
-				intent.Call<AndroidJavaObject>("setAction", intentClass.GetStatic<string>("ACTION_MAIN"));
-				intent.Call<AndroidJavaObject>("setPackage", packageName);
+				using var packageManager = activity.Call<AndroidJavaObject>("getPackageManager");
+				// Null when the package isn't installed, has no launcher activity, or (Android 11+) isn't visible to this app.
+				using var launchIntent = packageManager.Call<AndroidJavaObject>("getLaunchIntentForPackage", packageName);
+				implicitFallback = launchIntent == null;
+				// startActivity resolves this implicit intent only if the target's MAIN filter has CATEGORY_DEFAULT,
+				// which a stock Unity launcher activity (MAIN + LAUNCHER) doesn't.
+				using var implicitIntent = implicitFallback ? new AndroidJavaObject("android.content.Intent", intentClass.GetStatic<string>("ACTION_MAIN")) : null;
+				var intent = launchIntent ?? implicitIntent;
+				if (implicitFallback) intent.Call<AndroidJavaObject>("setPackage", packageName);
 				intent.Call<AndroidJavaObject>("putExtra", "auth_handoff", handoffJson);
 				intent.Call<AndroidJavaObject>("addFlags", intentClass.GetStatic<int>("FLAG_ACTIVITY_NEW_TASK"));
 				activity.Call("startActivity", intent);
@@ -753,7 +762,11 @@ namespace AbxrLib.Runtime
 			}
 			catch (Exception ex)
 			{
-				Logcat.Error($"LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}");
+				string hint = !implicitFallback ? "" :
+					$" This app found no launcher activity for '{packageName}'. Check that it is installed and, on Android 11 and later, " +
+					$"that this app's AndroidManifest.xml has a <queries> entry that makes it visible: <package android:name=\"{packageName}\" />, " +
+					"or an <intent> with action android.intent.action.MAIN and category android.intent.category.LAUNCHER.";
+				Logcat.Error($"LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}{hint}");
 				return false;
 			}
 #else
