@@ -530,14 +530,14 @@ namespace AbxrLib.Runtime
         /// <summary>
         /// False while the app is unpaired and no pairing prompt is open (SDK-60 decision 1): a never-paired install
         /// would otherwise fill the queues, and a later pairing would send data recorded before anyone opted in.
-        /// Recording resumes when the prompt opens.
+        /// Recording resumes when the prompt opens. A session a launcher handed over records too (SDK-80).
         /// </summary>
-        private bool IsRecording => _endSessionInProgress ||
+        private bool IsRecording => _endSessionInProgress || _authService.HasAuthHandoff ||
             !(_pairingService != null && _pairingService.State == Abxr.PairingState.Unpaired && _pairingService.CanPair);
 
         private void StopRecordingWhileUnpaired()
         {
-            if (!_pairingService.CanPair) return;
+            if (!_pairingService.CanPair || _authService.HasAuthHandoff) return;
             _transport?.ClearAllPending();
             Logcat.Info("Not recording: this app isn't paired with an organization. Recording starts when the pairing prompt opens.");
         }
