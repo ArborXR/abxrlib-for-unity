@@ -1069,6 +1069,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (_tokenExpiry == DateTime.MinValue || _attemptActive) continue;
                 if (_tokenExpiry - DateTime.UtcNow <= TimeSpan.FromSeconds(ReAuthThresholdSeconds))
                 {
+                    if (_sessionUsedAuthHandoff)
+                        Logcat.Info($"The session handed over by the launcher expires at {_tokenExpiry:u}, and this app can't renew it. Re-authenticating.");
                     Authenticate();
                 }
             }
@@ -1776,9 +1778,16 @@ namespace AbxrLib.Runtime.Services.Auth
             
             if (handoff)
             {
-                // Set token expiry to far in the future since we're trusting the handoff
-                _tokenExpiry = DateTime.UtcNow.AddHours(24);
-                Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
+                DateTime expiry = HandoffTokenExpiry(ResponseData);
+                if (expiry <= DateTime.UtcNow)
+                {
+                    // Info, not Warning: release builds drop warnings.
+                    Logcat.Info($"The session handed over by the launcher expired at {expiry:u}.");
+                    ResponseData = new AuthResponse();
+                    return false;
+                }
+                _tokenExpiry = expiry;
+                Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}. Token expires at {expiry:u}.");
                 _sessionUsedAuthHandoff = true;
                 _returnToPackage = ResponseData?.ReturnToPackage;
                 ResponseData.UserData ??= new Dictionary<string, string>();
@@ -1832,6 +1841,28 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             
             return true;
+        }
+
+        /// <summary>
+        /// When a handed-over token expires: its exp claim, then the launcher's TokenExpirationMs, then 24 hours from now
+        /// (a launcher on the ArborInsightsClient transport sends no token). The claim comes first because launchers write
+        /// now + 24 hours as TokenExpirationMs when their own expiry is unknown or already past.
+        /// </summary>
+        private static DateTime HandoffTokenExpiry(AuthResponse handoff)
+        {
+            var jwt = Utils.TryDecodeJwtPayload(handoff.Token);
+            if (jwt != null && jwt.TryGetValue("exp", out var exp))
+            {
+                try { return DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(exp)).UtcDateTime; }
+                catch (Exception) { /* not a Unix time; fall through */ }
+            }
+            // Smaller values aren't milliseconds after 2001 (seconds, or a placeholder such as 0), so they count as absent.
+            if (handoff.TokenExpirationMs >= 1_000_000_000_000L)
+            {
+                try { return DateTimeOffset.FromUnixTimeMilliseconds(handoff.TokenExpirationMs.Value).UtcDateTime; }
+                catch (ArgumentOutOfRangeException) { /* past year 9999; fall through */ }
+            }
+            return DateTime.UtcNow.AddHours(24);
         }
 
         // ── Testing only (For TestRunner) ───────────────────────────────
