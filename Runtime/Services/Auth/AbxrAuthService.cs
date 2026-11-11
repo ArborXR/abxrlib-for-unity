@@ -539,7 +539,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 bool applied = true;
                 string applyFailure = null;
                 if (transport != null)
-                    yield return transport.ApplyAuthHandoffCoroutine(_handoffSessionJson, (ok, reason) => { applied = ok; applyFailure = reason; });
+                    yield return transport.ApplyAuthHandoffCoroutine(_handoffSessionJson, () => generation == _sessionGeneration,
+                        (ok, reason) => { applied = ok; applyFailure = reason; });
                 if (generation != _sessionGeneration) yield break;
                 _handoffSessionJson = null;
                 if (applied)

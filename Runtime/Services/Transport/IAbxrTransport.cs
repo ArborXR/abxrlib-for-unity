@@ -44,9 +44,9 @@ namespace AbxrLib.Runtime.Services.Transport
         /// <summary>
         /// Gives the transport a session adopted from an auth handoff, which skips <see cref="AuthRequestCoroutine"/>.
         /// REST has nothing to do. The service binds again when EndSession unbound it, waits until it is ready, and takes the
-        /// session. onComplete(success, failureReason).
+        /// session unless stillCurrent() turned false while it waited. onComplete(success, failureReason).
         /// </summary>
-        IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete);
+        IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete);
 
         /// <summary>Get app config JSON. onComplete(success, configJson).</summary>
         IEnumerator GetConfigCoroutine(Action<bool, string> onComplete);

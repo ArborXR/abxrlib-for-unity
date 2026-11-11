@@ -468,6 +468,8 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         public bool HoldHandoff { get; set; }
         /// <summary>The answer to giving the transport a handed-over session; null means it takes it.</summary>
         public string HandoffFailure { get; set; }
+        /// <summary>Handed-over sessions the transport took: given while still current, without a failure.</summary>
+        public int HandoffsApplied { get; private set; }
 
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
@@ -489,12 +491,18 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             onComplete?.Invoke(response);
         }
 
-        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete)
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete)
         {
             HandoffCalls++;
             LastHandoffJson = sessionJson;
             while (HoldHandoff)
                 yield return null;
+            if (stillCurrent != null && !stillCurrent())
+            {
+                onComplete?.Invoke(false, "The session ended before the service was ready");
+                yield break;
+            }
+            if (HandoffFailure == null) HandoffsApplied++;
             onComplete?.Invoke(HandoffFailure == null, HandoffFailure);
         }
 

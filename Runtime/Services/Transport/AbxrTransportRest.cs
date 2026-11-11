@@ -108,7 +108,7 @@ namespace AbxrLib.Runtime.Services.Transport
         }
 
         /// <summary>REST sends the handed-over token with each request, so there is nothing to set up.</summary>
-        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete)
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete)
         {
             onComplete?.Invoke(true, null);
             yield break;

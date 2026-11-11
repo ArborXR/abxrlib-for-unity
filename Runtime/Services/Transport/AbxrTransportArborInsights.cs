@@ -74,13 +74,19 @@ namespace AbxrLib.Runtime.Services.Transport
         /// The service has no session for a handoff otherwise, since a handoff skips AuthRequestCoroutine. A handoff adopted
         /// while the app runs follows EndSession, which unbound the service, so this binds again and waits first.
         /// </summary>
-        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete)
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete)
         {
             string bindFailure = null;
             yield return BindIfUnboundCoroutine(reason => bindFailure = reason);
             if (bindFailure != null)
             {
                 onComplete?.Invoke(false, bindFailure);
+                yield break;
+            }
+            // EndSession or a newer handoff replaced this session during the wait, and the service must not end up holding it.
+            if (stillCurrent != null && !stillCurrent())
+            {
+                onComplete?.Invoke(false, "The session ended before the service was ready");
                 yield break;
             }
             int result;

@@ -507,6 +507,28 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Assert.AreNotEqual("next-learner-token", Abxr.GetAuthResponse()?.Token);
     }
 
+    [UnityTest]
+    public IEnumerator AuthHandoff_SessionEndedWhileTheServiceBinds_IsNotGivenToIt()
+    {
+        var transport = UseOfflineDeviceAuth();
+        transport.IsServiceTransport = true;
+        transport.HoldHandoff = true;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("next-learner-token"));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.HandoffCalls >= 1, 5f);
+
+        Abxr.EndSession();
+        transport.HoldHandoff = false;
+        yield return null;
+        yield return null;
+
+        Assert.AreEqual(0, transport.HandoffsApplied, "The service must not end up holding a session EndSession cleared.");
+        CollectionAssert.IsEmpty(results);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
+    }
+
     // ── Auth handoff returned to a launcher still running ─────────────────
     // App 2 sends the launcher's SessionId back, which the launcher matches whatever became of the token.
 
