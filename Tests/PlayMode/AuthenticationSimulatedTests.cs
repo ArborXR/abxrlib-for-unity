@@ -548,7 +548,7 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         string token = Abxr.GetAuthResponse().Token;
         var results = new List<bool>();
         Abxr.OnAuthCompleted += (success, _) => results.Add(success);
-        // A SetUserData sync or the SSO merge re-authenticated App 2, so the session comes back with another token.
+        // App 2 re-authenticated without changing the user data, so the session comes back with another token.
         AbxrAuthService.SetAuthHandoffForTesting(AbxrSubsystem.Instance.GetHandoffJsonForTesting().Replace(token, "app-two-token"));
 
         SubsystemGO.SendMessage("OnApplicationFocus", true);
@@ -573,6 +573,31 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         CollectionAssert.AreEqual(new[] { true }, results);
         StringAssert.Contains("\"SessionId\":\"launcher-session\"", AbxrSubsystem.Instance.GetHandoffJsonForTesting(),
             "The return handoff must carry the launcher's session, which is what the launcher matches.");
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_FromTheSameLauncherSession_WithNewUserData_ReplacesTheSession()
+    {
+        UseOfflineDeviceAuth();
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("launcher-token", sessionId: "launcher-session"));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        // App 3 returning this app's session, unchanged.
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("launcher-token", sessionId: "launcher-session"));
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return null;
+        CollectionAssert.AreEqual(new[] { true }, results, "The same session with the same user data is kept.");
+
+        // The launcher set the next learner's user data, which keeps its SessionId, and launched this app again.
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("launcher-token", sessionId: "launcher-session", userDataId: "next-learner"));
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => results.Count >= 2, 5f);
+
+        CollectionAssert.AreEqual(new[] { true, true }, results, "Ignoring it would record the next learner under the previous one.");
+        Assert.AreEqual("next-learner", Abxr.GetAuthResponse().UserData["id"]);
     }
 
     /// <summary>Routes device auth to a scripted transport that answers offline, with valid-looking legacy credentials.</summary>
@@ -610,8 +635,9 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
     /// A launcher's handoff payload (the fields GetHandoffJson sends that a receiver reads) for a session with this token.
     /// Without a sessionId it is what an SDK before 3.0 sends.
     /// </summary>
-    private static string HandoffJson(string token, string sessionId = null) =>
-        "{\"Token\":\"" + token + "\",\"Secret\":\"handoff-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\",\"UserId\":\"learner\",\"UserData\":{}"
+    private static string HandoffJson(string token, string sessionId = null, string userDataId = null) =>
+        "{\"Token\":\"" + token + "\",\"Secret\":\"handoff-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\",\"UserId\":\"learner\""
+        + ",\"UserData\":" + (userDataId != null ? "{\"id\":\"" + userDataId + "\"}" : "{}")
         + (sessionId != null ? ",\"SessionId\":\"" + sessionId + "\"" : "") + "}";
 
     private static IEnumerator WaitFor(Func<bool> condition, float timeoutSeconds)

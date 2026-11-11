@@ -1445,14 +1445,24 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// True when a handoff carries this app's own session, which App 2 is returning. Matched on SessionId, which App 2 sends
-        /// back unchanged even when its transport strips the token or it re-authenticated (a SetUserData sync, the SSO merge).
+        /// back unchanged even when its transport strips the token or it re-authenticated, and on UserData: a launcher that set
+        /// new user data keeps its SessionId, so a handoff with other user data is the launcher handing over the next learner.
         /// An SDK before 3.0 sends no SessionId, so the token is compared then.
         /// </summary>
         private bool CarriesCurrentSession(AuthResponse handoff)
         {
             if (!string.IsNullOrEmpty(handoff.SessionId))
-                return handoff.SessionId == HandoffSessionId;
+                return handoff.SessionId == HandoffSessionId && SameUserData(handoff.UserData, ResponseData?.UserData);
             return !string.IsNullOrEmpty(handoff.Token) && handoff.Token == ResponseData?.Token;
+        }
+
+        private static bool SameUserData(Dictionary<string, string> a, Dictionary<string, string> b)
+        {
+            if ((a?.Count ?? 0) != (b?.Count ?? 0)) return false;
+            if (a == null || b == null) return true;
+            foreach (var kvp in a)
+                if (!b.TryGetValue(kvp.Key, out var value) || value != kvp.Value) return false;
+            return true;
         }
 
         /// <summary>
@@ -1524,7 +1534,8 @@ namespace AbxrLib.Runtime.Services.Auth
         /// Builds the JSON payload passed via the auth_handoff Android intent extra.
         /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
         /// so the receiving app and its ArborInsightsClient service can fully adopt the session, and SessionId, which the receiving
-        /// app sends back unchanged so a launcher still running keeps its session (<see cref="HasNewAuthHandoff"/>).
+        /// app sends back unchanged so a launcher still running keeps its session (<see cref="HasNewAuthHandoff"/>) while the
+        /// user data is unchanged too.
         /// When includeReturnToPackage is true, adds ReturnToPackage (current app's identifier) so the receiving app can return the session when assessment completes.
         /// </summary>
         internal string GetHandoffJson(bool includeReturnToPackage = false)
