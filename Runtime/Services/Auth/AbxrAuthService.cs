@@ -789,7 +789,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
                 AuthTransportResult result = default;
-                yield return transport.AuthRequestCoroutine(_payload, r => result = r);
+                yield return transport.AuthRequestCoroutine(_payload, () => generation == _sessionGeneration, r => result = r);
 
                 // The session was cleared while the request was in flight: drop the response instead of applying it to the new session.
                 if (generation != _sessionGeneration) yield break;

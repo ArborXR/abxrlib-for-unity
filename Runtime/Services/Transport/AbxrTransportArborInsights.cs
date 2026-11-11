@@ -36,7 +36,7 @@ namespace AbxrLib.Runtime.Services.Transport
                 onFailure("ArborInsightsClient service not ready after bind");
         }
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Func<bool> stillCurrent, Action<AuthTransportResult> onComplete)
         {
             // If unbound (e.g. after EndSession), re-establish bind so StartAuthentication() works without StartNewSession.
             // Yields must be outside any try-catch block in C# iterators.
@@ -45,6 +45,12 @@ namespace AbxrLib.Runtime.Services.Transport
             if (bindFailure != null)
             {
                 onComplete?.Invoke(new AuthTransportResult(false, bindFailure, false));
+                yield break;
+            }
+            // EndSession or StartNewSession cleared the session during the wait, and the payload already carries the next one's id.
+            if (stillCurrent != null && !stillCurrent())
+            {
+                onComplete?.Invoke(new AuthTransportResult(false, "The session ended before the service was ready", false));
                 yield break;
             }
 

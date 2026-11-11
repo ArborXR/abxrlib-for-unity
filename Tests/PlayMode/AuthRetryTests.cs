@@ -299,6 +299,28 @@ public class AuthRetryTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator DeviceAuth_EndSessionWhileTheServiceBinds_SendsNoRequest()
+    {
+        // After an EndSession the service is unbound, so the next attempt binds it again and waits up to 10 seconds first.
+        var transport = UseScriptedTransport(Authorized);
+        transport.IsServiceTransport = true;
+        transport.HoldBind = true;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, error) => results.Add(success);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.AuthCalls >= 1, 5f);
+        Abxr.EndSession();
+        transport.HoldBind = false;
+        yield return null;
+        yield return null;
+
+        Assert.AreEqual(0, transport.RequestsSent, "The service must not be asked to authenticate a session EndSession cleared.");
+        CollectionAssert.IsEmpty(results);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
+    }
+
+    [UnityTest]
     public IEnumerator DeviceAuth_StartNewSessionDuringRequest_DropsTheOldAttempt()
     {
         var transport = UseScriptedTransport(Offline);
@@ -449,6 +471,10 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         public bool Hold { get; set; }
         /// <summary>Holds individual requests by their 1-based call number, on top of <see cref="Hold"/>.</summary>
         public Func<int, bool> HoldCall { get; set; } = call => false;
+        /// <summary>While true, requests wait before going out, as the service's bind and wait after EndSession do.</summary>
+        public bool HoldBind { get; set; }
+        /// <summary>Requests that went out: called while the session was still current once <see cref="HoldBind"/> let them go.</summary>
+        public int RequestsSent { get; private set; }
         /// <summary>While true, GET config stays in flight.</summary>
         public bool HoldConfig { get; set; }
         /// <summary>The GET config answer; null answers with a failure.</summary>
@@ -471,9 +497,17 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         /// <summary>Handed-over sessions the transport took: given while still current, without a failure.</summary>
         public int HandoffsApplied { get; private set; }
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Func<bool> stillCurrent, Action<AuthTransportResult> onComplete)
         {
             int call = ++AuthCalls;
+            while (HoldBind)
+                yield return null;
+            if (stillCurrent != null && !stillCurrent())
+            {
+                onComplete?.Invoke(new AuthTransportResult(false, "The session ended before the service was ready", false));
+                yield break;
+            }
+            RequestsSent++;
             LastPayload = new AuthPayload
             {
                 appToken = payload.appToken,

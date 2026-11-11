@@ -68,7 +68,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Func<bool> stillCurrent, Action<AuthTransportResult> onComplete)
         {
             string url = RestUri(AuthPath).ToString();
             string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
