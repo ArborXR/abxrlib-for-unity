@@ -507,6 +507,74 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Assert.AreNotEqual("next-learner-token", Abxr.GetAuthResponse()?.Token);
     }
 
+    // ── Auth handoff returned to a launcher still running ─────────────────
+    // App 2 sends the launcher's SessionId back, which the launcher matches whatever became of the token.
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_ReturnedWithoutAToken_OnTheServiceTransport_IsIgnored()
+    {
+        var transport = UseOfflineDeviceAuth();
+        transport.IsServiceTransport = true;
+        // Without a token the teardown flush would log an error on REST, so data goes to the scripted transport too.
+        AbxrSubsystem.Instance.SetTransportForTesting(transport);
+        // The service strips the token from its auth response, so the launcher has none to hand over and none comes back.
+        var response = BuildTestAuthResponse();
+        response.Token = null;
+        SimulateAuth(response);
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+        auth.SetSessionId("launcher-session");
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        string returned = AbxrSubsystem.Instance.GetHandoffJsonForTesting();
+        StringAssert.Contains("\"Token\":\"\"", returned);
+        AbxrAuthService.SetAuthHandoffForTesting(returned);
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return null;
+
+        Assert.IsTrue(auth.Authenticated, "The launcher keeps its session.");
+        Assert.AreEqual(0, transport.QuitCalls, "Its session isn't ended, so open events aren't closed as application_quit.");
+        CollectionAssert.IsEmpty(results, "OnAuthCompleted must not fire again: a handler that launches App 2 would launch it again.");
+        Assert.AreEqual(0, transport.HandoffCalls);
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_ReturnedAfterAppTwoReauthenticated_IsIgnored()
+    {
+        UseOfflineDeviceAuth();
+        SimulateAuth();
+        var auth = AbxrSubsystem.Instance.AuthServiceForTesting;
+        auth.SetSessionId("launcher-session");
+        string token = Abxr.GetAuthResponse().Token;
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        // A SetUserData sync or the SSO merge re-authenticated App 2, so the session comes back with another token.
+        AbxrAuthService.SetAuthHandoffForTesting(AbxrSubsystem.Instance.GetHandoffJsonForTesting().Replace(token, "app-two-token"));
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return null;
+
+        Assert.IsTrue(auth.Authenticated, "The launcher keeps its session.");
+        Assert.AreEqual(token, Abxr.GetAuthResponse().Token);
+        CollectionAssert.IsEmpty(results);
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_Adopted_SendsTheLaunchersSessionIdOn()
+    {
+        UseOfflineDeviceAuth();
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("launcher-token", sessionId: "launcher-session"));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        CollectionAssert.AreEqual(new[] { true }, results);
+        StringAssert.Contains("\"SessionId\":\"launcher-session\"", AbxrSubsystem.Instance.GetHandoffJsonForTesting(),
+            "The return handoff must carry the launcher's session, which is what the launcher matches.");
+    }
+
     /// <summary>Routes device auth to a scripted transport that answers offline, with valid-looking legacy credentials.</summary>
     private AuthRetryTests.ScriptedAuthTransport UseOfflineDeviceAuth()
     {
@@ -538,9 +606,13 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff(), "The first session adopts the handoff.");
     }
 
-    /// <summary>A launcher's handoff payload (the fields GetHandoffJson sends that a receiver reads) for a session with this token.</summary>
-    private static string HandoffJson(string token) =>
-        "{\"Token\":\"" + token + "\",\"Secret\":\"handoff-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\",\"UserId\":\"learner\",\"UserData\":{}}";
+    /// <summary>
+    /// A launcher's handoff payload (the fields GetHandoffJson sends that a receiver reads) for a session with this token.
+    /// Without a sessionId it is what an SDK before 3.0 sends.
+    /// </summary>
+    private static string HandoffJson(string token, string sessionId = null) =>
+        "{\"Token\":\"" + token + "\",\"Secret\":\"handoff-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\",\"UserId\":\"learner\",\"UserData\":{}"
+        + (sessionId != null ? ",\"SessionId\":\"" + sessionId + "\"" : "") + "}";
 
     private static IEnumerator WaitFor(Func<bool> condition, float timeoutSeconds)
     {

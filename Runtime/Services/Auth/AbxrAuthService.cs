@@ -122,6 +122,8 @@ namespace AbxrLib.Runtime.Services.Auth
         private string _handoffSessionJson;
         /// <summary>True when this attempt was let through on the handed-over session alone, with nothing to run device auth with.</summary>
         private bool _attemptAdmittedByHandoff;
+        /// <summary>The launcher's session id, for a session adopted from a handoff (<see cref="HandoffSessionId"/>).</summary>
+        private string _handoffSessionId;
 
         /// <summary>
         /// True when this session came from an auth handoff, and while an attempt that read one settles identity. The
@@ -1288,6 +1290,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;
             _handoffSessionJson = null;
+            _handoffSessionId = null;
             _ssoUserDataMergedBeforeAuthSucceeded = false;
 #if UNITY_WEBGL && !UNITY_EDITOR
             _webglUrlPinAutoSubmitAttempted = false;
@@ -1303,6 +1306,7 @@ namespace AbxrLib.Runtime.Services.Auth
             _returnToPackage = null;
             _userData = null;
             _handoffSessionJson = null;
+            _handoffSessionId = null;
         }
 
         /// <summary>
@@ -1416,7 +1420,7 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// True when a handoff is waiting that would replace this session: one a launcher delivered to the running app (a new
-        /// intent). The caller starts a new session, whose Authenticate() applies it. A handoff carrying this session's token is
+        /// intent). The caller starts a new session, whose Authenticate() applies it. A handoff carrying this session is
         /// App 2 returning the launcher's own session, and one that can't be applied (unreadable, expired, or without a token
         /// this transport can use) would only cost the session it replaced: both are consumed here instead, so the session
         /// carries on and a later StartNewSession() doesn't adopt them.
@@ -1426,19 +1430,36 @@ namespace AbxrLib.Runtime.Services.Auth
             string payload = ReadAuthHandoff(consume: false);
             if (string.IsNullOrEmpty(payload)) return false;
             ApplicableHandoffJson(payload, out AuthResponse session);
-            bool hasToken = session != null && !string.IsNullOrEmpty(session.Token);
+            bool currentSession = session != null && CarriesCurrentSession(session);
             // A session without a token comes from a launcher on the ArborInsightsClient transport, and only that transport
-            // can use it. It can't be matched against the current session, so there it counts as new.
-            bool isNew = hasToken
-                ? session.Token != ResponseData?.Token
-                : session != null && _getTransport?.Invoke()?.IsServiceTransport == true;
-            if (isNew) return true;
+            // can use it.
+            bool usable = session != null
+                && (!string.IsNullOrEmpty(session.Token) || _getTransport?.Invoke()?.IsServiceTransport == true);
+            if (usable && !currentSession) return true;
             ReadAuthHandoff(consume: true);
-            Logcat.Info(hasToken
+            Logcat.Info(currentSession
                 ? "Ignored an auth_handoff carrying the current session; the session continues."
                 : "Ignored an auth_handoff that can't be applied; the current session continues.");
             return false;
         }
+
+        /// <summary>
+        /// True when a handoff carries this app's own session, which App 2 is returning. Matched on SessionId, which App 2 sends
+        /// back unchanged even when its transport strips the token or it re-authenticated (a SetUserData sync, the SSO merge).
+        /// An SDK before 3.0 sends no SessionId, so the token is compared then.
+        /// </summary>
+        private bool CarriesCurrentSession(AuthResponse handoff)
+        {
+            if (!string.IsNullOrEmpty(handoff.SessionId))
+                return handoff.SessionId == HandoffSessionId;
+            return !string.IsNullOrEmpty(handoff.Token) && handoff.Token == ResponseData?.Token;
+        }
+
+        /// <summary>
+        /// This session's id in the handoffs it sends: the launcher's, for a session adopted from a handoff, so it survives every
+        /// app it passes through; otherwise the session id device authentication sent. A new session gets a new one.
+        /// </summary>
+        private string HandoffSessionId => !string.IsNullOrEmpty(_handoffSessionId) ? _handoffSessionId : _payload?.sessionId;
 
         /// <summary>
         /// Returns the JSON string to use for handoff: if the value is raw JSON (starts with '{') use as-is;
@@ -1502,7 +1523,8 @@ namespace AbxrLib.Runtime.Services.Auth
         /// <summary>
         /// Builds the JSON payload passed via the auth_handoff Android intent extra.
         /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
-        /// so the receiving app and its ArborInsightsClient service can fully adopt the session.
+        /// so the receiving app and its ArborInsightsClient service can fully adopt the session, and SessionId, which the receiving
+        /// app sends back unchanged so a launcher still running keeps its session (<see cref="HasNewAuthHandoff"/>).
         /// When includeReturnToPackage is true, adds ReturnToPackage (current app's identifier) so the receiving app can return the session when assessment completes.
         /// </summary>
         internal string GetHandoffJson(bool includeReturnToPackage = false)
@@ -1526,6 +1548,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 ["OrgToken"]          = _payload?.orgToken ?? "",
                 ["OrgId"]             = _payload?.orgId ?? "",
                 ["TokenExpirationMs"] = expiryMs,
+                ["SessionId"]         = HandoffSessionId ?? "",
             };
             if (includeReturnToPackage)
                 handoff["ReturnToPackage"] = Application.identifier ?? "";
@@ -1882,6 +1905,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}. Token expires at {expiry:u}.");
                 _sessionUsedAuthHandoff = true;
                 _returnToPackage = ResponseData?.ReturnToPackage;
+                // A launcher on an SDK before 3.0 sends none; the session still needs one to come back to this app.
+                _handoffSessionId = !string.IsNullOrEmpty(ResponseData.SessionId) ? ResponseData.SessionId : Guid.NewGuid().ToString();
                 ResponseData.UserData ??= new Dictionary<string, string>();
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
 
