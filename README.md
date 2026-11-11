@@ -93,13 +93,15 @@ It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`, and Te
 
 **Skip it** if your app collects input itself. Handle `Abxr.OnInputRequested` and pass the value to `Abxr.OnInputSubmitted`; AbxrLib will not try to draw anything. Events, telemetry, logs, storage, and authentication all work without the UI. Two things do not: `Abxr.PollUser` drops its poll with a warning unless you register your own UI via `AbxrUi.RegisterPollUi`, and the "same user?" prompt shown when the headset is put back on (`Abxr.OnHeadsetPutOnNewSession`) is asked through that same poll UI — so without one, that callback never fires.
 
-> **Upgrading from 2.0.10 or earlier?** Three changes to know about:
+> **Upgrading from 2.0.10 or earlier?** Five changes to know about:
 >
-> 1. The sign-in UI used to ship inside the package. After updating, import it as above — otherwise an authentication request that needs a PIN or email has nothing to show unless your app handles `Abxr.OnInputRequested`. The wizard says so on its first page.
+> 1. The sign-in UI used to ship inside the package. After updating, import it as above — otherwise an authentication request that needs a PIN or email has nothing to show unless your app handles `Abxr.OnInputRequested`. The wizard says so on its first page. AbxrLib also no longer depends on TextMeshPro, so if your project only had it through AbxrLib, add it yourself or import through the wizard.
 > 2. `Abxr.PollUser()` now takes `PollType` from `AbxrLib.Runtime.Types` instead of `ExitPollHandler.PollType`. If you call it, add `using AbxrLib.Runtime.Types;` and drop the `ExitPollHandler.` prefix — the enum values are unchanged.
 > 3. `Abxr.AIProxy` has been removed, along with `AIProxyApi` and `AIPromptPayload`. The backend endpoint it called is no longer served, so every call already returned `null`. Call your LLM provider directly with your own keys.
+> 4. If your app handles `Abxr.OnInputRequested`, its `type` is now the value the backend sends: `assessmentPin` for a PIN (it was `pin`), `email`, or `text`. After a wrong entry, `error` is "Authentication Failed". Empty input is no longer rejected by the SDK; it goes to the backend like any other value.
+> 5. If your code uses the QR readers directly, switch to the `Abxr` QR methods (`IsQRScanForAuthAvailable`, `StartQRScanForAuthInput`, `CancelQRScanForAuthInput`, `GetQRScanCameraTexture`), which kept their signatures. The readers moved into the sample's `AbxrLib.WorldSpace` assembly as `QRCodeReaderMeta` (formerly `QRCodeReader`) and `QRCodeReaderPico`, in `AbxrLib.Runtime.Core.QRScanner`, with a smaller API. QR sign-in on PICO now needs PICO Unity SDK 3.4 or newer.
 >
-> Beyond these, 3.0 adds new public API (the `AbxrUi` registry and its interfaces) without touching anything else you already call.
+> 3.0 also adds passcode pairing, `AbxrObserver`, and the `AbxrUi` registry and its interfaces. The [3.0.0 release notes](https://github.com/ArborXR/abxrlib-for-unity/releases/tag/v3.0.0) list the rest, including behavior changes such as device authentication retrying instead of giving up.
 >
 > One deprecation: `enableArborInsightsClient` is now `[Obsolete]`. The Insights device service it turns on is being removed, and from 3.1 the setting does nothing. Leave it as it is; nothing changes in 3.0.
 
