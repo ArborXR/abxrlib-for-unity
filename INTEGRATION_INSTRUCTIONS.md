@@ -234,7 +234,7 @@ Use this to implement or audit an integration.
 
 ### Installation and config
 
-- [ ] Package added via git URL (or local path). Optionally pin to a tag for reproducible builds (e.g. `#v2.0.4` in the package URL).
+- [ ] Package added via git URL (or local path). Optionally pin to a tag for reproducible builds (e.g. `#v3.0.0` in the package URL).
 - [ ] **Analytics for XR → Configuration** has **App Token** set; no **Org Token** saved, so the dynamic org token is used, unless the project is already on production_custom (or legacy credentials if still using app ID/org ID/auth secret).
 - [ ] Production builds do not embed org token or long-lived secrets unless required for a single-customer deployment.
 - [ ] Sign-in UI decided: **World-Space UI** sample imported, **or** `Abxr.OnInputRequested` handled by the app (§2.1a). One of the two is required for PIN or email auth to complete.
