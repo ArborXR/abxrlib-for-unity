@@ -258,7 +258,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
             }
             else if (Instance != this)
             {
-                Logcat.Warning("QRCodeReader Instance already exists. Destroying duplicate.");
+                Logcat.Warning("QRCodeReaderMeta Instance already exists. Destroying duplicate.");
                 Destroy(gameObject);
             }
         }

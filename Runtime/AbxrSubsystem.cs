@@ -640,8 +640,8 @@ namespace AbxrLib.Runtime
         
         internal void CancelQRScanForAuthInput() => AbxrUi.QrScanner?.CancelScan();
 
-        /// True when the app can choose where to display the QR camera feed (non-Pico).
-        /// When true, use GetQRScanCameraTexture() and assign to your own RawImage. When false (Pico), the platform shows its own scanner UI.
+        /// True when a QR reader is available on this device, so the app can choose where to display its camera feed:
+        /// use GetQRScanCameraTexture() and assign it to your own RawImage.
         internal bool IsQRScanCameraTexturePlaceable() => AbxrUi.QrScanner != null;
 
         internal Texture GetQRScanCameraTexture() => AbxrUi.QrScanner?.GetCameraTexture();
@@ -831,7 +831,7 @@ namespace AbxrLib.Runtime
 		/// <summary>Starts authentication. Waits for transport selection to complete first so the first auth uses the correct backend (service if available, else REST).</summary>
 		internal void StartAuthentication() => StartCoroutine(AuthStartAfterTransportSelectionCoroutine(0f));
 
-		/// <summary>True when the SDK is waiting for auth input (OnInputRequested was invoked). Use with device-specific QR availability to show "Scan QR" only when it will be accepted (e.g. Meta: IsAuthInputRequestPending() &amp;&amp; MetaQRCodeReader.Instance.IsQRScanningAvailable()).</summary>
+		/// <summary>True when the SDK is waiting for auth input (OnInputRequested was invoked). To show "Scan QR" only when it will be accepted, use IsQRScanForAuthAvailable(), which also checks for a QR reader on this device.</summary>
 		internal bool IsAuthInputRequestPending() => _authService != null && _authService.IsInputRequestPending;
 
 		/// <summary>

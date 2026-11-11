@@ -39,5 +39,5 @@ Original source: https://github.com/micjahn/ZXing.Net
 
 ## Usage
 
-This library is used by `MetaQRCodeReader.cs` for QR code scanning on Meta Quest headsets.
+This library decodes QR codes for `QRCodeReaderMeta.cs` (Meta Quest) and `QRCodeReaderPico.cs` (PICO).
 
