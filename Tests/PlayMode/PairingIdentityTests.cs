@@ -409,6 +409,23 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
+    public IEnumerator AHandoffTheServiceCantTake_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        transport.IsServiceTransport = true;
+        transport.HandoffFailure = "SetAuthFromHandoff returned CORRUPT_JSON";
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(1, transport.HandoffCalls);
+        Assert.AreEqual(0, transport.AuthCalls, "The handoff was its only identity, so there is nothing to run device auth with.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
     public IEnumerator AHandoffDeliveredAfterEndingQuietly_SignsIn()
     {
         var transport = Start(pairedAs: null, Authorized);
