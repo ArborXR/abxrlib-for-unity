@@ -89,7 +89,7 @@ The package itself contains no user interface. AbxrLib's built-in sign-in UI —
 - From the wizard: `Analytics for XR > Setup Wizard` → **Import world-space UI**, or
 - From `Window > Package Manager` → **AbxrLib for Unity** → **Samples** → **World-Space UI** → **Import**
 
-It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`, and TextMeshPro is added for you if the project does not have it. Because it is imported into your project rather than resolved as a package, **updating AbxrLib does not update it** — the wizard flags the mismatch and offers a re-import (which overwrites, so keep your own changes elsewhere).
+It lands in `Assets/Samples/AbxrLib for Unity/<version>/World-Space UI/`. The wizard's import also adds TextMeshPro if the project does not have it; a Package Manager import does not, and the wizard then offers to add it. Because it is imported into your project rather than resolved as a package, **updating AbxrLib does not update it** — the wizard flags the mismatch and offers a re-import (which overwrites, so keep your own changes elsewhere).
 
 **Skip it** if your app collects input itself. Handle `Abxr.OnInputRequested` and pass the value to `Abxr.OnInputSubmitted`; AbxrLib will not try to draw anything. Events, telemetry, logs, storage, and authentication all work without the UI. Two things do not: `Abxr.PollUser` drops its poll with a warning unless you register your own UI via `AbxrUi.RegisterPollUi`, and the "same user?" prompt shown when the headset is put back on (`Abxr.OnHeadsetPutOnNewSession`) is asked through that same poll UI — so without one, that callback never fires.
 
