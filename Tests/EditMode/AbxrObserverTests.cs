@@ -373,6 +373,7 @@ public class AbxrObserverTests
         public bool StorageAdd(string name, Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy, long recordId = 0) => Add(name, recordId);
 
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete) { yield break; }
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete) { yield break; }
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete) { yield break; }
         public void ForceSend() { }
         public IEnumerator StorageGetCoroutine(string name, Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete) { yield break; }

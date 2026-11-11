@@ -16,26 +16,36 @@ namespace AbxrLib.Runtime.Services.Transport
     {
         public bool IsServiceTransport => true;
 
+        /// <summary>
+        /// Binds again when the service is unbound (EndSession's OnQuit unbinds it), and waits until it is ready. The AAR doesn't
+        /// rebind on its own: after Unbind() it sends calls to the old connection. onFailure(reason) when it can't bind in time.
+        /// </summary>
+        private static IEnumerator BindIfUnboundCoroutine(Action<string> onFailure)
+        {
+            if (ArborInsightsClient.IsServiceBound()) yield break;
+            if (!ArborInsightsClient.Bind(null))
+            {
+                onFailure("ArborInsightsClient.Bind failed");
+                yield break;
+            }
+            const int maxAttempts = 40;
+            const float intervalSeconds = 0.25f;
+            for (int i = 0; i < maxAttempts && !ArborInsightsClient.ServiceIsFullyInitialized(); i++)
+                yield return new WaitForSecondsRealtime(intervalSeconds);
+            if (!ArborInsightsClient.ServiceIsFullyInitialized())
+                onFailure("ArborInsightsClient service not ready after bind");
+        }
+
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
             // If unbound (e.g. after EndSession), re-establish bind so StartAuthentication() works without StartNewSession.
             // Yields must be outside any try-catch block in C# iterators.
-            if (!ArborInsightsClient.IsServiceBound())
+            string bindFailure = null;
+            yield return BindIfUnboundCoroutine(reason => bindFailure = reason);
+            if (bindFailure != null)
             {
-                if (!ArborInsightsClient.Bind(null))
-                {
-                    onComplete?.Invoke(new AuthTransportResult(false, "ArborInsightsClient.Bind failed", false));
-                    yield break;
-                }
-                const int maxAttempts = 40;
-                const float intervalSeconds = 0.25f;
-                for (int i = 0; i < maxAttempts && !ArborInsightsClient.ServiceIsFullyInitialized(); i++)
-                    yield return new WaitForSecondsRealtime(intervalSeconds);
-                if (!ArborInsightsClient.ServiceIsFullyInitialized())
-                {
-                    onComplete?.Invoke(new AuthTransportResult(false, "ArborInsightsClient service not ready after bind", false));
-                    yield break;
-                }
+                onComplete?.Invoke(new AuthTransportResult(false, bindFailure, false));
+                yield break;
             }
 
             try
@@ -58,6 +68,36 @@ namespace AbxrLib.Runtime.Services.Transport
                 onComplete?.Invoke(new AuthTransportResult(false, ex.Message, false));
             }
             yield return null;
+        }
+
+        /// <summary>
+        /// The service has no session for a handoff otherwise, since a handoff skips AuthRequestCoroutine. A handoff adopted
+        /// while the app runs follows EndSession, which unbound the service, so this binds again and waits first.
+        /// </summary>
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete)
+        {
+            string bindFailure = null;
+            yield return BindIfUnboundCoroutine(reason => bindFailure = reason);
+            if (bindFailure != null)
+            {
+                onComplete?.Invoke(false, bindFailure);
+                yield break;
+            }
+            int result;
+            try
+            {
+                // The full auth response JSON, so the service sets apiToken/apiSecret/restUrl together and accepts events at once.
+                result = ArborInsightsClient.SetAuthFromHandoff(sessionJson, Configuration.Instance?.restUrl ?? "");
+            }
+            catch (Exception ex)
+            {
+                Logcat.Error($"ArborInsights SetAuthFromHandoff failed: {ex.Message}");
+                result = (int)AbxrResult.NOT_INITIALIZED;
+            }
+            if (result == (int)AbxrResult.OK)
+                onComplete?.Invoke(true, null);
+            else
+                onComplete?.Invoke(false, $"SetAuthFromHandoff returned {(AbxrResult)result}");
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)

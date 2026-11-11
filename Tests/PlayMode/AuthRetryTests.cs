@@ -459,7 +459,15 @@ public class AuthRetryTests : AbxrPlayModeTestBase
         /// <summary>Answers the next request with this result instead of the default one.</summary>
         public void AnswerNextWith(AuthTransportResult response) => _nextResponses.Enqueue(response);
 
-        public bool IsServiceTransport => false;
+        /// <summary>True stands in for the ArborInsightsClient transport, which a handed-over session has to be given to.</summary>
+        public bool IsServiceTransport { get; set; }
+        public int HandoffCalls { get; private set; }
+        /// <summary>The session given to the transport by the latest <see cref="ApplyAuthHandoffCoroutine"/>.</summary>
+        public string LastHandoffJson { get; private set; }
+        /// <summary>While true, giving a handed-over session to the transport stays in flight, as the service's bind and wait do.</summary>
+        public bool HoldHandoff { get; set; }
+        /// <summary>The answer to giving the transport a handed-over session; null means it takes it.</summary>
+        public string HandoffFailure { get; set; }
 
         public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
         {
@@ -479,6 +487,15 @@ public class AuthRetryTests : AbxrPlayModeTestBase
             while (Hold || HoldCall(call))
                 yield return null;
             onComplete?.Invoke(response);
+        }
+
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete)
+        {
+            HandoffCalls++;
+            LastHandoffJson = sessionJson;
+            while (HoldHandoff)
+                yield return null;
+            onComplete?.Invoke(HandoffFailure == null, HandoffFailure);
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)

@@ -41,6 +41,13 @@ namespace AbxrLib.Runtime.Services.Transport
         /// <summary>Perform auth request. onComplete receives the result with the transport's rejection verdict, HTTP status, and network-error flag, so the auth service can tell a refusal from a transient failure.</summary>
         IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete);
 
+        /// <summary>
+        /// Gives the transport a session adopted from an auth handoff, which skips <see cref="AuthRequestCoroutine"/>.
+        /// REST has nothing to do. The service binds again when EndSession unbound it, waits until it is ready, and takes the
+        /// session. onComplete(success, failureReason).
+        /// </summary>
+        IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete);
+
         /// <summary>Get app config JSON. onComplete(success, configJson).</summary>
         IEnumerator GetConfigCoroutine(Action<bool, string> onComplete);
 

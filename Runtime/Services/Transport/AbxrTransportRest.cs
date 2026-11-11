@@ -107,6 +107,13 @@ namespace AbxrLib.Runtime.Services.Transport
             return new AuthTransportResult(success, response, isAuthRejectedByApi, responseCode, networkError);
         }
 
+        /// <summary>REST sends the handed-over token with each request, so there is nothing to set up.</summary>
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Action<bool, string> onComplete)
+        {
+            onComplete?.Invoke(true, null);
+            yield break;
+        }
+
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
         {
             string url = RestUri(ConfigPath).ToString();

@@ -429,6 +429,84 @@ public class AuthenticationSimulatedTests : AbxrPlayModeTestBase
         CollectionAssert.IsEmpty(results);
     }
 
+    // ── Auth handoff on the ArborInsightsClient transport ─────────────────
+    // A handoff skips device auth, which is where the service binds again after EndSession, so the session is given to the
+    // transport before the app signs in. The scripted transport stands in for the service: HoldHandoff is its bind and wait.
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_DeliveredWhileRunning_OnTheServiceTransport_SignsInOnceTheServiceHasIt()
+    {
+        var transport = UseOfflineDeviceAuth();
+        transport.IsServiceTransport = true;
+        transport.HoldHandoff = true;
+        SimulateAuth();
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        string handoff = HandoffJson("next-learner-token");
+        AbxrAuthService.SetAuthHandoffForTesting(handoff);
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => transport.HandoffCalls >= 1, 5f);
+        yield return null;
+
+        Assert.AreEqual(1, transport.HandoffCalls);
+        CollectionAssert.IsEmpty(results, "The app must not report signed in while the service has no session for it.");
+        Assert.AreEqual(0, transport.ConfigCalls, "GET config goes to the service too, so it waits as well.");
+
+        transport.HoldHandoff = false;
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        CollectionAssert.AreEqual(new[] { true }, results);
+        Assert.AreEqual(handoff, transport.LastHandoffJson);
+        Assert.AreEqual(0, transport.AuthCalls, "The handoff replaces device auth.");
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_DeliveredAfterEndSession_OnTheServiceTransport_IsGivenToTheService()
+    {
+        var transport = UseOfflineDeviceAuth();
+        transport.IsServiceTransport = true;
+        var results = new List<bool>();
+        yield return AdoptFixedHandoff(results);
+        Abxr.EndSession();
+        transport.HoldHandoff = true;
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("next-learner-token"));
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => transport.HandoffCalls >= 2, 5f);
+        yield return null;
+
+        Assert.AreEqual(2, transport.HandoffCalls, "EndSession unbound the service, so the next session must be given to it too.");
+        Assert.AreEqual(1, results.Count, "No second sign-in before the service has the session.");
+
+        transport.HoldHandoff = false;
+        yield return WaitFor(() => results.Count >= 2, 5f);
+
+        CollectionAssert.AreEqual(new[] { true, true }, results);
+        Assert.AreEqual("next-learner-token", Abxr.GetAuthResponse().Token);
+    }
+
+    [UnityTest]
+    public IEnumerator AuthHandoff_TheServiceCantTakeIt_RunsDeviceAuth()
+    {
+        var transport = UseOfflineDeviceAuth();
+        transport.IsServiceTransport = true;
+        transport.HandoffFailure = "ArborInsightsClient service not ready after bind";
+        SimulateAuth();
+        var results = new List<bool>();
+        Abxr.OnAuthCompleted += (success, _) => results.Add(success);
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson("next-learner-token"));
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(OfflineRetryingReport)));
+
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => results.Count >= 1, 5f);
+
+        CollectionAssert.AreEqual(new[] { false }, results, "A session the service doesn't have must not be reported as signed in.");
+        Assert.AreEqual(1, transport.AuthCalls, "It continues with device authentication, as for any handoff that can't be applied.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        Assert.AreNotEqual("next-learner-token", Abxr.GetAuthResponse()?.Token);
+    }
+
     /// <summary>Routes device auth to a scripted transport that answers offline, with valid-looking legacy credentials.</summary>
     private AuthRetryTests.ScriptedAuthTransport UseOfflineDeviceAuth()
     {

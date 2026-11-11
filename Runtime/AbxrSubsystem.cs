@@ -888,7 +888,8 @@ namespace AbxrLib.Runtime
 		
 		/// <summary>
 		/// Starts an entirely fresh session: clears all API tokens, auth state, and pending data; then re-authenticates.
-		/// When using ArborInsightsClient (Android), unbinds and rebinds the service so the connection is fresh.
+		/// When using ArborInsightsClient (Android), unbinds and rebinds a bound service so the connection is fresh. After
+		/// EndSession the service is unbound, and the new attempt binds it and waits for it, for device auth and a handoff alike.
 		/// Equivalent to the user closing the app and starting it again from a session perspective.
 		/// </summary>
 internal void StartNewSession()
