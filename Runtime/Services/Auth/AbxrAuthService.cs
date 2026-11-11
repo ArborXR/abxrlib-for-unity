@@ -386,7 +386,8 @@ namespace AbxrLib.Runtime.Services.Auth
 
         /// <summary>
         /// Submit user input when there is an outstanding OnInputRequested. Called by subsystem (Abxr.OnInputSubmitted).
-        /// If no input was requested, this is a no-op. Empty or whitespace-only input is rejected and OnInputRequested is re-invoked with an error (no transport call).
+        /// If no input was requested, this is a no-op. Empty input isn't checked here: it goes to the backend like any other value,
+        /// and a rejected entry re-invokes OnInputRequested with an error.
         /// </summary>
         public void SubmitInput(string input)
         {
