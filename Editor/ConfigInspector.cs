@@ -284,7 +284,7 @@ namespace AbxrLib.Editor
                 EditorGUILayout.LabelField("When enabled, PlayMode tests that trigger auth input (e.g. PIN or email) will auto-respond using the values below so tests don't block waiting for user input.", EditorStyles.wordWrappedLabel);
                 EditorGUILayout.EndVertical();
                 config.unitTestAuthPin = EditorGUILayout.TextField(new GUIContent(
-                    "PIN / assessment PIN", "Used when auth requests type \"pin\" or \"assessmentPin\"."), config.unitTestAuthPin);
+                    "PIN / assessment PIN", "Used when auth requests type \"assessmentPin\"."), config.unitTestAuthPin);
                 config.unitTestAuthBadPin = EditorGUILayout.TextField(new GUIContent(
                     "Bad PIN (always fail)", "PIN that backend must always reject. Set when running invalid-PIN tests; empty = those tests will ignore."), config.unitTestAuthBadPin);
                 config.unitTestAuthText = EditorGUILayout.TextField(new GUIContent(
