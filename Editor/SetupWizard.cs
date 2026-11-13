@@ -337,10 +337,11 @@ namespace AbxrLib.Editor
                         isCustomApk ? "The customer's organization JWT." : "An Organization Token saved in this project.",
                         _config.orgToken);
 
-                    EditorGUILayout.LabelField(isCustomApk
-                            ? "A specific customer's Organization Token is not self-serve in the portal. Contact ArborXR."
-                            : SetupWizardChecks.OrgTokenFieldHint(_config, out _) ?? "",
-                        _styles.Hint);
+                    bool orgTokenWarn = false;
+                    string orgTokenHint = isCustomApk
+                        ? "A specific customer's Organization Token is not self-serve in the portal. Contact ArborXR."
+                        : SetupWizardChecks.OrgTokenFieldHint(_config, out orgTokenWarn);
+                    DrawHint(orgTokenHint, orgTokenWarn);
                 }
             }
             else
@@ -353,8 +354,8 @@ namespace AbxrLib.Editor
                 using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.authSecret, _legacyAuthSecretField)))
                     _config.authSecret = DrawPasteField("Authorization Secret", "Used by Development and Custom APK builds.", _config.authSecret);
 
-                string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out _);
-                if (legacyOrgHint != null) EditorGUILayout.LabelField(legacyOrgHint, _styles.Hint);
+                string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool legacyOrgWarn);
+                DrawHint(legacyOrgHint, legacyOrgWarn);
 
                 EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
             }
@@ -606,6 +607,17 @@ namespace AbxrLib.Editor
         /// A text field with a Paste button. Tokens are long enough that pasting is the only realistic way to enter
         /// them, and a copied token often carries a trailing newline, so whatever arrives is trimmed.
         /// </summary>
+        /// <summary>
+        /// A hint under a field. One that needs the developer's attention is a warning box, as the inspector shows
+        /// it; the rest is small grey text.
+        /// </summary>
+        private void DrawHint(string text, bool warn)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            if (warn) EditorGUILayout.HelpBox(text, MessageType.Warning);
+            else EditorGUILayout.LabelField(text, _styles.Hint);
+        }
+
         private string DrawPasteField(string label, string tooltip, string value)
         {
             EditorGUILayout.LabelField(new GUIContent(label, tooltip));
