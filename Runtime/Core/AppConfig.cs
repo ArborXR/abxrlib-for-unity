@@ -111,7 +111,7 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only. Set in the Unity asset only; not overridden by GET /v1/storage/config.")]
         public bool enableArborMdmClient = true;
 
-        [Tooltip("When enabled (Auth Handoff Launcher flow), the auth mechanism from config is overridden: if type is not already assessmentPin, it is set to assessmentPin with prompt \"Enter your 6-digit PIN\". Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false.")]
+        [Tooltip("When enabled (Learner Launcher Mode), the auth mechanism type from config is overridden to assessmentPin unless it already is; the prompt from config is kept. Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false.")]
         public bool enableLearnerLauncherMode = false;
 
         [Tooltip("When enabled, automatic telemetry collection runs. Defaults to true for new configs.")]
