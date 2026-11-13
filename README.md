@@ -63,7 +63,7 @@ Developers can implement their own backend services by following the ABXR protoc
    https://github.com/ArborXR/abxrlib-for-unity.git
    ```
 4. Once imported, you will see `Analytics for XR` in your Unity toolbar.
-5. If Unity asks whether to enable the native platform backends for the new input system, either answer works. AbxrLib depends on the Input System package, which is why Unity asks, but AbxrLib itself reads no input, and its optional sign-in UI works with the Input System, the Input Manager (old), or both. **Yes** enables the backends and restarts the Editor; **No** leaves your input settings as they are. The Setup Wizard stays blank behind the prompt until you answer.
+5. If Unity asks whether to enable the native platform backends for the new input system, either answer works. AbxrLib depends on the Input System package, which is why Unity asks, but AbxrLib itself reads no input through it, and its optional sign-in UI works with the Input System, the Input Manager (old), or both. **Yes** enables the backends and restarts the Editor; **No** leaves your input settings as they are. The Setup Wizard stays blank behind the prompt until you answer.
 
 ### Setup Wizard
 
