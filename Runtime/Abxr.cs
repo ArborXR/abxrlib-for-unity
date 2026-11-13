@@ -481,8 +481,9 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Returns true if QR scanning for auth input is available. Use to show/hide a "Scan QR" option in custom auth UI.
-	/// True only while an auth input request is pending and a QR reader from the World-Space UI sample is offered on this device:
-	/// QRCodeReaderMeta (supported Meta Quest headsets) or QRCodeReaderPico (supported PICO headsets, PICO SDK 3.4+), both in AbxrLib.Runtime.Core.QRScanner.
+	/// True only while an auth input request is pending and a QR scanner is registered through AbxrUi.RegisterQrScanner.
+	/// The World-Space UI sample registers one on the headsets it supports: QRCodeReaderMeta (Meta Quest) or QRCodeReaderPico
+	/// (PICO, PICO SDK 3.4+), both in AbxrLib.Runtime.Core.QRScanner. A scanner your app registers counts too.
 	/// You can embed the camera feed via GetQRScanCameraTexture().
 	/// </summary>
 	public static bool IsQRScanForAuthAvailable() => X != null && X.IsQRScanForAuthAvailable();
