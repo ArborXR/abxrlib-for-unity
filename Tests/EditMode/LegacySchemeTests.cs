@@ -148,6 +148,29 @@ public class LegacySchemeTests
         Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(null));
     }
 
+    [Test]
+    public void TheShippingNote_OnAppTokens_NamesNoLegacyCredential()
+    {
+        _config.useAppTokens = true;
+
+        string note = SetupWizardChecks.ShippingNote(_config);
+
+        StringAssert.Contains("Never ship an Organization Token", note);
+        StringAssert.DoesNotContain("Authorization Secret", note);
+        StringAssert.DoesNotContain("Organization ID", note);
+    }
+
+    [Test]
+    public void TheShippingNote_OnTheLegacyScheme_NamesItsOwnCredentials()
+    {
+        _config.useAppTokens = false;
+
+        string note = SetupWizardChecks.ShippingNote(_config);
+
+        StringAssert.Contains("Organization ID with its Authorization Secret", note);
+        StringAssert.DoesNotContain("App Token", note);
+    }
+
     // ── Legacy values left on a project that uses App Tokens ──────
 
     [Test]

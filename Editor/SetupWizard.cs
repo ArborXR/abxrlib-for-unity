@@ -375,10 +375,7 @@ namespace AbxrLib.Editor
             EditorGUILayout.EndVertical();
             
             GUILayout.Space(8f);
-            EditorGUILayout.HelpBox(
-                "Never ship an Organization Token or Authorization Secret in a publicly distributed APK.\n\nA Development " +
-                "build uses the App Token as the Organization Token, so it is for internal or single-org builds only.\n\nFor shared builds use " +
-                "Production and let ArborXR-managed devices supply the organization.", MessageType.None);
+            EditorGUILayout.HelpBox(SetupWizardChecks.ShippingNote(_config), MessageType.None);
 
             GUILayout.Space(6f);
             EditorGUILayout.BeginHorizontal();

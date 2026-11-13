@@ -48,7 +48,7 @@ namespace AbxrLib.Editor
             if (!SetupWizardChecks.ShowsLegacyScheme(config))
             {
                 config.appToken = EditorGUILayout.TextField(new GUIContent(
-                    "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);
+                    "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required."), config.appToken);
                 
                 bool isProductionCustom = config.buildType == "production_custom";
                 // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from the

@@ -402,6 +402,17 @@ namespace AbxrLib.Editor
             config.authSecret = "";
         }
 
+        /// <summary>
+        /// The wizard's reminder about what not to ship. It names the credentials the project's scheme has, so a
+        /// project on App Tokens isn't warned about a secret it never sees.
+        /// </summary>
+        internal static string ShippingNote(AppConfig config) => ShowsLegacyScheme(config)
+            ? "Never ship an Organization ID with its Authorization Secret in a publicly distributed APK.\n\nFor " +
+              "shared builds use Production and let ArborXR-managed devices supply the organization."
+            : "Never ship an Organization Token in a publicly distributed APK.\n\nA Development build uses the App " +
+              "Token as the Organization Token, so it is for internal or single-org builds only.\n\nFor shared " +
+              "builds use Production and let ArborXR-managed devices supply the organization.";
+
         /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
         internal const string LegacySchemeNote =
             "This project uses the legacy scheme: Application ID, Organization ID and Authorization Secret. It keeps " +
