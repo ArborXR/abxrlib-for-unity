@@ -53,7 +53,7 @@ If you see errors about **Meta Quest: Session** or **Meta Quest: Camera (Passthr
 
 - **Quest 2** is not supported (camera quality insufficient for reliable QR scanning).
 - Only QR codes starting with **ABXR:** are accepted; the button label toggles to "Stop Scanning" while active.
-- For custom UI, use `Abxr.GetQRScanCameraTexture()` to get the camera texture (e.g. for a RawImage). Pico uses a different path; Meta-only builds do not conflict with Pico.
+- For custom UI, use `Abxr.GetQRScanCameraTexture()` to get the camera texture (e.g. for a RawImage). PICO has its own reader (`QRCodeReaderPico`), which supplies a texture the same way; Meta-only builds do not conflict with it.
 
 ## Debugging
 
