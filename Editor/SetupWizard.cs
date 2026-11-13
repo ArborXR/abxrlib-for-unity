@@ -360,14 +360,7 @@ namespace AbxrLib.Editor
             {
                 EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
                 if (GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(_config), GUILayout.Width(160f)))
-                {
-                    Undo.RecordObject(_config, "Clear leftover AbxrLib values");
-                    SetupWizardChecks.ClearLeftoverLegacyValues(_config);
-                    SetupWizardChecks.ClearLeftoverTokens(_config);
-                    // Nothing is left to switch back to, so the checkbox goes with the values.
-                    _useAppTokensToggle.Reset();
-                    EditorUtility.SetDirty(_config);
-                }
+                    SetupWizardChecks.ClearLeftoverValues(_config, _useAppTokensToggle);
             }
 
             if (EditorGUI.EndChangeCheck()) EditorUtility.SetDirty(_config);

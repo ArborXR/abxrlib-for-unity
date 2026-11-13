@@ -552,21 +552,61 @@ public class LegacySchemeTests
     }
 
     [Test]
-    public void ClearingTheLegacyValues_RemovesTheCheckboxToo()
+    public void TheClearButton_EmptiesTheLegacyValues_AndRemovesTheCheckboxToo()
     {
         var checkbox = new SetupWizardChecks.ShownLatch();
-        _config.useAppTokens = true;
-        _config.appToken = "app.token.jwt";
-        _config.appID = AppId;
-        _config.orgID = OrgId;
-        _config.authSecret = "secret";
+        OnAppTokensWithLegacyValues();
         Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)));
 
-        // What the Clear button does in both editors.
-        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
-        checkbox.Reset();
+        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config, checkbox);
 
+        Assert.IsTrue(cleared);
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
+        Assert.AreEqual("app.token.jwt", _config.appToken);
         Assert.IsFalse(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)), "Nothing is left to switch back to.");
+        Assert.IsTrue(UnityEditor.EditorUtility.IsDirty(_config), "The asset is marked changed, so the save writes it.");
+    }
+
+    [Test]
+    public void TheClearButton_OnTheLegacyScheme_EmptiesTheTokens()
+    {
+        OnTheLegacySchemeWithTokens();
+
+        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config, new SetupWizardChecks.ShownLatch());
+
+        Assert.IsTrue(cleared);
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(_config));
+        Assert.AreEqual(AppId, _config.appID);
+    }
+
+    [Test]
+    public void TheClearButton_IsOneUndoStep()
+    {
+        OnAppTokensWithLegacyValues();
+        UnityEditor.Undo.IncrementCurrentGroup();
+
+        SetupWizardChecks.ClearLeftoverValues(_config, null);
+        UnityEditor.Undo.FlushUndoRecordObjects();
+        UnityEditor.Undo.PerformUndo();
+
+        Assert.AreEqual(AppId, _config.appID);
+        Assert.AreEqual(OrgId, _config.orgID);
+        Assert.AreEqual("secret", _config.authSecret);
+    }
+
+    [Test]
+    public void TheClearButton_WhereNothingMayBeCleared_ChangesNothing()
+    {
+        var checkbox = new SetupWizardChecks.ShownLatch();
+        OnAppTokensWithLegacyValues(appToken: "");
+        checkbox.Holds(true);
+
+        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config, checkbox);
+
+        Assert.IsFalse(cleared);
+        Assert.AreEqual(AppId, _config.appID);
+        Assert.IsTrue(checkbox.Holds(false), "The checkbox stays: it is the way back to those credentials.");
+        Assert.IsFalse(SetupWizardChecks.ClearLeftoverValues(null, checkbox));
     }
 
     [Test]

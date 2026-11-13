@@ -445,6 +445,24 @@ namespace AbxrLib.Editor
             config.orgToken = "";
         }
 
+        /// <summary>
+        /// The Clear button under the leftover warning, for both editors: empties the other scheme's saved values as
+        /// one undoable step, drops the checkbox latch, since nothing is left to switch back to, and marks the asset
+        /// changed. False, changing nothing, when there is nothing it may clear.
+        /// </summary>
+        internal static bool ClearLeftoverValues(AppConfig config, ShownLatch useAppTokensToggle)
+        {
+            LeftoverValuesNotice(config, out bool offersClear);
+            if (!offersClear) return false;
+
+            Undo.RecordObject(config, "Clear leftover AbxrLib values");
+            ClearLeftoverLegacyValues(config);
+            ClearLeftoverTokens(config);
+            useAppTokensToggle?.Reset();
+            EditorUtility.SetDirty(config);
+            return true;
+        }
+
         /// <summary>The Clear button's label under the leftover warning, for the values the project's scheme leaves over.</summary>
         internal static string ClearLeftoverValuesLabel(AppConfig config) =>
             ShowsLegacyScheme(config) ? "Clear saved tokens" : "Clear legacy values";

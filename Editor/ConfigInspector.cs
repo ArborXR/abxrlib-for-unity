@@ -111,14 +111,7 @@ namespace AbxrLib.Editor
             {
                 EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
                 if (offersClear && GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(config), GUILayout.Width(160f)))
-                {
-                    Undo.RecordObject(config, "Clear leftover AbxrLib values");
-                    SetupWizardChecks.ClearLeftoverLegacyValues(config);
-                    SetupWizardChecks.ClearLeftoverTokens(config);
-                    // Nothing is left to switch back to, so the checkbox goes with the values.
-                    _useAppTokensToggle.Reset();
-                    EditorUtility.SetDirty(config);
-                }
+                    SetupWizardChecks.ClearLeftoverValues(config, _useAppTokensToggle);
             }
 
             // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
