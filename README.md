@@ -120,7 +120,7 @@ To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org 
 
 #### Configure Unity Project
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
-2. New projects authenticate with an App Token. A **Use App Tokens** checkbox shows only in a project that is still on the [legacy scheme](#legacy-app-id--org-id--auth-secret), where ticking it switches the project to App Tokens.
+2. New projects authenticate with an App Token. A **Use App Tokens** checkbox shows only in a project that is on the [legacy scheme](#legacy-app-id--org-id--auth-secret) or still has legacy values saved: ticking it switches the project to App Tokens, and unticking it switches back.
 3. Set **App Token** (required): JWT for your app, from your distribution channel or ArborXR portal (**Content Library** → **Managed** app → **Insights Hub**).
 4. **Org Token:** New projects don't set one. `Production` uses the **dynamic org token** (derived from device/org context when available) or passcode pairing, and `Development` uses your **App Token** as the org token. The field shows only when the project already has an org token saved, or is already on `Production (Custom APK)`, where it is required.
 
@@ -181,9 +181,9 @@ void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason rea
 
 A project that already uses the legacy scheme keeps working: Configuration and the Setup Wizard still show its App ID, Org ID, and Auth Secret (from the app’s credential or details views in the portal where your organization still exposes them), a note that the scheme is legacy, and a **Use App Tokens** checkbox for switching. On ArborXR-managed devices, only App ID may be required; Org ID and Auth Secret can auto-fill.
 
-New projects use an App Token. A project that isn't already on the legacy scheme is not offered it: the legacy fields and the checkbox don't show. The legacy scheme also can't use passcode pairing, which needs an App Token.
+New projects use an App Token. A project that isn't on the legacy scheme and has no legacy values saved is not offered it: the legacy fields and the checkbox don't show. The legacy scheme also can't use passcode pairing, which needs an App Token.
 
-If a project on App Tokens still has an App ID, Org ID, or Auth Secret saved (after switching, for example), Configuration and the Setup Wizard warn that the values ship inside the build, and a **Clear legacy values** button empties them.
+If a project on App Tokens still has an App ID, Org ID, or Auth Secret saved (after switching, for example), Configuration and the Setup Wizard warn that the values ship inside the build, and a **Clear legacy values** button empties them. To switch back to the legacy scheme, untick **Use App Tokens**: the checkbox stays for as long as those values are saved, and clearing them removes it. A project last saved before the checkbox existed opens the same way, with the checkbox ticked and no App Token: untick it to keep using the legacy credentials, or paste an App Token.
 
 ### Using with Other Backend Services
 For information on implementing your own backend service or using other compatible services, please refer to the ABXR protocol specification.

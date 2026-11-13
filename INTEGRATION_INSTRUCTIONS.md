@@ -42,7 +42,7 @@ Because the UI is imported into `Assets/`, **updating AbxrLib does not update it
 
 Use **app token** and **org token** for authentication. In **Analytics for XR → Configuration**:
 
-- **Use App Tokens:** On in every new project, where the checkbox doesn't show. It shows only in a project that is still on the legacy scheme; tick it there to switch to App Tokens.
+- **Use App Tokens:** On in every new project, where the checkbox doesn't show. It shows only in a project that is on the legacy scheme or still has legacy values saved; tick it to switch to App Tokens, untick it to switch back.
 - **App Token:** Required. JWT for your app (from your distribution channel or ArborXR portal).
 - **Org Token:** Not set in a new project: the SDK uses the **dynamic org token** (derived from device/org context when available) or passcode pairing, and in `Development` the App Token. The field shows only when the project already has one saved, or is already on **Build Type** `Production (Custom APK)` (single-customer builds), where it is required.
 
