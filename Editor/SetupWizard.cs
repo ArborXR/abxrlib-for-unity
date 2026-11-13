@@ -163,7 +163,7 @@ namespace AbxrLib.Editor
                 string mark = IsStepComplete(step) ? "✓" : current ? "▸" : "•";
                 var style = current ? _styles.StepSelected : _styles.Step;
 
-                if (GUILayout.Button($"  {mark}  {StepTitles[i]}", style)) _step = step;
+                if (GUILayout.Button($"  {mark}  {StepTitles[i]}", style)) GoTo(step);
             }
 
             GUILayout.FlexibleSpace();
@@ -211,7 +211,7 @@ namespace AbxrLib.Editor
             {
                 if (GUILayout.Button("Back", GUILayout.Width(80f)))
                 {
-                    _step = (Step)((int)_step - 1);
+                    GoTo((Step)((int)_step - 1));
                     Refresh();
                 }
             }
@@ -226,8 +226,7 @@ namespace AbxrLib.Editor
             }
             else if (GUILayout.Button("Next", GUILayout.Width(90f)))
             {
-                SaveConfig();
-                _step = (Step)((int)_step + 1);
+                GoTo((Step)((int)_step + 1));
                 Refresh();
             }
 
@@ -540,7 +539,7 @@ namespace AbxrLib.Editor
             GUI.color = color;
             EditorGUILayout.LabelField(label, GUILayout.Width(110f));
             EditorGUILayout.LabelField(value);
-            if (!ok && GUILayout.Button("Fix", EditorStyles.miniButton, GUILayout.Width(40f))) _step = goTo;
+            if (!ok && GUILayout.Button("Fix", EditorStyles.miniButton, GUILayout.Width(40f))) GoTo(goTo);
             EditorGUILayout.EndHorizontal();
         }
 
@@ -633,6 +632,22 @@ namespace AbxrLib.Editor
             Step.Project => _checks != null && !_checks.Exists(c => c.Severity == SetupWizardChecks.Severity.Problem),
             _ => false
         };
+
+        /// <summary>
+        /// Every page change saves, however the page was left (Next, Back, the step list, a Fix jump), so the asset on
+        /// disk never trails what the wizard shows.
+        /// </summary>
+        private void GoTo(Step step)
+        {
+            SaveConfig();
+            _step = step;
+        }
+
+        /// <summary>Closing saves too: a token pasted on the Credentials page is otherwise only in memory.</summary>
+        private void OnDestroy()
+        {
+            if (_config != null && EditorUtility.IsDirty(_config)) SaveConfig();
+        }
 
         private void SaveConfig()
         {
