@@ -296,12 +296,15 @@ namespace AbxrLib.Editor
             int current = SetupWizardChecks.BuildTypeIndex(_config.buildType);
             // Production (Custom APK) is offered only to a project already saved on it (SDK-90).
             bool offersCustomApk = _customApkOption.Holds(SetupWizardChecks.UsesCustomApk(_config));
-            int selected = EditorGUILayout.Popup(new GUIContent("Build Type",
+            string buildTypeTooltip =
                 "Production: shared builds, including ArborXR-managed fleets; each device's org comes from the " +
                 "device at runtime.\n" +
-                "Development: for your own test builds.\n" +
-                "Production (Custom APK): one customer per build; the Organization Token is required and the MDM is " +
-                "not consulted for it."),
+                "Development: for your own test builds.";
+            // Only a project that is offered Production (Custom APK) is told about it (SDK-90).
+            if (offersCustomApk)
+                buildTypeTooltip += "\nProduction (Custom APK): one customer per build; the Organization Token is " +
+                                    "required and the MDM is not consulted for it.";
+            int selected = EditorGUILayout.Popup(new GUIContent("Build Type", buildTypeTooltip),
                 current, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
             if (selected != current) _config.buildType = SetupWizardChecks.BuildTypeAtIndex(selected);
 

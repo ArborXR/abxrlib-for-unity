@@ -35,8 +35,13 @@ namespace AbxrLib.Editor
             bool offersCustomApk = _customApkOption.Holds(SetupWizardChecks.UsesCustomApk(config));
             // The Organization ID and Authorization Secret wording is for a project that has those fields (SDK-89).
             string buildTypeTooltip = SetupWizardChecks.ShowsLegacyScheme(config)
-                ? "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only).\nProduction (Custom APK): For single-customer builds; requires Organization ID and Authorization Secret; API receives buildType Production."
-                : "Production: shared builds, including ArborXR-managed fleets; each device's organization comes from the device at runtime.\nDevelopment: your own test builds; they report to the organization that owns the app.\nProduction (Custom APK): For single-customer builds; requires Organization Token; API receives buildType Production.";
+                ? "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only)."
+                : "Production: shared builds, including ArborXR-managed fleets; each device's organization comes from the device at runtime.\nDevelopment: your own test builds; they report to the organization that owns the app.";
+            // Only a project that is offered Production (Custom APK) is told about it (SDK-90).
+            if (offersCustomApk)
+                buildTypeTooltip += SetupWizardChecks.ShowsLegacyScheme(config)
+                    ? "\nProduction (Custom APK): For single-customer builds; requires Organization ID and Authorization Secret; API receives buildType Production."
+                    : "\nProduction (Custom APK): For single-customer builds; requires Organization Token; API receives buildType Production.";
             int newSelection = EditorGUILayout.Popup(new GUIContent("Build Type", buildTypeTooltip),
                 currentSelection, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
 
