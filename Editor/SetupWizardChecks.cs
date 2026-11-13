@@ -419,43 +419,6 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// What the inspector and the wizard say about <see cref="LeftoverLegacyValues"/>, or null when there are none.
-        /// The values are in the Resources asset, so they ship inside every build, and nothing shows them once the
-        /// legacy fields are hidden. On App Tokens the SDK doesn't sign in with them, but a saved Organization ID is
-        /// still what Abxr.GetOrgId() returns when no ArborXR client supplies one, so the text doesn't call it unused.
-        /// Null too while the project has no App Token: the legacy values are then its only credentials, so nothing
-        /// calls them leftovers. <see cref="SwitchBackMessage"/> speaks for that state.
-        /// </summary>
-        internal static string LeftoverLegacyValuesWarning(AppConfig config)
-        {
-            string[] names = LeftoverLegacyValues(config);
-            if (names.Length == 0 || string.IsNullOrWhiteSpace(config.appToken)) return null;
-
-            bool one = names.Length == 1;
-            string them = one ? "it" : "them";
-            string text = $"This project is on App Tokens, but {string.Join(", ", names)} {(one ? "is" : "are")} " +
-                          $"still saved from the legacy scheme and {(one ? "ships" : "ship")} inside every build. ";
-            text += string.IsNullOrEmpty(config.orgID)
-                ? $"The SDK doesn't read {them} on App Tokens. "
-                : $"The SDK doesn't sign in with {them}, but on a device without ArborXR MDM Abxr.GetOrgId() " +
-                  "still returns the Organization ID, and a secret set with Abxr.SetAuthSecret is paired with it. ";
-            return text + $"Untick Use App Tokens to go back to the legacy scheme, or clear {them}, which also " +
-                   "removes that checkbox.";
-        }
-
-        /// <summary>
-        /// Empties <see cref="LeftoverLegacyValues"/>. Does nothing on the legacy scheme, where the same fields are the
-        /// project's credentials, or while the project has no App Token, where they are its only ones.
-        /// </summary>
-        internal static void ClearLeftoverLegacyValues(AppConfig config)
-        {
-            if (LeftoverLegacyValuesWarning(config) == null) return;
-            config.appID = "";
-            config.orgID = "";
-            config.authSecret = "";
-        }
-
-        /// <summary>
         /// The other direction: the App Token and Organization Token a project on the legacy scheme still has saved,
         /// by the name of their field. Empty on App Tokens, where they are in use.
         /// </summary>
@@ -469,85 +432,107 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// What the inspector and the wizard say about <see cref="LeftoverTokens"/>, or null when there are none. The
-        /// legacy scheme has no field for them, the runtime doesn't read them there, and they still ship inside every
-        /// build. Null too while the project has no Application ID: the tokens are then its only credentials.
+        /// Whether values are saved for the scheme the project isn't on. They have no field there, the SDK doesn't
+        /// sign in with them, and they still ship inside every build, so the editors always say so.
         /// </summary>
-        internal static string LeftoverTokensWarning(AppConfig config)
-        {
-            string[] names = LeftoverTokens(config);
-            if (names.Length == 0 || string.IsNullOrWhiteSpace(config.appID)) return null;
+        internal static bool HasLeftoverValues(AppConfig config) =>
+            LeftoverLegacyValues(config).Length > 0 || LeftoverTokens(config).Length > 0;
 
+        /// <summary>Whether the saved credentials would pass validation with Use App Tokens set the given way.</summary>
+        private static bool CredentialsWouldBeValid(AppConfig config, bool useAppTokens) =>
+            config != null && RuntimeAuthConfig.ValidateAuthFields(useAppTokens, config.buildType, config.appID,
+                config.orgID, config.authSecret, config.appToken, config.orgToken) == null;
+
+        /// <summary>
+        /// Whether the credentials saved for the other scheme would sign in if the project switched to it. A project
+        /// that can't sign in as it stands is told about that way out.
+        /// </summary>
+        internal static bool OtherSchemeWouldWork(AppConfig config) =>
+            config != null && CredentialsWouldBeValid(config, !config.useAppTokens);
+
+        /// <summary>
+        /// Whether the editors offer to clear the leftover values: only when the scheme the project is on has valid
+        /// credentials of its own. Until then the other scheme's values may be the only ones that work. An asset last
+        /// saved before Use App Tokens existed opens ticked, with legacy credentials and no App Token, and a token
+        /// that is half pasted into it must not make those credentials look disposable.
+        /// </summary>
+        internal static bool CanClearLeftoverValues(AppConfig config) =>
+            HasLeftoverValues(config) && CredentialsAreValid(config);
+
+        /// <summary>
+        /// What both editors show under the credential fields whenever values are saved for the scheme the project
+        /// isn't on, or null when none are. It names them and says they ship: they are in the Resources asset, and
+        /// nothing shows them once that scheme's fields are hidden. A saved Organization ID is not called unused,
+        /// since Abxr.GetOrgId() still returns it when no ArborXR client supplies one. <paramref name="offersClear"/>
+        /// is <see cref="CanClearLeftoverValues"/>. Without it, the text says what stops the project signing in, and
+        /// that switching scheme is a way out when the leftover credentials would work.
+        /// </summary>
+        internal static string LeftoverValuesNotice(AppConfig config, out bool offersClear)
+        {
+            offersClear = CanClearLeftoverValues(config);
+            if (!HasLeftoverValues(config)) return null;
+
+            bool onAppTokens = config.useAppTokens;
+            string[] names = onAppTokens ? LeftoverLegacyValues(config) : LeftoverTokens(config);
             bool one = names.Length == 1;
             string them = one ? "it" : "them";
-            return $"This project is on the legacy scheme, but {string.Join(", ", names)} {(one ? "is" : "are")} " +
-                   $"still saved and {(one ? "ships" : "ship")} inside every build. The SDK doesn't read {them} on " +
-                   $"the legacy scheme. Tick Use App Tokens to go back to App Tokens, or clear {them}.";
+
+            string text = onAppTokens ? "This project is on App Tokens, but " : "This project is on the legacy scheme, but ";
+            text += $"{string.Join(", ", names)} {(one ? "is" : "are")} still saved ";
+            if (onAppTokens) text += "from the legacy scheme ";
+            text += $"and {(one ? "ships" : "ship")} inside every build. ";
+            if (!onAppTokens)
+                text += $"The SDK doesn't read {them} on the legacy scheme. ";
+            else if (string.IsNullOrEmpty(config.orgID))
+                text += $"The SDK doesn't read {them} on App Tokens. ";
+            else
+                text += $"The SDK doesn't sign in with {them}, but on a device without ArborXR MDM Abxr.GetOrgId() " +
+                        "still returns the Organization ID, and a secret set with Abxr.SetAuthSecret is paired with it. ";
+
+            if (offersClear)
+                return text + (onAppTokens
+                    ? $"Untick Use App Tokens to go back to the legacy scheme, or clear {them}, which also removes that checkbox."
+                    : $"Tick Use App Tokens to go back to App Tokens, or clear {them}.");
+
+            // The scheme in use can't sign in yet, so nothing offers to clear what may be the only credentials that work.
+            text += $"Clearing {them} is offered once the project can sign in. As it stands it can't: " +
+                    DescribeOwnCredentialProblem(config);
+            if (OtherSchemeWouldWork(config))
+                text += onAppTokens
+                    ? $" Or untick Use App Tokens to keep using the legacy scheme."
+                    : $" Or tick Use App Tokens to keep using App Tokens.";
+            return text;
         }
 
         /// <summary>
-        /// Empties <see cref="LeftoverTokens"/>. Does nothing on App Tokens, where they are the project's credentials,
-        /// or while the project has no Application ID, where they are its only ones.
-        /// </summary>
-        internal static void ClearLeftoverTokens(AppConfig config)
-        {
-            if (LeftoverTokensWarning(config) == null) return;
-            config.appToken = "";
-            config.orgToken = "";
-        }
-
-        /// <summary>
-        /// The Clear button under the leftover warning, for both editors: empties the other scheme's saved values as
+        /// The Clear button under the leftover notice, for both editors: empties the other scheme's saved values as
         /// one undoable step, drops the checkbox latch, since nothing is left to switch back to, and marks the asset
-        /// changed. False, changing nothing, when there is nothing it may clear.
+        /// changed. False, changing nothing, unless <see cref="CanClearLeftoverValues"/>.
         /// </summary>
-        internal static bool ClearLeftoverValues(AppConfig config, ShownLatch useAppTokensToggle)
+        internal static bool ClearLeftoverValues(AppConfig config, ShownLatch useAppTokensToggle = null)
         {
-            LeftoverValuesNotice(config, out bool offersClear);
-            if (!offersClear) return false;
+            if (!CanClearLeftoverValues(config)) return false;
 
             Undo.RecordObject(config, "Clear leftover AbxrLib values");
-            ClearLeftoverLegacyValues(config);
-            ClearLeftoverTokens(config);
+            if (config.useAppTokens)
+            {
+                config.appID = "";
+                config.orgID = "";
+                config.authSecret = "";
+            }
+            else
+            {
+                config.appToken = "";
+                config.orgToken = "";
+            }
             useAppTokensToggle?.Reset();
             EditorUtility.SetDirty(config);
             return true;
         }
 
-        /// <summary>The Clear button's label under the leftover warning, for the values the project's scheme leaves over.</summary>
+        /// <summary>The Clear button's label under the leftover notice, for the values the project's scheme leaves over.</summary>
         internal static string ClearLeftoverValuesLabel(AppConfig config) =>
             ShowsLegacyScheme(config) ? "Clear saved tokens" : "Clear legacy values";
-
-        /// <summary>
-        /// What a project is told when the scheme it is set to has no credential of its own while the other scheme's
-        /// are saved. That is how an asset last saved before Use App Tokens existed opens: ticked, with legacy
-        /// credentials and no App Token. Those credentials are all it has, so it is shown the way back to them
-        /// instead of an offer to clear them. Null in any other state.
-        /// </summary>
-        internal static string SwitchBackMessage(AppConfig config)
-        {
-            if (config == null) return null;
-            if (config.useAppTokens && string.IsNullOrWhiteSpace(config.appToken) && !string.IsNullOrEmpty(config.appID))
-                return "Use App Tokens is ticked, but this project has no App Token and has legacy credentials saved. " +
-                       "Untick Use App Tokens to keep using them, or paste an App Token (ArborXR portal: Content " +
-                       "Library > your app under Managed > Insights Hub tab).";
-            if (!config.useAppTokens && string.IsNullOrWhiteSpace(config.appID) && !string.IsNullOrEmpty(config.appToken))
-                return "Use App Tokens is unticked, but this project has no Application ID and has an App Token saved. " +
-                       "Tick Use App Tokens to keep using it, or enter an Application ID.";
-            return null;
-        }
-
-        /// <summary>
-        /// What both editors show under the credential fields about the other scheme's saved values: the leftover
-        /// warning, with <paramref name="offersClear"/> set, or <see cref="SwitchBackMessage"/> when those values are
-        /// the project's only credentials. Null when neither applies.
-        /// </summary>
-        internal static string LeftoverValuesNotice(AppConfig config, out bool offersClear)
-        {
-            string warning = LeftoverLegacyValuesWarning(config) ?? LeftoverTokensWarning(config);
-            offersClear = warning != null;
-            return warning ?? SwitchBackMessage(config);
-        }
 
         /// <summary>
         /// The wizard's reminder about what not to ship. It names the credentials the project's scheme has, so a
@@ -735,11 +720,19 @@ namespace AbxrLib.Editor
             if (config == null) return "No AbxrLib configuration could be loaded yet.";
             if (CredentialsAreValid(config)) return null;
 
-            bool isCustomApk = config.buildType == "production_custom";
+            string problem = DescribeOwnCredentialProblem(config);
+            // The other scheme's saved credentials would work: say so, since switching is the short way out. An asset
+            // last saved before Use App Tokens existed opens like this, ticked with only legacy credentials.
+            if (!OtherSchemeWouldWork(config)) return problem;
+            return problem + (config.useAppTokens
+                ? " This project also has legacy credentials saved that would work: untick Use App Tokens to keep using them."
+                : " This project also has an App Token saved that would work: tick Use App Tokens to keep using it.");
+        }
 
-            // The other scheme's credentials are saved and this one has none: say how to get back to them.
-            string switchBack = SwitchBackMessage(config);
-            if (switchBack != null) return switchBack;
+        /// <summary>What is wrong with the credentials of the scheme the project is on. Only called when they are invalid.</summary>
+        private static string DescribeOwnCredentialProblem(AppConfig config)
+        {
+            bool isCustomApk = config.buildType == "production_custom";
 
             if (config.useAppTokens)
             {

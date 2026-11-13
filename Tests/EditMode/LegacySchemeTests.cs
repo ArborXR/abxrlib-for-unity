@@ -59,18 +59,33 @@ public class LegacySchemeTests
         Assert.IsTrue(SetupWizardChecks.CredentialsAreValid(_config), "And the credentials it shipped with work again.");
     }
 
-    [Test]
-    public void LegacyCredentialsWithNoAppToken_AreToldToUntickOrPasteAnAppToken()
+    [TestCase("", "App Token is required.")]
+    [TestCase(null, "App Token is required.")]
+    [TestCase("truncated-token", "App Token does not look like a token")]
+    public void WorkingLegacyCredentials_WithoutAUsableAppToken_AreToldTheyCanUntick(string appToken, string problemStart)
     {
         Assert.IsTrue(_config.useAppTokens);
+        _config.appToken = appToken;
         _config.appID = AppId;
         _config.orgID = OrgId;
         _config.authSecret = "secret";
 
         string problem = SetupWizardChecks.DescribeCredentialProblem(_config);
 
-        StringAssert.Contains("Untick Use App Tokens to keep using them", problem);
-        StringAssert.Contains("or paste an App Token", problem);
+        StringAssert.StartsWith(problemStart, problem);
+        StringAssert.Contains("untick Use App Tokens to keep using them", problem);
+    }
+
+    [Test]
+    public void AWorkingAppToken_WithIncompleteLegacyCredentials_IsToldItCanTick()
+    {
+        _config.useAppTokens = false;
+        _config.appToken = "app.token.jwt";
+
+        string problem = SetupWizardChecks.DescribeCredentialProblem(_config);
+
+        StringAssert.StartsWith("Application ID is required", problem);
+        StringAssert.Contains("tick Use App Tokens to keep using it", problem);
     }
 
     [Test]
@@ -134,7 +149,8 @@ public class LegacySchemeTests
 
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(_config));
         Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
-        Assert.IsNotNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
+        Assert.IsNotNull(SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear));
+        Assert.IsTrue(offersClear);
     }
 
     [Test]
@@ -367,6 +383,7 @@ public class LegacySchemeTests
 
         CollectionAssert.AreEqual(new[] { "Application ID", "Organization ID", "Authorization Secret" },
             SetupWizardChecks.LeftoverLegacyValues(_config));
+        Assert.IsTrue(SetupWizardChecks.HasLeftoverValues(_config));
     }
 
     [TestCase(AppId, null, null, "Application ID")]
@@ -383,12 +400,11 @@ public class LegacySchemeTests
     }
 
     [Test]
-    public void AProjectOnAppTokens_WithNoLegacyValues_HasNoWarning()
+    public void AProjectOnAppTokens_WithNoLegacyValues_HasNoNotice()
     {
         _config.appToken = "app.token.jwt";
 
-        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
-        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
+        Assert.IsFalse(SetupWizardChecks.HasLeftoverValues(_config));
         Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear));
         Assert.IsFalse(offersClear);
     }
@@ -402,138 +418,158 @@ public class LegacySchemeTests
         _config.authSecret = "secret";
 
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
-        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
+        Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out _));
     }
 
     [Test]
-    public void WithoutAConfig_ThereIsNoLeftoverWarning()
+    public void WithoutAConfig_ThereIsNothingLeftOver()
     {
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(null));
-        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(null));
-        Assert.IsNull(SetupWizardChecks.SwitchBackMessage(null));
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(null));
+        Assert.IsFalse(SetupWizardChecks.HasLeftoverValues(null));
+        Assert.IsFalse(SetupWizardChecks.CanClearLeftoverValues(null));
+        Assert.IsFalse(SetupWizardChecks.OtherSchemeWouldWork(null));
         Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(null, out bool offersClear));
         Assert.IsFalse(offersClear);
+        Assert.IsFalse(SetupWizardChecks.ClearLeftoverValues(null));
     }
 
     [Test]
-    public void TheLeftoverWarning_WithAnOrganizationId_DoesNotCallItUnused()
+    public void TheNotice_WithAnOrganizationId_DoesNotCallItUnused()
     {
         OnAppTokensWithLegacyValues();
 
-        string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
 
-        StringAssert.Contains("Application ID, Organization ID, Authorization Secret are still saved", warning);
-        StringAssert.Contains("ship inside every build", warning);
-        StringAssert.Contains("Abxr.GetOrgId() still returns the Organization ID", warning);
-        StringAssert.DoesNotContain("doesn't read", warning);
-        StringAssert.DoesNotContain("unused", warning);
-        StringAssert.Contains("Untick Use App Tokens to go back to the legacy scheme, or clear them", warning);
+        Assert.IsTrue(offersClear);
+        StringAssert.Contains("Application ID, Organization ID, Authorization Secret are still saved", notice);
+        StringAssert.Contains("ship inside every build", notice);
+        StringAssert.Contains("Abxr.GetOrgId() still returns the Organization ID", notice);
+        StringAssert.DoesNotContain("doesn't read", notice);
+        StringAssert.DoesNotContain("unused", notice);
+        StringAssert.Contains("Untick Use App Tokens to go back to the legacy scheme, or clear them", notice);
     }
 
     [Test]
-    public void TheLeftoverWarning_WithoutAnOrganizationId_SaysTheSdkDoesNotReadIt()
+    public void TheNotice_WithoutAnOrganizationId_SaysTheSdkDoesNotReadIt()
     {
         _config.useAppTokens = true;
         _config.appToken = "app.token.jwt";
         _config.authSecret = "secret";
 
-        string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
 
-        StringAssert.Contains("Authorization Secret is still saved", warning);
-        StringAssert.Contains("ships inside every build", warning);
-        StringAssert.Contains("The SDK doesn't read it on App Tokens.", warning);
-        StringAssert.Contains("or clear it, which also removes that checkbox", warning);
+        Assert.IsTrue(offersClear);
+        StringAssert.Contains("Authorization Secret is still saved", notice);
+        StringAssert.Contains("ships inside every build", notice);
+        StringAssert.Contains("The SDK doesn't read it on App Tokens.", notice);
+        StringAssert.Contains("or clear it, which also removes that checkbox", notice);
     }
 
-    [Test]
-    public void TheLeftoverWarning_NeverPrintsAValue()
+    [TestCase("app.token.jwt")]
+    [TestCase("a-broken-token")]
+    public void TheNotice_NeverPrintsAValue(string appToken)
     {
-        OnAppTokensWithLegacyValues();
+        OnAppTokensWithLegacyValues(appToken);
         _config.authSecret = "a-secret-value";
 
-        string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out _);
 
-        StringAssert.DoesNotContain(AppId, warning);
-        StringAssert.DoesNotContain(OrgId, warning);
-        StringAssert.DoesNotContain("a-secret-value", warning);
-        StringAssert.DoesNotContain("app.token.jwt", warning);
+        StringAssert.DoesNotContain(AppId, notice);
+        StringAssert.DoesNotContain(OrgId, notice);
+        StringAssert.DoesNotContain("a-secret-value", notice);
+        StringAssert.DoesNotContain(appToken, notice);
     }
 
-    [Test]
-    public void WithAnAppToken_TheNoticeIsTheLeftoverWarning_AndOffersClear()
+    // Clear is for a project that can sign in without the leftovers. Without a usable App Token, the legacy values may
+    // be the only credentials that work: an asset last saved before Use App Tokens existed opens exactly like this,
+    // and so does one where a token was half pasted or the Application ID went into the App Token field.
+    [TestCase(null, "App Token is required.")]
+    [TestCase("", "App Token is required.")]
+    [TestCase("   ", "App Token is required.")]
+    [TestCase("truncated-token", "App Token does not look like a token")]
+    [TestCase(AppId, "App Token does not look like a token")]
+    public void WithoutAUsableAppToken_ClearIsNotOffered_AndTheNoticeSaysHowToSignIn(string appToken, string problem)
     {
-        OnAppTokensWithLegacyValues();
-
-        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
-
-        Assert.AreEqual(SetupWizardChecks.LeftoverLegacyValuesWarning(_config), notice);
-        Assert.IsTrue(offersClear);
-    }
-
-    [TestCase(null)]
-    [TestCase("")]
-    [TestCase("   ")]
-    public void WithNoAppToken_TheLegacyValuesAreNotLeftovers_AndNothingOffersToClearThem(string appToken)
-    {
-        // How an asset last saved before Use App Tokens existed opens. Its legacy values are its only credentials.
         OnAppTokensWithLegacyValues(appToken);
 
-        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
         string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
 
-        Assert.IsFalse(offersClear, "One click must not delete the only credentials the project has.");
-        StringAssert.Contains("Untick Use App Tokens to keep using them, or paste an App Token", notice);
-        Assert.AreEqual(notice, SetupWizardChecks.DescribeCredentialProblem(_config), "The wizard's top box says the same.");
-    }
+        Assert.IsFalse(offersClear, "One click must not delete the only credentials that work.");
+        Assert.IsFalse(SetupWizardChecks.CanClearLeftoverValues(_config));
+        StringAssert.Contains("Application ID, Organization ID, Authorization Secret are still saved", notice);
+        StringAssert.Contains("ship inside every build", notice);
+        StringAssert.Contains("Clearing them is offered once the project can sign in", notice);
+        StringAssert.Contains(problem, notice);
+        StringAssert.Contains("Or untick Use App Tokens to keep using the legacy scheme.", notice);
 
-    [Test]
-    public void ClearLeftoverLegacyValues_WithNoAppToken_LeavesTheOnlyCredentialsAlone()
-    {
-        OnAppTokensWithLegacyValues(appToken: "");
-
-        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
-
+        Assert.IsFalse(SetupWizardChecks.ClearLeftoverValues(_config));
         Assert.AreEqual(AppId, _config.appID);
         Assert.AreEqual(OrgId, _config.orgID);
         Assert.AreEqual("secret", _config.authSecret);
     }
 
     [Test]
-    public void ClearLeftoverLegacyValues_EmptiesThem_AndNothingElse()
+    public void OnAppTokensWithNoAppTokenOrApplicationId_ASavedOrganizationIdStillGetsANotice()
+    {
+        // Nothing here could sign in on either scheme, but the values still ship, so the project is still told.
+        _config.useAppTokens = true;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+
+        Assert.IsFalse(offersClear);
+        StringAssert.Contains("Organization ID, Authorization Secret are still saved", notice);
+        StringAssert.Contains("ship inside every build", notice);
+        StringAssert.Contains("App Token is required.", notice);
+        StringAssert.DoesNotContain("Or untick", notice, "The legacy scheme wouldn't work either, with no Application ID.");
+    }
+
+    [Test]
+    public void ACustomApkProjectMissingItsOrganizationToken_IsNotOfferedClear()
+    {
+        OnAppTokensWithLegacyValues();
+        _config.buildType = "production_custom";
+
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+
+        Assert.IsFalse(offersClear, "It can't sign in yet, even with a valid App Token.");
+        StringAssert.Contains("Organization Token", notice);
+    }
+
+    [Test]
+    public void TheClearButton_EmptiesTheLegacyValues_AndNothingElse()
     {
         OnAppTokensWithLegacyValues();
         _config.buildType = "development";
         _config.orgToken = "org.token.jwt";
 
-        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
+        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config);
 
+        Assert.IsTrue(cleared);
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
-        Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out _), "The warning and its button go once they are cleared.");
+        Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out _), "The notice and its button go once they are cleared.");
         Assert.IsTrue(_config.useAppTokens);
         Assert.AreEqual("development", _config.buildType);
         Assert.AreEqual("app.token.jwt", _config.appToken);
         Assert.AreEqual("org.token.jwt", _config.orgToken);
+        Assert.IsTrue(UnityEditor.EditorUtility.IsDirty(_config), "The asset is marked changed, so the save writes it.");
     }
 
     [Test]
-    public void ClearLeftoverLegacyValues_OnALegacyProject_LeavesItsCredentials()
+    public void TheClearButton_OnALegacyProjectWithNothingLeftOver_LeavesItsCredentials()
     {
         _config.useAppTokens = false;
         _config.appID = AppId;
         _config.orgID = OrgId;
         _config.authSecret = "secret";
 
-        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
+        Assert.IsFalse(SetupWizardChecks.ClearLeftoverValues(_config));
 
         Assert.AreEqual(AppId, _config.appID);
         Assert.AreEqual(OrgId, _config.orgID);
         Assert.AreEqual("secret", _config.authSecret);
-    }
-
-    [Test]
-    public void ClearLeftoverLegacyValues_WithoutAConfig_DoesNothing()
-    {
-        Assert.DoesNotThrow(() => SetupWizardChecks.ClearLeftoverLegacyValues(null));
     }
 
     // ── Tokens left on a project that uses the legacy scheme ──────
@@ -552,6 +588,7 @@ public class LegacySchemeTests
         OnTheLegacySchemeWithTokens();
 
         CollectionAssert.AreEqual(new[] { "App Token", "Organization Token" }, SetupWizardChecks.LeftoverTokens(_config));
+        Assert.IsTrue(SetupWizardChecks.HasLeftoverValues(_config));
     }
 
     [Test]
@@ -562,23 +599,22 @@ public class LegacySchemeTests
         _config.orgToken = "org.token.jwt";
 
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(_config));
-        Assert.IsNull(SetupWizardChecks.LeftoverTokensWarning(_config));
-        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(null));
+        Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out _));
     }
 
     [Test]
-    public void TheLeftoverTokensWarning_SaysTheyShip_AndNeverPrintsOne()
+    public void TheTokensNotice_SaysTheyShip_AndNeverPrintsOne()
     {
         OnTheLegacySchemeWithTokens();
 
-        string warning = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
 
         Assert.IsTrue(offersClear);
-        StringAssert.Contains("App Token, Organization Token are still saved and ship inside every build", warning);
-        StringAssert.Contains("The SDK doesn't read them on the legacy scheme", warning);
-        StringAssert.Contains("Tick Use App Tokens to go back to App Tokens, or clear them", warning);
-        StringAssert.DoesNotContain("app.token.jwt", warning);
-        StringAssert.DoesNotContain("org.token.jwt", warning);
+        StringAssert.Contains("App Token, Organization Token are still saved and ship inside every build", notice);
+        StringAssert.Contains("The SDK doesn't read them on the legacy scheme", notice);
+        StringAssert.Contains("Tick Use App Tokens to go back to App Tokens, or clear them", notice);
+        StringAssert.DoesNotContain("app.token.jwt", notice);
+        StringAssert.DoesNotContain("org.token.jwt", notice);
         Assert.AreEqual("Clear saved tokens", SetupWizardChecks.ClearLeftoverValuesLabel(_config));
     }
 
@@ -590,33 +626,51 @@ public class LegacySchemeTests
         Assert.AreEqual("Clear legacy values", SetupWizardChecks.ClearLeftoverValuesLabel(_config));
     }
 
-    [TestCase(null)]
-    [TestCase("")]
-    public void WithNoApplicationId_TheTokensAreNotLeftovers_AndNothingOffersToClearThem(string appId)
+    // The mirror: a project on App Tokens that unticked the checkbox, or one whose Application ID is mistyped.
+    [TestCase(null, "Application ID is required")]
+    [TestCase("", "Application ID is required")]
+    [TestCase("not-a-uuid", "Application ID must be a UUID")]
+    public void WithoutAUsableApplicationId_ClearIsNotOffered_AndTheNoticeSaysHowToSignIn(string appId, string problem)
     {
-        // A project on App Tokens that unticked the checkbox: its App Token is its only credential.
         OnTheLegacySchemeWithTokens(appId);
 
-        Assert.IsNull(SetupWizardChecks.LeftoverTokensWarning(_config));
         string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
 
         Assert.IsFalse(offersClear);
-        StringAssert.Contains("Tick Use App Tokens to keep using it, or enter an Application ID", notice);
-        Assert.AreEqual(notice, SetupWizardChecks.DescribeCredentialProblem(_config));
+        StringAssert.Contains("App Token, Organization Token are still saved and ship inside every build", notice);
+        StringAssert.Contains("Clearing them is offered once the project can sign in", notice);
+        StringAssert.Contains(problem, notice);
+        StringAssert.Contains("Or tick Use App Tokens to keep using App Tokens.", notice);
 
-        SetupWizardChecks.ClearLeftoverTokens(_config);
-        Assert.AreEqual("app.token.jwt", _config.appToken, "Its only credential is left alone.");
+        Assert.IsFalse(SetupWizardChecks.ClearLeftoverValues(_config));
+        Assert.AreEqual("app.token.jwt", _config.appToken, "Its only working credential is left alone.");
+        Assert.AreEqual("org.token.jwt", _config.orgToken);
     }
 
     [Test]
-    public void ClearLeftoverTokens_EmptiesThem_AndNothingElse()
+    public void OnTheLegacySchemeWithNoApplicationIdOrAppToken_ASavedOrganizationTokenStillGetsANotice()
+    {
+        _config.useAppTokens = false;
+        _config.orgToken = "org.token.jwt";
+
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+
+        Assert.IsFalse(offersClear);
+        StringAssert.Contains("Organization Token is still saved and ships inside every build", notice);
+        StringAssert.Contains("Application ID is required", notice);
+        StringAssert.DoesNotContain("Or tick", notice, "App Tokens wouldn't work either, with no App Token.");
+    }
+
+    [Test]
+    public void TheClearButton_OnTheLegacyScheme_EmptiesTheTokens_AndNothingElse()
     {
         OnTheLegacySchemeWithTokens();
         _config.orgID = OrgId;
         _config.authSecret = "secret";
 
-        SetupWizardChecks.ClearLeftoverTokens(_config);
+        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config);
 
+        Assert.IsTrue(cleared);
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(_config));
         Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out _));
         Assert.IsFalse(_config.useAppTokens);
@@ -626,14 +680,13 @@ public class LegacySchemeTests
     }
 
     [Test]
-    public void ClearLeftoverTokens_OnAppTokens_LeavesItsCredentials()
+    public void TheClearButton_OnAppTokensWithNothingLeftOver_LeavesItsTokens()
     {
         _config.useAppTokens = true;
         _config.appToken = "app.token.jwt";
         _config.orgToken = "org.token.jwt";
 
-        SetupWizardChecks.ClearLeftoverTokens(_config);
-        SetupWizardChecks.ClearLeftoverTokens(null);
+        Assert.IsFalse(SetupWizardChecks.ClearLeftoverValues(_config));
 
         Assert.AreEqual("app.token.jwt", _config.appToken);
         Assert.AreEqual("org.token.jwt", _config.orgToken);

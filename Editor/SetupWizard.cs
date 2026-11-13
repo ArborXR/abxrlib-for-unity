@@ -364,13 +364,12 @@ namespace AbxrLib.Editor
             }
 
             // Values saved for the scheme the project isn't on have no field, and they still ship inside the build
-            // (SDK-89). While they are the project's only credentials there is no Clear, and the box at the top of
-            // this page already says how to get back to them.
+            // (SDK-89), so this always says so. Clear is offered only once the project can sign in without them.
             string leftoverNotice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
-            if (leftoverNotice != null && offersClear)
+            if (leftoverNotice != null)
             {
                 EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
-                if (GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(_config), GUILayout.Width(160f)))
+                if (offersClear && GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(_config), GUILayout.Width(160f)))
                     SetupWizardChecks.ClearLeftoverValues(_config, _useAppTokensToggle);
             }
 
