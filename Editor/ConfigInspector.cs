@@ -96,14 +96,17 @@ namespace AbxrLib.Editor
                 string orgIdLabel = isProductionCustomLegacy ? "Organization ID (required)" : "Organization ID (*)";
                 string orgIdTooltip = isProductionCustomLegacy
                     ? "Required for Production (Custom APK). Set the customer's organization ID from ArborXR Portal."
-                    : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
+                    : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx. " + SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk);
                 // Production takes neither, so empty fields are locked there. One that has held a value stays editable.
                 EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.orgID, _legacyOrgIdField));
                 config.orgID = EditorGUILayout.TextField(new GUIContent(orgIdLabel, orgIdTooltip), config.orgID);
                 EditorGUI.EndDisabledGroup();
                 string authSecretLabel = isProductionCustomLegacy ? "Authorization Secret (required)" : "Authorization Secret (*)";
                 EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.authSecret, _legacyAuthSecretField));
-                config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, "Required for Production (Custom APK) when using legacy auth."), config.authSecret);
+                string authSecretTooltip = isProductionCustomLegacy
+                    ? "Required for Production (Custom APK)."
+                    : SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk);
+                config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, authSecretTooltip), config.authSecret);
                 EditorGUI.EndDisabledGroup();
                 
                 string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(config, out bool legacyOrgWarn);
@@ -177,7 +180,7 @@ namespace AbxrLib.Editor
                 EditorGUILayout.LabelField("* Fields marked with asterisk should NOT be set when building for 3rd parties.", EditorStyles.wordWrappedLabel);
                 EditorGUILayout.Space(2);
                 EditorGUILayout.LabelField("• Application ID should ALWAYS be set", EditorStyles.wordWrappedLabel);
-                EditorGUILayout.LabelField("• Organization ID and Authorization Secret should ONLY be set for custom APKs", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField(SetupWizardChecks.LegacyOrgValuesRule(offersCustomApk), EditorStyles.wordWrappedLabel);
                 EditorGUILayout.LabelField("• Setting these values inappropriately may violate Terms of Service with ArborXR or Meta", EditorStyles.wordWrappedLabel);
                 EditorGUILayout.LabelField("• Only use these fields when building for a specific 3rd party who is aware and approves", EditorStyles.wordWrappedLabel);
                 EditorGUILayout.EndVertical();

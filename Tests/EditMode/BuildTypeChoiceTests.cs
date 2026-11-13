@@ -232,6 +232,15 @@ public class BuildTypeChoiceTests
         Assert.IsNull(SetupWizardChecks.CustomApkOptionNote(offersCustomApk: false));
     }
 
+    [Test]
+    public void TheLegacyFieldText_MentionsCustomApk_OnlyWhereItIsOffered()
+    {
+        StringAssert.DoesNotContain("Custom APK", SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk: false));
+        StringAssert.Contains("Development and Custom APK builds", SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk: true));
+        StringAssert.DoesNotContain("custom APK", SetupWizardChecks.LegacyOrgValuesRule(offersCustomApk: false));
+        StringAssert.Contains("Development builds and custom APKs", SetupWizardChecks.LegacyOrgValuesRule(offersCustomApk: true));
+    }
+
     // ── Switching in an open window ───────────────────────────────
 
     [Test]

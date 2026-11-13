@@ -611,6 +611,19 @@ namespace AbxrLib.Editor
             return config != null && IsProduction(config.buildType) && !held;
         }
 
+        /// <summary>
+        /// The tooltip on a legacy Organization ID or Authorization Secret field. It mentions Custom APK builds only
+        /// to a project that is offered that Build Type.
+        /// </summary>
+        internal static string LegacyOrgFieldTooltip(bool offersCustomApk) =>
+            (offersCustomApk ? "Development and Custom APK builds sign in with it." : "Development builds sign in with it.") +
+            " In Production the device's MDM supplies it.";
+
+        /// <summary>The production build warning's line about when the Organization ID and Authorization Secret may be set.</summary>
+        internal static string LegacyOrgValuesRule(bool offersCustomApk) => offersCustomApk
+            ? "• Organization ID and Authorization Secret should ONLY be set for Development builds and custom APKs"
+            : "• Organization ID and Authorization Secret should ONLY be set for Development builds";
+
         /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
         internal const string LegacySchemeNote =
             "This project uses the legacy scheme: Application ID, Organization ID and Authorization Secret. It keeps " +
