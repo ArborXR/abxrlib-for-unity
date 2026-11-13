@@ -249,9 +249,22 @@ namespace AbxrLib.Editor
         internal static int BuildTypeIndex(string buildType) =>
             buildType == "development" ? 1 : buildType == "production_custom" ? 2 : 0;
 
-        /// <summary>The Build Type a popup index stands for.</summary>
+        /// <summary>The Build Type a popup index stands for. An index outside the list reads as its nearest end.</summary>
         internal static string BuildTypeAtIndex(int index) =>
             BuildTypeValues[Mathf.Clamp(index, 0, BuildTypeValues.Length - 1)];
+
+        /// <summary>
+        /// What a pick in the Build Type popup writes, for both editors: the Build Type at
+        /// <paramref name="pickedIndex"/>, or null when nothing is to be written. Nothing is written when the pick is
+        /// the option already shown, so drawing the popup never rewrites a stored value, an unrecognised one included,
+        /// or when the index isn't one of the options on offer.
+        /// </summary>
+        internal static string BuildTypePicked(string stored, bool offersCustomApk, int pickedIndex)
+        {
+            if (pickedIndex == BuildTypeIndex(stored)) return null;
+            if (pickedIndex < 0 || pickedIndex >= BuildTypeLabels(offersCustomApk).Length) return null;
+            return BuildTypeAtIndex(pickedIndex);
+        }
 
         /// <summary>Production as the runtime reads it: it drops saved org credentials only for this value, whatever its case.</summary>
         private static bool IsProduction(string buildType) =>

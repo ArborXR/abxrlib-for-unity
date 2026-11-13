@@ -43,7 +43,8 @@ namespace AbxrLib.Editor
             int newSelection = EditorGUILayout.Popup(new GUIContent("Build Type", buildTypeTooltip),
                 currentSelection, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
 
-            if (newSelection != currentSelection) config.buildType = SetupWizardChecks.BuildTypeAtIndex(newSelection);
+            string pickedBuildType = SetupWizardChecks.BuildTypePicked(config.buildType, offersCustomApk, newSelection);
+            if (pickedBuildType != null) config.buildType = pickedBuildType;
                         
             EditorGUILayout.Space();
             

@@ -307,7 +307,8 @@ namespace AbxrLib.Editor
             string buildTypeTooltip = SetupWizardChecks.BuildTypeTooltip(_config, offersCustomApk);
             int selected = EditorGUILayout.Popup(new GUIContent("Build Type", buildTypeTooltip),
                 current, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
-            if (selected != current) _config.buildType = SetupWizardChecks.BuildTypeAtIndex(selected);
+            string pickedBuildType = SetupWizardChecks.BuildTypePicked(_config.buildType, offersCustomApk, selected);
+            if (pickedBuildType != null) _config.buildType = pickedBuildType;
 
             EditorGUILayout.LabelField(SetupWizardChecks.BuildTypeHint(_config, selected), _styles.Hint);
 

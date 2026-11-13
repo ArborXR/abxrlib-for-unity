@@ -73,7 +73,9 @@ public class BuildTypeChoiceTests
     [TestCase(0, ExpectedResult = "production")]
     [TestCase(1, ExpectedResult = "development")]
     [TestCase(2, ExpectedResult = "production_custom")]
-    public string BuildTypeAtIndex_IsTheSameWhetherOrNotCustomApkIsOffered(int index) => SetupWizardChecks.BuildTypeAtIndex(index);
+    [TestCase(-1, ExpectedResult = "production")] // outside the list: its nearest end
+    [TestCase(99, ExpectedResult = "production_custom")]
+    public string BuildTypeAtIndex_ForEachIndex(int index) => SetupWizardChecks.BuildTypeAtIndex(index);
 
     [Test]
     public void LeavingCustomApkOut_MovesNoOtherOption()
@@ -111,19 +113,35 @@ public class BuildTypeChoiceTests
         Assert.AreEqual(buildType, SetupWizardChecks.BuildTypeAtIndex(SetupWizardChecks.BuildTypeIndex(buildType)));
     }
 
-    [Test]
-    public void AnUnrecognisedValue_ShowsAsProduction_AndIsOnlyRewrittenByAChange()
+    [TestCase("unknown")]
+    [TestCase("")]
+    [TestCase(null)]
+    [TestCase("Production")]
+    public void AnUnrecognisedValue_ShowsAsProduction_AndDrawingThePopupWritesNothing(string stored)
     {
-        _config.buildType = "unknown";
-        string[] labels = SetupWizardChecks.BuildTypeLabels(SetupWizardChecks.UsesCustomApk(_config));
+        _config.buildType = stored;
+        bool offers = SetupWizardChecks.UsesCustomApk(_config);
+        int shown = SetupWizardChecks.BuildTypeIndex(stored);
 
-        int shown = SetupWizardChecks.BuildTypeIndex(_config.buildType);
-
-        Assert.AreEqual("Production", labels[shown]);
-        // The editors write back only when the selection differs from the one shown, so drawing leaves "unknown" alone.
-        Assert.AreEqual("unknown", _config.buildType);
-        Assert.AreEqual("development", SetupWizardChecks.BuildTypeAtIndex(1), "Choosing Development is a change, and is written.");
+        Assert.AreEqual("Production", SetupWizardChecks.BuildTypeLabels(offers)[shown]);
+        Assert.IsNull(SetupWizardChecks.BuildTypePicked(stored, offers, shown), "The popup returns the index it shows until the developer picks another.");
+        Assert.AreEqual("development", SetupWizardChecks.BuildTypePicked(stored, offers, 1), "Choosing Development is a change, and is written.");
     }
+
+    // What both editors do with the popup's answer: (stored value, whether Custom APK is offered, picked index).
+    [TestCase("production", false, 0, ExpectedResult = null)]
+    [TestCase("production", false, 1, ExpectedResult = "development")]
+    [TestCase("development", false, 1, ExpectedResult = null)]
+    [TestCase("development", false, 0, ExpectedResult = "production")]
+    [TestCase("production_custom", true, 2, ExpectedResult = null)]
+    [TestCase("production_custom", true, 0, ExpectedResult = "production")]
+    [TestCase("production_custom", true, 1, ExpectedResult = "development")]
+    [TestCase("production", true, 2, ExpectedResult = "production_custom")] // switching back while the option is still up
+    [TestCase("production", false, 2, ExpectedResult = null)] // not on offer
+    [TestCase("production", false, -1, ExpectedResult = null)]
+    [TestCase("production", true, 3, ExpectedResult = null)]
+    public string BuildTypePicked_WritesOnlyAChangeToAnOptionOnOffer(string stored, bool offersCustomApk, int pickedIndex) =>
+        SetupWizardChecks.BuildTypePicked(stored, offersCustomApk, pickedIndex);
 
     [Test]
     public void AnUnrecognisedValue_StillGetsTheHintThatItsOrganizationTokenIsSent()
