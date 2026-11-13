@@ -558,6 +558,20 @@ public class LegacySchemeTests
     }
 
     [Test]
+    public void TheClearButton_RecordsAnUndoStep()
+    {
+        // Read the step's name, not its effect: undoing it means running the Editor's undo stack, which reverts an
+        // in-memory object unreliably in batch mode (a test that did so failed in half the full runs).
+        OnAppTokensWithLegacyValues();
+        UnityEditor.Undo.IncrementCurrentGroup();
+
+        SetupWizardChecks.ClearLeftoverValues(_config);
+        UnityEditor.Undo.FlushUndoRecordObjects();
+
+        Assert.AreEqual("Clear leftover AbxrLib values", UnityEditor.Undo.GetCurrentGroupName());
+    }
+
+    [Test]
     public void TheClearButton_OnALegacyProjectWithNothingLeftOver_LeavesItsCredentials()
     {
         _config.useAppTokens = false;
