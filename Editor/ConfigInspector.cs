@@ -40,7 +40,7 @@ namespace AbxrLib.Editor
                 string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token (optional)";
                 string orgTokenTooltip = isProductionCustom
                     ? "Required for Production (Custom APK). Set the customer's org token from ArborXR Portal."
-                    : "Optional. In Development: use this or leave empty to use App Token as org token. In Production this field is not used.";
+                    : "Optional. In Development: leave empty to use the App Token as the Organization Token, which reports to the organization that owns the app. An ArborXR-managed device, or an org set at runtime, is used first. In Production this field is not used.";
                 config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
                 EditorGUI.EndDisabledGroup();
                 if (isProduction)
@@ -51,7 +51,8 @@ namespace AbxrLib.Editor
                         MessageType.Info);
                 else
                     EditorGUILayout.HelpBox(
-                        "In Development you can set an Organization Token, or leave empty to use the App Token as the org token.",
+                        "In Development you can set an Organization Token, or leave it empty to use the App Token as the Organization Token: the app then reports to the organization that owns it. An ArborXR-managed device reports to its own organization either way.\n" +
+                        "A Development build never shows passcode pairing. To test pairing, use Build Type Production.",
                         MessageType.Info);
             }
             else

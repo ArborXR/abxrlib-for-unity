@@ -296,7 +296,9 @@ namespace AbxrLib.Editor
             {
                 0 => "Shared builds, and the right choice for an ArborXR-managed fleet: leave Organization Token " +
                      "empty and each device reports to its own organization at runtime.",
-                1 => "Your own test builds. Use the App Token as the Organization Token, or leave it empty on a managed device.",
+                1 => "Your own test builds. Leave Organization Token empty to report to the organization that owns the app; " +
+                     "a managed device reports to its own organization. Passcode pairing never shows in Development: " +
+                     "use Production to test it.",
                 _ => "One customer per build: every device running this build reports to the organization set here, " +
                      "and the MDM is not consulted for it. Not for an ArborXR-managed fleet - use Production there."
             }, _styles.Hint);
@@ -317,7 +319,9 @@ namespace AbxrLib.Editor
                 {
                     _config.orgToken = DrawPasteField(
                         _config.buildType == "production_custom" ? "Organization Token (required)" : "Organization Token (optional)",
-                        "The customer's organization JWT. Empty means the organization comes from the device at runtime.",
+                        _config.buildType == "development"
+                            ? "An organization's JWT. Empty means the organization that owns the app, or the device's organization on a managed device."
+                            : "The customer's organization JWT. Empty means the organization comes from the device at runtime.",
                         _config.orgToken);
                 }
 

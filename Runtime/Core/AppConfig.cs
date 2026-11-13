@@ -32,7 +32,7 @@ namespace AbxrLib.Runtime.Core
         [Header("App Tokens")]
         [Tooltip("When enabled, authenticate with App Token and Org Token (JWT) instead of App ID, Org ID, and Auth Secret. Defaults to true; disable only for legacy integrations.")] public bool useAppTokens = true;
         [Tooltip("App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on.")] public string appToken;
-        [Tooltip("Optional. Organization Token (JWT) from ArborXR Portal. Leave empty for shared production builds; set for single-org or dev builds.")] public string orgToken;
+        [Tooltip("Optional. Organization Token (JWT) from ArborXR Portal. Not used in Production. In Development, leave empty to use the App Token, which reports to the organization that owns the app. Required for Production (Custom APK).")] public string orgToken;
 
         [Header("Service Provider")]
         public string restUrl = "https://lib-backend.xrdm.app/";
