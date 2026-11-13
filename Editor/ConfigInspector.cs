@@ -181,9 +181,9 @@ namespace AbxrLib.Editor
                 EditorGUILayout.LabelField("* Fields marked with asterisk should NOT be set when building for 3rd parties.", EditorStyles.wordWrappedLabel);
                 EditorGUILayout.Space(2);
                 EditorGUILayout.LabelField("• Application ID should ALWAYS be set", EditorStyles.wordWrappedLabel);
-                EditorGUILayout.LabelField(SetupWizardChecks.LegacyOrgValuesRule(offersCustomApk), EditorStyles.wordWrappedLabel);
+                foreach (string rule in SetupWizardChecks.LegacyOrgValuesRules(offersCustomApk))
+                    EditorGUILayout.LabelField(rule, EditorStyles.wordWrappedLabel);
                 EditorGUILayout.LabelField("• Setting these values inappropriately may violate Terms of Service with ArborXR or Meta", EditorStyles.wordWrappedLabel);
-                EditorGUILayout.LabelField("• Only use these fields when building for a specific 3rd party who is aware and approves", EditorStyles.wordWrappedLabel);
                 EditorGUILayout.EndVertical();
 
                 EditorGUILayout.Space();

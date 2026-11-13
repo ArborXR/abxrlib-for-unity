@@ -615,10 +615,18 @@ namespace AbxrLib.Editor
             (offersCustomApk ? "Development and Custom APK builds sign in with it." : "Development builds sign in with it.") +
             " In Production the device's MDM supplies it.";
 
-        /// <summary>The production build warning's line about when the Organization ID and Authorization Secret may be set.</summary>
-        internal static string LegacyOrgValuesRule(bool offersCustomApk) => offersCustomApk
-            ? "• Organization ID and Authorization Secret should ONLY be set for Development builds and custom APKs"
-            : "• Organization ID and Authorization Secret should ONLY be set for Development builds";
+        /// <summary>
+        /// The production build warning's lines about when the Organization ID and Authorization Secret may be set:
+        /// in a project's own Development builds, and, where that Build Type is offered, in a custom APK built for
+        /// one 3rd party who knows. The line about 3rd parties is about custom APKs, so it shows only with them.
+        /// </summary>
+        internal static string[] LegacyOrgValuesRules(bool offersCustomApk) => offersCustomApk
+            ? new[]
+            {
+                "• Organization ID and Authorization Secret should ONLY be set for your own Development builds and for custom APKs",
+                "• Only build a custom APK for a specific 3rd party who is aware and approves"
+            }
+            : new[] { "• Organization ID and Authorization Secret should ONLY be set for your own Development builds" };
 
         /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
         internal const string LegacySchemeNote =

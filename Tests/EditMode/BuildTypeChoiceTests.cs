@@ -237,8 +237,21 @@ public class BuildTypeChoiceTests
     {
         StringAssert.DoesNotContain("Custom APK", SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk: false));
         StringAssert.Contains("Development and Custom APK builds", SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk: true));
-        StringAssert.DoesNotContain("custom APK", SetupWizardChecks.LegacyOrgValuesRule(offersCustomApk: false));
-        StringAssert.Contains("Development builds and custom APKs", SetupWizardChecks.LegacyOrgValuesRule(offersCustomApk: true));
+    }
+
+    [Test]
+    public void TheProductionBuildWarning_SpeaksOfThirdPartiesOnlyWithCustomApks()
+    {
+        string[] without = SetupWizardChecks.LegacyOrgValuesRules(offersCustomApk: false);
+        string[] with = SetupWizardChecks.LegacyOrgValuesRules(offersCustomApk: true);
+
+        Assert.AreEqual(1, without.Length);
+        StringAssert.Contains("your own Development builds", without[0]);
+        StringAssert.DoesNotContain("custom APK", without[0]);
+        StringAssert.DoesNotContain("3rd party", without[0]);
+        Assert.AreEqual(2, with.Length);
+        StringAssert.Contains("your own Development builds and for custom APKs", with[0]);
+        StringAssert.Contains("custom APK for a specific 3rd party", with[1]);
     }
 
     // ── Nothing issues a customer's Organization Token ────────────
