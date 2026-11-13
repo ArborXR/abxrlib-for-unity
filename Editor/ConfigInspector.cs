@@ -104,7 +104,7 @@ namespace AbxrLib.Editor
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Service Provider", EditorStyles.boldLabel);
             string newRestUrl = EditorGUILayout.TextField(new GUIContent(
-                "REST URL", "Should most likely be\nhttps://lib-backend.xrdm.app/ during Beta"), config.restUrl);
+                "REST URL", "The Insights backend the SDK sends data to.\nhttps://lib-backend.xrdm.app/ unless ArborXR gave you another."), config.restUrl);
             
             // Validate URL format
             if (!string.IsNullOrEmpty(newRestUrl))
