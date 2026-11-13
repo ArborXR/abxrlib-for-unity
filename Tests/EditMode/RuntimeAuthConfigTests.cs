@@ -37,7 +37,19 @@ public class RuntimeAuthConfigTests
     public string UseAppTokenAsOrgTokenInDevelopment_OnlyWhenNothingSuppliedAnOrg(string buildType, bool useAppTokens, string orgToken, string orgId, string authSecret)
     {
         var auth = new RuntimeAuthConfig { buildType = buildType, useAppTokens = useAppTokens, appToken = AppToken, orgToken = orgToken, orgId = orgId, authSecret = authSecret };
-        auth.UseAppTokenAsOrgTokenInDevelopment();
+        bool applied = auth.UseAppTokenAsOrgTokenInDevelopment();
+
+        Assert.AreEqual(auth.orgToken == AppToken, applied, "It reports whether the App Token took over, for the log line.");
         return auth.orgToken;
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    public void UseAppTokenAsOrgTokenInDevelopment_WithoutAnAppToken_DoesNothing(string appToken)
+    {
+        var auth = new RuntimeAuthConfig { buildType = "development", useAppTokens = true, appToken = appToken };
+
+        Assert.IsFalse(auth.UseAppTokenAsOrgTokenInDevelopment());
+        Assert.IsFalse(auth.HasOrgCredential());
     }
 }

@@ -64,6 +64,7 @@ namespace AbxrLib.Runtime.Services.Auth
         private bool _inputRequestPending;
         /// <summary>True when the API rejected our credentials (401/403 or explicit error). No further auth attempts this session; Authenticate() will no-op and report failure.</summary>
         private bool _credentialsRejectedByApi;
+        private bool _appTokenAsOrgTokenLogged;
 
         /// <summary>True when OnInputRequested was invoked and we are waiting for the app to call SubmitInput (OnInputSubmitted). Used so clients can show/hide QR-for-auth UI via IsQRScanForAuthAvailable() without tracking state themselves.</summary>
         internal bool IsInputRequestPending => _inputRequestPending;
@@ -259,8 +260,14 @@ namespace AbxrLib.Runtime.Services.Auth
             GetQueryData();
 #endif
             // Last, so every source above wins: a Development build with no org signs in as the org that owns the app (SDK-85).
-            // That is an org credential, so a Development build never pairs.
-            _runtimeAuth.UseAppTokenAsOrgTokenInDevelopment();
+            // That is an org credential, so a Development build never pairs. Said once per launch: the sign-in that
+            // follows looks like any other, including when an org id was set without its secret.
+            if (_runtimeAuth.UseAppTokenAsOrgTokenInDevelopment() && !_appTokenAsOrgTokenLogged)
+            {
+                _appTokenAsOrgTokenLogged = true;
+                Logcat.Info("No organization was supplied, so this Development build is using the App Token as the " +
+                            "Organization Token: it reports to the organization that owns the app.");
+            }
 
             // Auth handoff (intent / CLI / test inject). Read before the pairing gate, since a launcher's session is an identity
             // too (SDK-80), and applied after validation. Only a session with a token stands in for an identity.

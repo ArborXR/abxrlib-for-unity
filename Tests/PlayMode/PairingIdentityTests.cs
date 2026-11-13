@@ -329,10 +329,17 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
     public IEnumerator Development_WithoutAnOrg_SignsInWithTheAppTokenAsTheOrgToken()
     {
         var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        var logs = new List<string>();
+        Application.LogCallback capture = (message, _, _) => logs.Add(message);
+        Application.logMessageReceived += capture;
 
         Abxr.StartAuthentication();
         yield return WaitFor(() => _reports.Count > 0, 5f);
+        Application.logMessageReceived -= capture;
 
+        string said = logs.Find(line => line.Contains("using the App Token as the Organization Token"));
+        Assert.IsNotNull(said, "The sign-in looks like any other, so the SDK says which org it used.");
+        StringAssert.DoesNotContain(AppToken, said, "The token itself is never logged.");
         CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports, "Not \"No organization identity\".");
         Assert.AreEqual(1, transport.AuthCalls);
         Assert.AreEqual(AppToken, transport.LastPayload.appToken);

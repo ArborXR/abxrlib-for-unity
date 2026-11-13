@@ -96,11 +96,14 @@ namespace AbxrLib.Runtime.Types
         /// lib-backend accepts an App Token as the Organization Token of the org that owns the app, so an App Token alone
         /// signs in from the Editor or a test build. Call after every other source (the ArborXR client, config,
         /// SetOrgId/SetAuthSecret, the org_token intent or URL parameter) has been applied, since each of them wins.
+        /// True when the App Token took over, so the caller can say so.
         /// </summary>
-        internal void UseAppTokenAsOrgTokenInDevelopment()
+        internal bool UseAppTokenAsOrgTokenInDevelopment()
         {
-            if (useAppTokens && buildType == "development" && !HasOrgCredential())
-                orgToken = appToken;
+            if (!useAppTokens || buildType != "development" || HasOrgCredential() || string.IsNullOrEmpty(appToken))
+                return false;
+            orgToken = appToken;
+            return true;
         }
 
         /// <summary>
