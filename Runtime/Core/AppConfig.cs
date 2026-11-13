@@ -30,7 +30,7 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("Optional")] public string launcherAppID;
 
         [Header("App Tokens")]
-        [Tooltip("When enabled, authenticate with App Token and Org Token (JWT) instead of App ID, Org ID, and Auth Secret. Defaults to true; disable only for legacy integrations.")] public bool useAppTokens = true;
+        [Tooltip("On: authenticate with an App Token (JWT). Off only in a project that already uses the legacy App ID, Org ID, and Auth Secret scheme; new projects use an App Token.")] public bool useAppTokens = true;
         [Tooltip("App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on.")] public string appToken;
         [Tooltip("Organization Token (JWT). Required for Production (Custom APK), where ArborXR supplies the customer's token. Not used in Production. Development uses the App Token unless a token is already saved here.")] public string orgToken;
 

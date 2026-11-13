@@ -69,7 +69,7 @@ Developers can implement their own backend services by following the ABXR protoc
 
 When the package finishes installing, the **AbxrLib Setup** wizard opens on its own and walks through everything below:
 
-- **Credentials** — App Token, the Org Token a `Production (Custom APK)` build needs (or the legacy App ID scheme), with validation as you paste.
+- **Credentials** — App Token, the Org Token a `Production (Custom APK)` build needs (or the legacy App ID scheme, in a project that already uses it), with validation as you paste.
 - **Project setup** — Editor version, required packages, the optional sign-in UI, and the Android player settings a standalone headset build needs (each with a one-click fix).
 - **First events** — the assessment calls that turn on grading dashboards and LMS reporting.
 
@@ -120,7 +120,7 @@ To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org 
 
 #### Configure Unity Project
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
-2. **Use App Tokens** is on by default for new configuration; keep it enabled for JWT authentication.
+2. New projects authenticate with an App Token. A **Use App Tokens** checkbox shows only in a project that is still on the [legacy scheme](#legacy-app-id--org-id--auth-secret), where ticking it switches the project to App Tokens.
 3. Set **App Token** (required): JWT for your app, from your distribution channel or ArborXR portal (**Content Library** → **Managed** app → **Insights Hub**).
 4. **Org Token:** Only a single-customer build needs one, so the field shows when **Build Type** is `Production (Custom APK)`, where it is required, or when the project already has one saved. `Production` uses the **dynamic org token** (derived from device/org context when available) or passcode pairing, and `Development` uses your **App Token** as the org token.
 
@@ -177,7 +177,9 @@ void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason rea
 
 #### Legacy (App ID / Org ID / Auth Secret)
 
-If your project still uses the legacy scheme: in Configuration, leave **Use App Tokens** off and set App ID, Org ID, and Auth Secret from the app’s credential or details views in the portal where your organization still exposes them. On ArborXR-managed devices, only App ID may be required; Org ID and Auth Secret can auto-fill. New integrations should use app token and org token.
+A project that already uses the legacy scheme keeps working: Configuration and the Setup Wizard still show its App ID, Org ID, and Auth Secret (from the app’s credential or details views in the portal where your organization still exposes them), a note that the scheme is legacy, and a **Use App Tokens** checkbox for switching. On ArborXR-managed devices, only App ID may be required; Org ID and Auth Secret can auto-fill.
+
+New projects use an App Token. A project that isn't already on the legacy scheme is not offered it: the legacy fields and the checkbox don't show. The legacy scheme also can't use passcode pairing, which needs an App Token.
 
 ### Using with Other Backend Services
 For information on implementing your own backend service or using other compatible services, please refer to the ABXR protocol specification.
