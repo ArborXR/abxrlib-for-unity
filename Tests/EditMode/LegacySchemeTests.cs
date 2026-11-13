@@ -24,11 +24,51 @@ public class LegacySchemeTests
     // ── The rule ──────────────────────────────────────────────────
 
     [Test]
-    public void ANewProject_IsNotShownTheLegacyScheme()
+    public void ANewProject_IsShownNeitherTheLegacySchemeNorTheCheckbox()
     {
         Assert.IsTrue(_config.useAppTokens, "A new configuration starts on App Tokens.");
+        Assert.IsFalse(SetupWizardChecks.HasLegacyValues(_config), "And with no legacy values.");
+
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(_config));
-        Assert.IsFalse(new SetupWizardChecks.ShownLatch().Holds(SetupWizardChecks.ShowsLegacyScheme(_config)), "No checkbox either.");
+        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
+    }
+
+    [Test]
+    public void AnAssetSavedBeforeTheCheckboxExisted_KeepsTheCheckbox_WhichIsItsWayBack()
+    {
+        // Such an asset has no value for Use App Tokens, so it loads as ticked, with its legacy credentials saved and
+        // no App Token.
+        Assert.IsTrue(_config.useAppTokens);
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+        Assert.IsFalse(SetupWizardChecks.CredentialsAreValid(_config), "It can't sign in as it opens.");
+
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
+        Assert.IsTrue(new SetupWizardChecks.ShownLatch().Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)),
+            "In a window that has only just opened, too.");
+
+        _config.useAppTokens = false;
+
+        Assert.IsTrue(SetupWizardChecks.ShowsLegacyScheme(_config), "Unticking brings its fields back.");
+        Assert.IsTrue(SetupWizardChecks.CredentialsAreValid(_config), "And the credentials it shipped with work again.");
+    }
+
+    [TestCase(true, null, null, null, ExpectedResult = false)] // a new project
+    [TestCase(true, "", "", "", ExpectedResult = false)]
+    [TestCase(true, AppId, null, null, ExpectedResult = true)]
+    [TestCase(true, null, OrgId, null, ExpectedResult = true)]
+    [TestCase(true, null, null, "secret", ExpectedResult = true)]
+    [TestCase(false, null, null, null, ExpectedResult = true)] // on the legacy scheme with nothing saved yet
+    [TestCase(false, AppId, OrgId, "secret", ExpectedResult = true)]
+    public bool ShowsUseAppTokensToggle_OnTheLegacyScheme_OrWhileLegacyValuesAreSaved(bool useAppTokens, string appId, string orgId, string authSecret)
+    {
+        _config.useAppTokens = useAppTokens;
+        _config.appID = appId;
+        _config.orgID = orgId;
+        _config.authSecret = authSecret;
+
+        return SetupWizardChecks.ShowsUseAppTokensToggle(_config);
     }
 
     [TestCase("production")]
@@ -54,15 +94,19 @@ public class LegacySchemeTests
     }
 
     [Test]
-    public void AProjectOnAppTokens_WithLegacyValuesStillSaved_IsNotShownTheLegacyScheme()
+    public void AProjectOnAppTokens_WithLegacyValuesStillSaved_GetsTheCheckbox_NotTheFields()
     {
-        // The fields stay hidden. The values still ship inside the build, which the leftover warning below says.
+        // The fields stay hidden, so the leftover warning below says the values still ship, and the checkbox is the
+        // way back to them.
         _config.useAppTokens = true;
+        _config.appToken = "app.token.jwt";
         _config.appID = AppId;
         _config.orgID = OrgId;
         _config.authSecret = "secret";
 
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(_config));
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
+        Assert.IsNotNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
     }
 
     [Test]
@@ -77,6 +121,8 @@ public class LegacySchemeTests
     public void WithoutAConfig_TheLegacySchemeDoesNotShow()
     {
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(null));
+        Assert.IsFalse(SetupWizardChecks.HasLegacyValues(null));
+        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(null));
     }
 
     // ── Legacy values left on a project that uses App Tokens ──────
@@ -149,6 +195,7 @@ public class LegacySchemeTests
         StringAssert.Contains("Abxr.GetOrgId() still returns the Organization ID", warning);
         StringAssert.DoesNotContain("doesn't read", warning);
         StringAssert.DoesNotContain("unused", warning);
+        StringAssert.Contains("Untick Use App Tokens to go back to the legacy scheme, or clear them", warning);
     }
 
     [Test]
@@ -161,7 +208,8 @@ public class LegacySchemeTests
 
         StringAssert.Contains("Authorization Secret is still saved", warning);
         StringAssert.Contains("ships inside every build", warning);
-        StringAssert.Contains("The SDK doesn't read it on App Tokens. Clear it.", warning);
+        StringAssert.Contains("The SDK doesn't read it on App Tokens.", warning);
+        StringAssert.Contains("or clear it, which also removes that checkbox", warning);
     }
 
     [Test]
@@ -221,21 +269,53 @@ public class LegacySchemeTests
         Assert.DoesNotThrow(() => SetupWizardChecks.ClearLeftoverLegacyValues(null));
     }
 
-    // ── Switching in an open window ───────────────────────────────
+    // ── Switching, and the way back ───────────────────────────────
 
     [Test]
-    public void TickingUseAppTokens_KeepsTheCheckboxUntilTheWindowCloses()
+    public void TickingUseAppTokens_WithLegacyValuesSaved_KeepsTheCheckboxInAnyWindow()
     {
-        var checkbox = new SetupWizardChecks.ShownLatch();
         _config.useAppTokens = false;
-        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsLegacyScheme(_config)));
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
 
         _config.useAppTokens = true;
 
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(_config), "The legacy fields give way to the App Token.");
-        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsLegacyScheme(_config)), "A mistaken tick can be undone.");
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config),
+            "Not only in the window that ticked it: after a recompile, in the other editor, in a later session.");
+    }
+
+    [Test]
+    public void ClearingTheLegacyValues_RemovesTheCheckboxToo()
+    {
+        var checkbox = new SetupWizardChecks.ShownLatch();
+        _config.useAppTokens = true;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)));
+
+        // What the Clear button does in both editors.
+        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
         checkbox.Reset();
-        Assert.IsFalse(checkbox.Holds(SetupWizardChecks.ShowsLegacyScheme(_config)), "A window opened after that offers no way back.");
+
+        Assert.IsFalse(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)), "Nothing is left to switch back to.");
+    }
+
+    [Test]
+    public void TickingUseAppTokens_WithNothingSaved_KeepsTheCheckboxUntilTheWindowCloses()
+    {
+        var checkbox = new SetupWizardChecks.ShownLatch();
+        _config.useAppTokens = false;
+        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)));
+
+        _config.useAppTokens = true;
+
+        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config), "No legacy values keep it there.");
+        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)), "A mistaken tick can be undone.");
+        checkbox.Reset();
+        Assert.IsFalse(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)), "A window opened after that has nothing to go back to.");
     }
 
     [Test]
@@ -243,14 +323,14 @@ public class LegacySchemeTests
     {
         var checkbox = new SetupWizardChecks.ShownLatch();
         _config.useAppTokens = false;
-        checkbox.Holds(SetupWizardChecks.ShowsLegacyScheme(_config));
+        checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
         _config.useAppTokens = true;
-        checkbox.Holds(SetupWizardChecks.ShowsLegacyScheme(_config));
+        checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
 
         _config.useAppTokens = false;
 
         Assert.IsTrue(SetupWizardChecks.ShowsLegacyScheme(_config));
-        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsLegacyScheme(_config)));
+        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)));
     }
 
     // ── The latch ─────────────────────────────────────────────────

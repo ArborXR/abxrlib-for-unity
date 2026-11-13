@@ -282,10 +282,26 @@ namespace AbxrLib.Editor
 
         /// <summary>
         /// Whether the project is on the legacy scheme (Application ID, Organization ID, Authorization Secret). Only
-        /// then do the Configuration inspector and the wizard show its fields and the Use App Tokens checkbox that
-        /// switches away from it (SDK-89). Every new project is on App Tokens, and is never offered the legacy scheme.
+        /// then do the Configuration inspector and the wizard show its fields, its note and its wording (SDK-89).
+        /// Every new project is on App Tokens, and is never offered the legacy scheme. The Use App Tokens checkbox
+        /// has its own rule, <see cref="ShowsUseAppTokensToggle"/>.
         /// </summary>
         internal static bool ShowsLegacyScheme(AppConfig config) => config != null && !config.useAppTokens;
+
+        /// <summary>Whether an Application ID, Organization ID or Authorization Secret is saved, on either scheme.</summary>
+        internal static bool HasLegacyValues(AppConfig config) =>
+            config != null && (!string.IsNullOrEmpty(config.appID) || !string.IsNullOrEmpty(config.orgID) ||
+                               !string.IsNullOrEmpty(config.authSecret));
+
+        /// <summary>
+        /// Whether the inspector and the wizard show the Use App Tokens checkbox: on the legacy scheme, so the project
+        /// can switch, and on App Tokens for as long as legacy values are saved, so it can switch back. The second
+        /// case is also how an asset last saved before the checkbox existed opens: it has no value for it, so it loads
+        /// as ticked, with its legacy credentials still there, and unticking it is the only way back to them. Only a
+        /// project with the checkbox ticked and no legacy values, which every new project is, never sees it.
+        /// </summary>
+        internal static bool ShowsUseAppTokensToggle(AppConfig config) =>
+            ShowsLegacyScheme(config) || HasLegacyValues(config);
 
         /// <summary>
         /// The legacy values a project on App Tokens still has saved, by the name of their field. Empty on the legacy
@@ -316,11 +332,12 @@ namespace AbxrLib.Editor
             string them = one ? "it" : "them";
             string text = $"This project is on App Tokens, but {string.Join(", ", names)} {(one ? "is" : "are")} " +
                           $"still saved from the legacy scheme and {(one ? "ships" : "ship")} inside every build. ";
-            return string.IsNullOrEmpty(config.orgID)
-                ? text + $"The SDK doesn't read {them} on App Tokens. Clear {them}."
-                : text + $"The SDK doesn't sign in with {them}, but on a device without ArborXR MDM Abxr.GetOrgId() " +
-                  "still returns the Organization ID, and a secret set with Abxr.SetAuthSecret is paired with it. " +
-                  $"Clear {them} unless your app relies on that.";
+            text += string.IsNullOrEmpty(config.orgID)
+                ? $"The SDK doesn't read {them} on App Tokens. "
+                : $"The SDK doesn't sign in with {them}, but on a device without ArborXR MDM Abxr.GetOrgId() " +
+                  "still returns the Organization ID, and a secret set with Abxr.SetAuthSecret is paired with it. ";
+            return text + $"Untick Use App Tokens to go back to the legacy scheme, or clear {them}, which also " +
+                   "removes that checkbox.";
         }
 
         /// <summary>

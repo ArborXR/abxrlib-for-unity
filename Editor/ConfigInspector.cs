@@ -9,7 +9,8 @@ namespace AbxrLib.Editor
     {
         // Keeps the Organization Token field up while this inspector is open, once it has held a value.
         private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
-        // Keeps the Use App Tokens checkbox up while this inspector is open, so a legacy project that ticks it can untick it.
+        // Keeps the Use App Tokens checkbox up while this inspector is open, so a legacy project with nothing saved yet
+        // can untick it again. With legacy values saved, the checkbox shows without this.
         private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
         // Keeps Production (Custom APK) in the Build Type choice while this inspector is open, so switching away can be undone.
         private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
@@ -96,6 +97,8 @@ namespace AbxrLib.Editor
                     {
                         Undo.RecordObject(config, "Clear legacy AbxrLib values");
                         SetupWizardChecks.ClearLeftoverLegacyValues(config);
+                        // Nothing is left to switch back to, so the checkbox goes with the values.
+                        _useAppTokensToggle.Reset();
                         EditorUtility.SetDirty(config);
                     }
                 }
@@ -129,8 +132,8 @@ namespace AbxrLib.Editor
 
                 EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
             }
-            // Only a project already on the legacy scheme is offered the choice (SDK-89). New projects use App Tokens.
-            if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsLegacyScheme(config)))
+            // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
+            if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(config)))
             {
                 EditorGUILayout.Space(5);
                 config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(

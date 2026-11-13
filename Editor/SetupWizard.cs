@@ -37,7 +37,8 @@ namespace AbxrLib.Editor
         private System.DateTime _checkedAt;
         // Keeps the Organization Token field up while this window is open, once it has held a value.
         private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
-        // Keeps the Use App Tokens checkbox up while this window is open, so a legacy project that ticks it can untick it.
+        // Keeps the Use App Tokens checkbox up while this window is open, so a legacy project with nothing saved yet
+        // can untick it again. With legacy values saved, the checkbox shows without this.
         private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
         // Keeps Production (Custom APK) in the Build Type choice while this window is open, so switching away can be undone.
         private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
@@ -320,8 +321,8 @@ namespace AbxrLib.Editor
             }, _styles.Hint);
 
             GUILayout.Space(8f);
-            // Only a project already on the legacy scheme is offered the choice (SDK-89). New projects use App Tokens.
-            if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsLegacyScheme(_config)))
+            // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
+            if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)))
             {
                 _config.useAppTokens = EditorGUILayout.ToggleLeft(new GUIContent("Use App Tokens (recommended)",
                         "On: authenticate with App Token / Organization Token. Off: legacy App ID, Org ID, and Auth Secret."),
@@ -359,6 +360,8 @@ namespace AbxrLib.Editor
                     {
                         Undo.RecordObject(_config, "Clear legacy AbxrLib values");
                         SetupWizardChecks.ClearLeftoverLegacyValues(_config);
+                        // Nothing is left to switch back to, so the checkbox goes with the values.
+                        _useAppTokensToggle.Reset();
                         EditorUtility.SetDirty(_config);
                     }
                 }
