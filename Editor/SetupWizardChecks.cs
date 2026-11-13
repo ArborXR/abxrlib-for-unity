@@ -354,6 +354,15 @@ namespace AbxrLib.Editor
             ShowsLegacyScheme(config) || HasLegacyValues(config);
 
         /// <summary>
+        /// <see cref="ShowsUseAppTokensToggle(AppConfig)"/> for one open inspector or wizard. A project that was on the
+        /// legacy scheme in this window keeps the checkbox after ticking it, even with nothing saved, so a mistaken
+        /// tick can be undone. Saved legacy values are read fresh each time and never latched, so once they are
+        /// cleared in either window the checkbox goes from both.
+        /// </summary>
+        internal static bool ShowsUseAppTokensToggle(AppConfig config, ShownLatch wasOnLegacyScheme) =>
+            wasOnLegacyScheme.Holds(ShowsLegacyScheme(config)) || HasLegacyValues(config);
+
+        /// <summary>
         /// The legacy values a project on App Tokens still has saved, by the name of their field. Empty on the legacy
         /// scheme, where they are the credentials in use and their fields show.
         /// </summary>

@@ -306,7 +306,7 @@ namespace AbxrLib.Editor
 
             GUILayout.Space(8f);
             // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
-            if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)))
+            if (SetupWizardChecks.ShowsUseAppTokensToggle(_config, _useAppTokensToggle))
             {
                 _config.useAppTokens = EditorGUILayout.ToggleLeft(new GUIContent("Use App Tokens (recommended)",
                         "On: authenticate with App Token / Organization Token. Off: legacy App ID, Org ID, and Auth Secret."),

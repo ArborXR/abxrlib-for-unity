@@ -45,7 +45,7 @@ public class LegacySchemeTests
         Assert.IsFalse(SetupWizardChecks.CredentialsAreValid(_config), "It can't sign in as it opens.");
 
         Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
-        Assert.IsTrue(new SetupWizardChecks.ShownLatch().Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)),
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, new SetupWizardChecks.ShownLatch()),
             "In a window that has only just opened, too.");
 
         _config.useAppTokens = false;
@@ -547,7 +547,7 @@ public class LegacySchemeTests
         _config.useAppTokens = true;
 
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(_config), "The legacy fields give way to the App Token.");
-        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config),
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, new SetupWizardChecks.ShownLatch()),
             "Not only in the window that ticked it: after a recompile, in the other editor, in a later session.");
     }
 
@@ -556,15 +556,30 @@ public class LegacySchemeTests
     {
         var checkbox = new SetupWizardChecks.ShownLatch();
         OnAppTokensWithLegacyValues();
-        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)));
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox));
 
         bool cleared = SetupWizardChecks.ClearLeftoverValues(_config, checkbox);
 
         Assert.IsTrue(cleared);
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
         Assert.AreEqual("app.token.jwt", _config.appToken);
-        Assert.IsFalse(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)), "Nothing is left to switch back to.");
+        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox), "Nothing is left to switch back to.");
         Assert.IsTrue(UnityEditor.EditorUtility.IsDirty(_config), "The asset is marked changed, so the save writes it.");
+    }
+
+    [Test]
+    public void ClearingInOneWindow_RemovesTheCheckboxFromTheOther()
+    {
+        var thisWindow = new SetupWizardChecks.ShownLatch();
+        var otherWindow = new SetupWizardChecks.ShownLatch();
+        OnAppTokensWithLegacyValues();
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, thisWindow));
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, otherWindow));
+
+        SetupWizardChecks.ClearLeftoverValues(_config, thisWindow);
+
+        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config, otherWindow),
+            "Saved values are read fresh, not latched, so the other window follows.");
     }
 
     [Test]
@@ -599,13 +614,13 @@ public class LegacySchemeTests
     {
         var checkbox = new SetupWizardChecks.ShownLatch();
         OnAppTokensWithLegacyValues(appToken: "");
-        checkbox.Holds(true);
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox));
 
         bool cleared = SetupWizardChecks.ClearLeftoverValues(_config, checkbox);
 
         Assert.IsFalse(cleared);
         Assert.AreEqual(AppId, _config.appID);
-        Assert.IsTrue(checkbox.Holds(false), "The checkbox stays: it is the way back to those credentials.");
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox), "The checkbox stays: it is the way back to those credentials.");
         Assert.IsFalse(SetupWizardChecks.ClearLeftoverValues(null, checkbox));
     }
 
@@ -614,14 +629,14 @@ public class LegacySchemeTests
     {
         var checkbox = new SetupWizardChecks.ShownLatch();
         _config.useAppTokens = false;
-        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)));
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox));
 
         _config.useAppTokens = true;
 
         Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config), "No legacy values keep it there.");
-        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)), "A mistaken tick can be undone.");
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox), "A mistaken tick can be undone.");
         checkbox.Reset();
-        Assert.IsFalse(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)), "A window opened after that has nothing to go back to.");
+        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox), "A window opened after that has nothing to go back to.");
     }
 
     [Test]
@@ -629,14 +644,14 @@ public class LegacySchemeTests
     {
         var checkbox = new SetupWizardChecks.ShownLatch();
         _config.useAppTokens = false;
-        checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
+        SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox);
         _config.useAppTokens = true;
-        checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config));
+        SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox);
 
         _config.useAppTokens = false;
 
         Assert.IsTrue(SetupWizardChecks.ShowsLegacyScheme(_config));
-        Assert.IsTrue(checkbox.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(_config)));
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox));
     }
 
     // ── The latch ─────────────────────────────────────────────────

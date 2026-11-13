@@ -115,7 +115,7 @@ namespace AbxrLib.Editor
             }
 
             // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
-            if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(config)))
+            if (SetupWizardChecks.ShowsUseAppTokensToggle(config, _useAppTokensToggle))
             {
                 EditorGUILayout.Space(5);
                 config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(
