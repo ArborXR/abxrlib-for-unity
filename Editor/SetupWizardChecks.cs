@@ -246,6 +246,25 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// <see cref="ShowsOrgTokenField"/> for one open inspector or wizard, which keeps the field up once it has held
+        /// a value. Emptying it would otherwise remove it on that keystroke, before a replacement can be typed or
+        /// pasted. Lasts until the window closes or is enabled again.
+        /// </summary>
+        internal sealed class OrgTokenFieldLatch
+        {
+            private bool _heldAValue;
+
+            internal bool Shows(AppConfig config)
+            {
+                if (config == null || !config.useAppTokens) return false;
+                if (!string.IsNullOrEmpty(config.orgToken)) _heldAValue = true;
+                return _heldAValue || ShowsOrgTokenField(config);
+            }
+
+            internal void Reset() => _heldAValue = false;
+        }
+
+        /// <summary>
         /// The hint under the Organization Token field where it shows without being required: what the saved value
         /// does in this Build Type, and whether to clear it. Null for Production (Custom APK), which has its own text,
         /// and for the legacy scheme. <paramref name="warn"/> is true when the value needs the developer's attention.
@@ -255,12 +274,18 @@ namespace AbxrLib.Editor
             warn = false;
             if (config == null || !config.useAppTokens || config.buildType == "production_custom") return null;
 
-            if (string.IsNullOrEmpty(config.orgToken)) return null;
+            bool empty = string.IsNullOrEmpty(config.orgToken);
+            bool isToken = LooksLikeJwt(config.orgToken);
 
             if (config.buildType == "development")
+            {
+                if (empty) return "Empty: Development builds use the App Token as the Organization Token.";
                 return "This project already has an Organization Token, so Development builds report to that " +
                        "organization. Clear it to use the App Token instead: builds then report to the organization " +
                        "that owns the app.";
+            }
+
+            if (empty) return "Empty, as Production expects: each device's organization comes from ArborXR MDM or passcode pairing.";
 
             warn = true;
             // The runtime drops a saved token only when the stored Build Type is Production itself. Any other value
@@ -268,7 +293,7 @@ namespace AbxrLib.Editor
             if (!string.Equals(config.buildType, "production", StringComparison.OrdinalIgnoreCase))
                 return "The saved Build Type isn't one AbxrLib recognises, so this Organization Token is still sent " +
                        "and builds report to its organization. Clear it, or choose the Build Type again.";
-            return LooksLikeJwt(config.orgToken)
+            return isToken
                 ? "Production doesn't use this Organization Token, but it is saved in the project and ships inside " +
                   "the build. Clear it."
                 : "Production doesn't use an Organization Token, and this value isn't one: it fails the credential " +

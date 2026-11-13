@@ -7,6 +7,11 @@ namespace AbxrLib.Editor
     [CustomEditor(typeof(AppConfig))]
     public class ConfigInspector : UnityEditor.Editor
     {
+        // Keeps the Organization Token field up while this inspector is open, once it has held a value.
+        private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
+
+        private void OnEnable() => _orgTokenField.Reset();
+
         public override void OnInspectorGUI()
         {
             var config = (AppConfig)target;
@@ -38,7 +43,7 @@ namespace AbxrLib.Editor
                 bool isProductionCustom = config.buildType == "production_custom";
                 // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from the
                 // device, and Development uses the App Token. A token the project already has saved always shows.
-                bool showsOrgToken = SetupWizardChecks.ShowsOrgTokenField(config);
+                bool showsOrgToken = _orgTokenField.Shows(config);
                 if (showsOrgToken)
                 {
                     string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token";
@@ -46,16 +51,10 @@ namespace AbxrLib.Editor
                         ? "Required for Production (Custom APK). Set the customer's org token from ArborXR Portal."
                         : "An Organization Token saved in this project. Clear it if it isn't needed.";
                     config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
-                    // The field goes once it is cleared. Without dropping focus, the next text field drawn in its place
-                    // would take over its edit state.
-                    if (!SetupWizardChecks.ShowsOrgTokenField(config))
-                    {
-                        GUI.FocusControl(null);
-                        EditorGUIUtility.editingTextField = false;
-                    }
                 }
 
-                string orgTokenHint = SetupWizardChecks.OrgTokenFieldHint(config, out bool orgTokenWarn);
+                bool orgTokenWarn = false;
+                string orgTokenHint = showsOrgToken ? SetupWizardChecks.OrgTokenFieldHint(config, out orgTokenWarn) : null;
                 MessageType orgTokenHintType = orgTokenWarn ? MessageType.Warning : MessageType.Info;
                 if (isProductionCustom)
                     EditorGUILayout.HelpBox(

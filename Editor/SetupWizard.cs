@@ -35,6 +35,8 @@ namespace AbxrLib.Editor
         private bool _worldSpaceInstalled;
         private bool _worldSpaceFilesImported;
         private System.DateTime _checkedAt;
+        // Keeps the Organization Token field up while this window is open, once it has held a value.
+        private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
         private Vector2 _scroll;
         private Styles _styles;
 
@@ -56,6 +58,7 @@ namespace AbxrLib.Editor
             window.minSize = new Vector2(640f, 560f);
             window._step = Step.Welcome;
             window._openedAutomatically = openedAutomatically;
+            window._orgTokenField.Reset();
             window.Refresh();
             window.Show();
             window.Focus();
@@ -64,6 +67,7 @@ namespace AbxrLib.Editor
         private void OnEnable()
         {
             titleContent = new GUIContent("AbxrLib Setup");
+            _orgTokenField.Reset();
             Refresh();
         }
 
@@ -318,20 +322,13 @@ namespace AbxrLib.Editor
 
                 // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from
                 // the device, and Development uses the App Token. A token the project already has saved always shows.
-                if (SetupWizardChecks.ShowsOrgTokenField(_config))
+                if (_orgTokenField.Shows(_config))
                 {
                     bool isCustomApk = _config.buildType == "production_custom";
                     _config.orgToken = DrawPasteField(
                         isCustomApk ? "Organization Token (required)" : "Organization Token",
                         isCustomApk ? "The customer's organization JWT." : "An Organization Token saved in this project.",
                         _config.orgToken);
-                    // The field goes once it is cleared. Without dropping focus, the next text field drawn in its place
-                    // would take over its edit state.
-                    if (!SetupWizardChecks.ShowsOrgTokenField(_config))
-                    {
-                        GUI.FocusControl(null);
-                        EditorGUIUtility.editingTextField = false;
-                    }
 
                     EditorGUILayout.LabelField(isCustomApk
                             ? "A specific customer's Organization Token is not self-serve in the portal - ArborXR provides it."
