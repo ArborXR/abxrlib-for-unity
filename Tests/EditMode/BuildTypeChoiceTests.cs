@@ -172,6 +172,7 @@ public class BuildTypeChoiceTests
         StringAssert.DoesNotContain("Organization Token", tooltip);
         StringAssert.Contains("ship inside the build", tooltip);
         StringAssert.DoesNotContain("will NOT be included", tooltip);
+        StringAssert.DoesNotContain("not used", tooltip);
     }
 
     [Test]

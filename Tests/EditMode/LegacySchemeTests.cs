@@ -172,7 +172,7 @@ public class LegacySchemeTests
     }
 
     [Test]
-    public void InProduction_ASavedOrganizationIdOrSecret_IsSaidToShip()
+    public void InProduction_ASavedOrganizationId_IsSaidToShip_AndIsNotCalledUnused()
     {
         _config.useAppTokens = false;
         _config.buildType = "production";
@@ -181,9 +181,28 @@ public class LegacySchemeTests
 
         string hint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn);
 
-        StringAssert.Contains("ship inside the build", hint);
-        StringAssert.DoesNotContain("NOT be included", hint);
         Assert.IsTrue(warn);
+        StringAssert.Contains("ship inside the build", hint);
+        StringAssert.Contains("Abxr.GetOrgId() still returns the Organization ID", hint);
+        StringAssert.DoesNotContain("NOT be included", hint);
+        StringAssert.DoesNotContain("doesn't use", hint);
+        StringAssert.DoesNotContain("not used", hint);
+    }
+
+    [Test]
+    public void InProduction_ASavedSecretAlone_IsSaidToShip()
+    {
+        _config.useAppTokens = false;
+        _config.buildType = "Production"; // the runtime ignores case here
+        _config.appID = AppId;
+        _config.authSecret = "secret";
+
+        string hint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn);
+
+        Assert.IsTrue(warn);
+        StringAssert.Contains("ship inside the build. Clear them.", hint);
+        StringAssert.DoesNotContain("GetOrgId", hint);
+        StringAssert.DoesNotContain("secret\"", hint);
     }
 
     [Test]
@@ -199,11 +218,40 @@ public class LegacySchemeTests
         Assert.IsFalse(warn);
     }
 
+    [TestCase("unknown")]
+    [TestCase("")]
+    public void WithAnUnrecognisedBuildType_SavedValuesAreSaidToStillSignIn(string buildType)
+    {
+        _config.useAppTokens = false;
+        _config.buildType = buildType;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        string hint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn);
+
+        Assert.IsTrue(warn);
+        StringAssert.Contains("builds still sign in with the Organization ID and Authorization Secret saved here", hint);
+        StringAssert.DoesNotContain("doesn't sign in", hint);
+        StringAssert.Contains("builds still sign in", SetupWizardChecks.BuildTypeHint(_config, 0), "The wizard's line under the popup agrees.");
+    }
+
+    [Test]
+    public void WithAnUnrecognisedBuildType_AndNothingSaved_ThereIsNoHint()
+    {
+        _config.useAppTokens = false;
+        _config.buildType = "unknown";
+        _config.appID = AppId;
+
+        Assert.IsNull(SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn));
+        Assert.IsFalse(warn);
+    }
+
     [TestCase(false, "production_custom", ExpectedResult = true)]
     [TestCase(false, "development", ExpectedResult = false)]
-    [TestCase(false, "unknown", ExpectedResult = false)]
     [TestCase(true, "production", ExpectedResult = false)] // not on the legacy scheme
     [TestCase(true, "production_custom", ExpectedResult = false)]
+    [TestCase(true, "unknown", ExpectedResult = false)]
     public bool LegacyOrgFieldsHint_IsOnlyForTheLegacyScheme(bool useAppTokens, string buildType)
     {
         _config.useAppTokens = useAppTokens;
