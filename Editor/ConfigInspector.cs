@@ -111,16 +111,9 @@ namespace AbxrLib.Editor
                 config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, "Required for Production (Custom APK) when using legacy auth."), config.authSecret);
                 EditorGUI.EndDisabledGroup();
                 
-                if (isProduction)
-                {
-                    EditorGUILayout.HelpBox("OrgID and AuthSecret are disabled in Production builds. These values will NOT be included in builds.", MessageType.Info);
-                }
-                else if (isProductionCustomLegacy)
-                {
-                    EditorGUILayout.HelpBox(
-                        "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization Secret are required. The API receives buildType Production.",
-                        MessageType.Info);
-                }
+                string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(config, out bool legacyOrgWarn);
+                if (legacyOrgHint != null)
+                    EditorGUILayout.HelpBox(legacyOrgHint, legacyOrgWarn ? MessageType.Warning : MessageType.Info);
 
                 EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
             }

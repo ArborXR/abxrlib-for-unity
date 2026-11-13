@@ -357,9 +357,12 @@ namespace AbxrLib.Editor
                     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", _config.appID);
                 using (new EditorGUI.DisabledScope(_config.buildType == "production"))
                 {
-                    _config.orgID = DrawPasteField("Organization ID", "Only for custom APKs.", _config.orgID);
-                    _config.authSecret = DrawPasteField("Authorization Secret", "Only for custom APKs.", _config.authSecret);
+                    _config.orgID = DrawPasteField("Organization ID", "Used by Development and Custom APK builds.", _config.orgID);
+                    _config.authSecret = DrawPasteField("Authorization Secret", "Used by Development and Custom APK builds.", _config.authSecret);
                 }
+
+                string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out _);
+                if (legacyOrgHint != null) EditorGUILayout.LabelField(legacyOrgHint, _styles.Hint);
 
                 EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Warning);
             }

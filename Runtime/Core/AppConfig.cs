@@ -19,7 +19,7 @@ namespace AbxrLib.Runtime.Core
     public class AppConfig : ScriptableObject
     {
         [Header("Build Type")]
-        [Tooltip("Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution). Development: OrgID and AuthSecret will be included in builds (for custom APKs only). Production (Custom APK): kept for projects already saved on it; like Production for the API but requires and includes Organization Token for single-customer builds.")]
+        [Tooltip("Production: a saved OrgID and AuthSecret are not used, but they stay in this asset and ship inside the build. Development: OrgID and AuthSecret are used. Production (Custom APK): kept for projects already saved on it; like Production for the API but requires and includes Organization Token for single-customer builds.")]
         public string buildType = "production";
 
         [Header("Application Identity")]

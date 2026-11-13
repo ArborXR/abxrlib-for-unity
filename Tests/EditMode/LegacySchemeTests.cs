@@ -171,6 +171,52 @@ public class LegacySchemeTests
         StringAssert.DoesNotContain("App Token", note);
     }
 
+    [Test]
+    public void InProduction_ASavedOrganizationIdOrSecret_IsSaidToShip()
+    {
+        _config.useAppTokens = false;
+        _config.buildType = "production";
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+
+        string hint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn);
+
+        StringAssert.Contains("ship inside the build", hint);
+        StringAssert.DoesNotContain("NOT be included", hint);
+        Assert.IsTrue(warn);
+    }
+
+    [Test]
+    public void InProduction_WithNeitherSaved_TheHintOnlyExplains()
+    {
+        _config.useAppTokens = false;
+        _config.buildType = "production";
+        _config.appID = AppId;
+
+        string hint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn);
+
+        StringAssert.Contains("the device's MDM supplies them", hint);
+        Assert.IsFalse(warn);
+    }
+
+    [TestCase(false, "production_custom", ExpectedResult = true)]
+    [TestCase(false, "development", ExpectedResult = false)]
+    [TestCase(false, "unknown", ExpectedResult = false)]
+    [TestCase(true, "production", ExpectedResult = false)] // not on the legacy scheme
+    [TestCase(true, "production_custom", ExpectedResult = false)]
+    public bool LegacyOrgFieldsHint_IsOnlyForTheLegacyScheme(bool useAppTokens, string buildType)
+    {
+        _config.useAppTokens = useAppTokens;
+        _config.buildType = buildType;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        string hint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn);
+
+        Assert.IsFalse(warn);
+        return hint != null;
+    }
+
     // ── Legacy values left on a project that uses App Tokens ──────
 
     [Test]

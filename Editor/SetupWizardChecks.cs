@@ -413,6 +413,27 @@ namespace AbxrLib.Editor
               "Token as the Organization Token, so it is for internal or single-org builds only.\n\nFor shared " +
               "builds use Production and let ArborXR-managed devices supply the organization.";
 
+        /// <summary>
+        /// The hint under the legacy scheme's Organization ID and Authorization Secret. Production doesn't use saved
+        /// ones, but nothing strips them from the Resources asset, so they still ship inside the build:
+        /// <paramref name="warn"/> is true then. Null where there is nothing to say.
+        /// </summary>
+        internal static string LegacyOrgFieldsHint(AppConfig config, out bool warn)
+        {
+            warn = false;
+            if (!ShowsLegacyScheme(config)) return null;
+            if (config.buildType == "production_custom")
+                return "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization " +
+                       "Secret are required. The API receives buildType Production.";
+            if (config.buildType != "production") return null;
+
+            if (string.IsNullOrEmpty(config.orgID) && string.IsNullOrEmpty(config.authSecret))
+                return "Production doesn't take an Organization ID or Authorization Secret: the device's MDM supplies them.";
+            warn = true;
+            return "Production doesn't use the Organization ID or Authorization Secret saved here (the device's MDM " +
+                   "supplies them), but they stay in the project and ship inside the build. Clear them.";
+        }
+
         /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
         internal const string LegacySchemeNote =
             "This project uses the legacy scheme: Application ID, Organization ID and Authorization Secret. It keeps " +
