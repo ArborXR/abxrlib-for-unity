@@ -217,6 +217,33 @@ public class LegacySchemeTests
         return hint != null;
     }
 
+    [TestCase("production", "", ExpectedResult = true)]
+    [TestCase("production", null, ExpectedResult = true)]
+    [TestCase("production", "not-a-uuid", ExpectedResult = false)] // it fails the credential check until fixed or cleared
+    [TestCase("production", OrgId, ExpectedResult = false)]
+    [TestCase("development", "", ExpectedResult = false)]
+    [TestCase("production_custom", "", ExpectedResult = false)]
+    [TestCase("unknown", "", ExpectedResult = false)]
+    public bool LegacyOrgFieldIsLocked_OnlyWhenEmptyInProduction(string buildType, string value)
+    {
+        _config.useAppTokens = false;
+        _config.buildType = buildType;
+
+        return SetupWizardChecks.LegacyOrgFieldIsLocked(_config, value);
+    }
+
+    [Test]
+    public void AMalformedOrganizationIdInProduction_CanBeReachedToFixIt()
+    {
+        _config.useAppTokens = false;
+        _config.buildType = "production";
+        _config.appID = AppId;
+        _config.orgID = "not-a-uuid";
+
+        Assert.IsFalse(SetupWizardChecks.CredentialsAreValid(_config), "The wizard asks for a fix.");
+        Assert.IsFalse(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID), "So the field must take one.");
+    }
+
     // ── Legacy values left on a project that uses App Tokens ──────
 
     [Test]

@@ -42,8 +42,6 @@ namespace AbxrLib.Editor
                         
             EditorGUILayout.Space();
             
-            bool isProduction = config.buildType == "production";
-            
             // One rule decides which scheme's fields show, here and in the wizard (SDK-89).
             if (!SetupWizardChecks.ShowsLegacyScheme(config))
             {
@@ -101,13 +99,16 @@ namespace AbxrLib.Editor
                     "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
                 
                 bool isProductionCustomLegacy = config.buildType == "production_custom";
-                EditorGUI.BeginDisabledGroup(isProduction);
                 string orgIdLabel = isProductionCustomLegacy ? "Organization ID (required)" : "Organization ID (*)";
                 string orgIdTooltip = isProductionCustomLegacy
                     ? "Required for Production (Custom APK). Set the customer's organization ID from ArborXR Portal."
                     : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
+                // Production takes neither, so empty fields are locked there. A saved value stays editable.
+                EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.orgID));
                 config.orgID = EditorGUILayout.TextField(new GUIContent(orgIdLabel, orgIdTooltip), config.orgID);
+                EditorGUI.EndDisabledGroup();
                 string authSecretLabel = isProductionCustomLegacy ? "Authorization Secret (required)" : "Authorization Secret (*)";
+                EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.authSecret));
                 config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, "Required for Production (Custom APK) when using legacy auth."), config.authSecret);
                 EditorGUI.EndDisabledGroup();
                 

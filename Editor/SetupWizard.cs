@@ -355,11 +355,11 @@ namespace AbxrLib.Editor
             {
                 _config.appID = DrawPasteField("Application ID (required)",
                     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", _config.appID);
-                using (new EditorGUI.DisabledScope(_config.buildType == "production"))
-                {
+                // Production takes neither, so empty fields are locked there. A saved value stays editable.
+                using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID)))
                     _config.orgID = DrawPasteField("Organization ID", "Used by Development and Custom APK builds.", _config.orgID);
+                using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.authSecret)))
                     _config.authSecret = DrawPasteField("Authorization Secret", "Used by Development and Custom APK builds.", _config.authSecret);
-                }
 
                 string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out _);
                 if (legacyOrgHint != null) EditorGUILayout.LabelField(legacyOrgHint, _styles.Hint);
