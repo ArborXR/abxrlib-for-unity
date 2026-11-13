@@ -9,8 +9,14 @@ namespace AbxrLib.Editor
     {
         // Keeps the Organization Token field up while this inspector is open, once it has held a value.
         private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
+        // Keeps the Use App Tokens checkbox up while this inspector is open, so a legacy project that ticks it can untick it.
+        private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
 
-        private void OnEnable() => _orgTokenField.Reset();
+        private void OnEnable()
+        {
+            _orgTokenField.Reset();
+            _useAppTokensToggle.Reset();
+        }
 
         public override void OnInspectorGUI()
         {
@@ -97,10 +103,13 @@ namespace AbxrLib.Editor
                         MessageType.Info);
                 }
             }
-                    // Use App Tokens checkbox right under buildType dropdown
-            EditorGUILayout.Space(5);
-            config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(
-                "Use App Tokens", "When enabled, use App Tokens (JWT) instead of appID/orgID/authSecret combination"), config.useAppTokens);
+            // Only a project already on the legacy scheme is offered the choice (SDK-89). New projects use App Tokens.
+            if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsLegacyScheme(config)))
+            {
+                EditorGUILayout.Space(5);
+                config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(
+                    "Use App Tokens", "When enabled, use App Tokens (JWT) instead of appID/orgID/authSecret combination"), config.useAppTokens);
+            }
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Service Provider", EditorStyles.boldLabel);

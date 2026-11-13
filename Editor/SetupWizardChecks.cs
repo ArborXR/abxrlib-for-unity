@@ -246,6 +246,13 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// Whether the project is on the legacy scheme (Application ID, Organization ID, Authorization Secret). Only
+        /// then do the Configuration inspector and the wizard show its fields and the Use App Tokens checkbox that
+        /// switches away from it (SDK-89). Every new project is on App Tokens, and is never offered the legacy scheme.
+        /// </summary>
+        internal static bool ShowsLegacyScheme(AppConfig config) => config != null && !config.useAppTokens;
+
+        /// <summary>
         /// For one open inspector or wizard: once something has shown, it stays until the window closes or is enabled
         /// again. Without it, the edit that makes a control unnecessary removes the control mid-edit, with no way back.
         /// </summary>

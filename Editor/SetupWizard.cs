@@ -37,6 +37,8 @@ namespace AbxrLib.Editor
         private System.DateTime _checkedAt;
         // Keeps the Organization Token field up while this window is open, once it has held a value.
         private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
+        // Keeps the Use App Tokens checkbox up while this window is open, so a legacy project that ticks it can untick it.
+        private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
         private Vector2 _scroll;
         private Styles _styles;
 
@@ -59,6 +61,7 @@ namespace AbxrLib.Editor
             window._step = Step.Welcome;
             window._openedAutomatically = openedAutomatically;
             window._orgTokenField.Reset();
+            window._useAppTokensToggle.Reset();
             window.Refresh();
             window.Show();
             window.Focus();
@@ -68,6 +71,7 @@ namespace AbxrLib.Editor
         {
             titleContent = new GUIContent("AbxrLib Setup");
             _orgTokenField.Reset();
+            _useAppTokensToggle.Reset();
             Refresh();
         }
 
@@ -309,10 +313,14 @@ namespace AbxrLib.Editor
             }, _styles.Hint);
 
             GUILayout.Space(8f);
-            _config.useAppTokens = EditorGUILayout.ToggleLeft(new GUIContent("Use App Tokens (recommended)",
-                    "On: authenticate with App Token / Organization Token. Off: legacy App ID, Org ID, and Auth Secret."),
-                _config.useAppTokens);
-            GUILayout.Space(4f);
+            // Only a project already on the legacy scheme is offered the choice (SDK-89). New projects use App Tokens.
+            if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsLegacyScheme(_config)))
+            {
+                _config.useAppTokens = EditorGUILayout.ToggleLeft(new GUIContent("Use App Tokens (recommended)",
+                        "On: authenticate with App Token / Organization Token. Off: legacy App ID, Org ID, and Auth Secret."),
+                    _config.useAppTokens);
+                GUILayout.Space(4f);
+            }
 
             if (_config.useAppTokens)
             {
