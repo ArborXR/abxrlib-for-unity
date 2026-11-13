@@ -280,6 +280,15 @@ namespace AbxrLib.Editor
             if (config.buildType == "development")
             {
                 if (empty) return "Empty: Development builds use the App Token as the Organization Token.";
+                if (!isToken)
+                {
+                    warn = true;
+                    return "This value isn't a token, so Development builds can't sign in with it. Clear it to use " +
+                           "the App Token, or re-copy the whole Organization Token.";
+                }
+                if (config.orgToken == config.appToken)
+                    return "This is a copy of the App Token, which Development builds use as the Organization Token " +
+                           "anyway. Clear it: a copy left here goes stale when the App Token changes.";
                 return "This project already has an Organization Token, so Development builds report to that " +
                        "organization. Clear it to use the App Token instead: builds then report to the organization " +
                        "that owns the app.";

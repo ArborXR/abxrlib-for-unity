@@ -73,6 +73,8 @@ public class OrgTokenFieldTests
     // ── The hint ──────────────────────────────────────────────────
 
     [TestCase("development", OrgToken, "Clear it to use the App Token instead", false)]
+    [TestCase("development", AppToken, "This is a copy of the App Token", false)]
+    [TestCase("development", "not-a-token", "can't sign in with it", true)]
     [TestCase("development", "", "Development builds use the App Token", false)]
     [TestCase("production", OrgToken, "ships inside the build", true)]
     [TestCase("production", "not-a-token", "this value isn't one", true)]
