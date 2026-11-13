@@ -311,6 +311,8 @@ namespace AbxrLib.Editor
             if (pickedBuildType != null) _config.buildType = pickedBuildType;
 
             EditorGUILayout.LabelField(SetupWizardChecks.BuildTypeHint(_config, selected), _styles.Hint);
+            string customApkNote = SetupWizardChecks.CustomApkOptionNote(offersCustomApk);
+            if (customApkNote != null) EditorGUILayout.LabelField(customApkNote, _styles.Hint);
 
             GUILayout.Space(8f);
             // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.

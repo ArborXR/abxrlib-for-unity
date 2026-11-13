@@ -45,6 +45,9 @@ namespace AbxrLib.Editor
 
             string pickedBuildType = SetupWizardChecks.BuildTypePicked(config.buildType, offersCustomApk, newSelection);
             if (pickedBuildType != null) config.buildType = pickedBuildType;
+
+            string customApkNote = SetupWizardChecks.CustomApkOptionNote(offersCustomApk);
+            if (customApkNote != null) EditorGUILayout.HelpBox(customApkNote, MessageType.Info);
                         
             EditorGUILayout.Space();
             

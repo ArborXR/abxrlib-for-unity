@@ -235,6 +235,18 @@ namespace AbxrLib.Editor
         internal static bool UsesCustomApk(AppConfig config) => config != null && config.buildType == "production_custom";
 
         /// <summary>
+        /// What a project that is offered Production (Custom APK) is told beside the Build Type choice. The option
+        /// follows the saved Build Type, so after switching away it is gone once the window is reopened (reselecting
+        /// the asset, entering Play mode and a recompile all do that), and nothing in the Editor brings it back.
+        /// Null where the option isn't offered.
+        /// </summary>
+        internal static string CustomApkOptionNote(bool offersCustomApk) => offersCustomApk
+            ? "Production (Custom APK) is offered only while this project is saved on it. After switching to another " +
+              "Build Type, it leaves this list once this window is reopened. To restore it, set buildType: " +
+              "production_custom in Assets/Resources/AbxrLib.asset."
+            : null;
+
+        /// <summary>
         /// The Build Type popup's labels. Production (Custom APK) is the last one, so leaving it out moves no other
         /// option: an index stands for the same Build Type either way.
         /// </summary>

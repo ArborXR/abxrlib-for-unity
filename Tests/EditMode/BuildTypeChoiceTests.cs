@@ -217,6 +217,21 @@ public class BuildTypeChoiceTests
         StringAssert.StartsWith("One customer per build", SetupWizardChecks.BuildTypeHint(_config, 2));
     }
 
+    [Test]
+    public void TheCustomApkNote_SaysTheOptionGoesAfterSwitchingAway_AndHowToRestoreIt()
+    {
+        string note = SetupWizardChecks.CustomApkOptionNote(offersCustomApk: true);
+
+        StringAssert.Contains("once this window is reopened", note);
+        StringAssert.Contains("buildType: production_custom in Assets/Resources/AbxrLib.asset", note);
+    }
+
+    [Test]
+    public void TheCustomApkNote_IsOnlyForAProjectOfferedTheOption()
+    {
+        Assert.IsNull(SetupWizardChecks.CustomApkOptionNote(offersCustomApk: false));
+    }
+
     // ── Switching in an open window ───────────────────────────────
 
     [Test]
