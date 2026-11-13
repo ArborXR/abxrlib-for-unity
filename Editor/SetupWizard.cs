@@ -607,10 +607,6 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// A text field with a Paste button. Tokens are long enough that pasting is the only realistic way to enter
-        /// them, and a copied token often carries a trailing newline, so whatever arrives is trimmed.
-        /// </summary>
-        /// <summary>
         /// A hint under a field. One that needs the developer's attention is a warning box, as the inspector shows
         /// it; the rest is small grey text.
         /// </summary>
@@ -621,6 +617,10 @@ namespace AbxrLib.Editor
             else EditorGUILayout.LabelField(text, _styles.Hint);
         }
 
+        /// <summary>
+        /// A text field with a Paste button. Tokens are long enough that pasting is the only realistic way to enter
+        /// them, and a copied token often carries a trailing newline, so whatever arrives is trimmed.
+        /// </summary>
         private string DrawPasteField(string label, string tooltip, string value)
         {
             EditorGUILayout.LabelField(new GUIContent(label, tooltip));
