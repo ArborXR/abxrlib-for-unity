@@ -322,8 +322,9 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
 
     // ── Development: the App Token as the org (SDK-85) ────────────
     // With no org from any source, a Development build uses its App Token as the Organization Token. Every other source
-    // wins. The ArborXR client and the org_token intent or URL parameter only run on a device or in a browser: each sets
-    // the org token before the fallback looks, which RuntimeAuthConfigTests covers.
+    // wins. The ArborXR client and the org_token intent or URL parameter only run on a device or in a browser, so no
+    // test here reaches them. RuntimeAuthConfigTests covers the rule alone (an org credential already there is kept),
+    // not that Authenticate() applies those sources before the fallback.
 
     [UnityTest]
     public IEnumerator Development_WithoutAnOrg_SignsInWithTheAppTokenAsTheOrgToken()
