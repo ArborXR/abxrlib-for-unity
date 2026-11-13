@@ -364,7 +364,7 @@ namespace AbxrLib.Editor
                 string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out _);
                 if (legacyOrgHint != null) EditorGUILayout.LabelField(legacyOrgHint, _styles.Hint);
 
-                EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Warning);
+                EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
             }
 
             if (EditorGUI.EndChangeCheck()) EditorUtility.SetDirty(_config);
