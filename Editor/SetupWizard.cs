@@ -325,23 +325,6 @@ namespace AbxrLib.Editor
                         _config.orgToken);
                 }
 
-                // The documented shortcut for internal and single-org test builds is to reuse the App Token as the
-                // Organization Token. It is one click here because typing a second JWT by hand is the step people
-                // get wrong, but it is only offered for Development - see the warning below.
-                if (_config.buildType == "development" && !string.IsNullOrWhiteSpace(_config.appToken) &&
-                    _config.orgToken != _config.appToken)
-                {
-                    if (GUILayout.Button(new GUIContent("Use App Token as Organization Token",
-                            "For internal or single-org test builds only. Never for a publicly distributed APK."),
-                        GUILayout.Width(260f)))
-                    {
-                        _config.orgToken = _config.appToken;
-                        GUI.FocusControl(null);
-                        EditorGUIUtility.editingTextField = false;
-                    }
-                    GUILayout.Space(4f);
-                }
-
                 if (!orgTokenUsed)
                     EditorGUILayout.LabelField(
                         "Production builds do not send an Organization Token from configuration, so the field is disabled.",
@@ -378,8 +361,8 @@ namespace AbxrLib.Editor
             
             GUILayout.Space(8f);
             EditorGUILayout.HelpBox(
-                "Never ship an Organization Token or Authorization Secret in a publicly distributed APK.\n\nReusing the " +
-                "App Token as the Organization Token is for internal or single-org builds only.\n\nFor shared builds use " +
+                "Never ship an Organization Token or Authorization Secret in a publicly distributed APK.\n\nA Development " +
+                "build uses the App Token as the Organization Token, so it is for internal or single-org builds only.\n\nFor shared builds use " +
                 "Production and let ArborXR-managed devices supply the organization.", MessageType.None);
 
             GUILayout.Space(6f);
