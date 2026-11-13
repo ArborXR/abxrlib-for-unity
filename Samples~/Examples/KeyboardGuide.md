@@ -159,12 +159,9 @@ public class CustomKeyboardHandler : MonoBehaviour
 The keyboard system is designed to work seamlessly with AbxrLib's authentication system:
 
 ```csharp
-// The authentication system automatically creates appropriate keyboards
-// Full keyboard for text input
-Abxr.Authenticate("username", "password");
-
-// PIN pad for assessment PINs
-Abxr.Authenticate("pin", "123456");
+// Authentication opens the keyboard it needs. The backend chooses the input type:
+// "text" and "email" open the full keyboard, "assessmentPin" opens the PIN pad.
+Abxr.StartAuthentication();
 ```
 
 ## Panel Structure

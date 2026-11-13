@@ -7,52 +7,85 @@ namespace AbxrLib.Editor
     [CustomEditor(typeof(AppConfig))]
     public class ConfigInspector : UnityEditor.Editor
     {
+        // Keeps the Organization Token field up while this inspector is open, once it has held a value.
+        private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
+        // Keeps the Use App Tokens checkbox up while this inspector is open, so a legacy project with nothing saved yet
+        // can untick it again. With legacy values saved, the checkbox shows without this.
+        private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
+        // Keeps Production (Custom APK) in the Build Type choice while this inspector is open, so switching away can be undone.
+        private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
+        // Keep a legacy Organization ID or Authorization Secret field editable in Production once it has held a value.
+        private readonly SetupWizardChecks.ShownLatch _legacyOrgIdField = new SetupWizardChecks.ShownLatch();
+        private readonly SetupWizardChecks.ShownLatch _legacyAuthSecretField = new SetupWizardChecks.ShownLatch();
+
+        private void OnEnable()
+        {
+            _orgTokenField.Reset();
+            _useAppTokensToggle.Reset();
+            _customApkOption.Reset();
+            _legacyOrgIdField.Reset();
+            _legacyAuthSecretField.Reset();
+        }
+
         public override void OnInspectorGUI()
         {
             var config = (AppConfig)target;
             EditorGUILayout.LabelField("Application Identity", EditorStyles.boldLabel);
             
-            string[] buildTypeValues = { "production", "development", "production_custom" };
-            string[] buildTypeDisplayNames = { "Production", "Development", "Production (Custom APK)" };
             // Unknown stored values display as Production - the same normalization the runtime and the setup
             // wizard apply - and the write-back only happens on an actual change. Anything else lets merely
             // selecting the asset rewrite buildType, and the old fallback rewrote it to production_custom, the
             // one type that ships single-customer org credentials.
-            int currentSelection = config.buildType == "development" ? 1 : (config.buildType == "production_custom" ? 2 : 0);
-            int newSelection = EditorGUILayout.Popup(new GUIContent(
-                "Build Type", "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only).\nProduction (Custom APK): For single-customer builds; requires Organization Token; API receives buildType Production."),
-                currentSelection, buildTypeDisplayNames);
+            int currentSelection = SetupWizardChecks.BuildTypeIndex(config.buildType);
+            // Production (Custom APK) is offered only to a project already saved on it (SDK-90).
+            bool offersCustomApk = _customApkOption.Holds(SetupWizardChecks.UsesCustomApk(config));
+            string buildTypeTooltip = SetupWizardChecks.BuildTypeTooltip(config, offersCustomApk);
+            int newSelection = EditorGUILayout.Popup(new GUIContent("Build Type", buildTypeTooltip),
+                currentSelection, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
 
-            if (newSelection != currentSelection) config.buildType = buildTypeValues[newSelection];
+            string pickedBuildType = SetupWizardChecks.BuildTypePicked(config.buildType, offersCustomApk, newSelection);
+            if (pickedBuildType != null) config.buildType = pickedBuildType;
+
+            string customApkNote = SetupWizardChecks.CustomApkOptionNote(offersCustomApk);
+            if (customApkNote != null) EditorGUILayout.HelpBox(customApkNote, MessageType.Info);
                         
             EditorGUILayout.Space();
             
-            bool useAppTokens = config.useAppTokens;
-            bool isProduction = config.buildType == "production";
-            
-            if (useAppTokens)
+            // One rule decides which scheme's fields show, here and in the wizard (SDK-89).
+            if (!SetupWizardChecks.ShowsLegacyScheme(config))
             {
                 config.appToken = EditorGUILayout.TextField(new GUIContent(
-                    "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);
+                    "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required."), config.appToken);
                 
                 bool isProductionCustom = config.buildType == "production_custom";
-                EditorGUI.BeginDisabledGroup(isProduction);
-                string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token (optional)";
-                string orgTokenTooltip = isProductionCustom
-                    ? "Required for Production (Custom APK). Set the customer's org token from ArborXR Portal."
-                    : "Optional. In Development: use this or leave empty to use App Token as org token. In Production this field is not used.";
-                config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
-                EditorGUI.EndDisabledGroup();
-                if (isProduction)
-                    EditorGUILayout.HelpBox("In Production, Organization Token from config is not sent. The field is disabled for shared production builds.", MessageType.Info);
-                else if (isProductionCustom)
+                // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from the
+                // device, and Development uses the App Token. A token the project already has saved always shows.
+                bool showsOrgToken = _orgTokenField.Shows(config);
+                if (showsOrgToken)
+                {
+                    string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token";
+                    string orgTokenTooltip = isProductionCustom
+                        ? "Required for Production (Custom APK). A customer's Organization Token is not self-serve in the portal: contact ArborXR."
+                        : "An Organization Token saved in this project. Clear it if it isn't needed.";
+                    config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
+                }
+
+                bool orgTokenWarn = false;
+                string orgTokenHint = showsOrgToken ? SetupWizardChecks.OrgTokenFieldHint(config, out orgTokenWarn) : null;
+                MessageType orgTokenHintType = orgTokenWarn ? MessageType.Warning : MessageType.Info;
+                if (isProductionCustom)
                     EditorGUILayout.HelpBox(
                         "Production (Custom APK): For custom APKs per customer. Organization Token is required. The API receives buildType Production.",
                         MessageType.Info);
+                else if (config.buildType == "development")
+                    EditorGUILayout.HelpBox(
+                        (orgTokenHint ?? "Development: the App Token is used as the Organization Token, so builds report to the organization that owns the app. An ArborXR-managed device reports to its own organization.") + "\n" +
+                        "A Development build never shows passcode pairing. To test pairing, use Build Type Production.",
+                        orgTokenHintType);
                 else
                     EditorGUILayout.HelpBox(
-                        "In Development you can set an Organization Token, or leave empty to use the App Token as the org token.",
-                        MessageType.Info);
+                        orgTokenHint ?? "Production: each device reports to its own organization, which comes from ArborXR MDM or passcode pairing at runtime.",
+                        orgTokenHintType);
             }
             else
             {
@@ -60,36 +93,51 @@ namespace AbxrLib.Editor
                     "Application ID (required)", "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"), config.appID);
                 
                 bool isProductionCustomLegacy = config.buildType == "production_custom";
-                EditorGUI.BeginDisabledGroup(isProduction);
                 string orgIdLabel = isProductionCustomLegacy ? "Organization ID (required)" : "Organization ID (*)";
                 string orgIdTooltip = isProductionCustomLegacy
                     ? "Required for Production (Custom APK). Set the customer's organization ID from ArborXR Portal."
-                    : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
+                    : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx. " + SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk);
+                // Production takes neither, so empty fields are locked there. One that has held a value stays editable.
+                EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.orgID, _legacyOrgIdField));
                 config.orgID = EditorGUILayout.TextField(new GUIContent(orgIdLabel, orgIdTooltip), config.orgID);
+                EditorGUI.EndDisabledGroup();
                 string authSecretLabel = isProductionCustomLegacy ? "Authorization Secret (required)" : "Authorization Secret (*)";
-                config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, "Required for Production (Custom APK) when using legacy auth."), config.authSecret);
+                EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.authSecret, _legacyAuthSecretField));
+                string authSecretTooltip = isProductionCustomLegacy
+                    ? "Required for Production (Custom APK)."
+                    : SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk);
+                config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, authSecretTooltip), config.authSecret);
                 EditorGUI.EndDisabledGroup();
                 
-                if (isProduction)
-                {
-                    EditorGUILayout.HelpBox("OrgID and AuthSecret are disabled in Production builds. These values will NOT be included in builds.", MessageType.Info);
-                }
-                else if (isProductionCustomLegacy)
-                {
-                    EditorGUILayout.HelpBox(
-                        "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization Secret are required. The API receives buildType Production.",
-                        MessageType.Info);
-                }
+                string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(config, out bool legacyOrgWarn);
+                if (legacyOrgHint != null)
+                    EditorGUILayout.HelpBox(legacyOrgHint, legacyOrgWarn ? MessageType.Warning : MessageType.Info);
+
+                EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
             }
-                    // Use App Tokens checkbox right under buildType dropdown
-            EditorGUILayout.Space(5);
-            config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(
-                "Use App Tokens", "When enabled, use App Tokens (JWT) instead of appID/orgID/authSecret combination"), config.useAppTokens);
+
+            // Values saved for the scheme the project isn't on have no field, and they still ship inside the build
+            // (SDK-89). While they are the project's only credentials, this is the way back to them and offers no Clear.
+            string leftoverNotice = SetupWizardChecks.LeftoverValuesNotice(config, out bool offersClear);
+            if (leftoverNotice != null)
+            {
+                EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
+                if (offersClear && GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(config), GUILayout.Width(160f)))
+                    SetupWizardChecks.ClearLeftoverValues(config, _useAppTokensToggle);
+            }
+
+            // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
+            if (SetupWizardChecks.ShowsUseAppTokensToggle(config, _useAppTokensToggle))
+            {
+                EditorGUILayout.Space(5);
+                config.useAppTokens = EditorGUILayout.Toggle(new GUIContent(
+                    "Use App Tokens", "When enabled, use App Tokens (JWT) instead of appID/orgID/authSecret combination"), config.useAppTokens);
+            }
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Service Provider", EditorStyles.boldLabel);
             string newRestUrl = EditorGUILayout.TextField(new GUIContent(
-                "REST URL", "Should most likely be\nhttps://lib-backend.xrdm.app/ during Beta"), config.restUrl);
+                "REST URL", "The Insights backend the SDK sends data to.\nhttps://lib-backend.xrdm.app/ unless ArborXR gave you another."), config.restUrl);
             
             // Validate URL format
             if (!string.IsNullOrEmpty(newRestUrl))
@@ -124,18 +172,22 @@ namespace AbxrLib.Editor
                 EditorGUILayout.HelpBox("Pairing URL must be an http:// or https:// URL, or passcode pairing can't redeem.", MessageType.Warning);
             EditorGUILayout.Space();
         
-            // Warning about production usage
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField("⚠️ PRODUCTION BUILD WARNING", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("* Fields marked with asterisk should NOT be set when building for 3rd parties.", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.Space(2);
-            EditorGUILayout.LabelField("• Application ID should ALWAYS be set", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.LabelField("• Organization ID and Authorization Secret should ONLY be set for custom APKs", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.LabelField("• Setting these values inappropriately may violate Terms of Service with ArborXR or Meta", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.LabelField("• Only use these fields when building for a specific 3rd party who is aware and approves", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.EndVertical();
-        
-            EditorGUILayout.Space();
+            // Warning about production usage. It is about the legacy fields, so it shows where they do (SDK-89).
+            if (SetupWizardChecks.ShowsProductionBuildWarning(config))
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField("⚠️ PRODUCTION BUILD WARNING", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("* Fields marked with asterisk should NOT be set when building for 3rd parties.", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.Space(2);
+                EditorGUILayout.LabelField("• Application ID should ALWAYS be set", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField(SetupWizardChecks.LegacyOrgValuesRule(offersCustomApk), EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField("• Setting these values inappropriately may violate Terms of Service with ArborXR or Meta", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField("• Only use these fields when building for a specific 3rd party who is aware and approves", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.EndVertical();
+
+                EditorGUILayout.Space();
+            }
+
             EditorGUILayout.LabelField("UI Behavior Control", EditorStyles.boldLabel);
             config.authUIFollowCamera = EditorGUILayout.Toggle(new GUIContent(
                 "Auth UI Follow Camera", "When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions."), config.authUIFollowCamera);
@@ -268,7 +320,7 @@ namespace AbxrLib.Editor
                 EditorGUILayout.LabelField("When enabled, PlayMode tests that trigger auth input (e.g. PIN or email) will auto-respond using the values below so tests don't block waiting for user input.", EditorStyles.wordWrappedLabel);
                 EditorGUILayout.EndVertical();
                 config.unitTestAuthPin = EditorGUILayout.TextField(new GUIContent(
-                    "PIN / assessment PIN", "Used when auth requests type \"pin\" or \"assessmentPin\"."), config.unitTestAuthPin);
+                    "PIN / assessment PIN", "Used when auth requests type \"assessmentPin\"."), config.unitTestAuthPin);
                 config.unitTestAuthBadPin = EditorGUILayout.TextField(new GUIContent(
                     "Bad PIN (always fail)", "PIN that backend must always reject. Set when running invalid-PIN tests; empty = those tests will ignore."), config.unitTestAuthBadPin);
                 config.unitTestAuthText = EditorGUILayout.TextField(new GUIContent(

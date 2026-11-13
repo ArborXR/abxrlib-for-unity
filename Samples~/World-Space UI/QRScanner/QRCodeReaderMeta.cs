@@ -39,6 +39,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
         };
 
         // ── Quest-specific state ─────────────────────────────────────────────────────
+        private bool _deviceChecked;
         private bool _headsetPermissionChecked;
         private bool _cameraStartupSucceeded;
 
@@ -220,7 +221,7 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
         private void Start()
         {
-            if (!IsOfferedOnThisDevice) StartCoroutine(DelayedDeviceCheck());
+            if (!_deviceChecked) StartCoroutine(DelayedDeviceCheck());
         }
 
         private void OnDestroy()
@@ -235,7 +236,15 @@ namespace AbxrLib.Runtime.Core.QRScanner
 
         private void TryActivateScanner()
         {
-            if (IsOfferedOnThisDevice) return;
+            if (IsOfferedOnThisDevice || _deviceChecked) return;
+            // The model can still be empty at Awake; DelayedDeviceCheck tries again once it's known.
+            if (string.IsNullOrEmpty(DeviceModel.deviceModel)) return;
+            _deviceChecked = true;
+            if (!IsDeviceSupported())
+            {
+                Logcat.Info($"QR code scanning isn't offered: device '{DeviceModel.deviceModel}' isn't a Quest 3, 3S or Pro.");
+                return;
+            }
 
             BarcodeReader ??= QrCodeScanCommon.CreateBarcodeReader();
             EnsureRuntimeObjects();
@@ -253,6 +262,9 @@ namespace AbxrLib.Runtime.Core.QRScanner
                 Destroy(gameObject);
             }
         }
+
+        private static bool IsDeviceSupported() =>
+            SupportedDevices.Any(model => string.Equals(DeviceModel.deviceModel, model, StringComparison.OrdinalIgnoreCase));
 
         private IEnumerator DelayedDeviceCheck()
         {

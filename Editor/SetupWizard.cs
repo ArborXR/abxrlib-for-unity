@@ -34,6 +34,17 @@ namespace AbxrLib.Editor
         private List<SetupWizardChecks.Check> _checks;
         private bool _worldSpaceInstalled;
         private bool _worldSpaceFilesImported;
+        private System.DateTime _checkedAt;
+        // Keeps the Organization Token field up while this window is open, once it has held a value.
+        private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
+        // Keeps the Use App Tokens checkbox up while this window is open, so a legacy project with nothing saved yet
+        // can untick it again. With legacy values saved, the checkbox shows without this.
+        private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
+        // Keeps Production (Custom APK) in the Build Type choice while this window is open, so switching away can be undone.
+        private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
+        // Keep a legacy Organization ID or Authorization Secret field editable in Production once it has held a value.
+        private readonly SetupWizardChecks.ShownLatch _legacyOrgIdField = new SetupWizardChecks.ShownLatch();
+        private readonly SetupWizardChecks.ShownLatch _legacyAuthSecretField = new SetupWizardChecks.ShownLatch();
         private Vector2 _scroll;
         private Styles _styles;
 
@@ -55,6 +66,11 @@ namespace AbxrLib.Editor
             window.minSize = new Vector2(640f, 560f);
             window._step = Step.Welcome;
             window._openedAutomatically = openedAutomatically;
+            window._orgTokenField.Reset();
+            window._useAppTokensToggle.Reset();
+            window._customApkOption.Reset();
+            window._legacyOrgIdField.Reset();
+            window._legacyAuthSecretField.Reset();
             window.Refresh();
             window.Show();
             window.Focus();
@@ -63,6 +79,11 @@ namespace AbxrLib.Editor
         private void OnEnable()
         {
             titleContent = new GUIContent("AbxrLib Setup");
+            _orgTokenField.Reset();
+            _useAppTokensToggle.Reset();
+            _customApkOption.Reset();
+            _legacyOrgIdField.Reset();
+            _legacyAuthSecretField.Reset();
             Refresh();
         }
 
@@ -77,6 +98,7 @@ namespace AbxrLib.Editor
             _checks = SetupWizardChecks.Run();
             _worldSpaceInstalled = SetupWizardChecks.WorldSpaceUiIsInstalled();
             _worldSpaceFilesImported = SetupWizardChecks.WorldSpaceUiFilesImported();
+            _checkedAt = System.DateTime.Now;
             Repaint();
         }
 
@@ -157,7 +179,7 @@ namespace AbxrLib.Editor
                 string mark = IsStepComplete(step) ? "✓" : current ? "▸" : "•";
                 var style = current ? _styles.StepSelected : _styles.Step;
 
-                if (GUILayout.Button($"  {mark}  {StepTitles[i]}", style)) _step = step;
+                if (GUILayout.Button($"  {mark}  {StepTitles[i]}", style)) GoTo(step);
             }
 
             GUILayout.FlexibleSpace();
@@ -205,7 +227,7 @@ namespace AbxrLib.Editor
             {
                 if (GUILayout.Button("Back", GUILayout.Width(80f)))
                 {
-                    _step = (Step)((int)_step - 1);
+                    GoTo((Step)((int)_step - 1));
                     Refresh();
                 }
             }
@@ -220,8 +242,7 @@ namespace AbxrLib.Editor
             }
             else if (GUILayout.Button("Next", GUILayout.Width(90f)))
             {
-                SaveConfig();
-                _step = (Step)((int)_step + 1);
+                GoTo((Step)((int)_step + 1));
                 Refresh();
             }
 
@@ -277,89 +298,80 @@ namespace AbxrLib.Editor
 
             EditorGUI.BeginChangeCheck();
 
-            string[] values = { "production", "development", "production_custom" };
-            string[] labels = { "Production", "Development", "Production (Custom APK)" };
             // An unrecognized stored value shows as Production, matching how the runtime normalizes it, and the
             // value is only written back when the popup actually changes - drawing this page must never edit the
             // configuration on its own.
-            int current = _config.buildType == "development" ? 1 : _config.buildType == "production_custom" ? 2 : 0;
-            int selected = EditorGUILayout.Popup(new GUIContent("Build Type",
-                "Production: shared builds, including ArborXR-managed fleets; each device's org comes from the " +
-                "device at runtime.\n" +
-                "Development: for your own test builds.\n" +
-                "Production (Custom APK): one customer per build; the Organization Token is required and the MDM is " +
-                "not consulted for it."),
-                current, labels);
-            if (selected != current) _config.buildType = values[selected];
+            int current = SetupWizardChecks.BuildTypeIndex(_config.buildType);
+            // Production (Custom APK) is offered only to a project already saved on it (SDK-90).
+            bool offersCustomApk = _customApkOption.Holds(SetupWizardChecks.UsesCustomApk(_config));
+            string buildTypeTooltip = SetupWizardChecks.BuildTypeTooltip(_config, offersCustomApk);
+            int selected = EditorGUILayout.Popup(new GUIContent("Build Type", buildTypeTooltip),
+                current, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
+            string pickedBuildType = SetupWizardChecks.BuildTypePicked(_config.buildType, offersCustomApk, selected);
+            if (pickedBuildType != null) _config.buildType = pickedBuildType;
 
-            EditorGUILayout.LabelField(selected switch
-            {
-                0 => "Shared builds, and the right choice for an ArborXR-managed fleet: leave Organization Token " +
-                     "empty and each device reports to its own organization at runtime.",
-                1 => "Your own test builds. Use the App Token as the Organization Token, or leave it empty on a managed device.",
-                _ => "One customer per build: every device running this build reports to the organization set here, " +
-                     "and the MDM is not consulted for it. Not for an ArborXR-managed fleet - use Production there."
-            }, _styles.Hint);
+            EditorGUILayout.LabelField(SetupWizardChecks.BuildTypeHint(_config, selected), _styles.Hint);
+            string customApkNote = SetupWizardChecks.CustomApkOptionNote(offersCustomApk);
+            if (customApkNote != null) EditorGUILayout.LabelField(customApkNote, _styles.Hint);
 
             GUILayout.Space(8f);
-            _config.useAppTokens = EditorGUILayout.ToggleLeft(new GUIContent("Use App Tokens (recommended)",
-                    "On: authenticate with App Token / Organization Token. Off: legacy App ID, Org ID, and Auth Secret."),
-                _config.useAppTokens);
-            GUILayout.Space(4f);
+            // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
+            if (SetupWizardChecks.ShowsUseAppTokensToggle(_config, _useAppTokensToggle))
+            {
+                _config.useAppTokens = EditorGUILayout.ToggleLeft(new GUIContent("Use App Tokens (recommended)",
+                        "On: authenticate with App Token / Organization Token. Off: legacy App ID, Org ID, and Auth Secret."),
+                    _config.useAppTokens);
+                GUILayout.Space(4f);
+            }
 
-            if (_config.useAppTokens)
+            // One rule decides which scheme's fields show, here and in the inspector (SDK-89).
+            if (!SetupWizardChecks.ShowsLegacyScheme(_config))
             {
                 _config.appToken = DrawPasteField("App Token (required)",
                     "The JWT that identifies your app and publisher.", _config.appToken);
 
-                bool orgTokenUsed = _config.buildType != "production";
-                using (new EditorGUI.DisabledScope(!orgTokenUsed))
+                // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from
+                // the device, and Development uses the App Token. A token the project already has saved always shows.
+                if (_orgTokenField.Shows(_config))
                 {
+                    bool isCustomApk = _config.buildType == "production_custom";
                     _config.orgToken = DrawPasteField(
-                        _config.buildType == "production_custom" ? "Organization Token (required)" : "Organization Token (optional)",
-                        "The customer's organization JWT. Empty means the organization comes from the device at runtime.",
+                        isCustomApk ? "Organization Token (required)" : "Organization Token",
+                        isCustomApk ? "The customer's organization JWT." : "An Organization Token saved in this project.",
                         _config.orgToken);
-                }
 
-                // The documented shortcut for internal and single-org test builds is to reuse the App Token as the
-                // Organization Token. It is one click here because typing a second JWT by hand is the step people
-                // get wrong, but it is only offered for Development - see the warning below.
-                if (_config.buildType == "development" && !string.IsNullOrWhiteSpace(_config.appToken) &&
-                    _config.orgToken != _config.appToken)
-                {
-                    if (GUILayout.Button(new GUIContent("Use App Token as Organization Token",
-                            "For internal or single-org test builds only. Never for a publicly distributed APK."),
-                        GUILayout.Width(260f)))
-                    {
-                        _config.orgToken = _config.appToken;
-                        GUI.FocusControl(null);
-                        EditorGUIUtility.editingTextField = false;
-                    }
-                    GUILayout.Space(4f);
+                    bool orgTokenWarn = false;
+                    string orgTokenHint = isCustomApk
+                        ? "A specific customer's Organization Token is not self-serve in the portal. Contact ArborXR."
+                        : SetupWizardChecks.OrgTokenFieldHint(_config, out orgTokenWarn);
+                    DrawHint(orgTokenHint, orgTokenWarn);
                 }
-
-                if (!orgTokenUsed)
-                    EditorGUILayout.LabelField(
-                        "Production builds do not send an Organization Token from configuration, so the field is disabled.",
-                        _styles.Hint);
-                else if (_config.buildType == "production_custom")
-                    EditorGUILayout.LabelField(
-                        "A specific customer's Organization Token is not self-serve in the portal - ArborXR provides it.",
-                        _styles.Hint);
             }
             else
             {
                 _config.appID = DrawPasteField("Application ID (required)",
                     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", _config.appID);
-                using (new EditorGUI.DisabledScope(_config.buildType == "production"))
-                {
-                    _config.orgID = DrawPasteField("Organization ID", "Only for custom APKs.", _config.orgID);
-                    _config.authSecret = DrawPasteField("Authorization Secret", "Only for custom APKs.", _config.authSecret);
-                }
+                // Production takes neither, so empty fields are locked there. One that has held a value stays editable.
+                using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, _legacyOrgIdField)))
+                    _config.orgID = DrawPasteField("Organization ID", SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk), _config.orgID);
+                using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.authSecret, _legacyAuthSecretField)))
+                    _config.authSecret = DrawPasteField("Authorization Secret", SetupWizardChecks.LegacyOrgFieldTooltip(offersCustomApk), _config.authSecret);
 
-                EditorGUILayout.HelpBox(
-                    "App Tokens are off, so this project uses the legacy scheme. New integrations should use App Tokens.",
-                    MessageType.Warning);
+                string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool legacyOrgWarn);
+                DrawHint(legacyOrgHint, legacyOrgWarn);
+
+                EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
+            }
+
+            // Values saved for the scheme the project isn't on have no field, and they still ship inside the build
+            // (SDK-89). While they are the project's only credentials there is no Clear, and the box at the top of
+            // this page already says how to get back to them.
+            string leftoverNotice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+            if (leftoverNotice != null && offersClear)
+            {
+                EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
+                if (GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(_config), GUILayout.Width(160f)))
+                    SetupWizardChecks.ClearLeftoverValues(_config, _useAppTokensToggle);
             }
 
             if (EditorGUI.EndChangeCheck()) EditorUtility.SetDirty(_config);
@@ -373,10 +385,7 @@ namespace AbxrLib.Editor
             EditorGUILayout.EndVertical();
             
             GUILayout.Space(8f);
-            EditorGUILayout.HelpBox(
-                "Never ship an Organization Token or Authorization Secret in a publicly distributed APK.\n\nReusing the " +
-                "App Token as the Organization Token is for internal or single-org builds only.\n\nFor shared builds use " +
-                "Production and let ArborXR-managed devices supply the organization.", MessageType.None);
+            EditorGUILayout.HelpBox(SetupWizardChecks.ShippingNote(_config), MessageType.None);
 
             GUILayout.Space(6f);
             EditorGUILayout.BeginHorizontal();
@@ -407,7 +416,11 @@ namespace AbxrLib.Editor
             foreach (var check in _checks) DrawCheck(check);
 
             GUILayout.Space(6f);
+            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Re-check", GUILayout.Width(120f))) Refresh();
+            // The rows also refresh whenever the window gets focus, so without the time a click changes nothing visible.
+            EditorGUILayout.LabelField($"Last checked {_checkedAt:T}. The checks also run when this window gets focus.", _styles.Hint);
+            EditorGUILayout.EndHorizontal();
         }
 
         private void DrawFirstEvents()
@@ -494,7 +507,9 @@ namespace AbxrLib.Editor
         /// Says on the first page that AbxrLib's sign-in UI is a separate import, because the case that needs telling
         /// is an upgrade: the project already works, the package quietly stopped carrying the keyboard and PIN pad,
         /// and nothing else would surface that until a user is standing in front of a sign-in prompt that never
-        /// appears. A configured project is treated as an upgrade and warned; an empty one is just informed.
+        /// appears. A configured project is warned, since it can sign in and would reach that prompt; an empty one
+        /// is just informed. Valid credentials don't prove an upgrade (a new project has them as soon as its App
+        /// Token is pasted), so the text never says the project came from an earlier AbxrLib.
         /// </summary>
         private void DrawWorldSpaceCallout()
         {
@@ -503,23 +518,23 @@ namespace AbxrLib.Editor
             // Imported but not compiling is a different problem with a different fix; Project Setup covers it.
             if (_worldSpaceFilesImported) return;
 
-            bool looksLikeUpgrade = SetupWizardChecks.CredentialsAreValid(_config);
+            bool configured = SetupWizardChecks.CredentialsAreValid(_config);
 
             GUILayout.Space(8f);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             var previous = GUI.color;
-            GUI.color = looksLikeUpgrade ? _styles.WarnColor : _styles.InfoColor;
-            EditorGUILayout.LabelField(looksLikeUpgrade
+            GUI.color = configured ? _styles.WarnColor : _styles.InfoColor;
+            EditorGUILayout.LabelField(configured
                 ? "! Sign-in UI is not installed in this project"
                 : "i Sign-in UI is a separate import", EditorStyles.boldLabel);
             GUI.color = previous;
 
-            EditorGUILayout.LabelField(looksLikeUpgrade
-                    ? "This project is already configured, so it was set up with an earlier AbxrLib. The world-space " +
-                      "keyboard, PIN pad, and QR scanning used to be part of the package; they are now a separate " +
-                      "import, which keeps TextMeshPro, uGUI, and XR Interaction Toolkit out of projects that do not " +
-                      "draw AbxrLib's UI.\nWithout it, an authentication request that needs a PIN or email has " +
+            EditorGUILayout.LabelField(configured
+                    ? "The world-space keyboard, PIN pad, and QR scanning are a separate import. Before 3.0 they " +
+                      "were part of the package, so a project updated from an earlier AbxrLib has to import them " +
+                      "again. Keeping them separate keeps TextMeshPro, uGUI, and XR Interaction Toolkit out of " +
+                      "projects that do not draw AbxrLib's UI.\nWithout it, an authentication request that needs a PIN or email has " +
                       "nothing to show unless your app handles Abxr.OnInputRequested itself."
                     : "AbxrLib can draw its own sign-in UI - world-space keyboard, PIN pad, exit polls, and QR " +
                       "scanning - or your app can collect input itself through Abxr.OnInputRequested. Import it if " +
@@ -545,7 +560,7 @@ namespace AbxrLib.Editor
             GUI.color = color;
             EditorGUILayout.LabelField(label, GUILayout.Width(110f));
             EditorGUILayout.LabelField(value);
-            if (!ok && GUILayout.Button("Fix", EditorStyles.miniButton, GUILayout.Width(40f))) _step = goTo;
+            if (!ok && GUILayout.Button("Fix", EditorStyles.miniButton, GUILayout.Width(40f))) GoTo(goTo);
             EditorGUILayout.EndHorizontal();
         }
 
@@ -595,6 +610,17 @@ namespace AbxrLib.Editor
         /// A text field with a Paste button. Tokens are long enough that pasting is the only realistic way to enter
         /// them, and a copied token often carries a trailing newline, so whatever arrives is trimmed.
         /// </summary>
+        /// <summary>
+        /// A hint under a field. One that needs the developer's attention is a warning box, as the inspector shows
+        /// it; the rest is small grey text.
+        /// </summary>
+        private void DrawHint(string text, bool warn)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            if (warn) EditorGUILayout.HelpBox(text, MessageType.Warning);
+            else EditorGUILayout.LabelField(text, _styles.Hint);
+        }
+
         private string DrawPasteField(string label, string tooltip, string value)
         {
             EditorGUILayout.LabelField(new GUIContent(label, tooltip));
@@ -638,6 +664,22 @@ namespace AbxrLib.Editor
             Step.Project => _checks != null && !_checks.Exists(c => c.Severity == SetupWizardChecks.Severity.Problem),
             _ => false
         };
+
+        /// <summary>
+        /// Every page change saves, however the page was left (Next, Back, the step list, a Fix jump), so the asset on
+        /// disk never trails what the wizard shows.
+        /// </summary>
+        private void GoTo(Step step)
+        {
+            SaveConfig();
+            _step = step;
+        }
+
+        /// <summary>Closing saves too: a token pasted on the Credentials page is otherwise only in memory.</summary>
+        private void OnDestroy()
+        {
+            if (_config != null && EditorUtility.IsDirty(_config)) SaveConfig();
+        }
 
         private void SaveConfig()
         {

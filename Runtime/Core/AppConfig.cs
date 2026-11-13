@@ -19,20 +19,20 @@ namespace AbxrLib.Runtime.Core
     public class AppConfig : ScriptableObject
     {
         [Header("Build Type")]
-        [Tooltip("Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution). Development: OrgID and AuthSecret will be included in builds (for custom APKs only). Production (Custom APK): like Production for the API but requires and includes Organization Token for single-customer builds.")]
+        [Tooltip("Production: a saved OrgID and AuthSecret are not used, but they stay in this asset and ship inside the build. Development: OrgID and AuthSecret are used. Production (Custom APK): kept for projects already saved on it; like Production for the API but requires and includes Organization Token for single-customer builds.")]
         public string buildType = "production";
 
         [Header("Application Identity")]
-        [Tooltip("Required")] public string appID;
-        [Tooltip("Optional - Only used when Build Type is Development")] public string orgID;
-        [Tooltip("Optional - Only used when Build Type is Development")] public string authSecret;
+        [Tooltip("Legacy scheme only: the Application ID, required there.")] public string appID;
+        [Tooltip("Legacy scheme only. Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it.")] public string orgID;
+        [Tooltip("Legacy scheme only. Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it.")] public string authSecret;
         [HideInInspector]
         [Tooltip("Optional")] public string launcherAppID;
 
         [Header("App Tokens")]
-        [Tooltip("When enabled, authenticate with App Token and Org Token (JWT) instead of App ID, Org ID, and Auth Secret. Defaults to true; disable only for legacy integrations.")] public bool useAppTokens = true;
-        [Tooltip("App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on.")] public string appToken;
-        [Tooltip("Optional. Organization Token (JWT) from ArborXR Portal. Leave empty for shared production builds; set for single-org or dev builds.")] public string orgToken;
+        [Tooltip("On: authenticate with an App Token (JWT). Off only in a project that already uses the legacy App ID, Org ID, and Auth Secret scheme; new projects use an App Token.")] public bool useAppTokens = true;
+        [Tooltip("App Token (JWT) from ArborXR Portal – identifies app and publisher. Required.")] public string appToken;
+        [Tooltip("Organization Token (JWT). Required for Production (Custom APK); a customer's token is not self-serve, so contact ArborXR. Not used in Production. Development uses the App Token unless a token is already saved here.")] public string orgToken;
 
         [Header("Service Provider")]
         public string restUrl = "https://lib-backend.xrdm.app/";
