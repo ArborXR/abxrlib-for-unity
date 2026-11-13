@@ -69,7 +69,7 @@ Developers can implement their own backend services by following the ABXR protoc
 
 When the package finishes installing, the **AbxrLib Setup** wizard opens on its own and walks through everything below:
 
-- **Credentials** — App Token, the Org Token a `Production (Custom APK)` build needs (or the legacy App ID scheme, in a project that already uses it), with validation as you paste.
+- **Credentials** — the App Token, with validation as you paste. A project already on `Production (Custom APK)` or the legacy App ID scheme also gets the fields it uses.
 - **Project setup** — Editor version, required packages, the optional sign-in UI, and the Android player settings a standalone headset build needs (each with a one-click fix).
 - **First events** — the assessment calls that turn on grading dashboards and LMS reporting.
 
@@ -122,11 +122,13 @@ To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org 
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
 2. New projects authenticate with an App Token. A **Use App Tokens** checkbox shows only in a project that is still on the [legacy scheme](#legacy-app-id--org-id--auth-secret), where ticking it switches the project to App Tokens.
 3. Set **App Token** (required): JWT for your app, from your distribution channel or ArborXR portal (**Content Library** → **Managed** app → **Insights Hub**).
-4. **Org Token:** Only a single-customer build needs one, so the field shows when **Build Type** is `Production (Custom APK)`, where it is required, or when the project already has one saved. `Production` uses the **dynamic org token** (derived from device/org context when available) or passcode pairing, and `Development` uses your **App Token** as the org token.
+4. **Org Token:** New projects don't set one. `Production` uses the **dynamic org token** (derived from device/org context when available) or passcode pairing, and `Development` uses your **App Token** as the org token. The field shows only when the project already has an org token saved, or is already on `Production (Custom APK)`, where it is required.
 
 **Development / testing:** Set **Build Type** to `Development` and set App Token. The app signs in as the organization that owns the app, in the Editor or on any device, so an App Token alone is enough to test with. Something else that supplies an organization is used first: an ArborXR-managed device (dynamic org token), then an org token supplied at runtime (`Abxr.SetOrgId` with `Abxr.SetAuthSecret`, the `org_token` intent extra or URL parameter). A project that already has an Org Token set for Development keeps using it: the field stays visible while it holds a value, and clearing it switches to the App Token. A Development build never shows [passcode pairing](#headsets-without-arborxr-mdm-passcode-pairing); test pairing with Build Type `Production`.
 
 **Production builds:** Set App Token; the device or runtime provides org context (the dynamic org token on an ArborXR-managed device, or passcode pairing).
+
+**Production (Custom APK):** A build type for single-customer APKs with one organization baked in. A project already saved on it keeps the option, its Org Token field, and its builds; other projects are offered `Production` and `Development` only. A customer's Org Token is not self-serve: contact ArborXR.
 
 > **⚠️ Security Note:** Avoid compiling org tokens or long-lived secrets into builds distributed to third parties. For general distribution, use ArborXR-managed devices or dynamic org token. For single-customer deployments, follow your security guidelines.
 
@@ -140,7 +142,7 @@ On ArborXR-managed devices the organization is **not** configured — it is reso
 | **Org Token** | not set | The device supplies it. Production shows the Org Token field only when the project has one saved, and ignores it either way; clear a saved one, since it still ships inside the build. In Development the device's value is used instead of the App Token or a saved org token. |
 | **Enable ArborMdmClient** (Advanced) | on (the default) | This is what reads the org ID and fingerprint. With it off there is no organization to authenticate against, and auth fails with *"Organization identification unavailable"* — the wizard warns if it has been turned off. |
 
-Do **not** use `Production (Custom APK)` for a managed fleet. It takes the organization from configuration by design and never consults the MDM, so every device in the build would report to the one org baked into it. That mode is for single-customer APKs, where ArborXR supplies the customer's org token (not self-serve).
+A project that is still on `Production (Custom APK)` should **not** use it for a managed fleet. It takes the organization from configuration by design and never consults the MDM, so every device in the build would report to the one org baked into it.
 
 On the legacy scheme, the MDM supplies Org ID and Auth Secret at runtime, so only **App ID** needs setting.
 
@@ -287,7 +289,7 @@ The full documentation includes:
 ### FAQ
 
 #### How do I get my App Token and Org Token?
-Use an **App Token** (recommended). Copy it from **Content Library** → **Managed** app → **Insights Hub** in the portal, or use the value from your distribution channel. The org token is the dynamic org token when the device or runtime provides org context; for Editor testing, set **Build Type** to `Development`, which uses the App Token as the org token. Only a `Production (Custom APK)` build needs an **Org Token** in Configuration, and ArborXR supplies it; a project that already has one saved for `Development` keeps using it. For legacy setups, Application ID and Authorization Secret are still available under application details and Settings > Organization Codes.
+Use an **App Token** (recommended). Copy it from **Content Library** → **Managed** app → **Insights Hub** in the portal, or use the value from your distribution channel. The org token is the dynamic org token when the device or runtime provides org context; for Editor testing, set **Build Type** to `Development`, which uses the App Token as the org token. New projects don't set an **Org Token**. A project already on `Production (Custom APK)` needs one in Configuration; it is not self-serve, so contact ArborXR. A project that already has one saved for `Development` keeps using it. For legacy setups, Application ID and Authorization Secret are still available under application details and Settings > Organization Codes.
 
 #### How do I enable object tracking?
 Object tracking can be enabled by adding the Track Object component to any GameObject in your scene via the Unity Inspector.

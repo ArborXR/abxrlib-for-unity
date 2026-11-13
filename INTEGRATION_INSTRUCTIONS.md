@@ -44,11 +44,11 @@ Use **app token** and **org token** for authentication. In **Analytics for XR �
 
 - **Use App Tokens:** On in every new project, where the checkbox doesn't show. It shows only in a project that is still on the legacy scheme; tick it there to switch to App Tokens.
 - **App Token:** Required. JWT for your app (from your distribution channel or ArborXR portal).
-- **Org Token:** Shown when **Build Type** is `Production (Custom APK)` (single-customer builds), where it is required, or when the project already has one saved. Otherwise the SDK uses the **dynamic org token** (derived from device/org context when available) or passcode pairing, and in `Development` the App Token.
+- **Org Token:** Not set in a new project: the SDK uses the **dynamic org token** (derived from device/org context when available) or passcode pairing, and in `Development` the App Token. The field shows only when the project already has one saved, or is already on **Build Type** `Production (Custom APK)` (single-customer builds), where it is required.
 
 **Development / testing:** Set **Build Type** to `Development` and set App Token. The App Token is used as the org token, so the app signs in as the organization that owns it, unless the project already has an Org Token saved, which is used instead. On ArborXR-managed devices, org context is supplied at runtime (dynamic org token).
 
-**Production (customer builds):** Set App Token. Use dynamic org token (no org token saved in config; the Org Token field shows when one is) where the device or runtime provides org context; for production_custom builds, configure the org token as required.
+**Production (customer builds):** Set App Token. Use dynamic org token (no org token saved in config; the Org Token field shows when one is) where the device or runtime provides org context. A project already on `Production (Custom APK)` keeps that build type and its required org token; other projects are not offered it, and a customer's org token is not self-serve (contact ArborXR).
 
 **Security:** Do not compile org tokens or long-lived secrets into builds distributed to third parties unless required for a single-customer deployment. Prefer dynamic org token where possible.
 
@@ -235,7 +235,7 @@ Use this to implement or audit an integration.
 ### Installation and config
 
 - [ ] Package added via git URL (or local path). Optionally pin to a tag for reproducible builds (e.g. `#v2.0.4` in the package URL).
-- [ ] **Analytics for XR → Configuration** has **App Token** set; no **Org Token** saved, so the dynamic org token is used, unless production_custom (or legacy credentials if still using app ID/org ID/auth secret).
+- [ ] **Analytics for XR → Configuration** has **App Token** set; no **Org Token** saved, so the dynamic org token is used, unless the project is already on production_custom (or legacy credentials if still using app ID/org ID/auth secret).
 - [ ] Production builds do not embed org token or long-lived secrets unless required for a single-customer deployment.
 - [ ] Sign-in UI decided: **World-Space UI** sample imported, **or** `Abxr.OnInputRequested` handled by the app (§2.1a). One of the two is required for PIN or email auth to complete.
 - [ ] On ArborXR-managed devices: **Build Type = Production**, no **Org Token** saved, **Enable ArborMdmClient** on. `Production (Custom APK)` is not for managed fleets — it ignores the MDM and pins every device to the configured org.
