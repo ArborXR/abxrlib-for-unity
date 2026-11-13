@@ -50,10 +50,10 @@ namespace AbxrLib.Editor
                         
             EditorGUILayout.Space();
             
-            bool useAppTokens = config.useAppTokens;
             bool isProduction = config.buildType == "production";
             
-            if (useAppTokens)
+            // One rule decides which scheme's fields show, here and in the wizard (SDK-89).
+            if (!SetupWizardChecks.ShowsLegacyScheme(config))
             {
                 config.appToken = EditorGUILayout.TextField(new GUIContent(
                     "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);

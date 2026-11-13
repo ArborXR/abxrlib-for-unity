@@ -330,7 +330,8 @@ namespace AbxrLib.Editor
                 GUILayout.Space(4f);
             }
 
-            if (_config.useAppTokens)
+            // One rule decides which scheme's fields show, here and in the inspector (SDK-89).
+            if (!SetupWizardChecks.ShowsLegacyScheme(_config))
             {
                 _config.appToken = DrawPasteField("App Token (required)",
                     "The JWT that identifies your app and publisher.", _config.appToken);
