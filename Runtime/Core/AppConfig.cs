@@ -23,9 +23,9 @@ namespace AbxrLib.Runtime.Core
         public string buildType = "production";
 
         [Header("Application Identity")]
-        [Tooltip("Required")] public string appID;
-        [Tooltip("Optional - Only used when Build Type is Development")] public string orgID;
-        [Tooltip("Optional - Only used when Build Type is Development")] public string authSecret;
+        [Tooltip("Legacy scheme only: the Application ID, required there.")] public string appID;
+        [Tooltip("Legacy scheme only. Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it.")] public string orgID;
+        [Tooltip("Legacy scheme only. Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it.")] public string authSecret;
         [HideInInspector]
         [Tooltip("Optional")] public string launcherAppID;
 

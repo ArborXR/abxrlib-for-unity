@@ -263,8 +263,8 @@ namespace AbxrLib.Editor
             {
                 Logcat.Warning($"AbxrLib created a new configuration but could not read the old one to copy your " +
                                $"settings across ({e.GetType().Name}: {e.Message}).\n" +
-                               $"WHAT TO DO: open Analytics for XR > Configuration and enter your appID / appToken / " +
-                               $"orgToken again. The old values are still in {quarantinePath}.");
+                               $"WHAT TO DO: open Analytics for XR > Configuration and enter your App Token again " +
+                               $"(your Application ID, on the legacy scheme). The old values are still in {quarantinePath}.");
                 return;
             }
 
@@ -283,8 +283,8 @@ namespace AbxrLib.Editor
                 // Nothing parsed: the project stores assets in binary, or the file is not a configuration at all.
                 Logcat.Warning($"AbxrLib created a new configuration but could not copy your old settings across " +
                                $"automatically.\n" +
-                               $"WHAT TO DO: open {quarantinePath} in a text editor, copy your appID / appToken / " +
-                               "orgToken values, then paste them into Analytics for XR > Configuration.\n" +
+                               $"WHAT TO DO: open {quarantinePath} in a text editor, copy your appToken value (appID, " +
+                               "orgID and authSecret on the legacy scheme), then paste it into Analytics for XR > Configuration.\n" +
                                "Your settings are not lost - they are still in that file. Do not delete it until you " +
                                "have copied them across.");
                 return;
@@ -292,8 +292,8 @@ namespace AbxrLib.Editor
 
             Logcat.Warning($"AbxrLib could not read your configuration, so it created a new one and copied your " +
                            $"{restored} saved settings into it. The old file is kept as {quarantinePath}.\n" +
-                           "WHAT TO DO: open Analytics for XR > Configuration and check your appID / appToken / " +
-                           "orgToken are correct. Keyboard and PIN prefab slots are not copied, so re-assign those if " +
+                           "WHAT TO DO: open Analytics for XR > Configuration and check your App Token is correct " +
+                           "(your Application ID, on the legacy scheme). Keyboard and PIN prefab slots are not copied, so re-assign those if " +
                            "you had set them.");
         }
 
@@ -412,7 +412,7 @@ namespace AbxrLib.Editor
             {
                 Logcat.Warning($"You have two AbxrLib configuration files: {NEW_CONFIG_NAME}.asset (the one AbxrLib " +
                                $"uses) and the older {OLD_CONFIG_NAME}.asset (ignored).\n" +
-                               $"WHAT TO DO: check {NEW_CONFIG_NAME}.asset has your appID / appToken / orgToken, then " +
+                               $"WHAT TO DO: check {NEW_CONFIG_NAME}.asset has your App Token (your Application ID, on the legacy scheme), then " +
                                $"delete {OLD_CONFIG_NAME}.asset.");
             }
         }
