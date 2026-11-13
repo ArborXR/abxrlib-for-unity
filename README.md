@@ -181,6 +181,8 @@ A project that already uses the legacy scheme keeps working: Configuration and t
 
 New projects use an App Token. A project that isn't already on the legacy scheme is not offered it: the legacy fields and the checkbox don't show. The legacy scheme also can't use passcode pairing, which needs an App Token.
 
+If a project on App Tokens still has an App ID, Org ID, or Auth Secret saved (after switching, for example), Configuration and the Setup Wizard warn that the values ship inside the build, and a **Clear legacy values** button empties them.
+
 ### Using with Other Backend Services
 For information on implementing your own backend service or using other compatible services, please refer to the ABXR protocol specification.
 
