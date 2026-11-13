@@ -65,7 +65,7 @@ namespace AbxrLib.Editor
                 {
                     string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token";
                     string orgTokenTooltip = isProductionCustom
-                        ? "Required for Production (Custom APK). Set the customer's org token from ArborXR Portal."
+                        ? "Required for Production (Custom APK). A customer's Organization Token is not self-serve in the portal: contact ArborXR."
                         : "An Organization Token saved in this project. Clear it if it isn't needed.";
                     config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
                 }

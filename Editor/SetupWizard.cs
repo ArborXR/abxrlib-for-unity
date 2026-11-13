@@ -345,7 +345,7 @@ namespace AbxrLib.Editor
                         _config.orgToken);
 
                     EditorGUILayout.LabelField(isCustomApk
-                            ? "A specific customer's Organization Token is not self-serve in the portal - ArborXR provides it."
+                            ? "A specific customer's Organization Token is not self-serve in the portal. Contact ArborXR."
                             : SetupWizardChecks.OrgTokenFieldHint(_config, out _) ?? "",
                         _styles.Hint);
                 }
