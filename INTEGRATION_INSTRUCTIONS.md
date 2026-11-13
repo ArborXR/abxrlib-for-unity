@@ -44,9 +44,9 @@ Use **app token** and **org token** for authentication. In **Analytics for XR â†
 
 - **Use App Tokens:** Enable this option.
 - **App Token:** Required. JWT for your app (from your distribution channel or ArborXR portal).
-- **Org Token:** Usually leave empty so the SDK uses the **dynamic org token** (derived from device/org context when available). For single-customer builds (e.g. production_custom), set the org token explicitly.
+- **Org Token:** Shown only when **Build Type** is `Production (Custom APK)` (single-customer builds), where it is required. Otherwise the SDK uses the **dynamic org token** (derived from device/org context when available) or passcode pairing, and in `Development` the App Token.
 
-**Development / testing:** Set App Token (and Org Token if needed for your build type). On ArborXR-managed devices, org context can be supplied at runtime (dynamic org token).
+**Development / testing:** Set **Build Type** to `Development` and set App Token. The App Token is used as the org token, so the app signs in as the organization that owns it. On ArborXR-managed devices, org context is supplied at runtime (dynamic org token).
 
 **Production (customer builds):** Set App Token. Use dynamic org token (empty org token in config) where the device or runtime provides org context; for production_custom builds, configure the org token as required.
 
