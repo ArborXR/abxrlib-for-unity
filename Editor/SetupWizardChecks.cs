@@ -253,6 +253,56 @@ namespace AbxrLib.Editor
         internal static string BuildTypeAtIndex(int index) =>
             BuildTypeValues[Mathf.Clamp(index, 0, BuildTypeValues.Length - 1)];
 
+        /// <summary>
+        /// The Build Type tooltip, the same in the inspector and the wizard. It names the credentials the project's
+        /// scheme has, and mentions Production (Custom APK) only where it is offered.
+        /// </summary>
+        internal static string BuildTypeTooltip(AppConfig config, bool offersCustomApk)
+        {
+            bool legacy = ShowsLegacyScheme(config);
+            string tooltip = legacy
+                ? "Production: shared builds, including ArborXR-managed fleets. The device's MDM supplies the " +
+                  "Organization ID and Authorization Secret; ones saved here are not used, but they stay in the " +
+                  "project and ship inside the build.\n" +
+                  "Development: your own test builds; they sign in with the Organization ID and Authorization Secret " +
+                  "saved here."
+                : "Production: shared builds, including ArborXR-managed fleets; each device's organization comes from " +
+                  "the device at runtime.\n" +
+                  "Development: your own test builds; they report to the organization that owns the app.";
+            if (!offersCustomApk) return tooltip;
+            return tooltip + (legacy
+                ? "\nProduction (Custom APK): one customer per build; Organization ID and Authorization Secret are " +
+                  "required and the MDM is not consulted for them. The API receives buildType Production."
+                : "\nProduction (Custom APK): one customer per build; the Organization Token is required and the MDM " +
+                  "is not consulted for it. The API receives buildType Production.");
+        }
+
+        /// <summary>The line under the wizard's Build Type choice, for the option at <paramref name="index"/>.</summary>
+        internal static string BuildTypeHint(AppConfig config, int index)
+        {
+            bool legacy = ShowsLegacyScheme(config);
+            switch (index)
+            {
+                case 0:
+                    return legacy
+                        ? "Shared builds, and the right choice for an ArborXR-managed fleet: the device's MDM supplies " +
+                          "the Organization ID and Authorization Secret at runtime, and ones saved here are not used."
+                        : "Shared builds, and the right choice for an ArborXR-managed fleet: each device reports to " +
+                          "its own organization at runtime.";
+                case 1:
+                    return legacy
+                        ? "Your own test builds. They sign in with the Organization ID and Authorization Secret saved " +
+                          "here; a managed device uses its own."
+                        : "Your own test builds. They report to the organization that owns the app; a managed device " +
+                          "reports to its own organization. Passcode pairing never shows in Development: use " +
+                          "Production to test it.";
+                default:
+                    return "One customer per build: every device running this build reports to the organization set " +
+                           "here, and the MDM is not consulted for it. Not for an ArborXR-managed fleet - use " +
+                           "Production there.";
+            }
+        }
+
         // ---------------------------------------------------------------------------------------------------------
         // Credentials
         // ---------------------------------------------------------------------------------------------------------

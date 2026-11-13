@@ -136,6 +136,68 @@ public class BuildTypeChoiceTests
         Assert.IsTrue(warn);
     }
 
+    // ── The tooltip and the wizard's hint ─────────────────────────
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void TheTooltip_MentionsCustomApk_OnlyWhereItIsOffered(bool useAppTokens)
+    {
+        _config.useAppTokens = useAppTokens;
+
+        StringAssert.DoesNotContain("Custom APK", SetupWizardChecks.BuildTypeTooltip(_config, offersCustomApk: false));
+        StringAssert.Contains("Production (Custom APK):", SetupWizardChecks.BuildTypeTooltip(_config, offersCustomApk: true));
+    }
+
+    [Test]
+    public void TheTooltip_OnAppTokens_NamesNoLegacyField()
+    {
+        _config.useAppTokens = true;
+
+        string tooltip = SetupWizardChecks.BuildTypeTooltip(_config, offersCustomApk: true);
+
+        StringAssert.DoesNotContain("Organization ID", tooltip);
+        StringAssert.DoesNotContain("Authorization Secret", tooltip);
+        StringAssert.DoesNotContain("OrgID", tooltip);
+        StringAssert.Contains("the Organization Token is required", tooltip);
+    }
+
+    [Test]
+    public void TheTooltip_OnTheLegacyScheme_NamesItsOwnFields_AndSaysTheyStillShip()
+    {
+        _config.useAppTokens = false;
+
+        string tooltip = SetupWizardChecks.BuildTypeTooltip(_config, offersCustomApk: true);
+
+        StringAssert.Contains("Organization ID and Authorization Secret are required", tooltip);
+        StringAssert.DoesNotContain("Organization Token", tooltip);
+        StringAssert.Contains("ship inside the build", tooltip);
+        StringAssert.DoesNotContain("will NOT be included", tooltip);
+    }
+
+    [Test]
+    public void TheHint_ForDevelopment_SaysWhereEachSchemeSignsIn()
+    {
+        _config.useAppTokens = true;
+        StringAssert.Contains("the organization that owns the app", SetupWizardChecks.BuildTypeHint(_config, 1));
+
+        _config.useAppTokens = false;
+        string legacy = SetupWizardChecks.BuildTypeHint(_config, 1);
+        StringAssert.Contains("the Organization ID and Authorization Secret saved here", legacy);
+        StringAssert.DoesNotContain("owns the app", legacy);
+        StringAssert.DoesNotContain("pairing", legacy);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void TheHint_HasALineForEveryOption(bool useAppTokens)
+    {
+        _config.useAppTokens = useAppTokens;
+
+        StringAssert.StartsWith("Shared builds", SetupWizardChecks.BuildTypeHint(_config, 0));
+        StringAssert.StartsWith("Your own test builds", SetupWizardChecks.BuildTypeHint(_config, 1));
+        StringAssert.StartsWith("One customer per build", SetupWizardChecks.BuildTypeHint(_config, 2));
+    }
+
     // ── Switching in an open window ───────────────────────────────
 
     [Test]

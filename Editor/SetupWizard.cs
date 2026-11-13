@@ -297,28 +297,12 @@ namespace AbxrLib.Editor
             int current = SetupWizardChecks.BuildTypeIndex(_config.buildType);
             // Production (Custom APK) is offered only to a project already saved on it (SDK-90).
             bool offersCustomApk = _customApkOption.Holds(SetupWizardChecks.UsesCustomApk(_config));
-            string buildTypeTooltip =
-                "Production: shared builds, including ArborXR-managed fleets; each device's org comes from the " +
-                "device at runtime.\n" +
-                "Development: for your own test builds.";
-            // Only a project that is offered Production (Custom APK) is told about it (SDK-90).
-            if (offersCustomApk)
-                buildTypeTooltip += "\nProduction (Custom APK): one customer per build; the Organization Token is " +
-                                    "required and the MDM is not consulted for it.";
+            string buildTypeTooltip = SetupWizardChecks.BuildTypeTooltip(_config, offersCustomApk);
             int selected = EditorGUILayout.Popup(new GUIContent("Build Type", buildTypeTooltip),
                 current, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
             if (selected != current) _config.buildType = SetupWizardChecks.BuildTypeAtIndex(selected);
 
-            EditorGUILayout.LabelField(selected switch
-            {
-                0 => "Shared builds, and the right choice for an ArborXR-managed fleet: each device reports to its own " +
-                     "organization at runtime.",
-                1 => "Your own test builds. They report to the organization that owns the app; a managed device " +
-                     "reports to its own organization. Passcode pairing never shows in Development: use Production " +
-                     "to test it.",
-                _ => "One customer per build: every device running this build reports to the organization set here, " +
-                     "and the MDM is not consulted for it. Not for an ArborXR-managed fleet - use Production there."
-            }, _styles.Hint);
+            EditorGUILayout.LabelField(SetupWizardChecks.BuildTypeHint(_config, selected), _styles.Hint);
 
             GUILayout.Space(8f);
             // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
