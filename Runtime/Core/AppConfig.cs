@@ -19,12 +19,12 @@ namespace AbxrLib.Runtime.Core
     public class AppConfig : ScriptableObject
     {
         [Header("Build Type")]
-        [Tooltip("Production: a saved OrgID and AuthSecret are not used, but they stay in this asset and ship inside the build. Development: OrgID and AuthSecret are used. Production (Custom APK): kept for projects already saved on it; like Production for the API but requires and includes Organization Token for single-customer builds.")]
+        [Tooltip("Production: the SDK doesn't sign in with a saved OrgID and AuthSecret, but they stay in this asset and ship inside the build. Development: the SDK signs in with them. Production (Custom APK): kept for projects already saved on it; like Production for the API but requires and includes Organization Token for single-customer builds.")]
         public string buildType = "production";
 
         [Header("Application Identity")]
         [Tooltip("Legacy scheme only: the Application ID, required there.")] public string appID;
-        [Tooltip("Legacy scheme only. Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it.")] public string orgID;
+        [Tooltip("On the legacy scheme, Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it. On either scheme, Abxr.GetOrgId() returns it when no ArborXR client supplies one.")] public string orgID;
         [Tooltip("Legacy scheme only. Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it.")] public string authSecret;
         [HideInInspector]
         [Tooltip("Optional")] public string launcherAppID;
