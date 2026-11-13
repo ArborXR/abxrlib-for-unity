@@ -39,6 +39,8 @@ namespace AbxrLib.Editor
         private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
         // Keeps the Use App Tokens checkbox up while this window is open, so a legacy project that ticks it can untick it.
         private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
+        // Keeps Production (Custom APK) in the Build Type choice while this window is open, so switching away can be undone.
+        private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
         private Vector2 _scroll;
         private Styles _styles;
 
@@ -62,6 +64,7 @@ namespace AbxrLib.Editor
             window._openedAutomatically = openedAutomatically;
             window._orgTokenField.Reset();
             window._useAppTokensToggle.Reset();
+            window._customApkOption.Reset();
             window.Refresh();
             window.Show();
             window.Focus();
@@ -72,6 +75,7 @@ namespace AbxrLib.Editor
             titleContent = new GUIContent("AbxrLib Setup");
             _orgTokenField.Reset();
             _useAppTokensToggle.Reset();
+            _customApkOption.Reset();
             Refresh();
         }
 
@@ -286,20 +290,20 @@ namespace AbxrLib.Editor
 
             EditorGUI.BeginChangeCheck();
 
-            string[] values = { "production", "development", "production_custom" };
-            string[] labels = { "Production", "Development", "Production (Custom APK)" };
             // An unrecognized stored value shows as Production, matching how the runtime normalizes it, and the
             // value is only written back when the popup actually changes - drawing this page must never edit the
             // configuration on its own.
-            int current = _config.buildType == "development" ? 1 : _config.buildType == "production_custom" ? 2 : 0;
+            int current = SetupWizardChecks.BuildTypeIndex(_config.buildType);
+            // Production (Custom APK) is offered only to a project already saved on it (SDK-90).
+            bool offersCustomApk = _customApkOption.Holds(SetupWizardChecks.UsesCustomApk(_config));
             int selected = EditorGUILayout.Popup(new GUIContent("Build Type",
                 "Production: shared builds, including ArborXR-managed fleets; each device's org comes from the " +
                 "device at runtime.\n" +
                 "Development: for your own test builds.\n" +
                 "Production (Custom APK): one customer per build; the Organization Token is required and the MDM is " +
                 "not consulted for it."),
-                current, labels);
-            if (selected != current) _config.buildType = values[selected];
+                current, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
+            if (selected != current) _config.buildType = SetupWizardChecks.BuildTypeAtIndex(selected);
 
             EditorGUILayout.LabelField(selected switch
             {

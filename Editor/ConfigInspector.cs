@@ -11,11 +11,14 @@ namespace AbxrLib.Editor
         private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
         // Keeps the Use App Tokens checkbox up while this inspector is open, so a legacy project that ticks it can untick it.
         private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
+        // Keeps Production (Custom APK) in the Build Type choice while this inspector is open, so switching away can be undone.
+        private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
 
         private void OnEnable()
         {
             _orgTokenField.Reset();
             _useAppTokensToggle.Reset();
+            _customApkOption.Reset();
         }
 
         public override void OnInspectorGUI()
@@ -23,21 +26,21 @@ namespace AbxrLib.Editor
             var config = (AppConfig)target;
             EditorGUILayout.LabelField("Application Identity", EditorStyles.boldLabel);
             
-            string[] buildTypeValues = { "production", "development", "production_custom" };
-            string[] buildTypeDisplayNames = { "Production", "Development", "Production (Custom APK)" };
             // Unknown stored values display as Production - the same normalization the runtime and the setup
             // wizard apply - and the write-back only happens on an actual change. Anything else lets merely
             // selecting the asset rewrite buildType, and the old fallback rewrote it to production_custom, the
             // one type that ships single-customer org credentials.
-            int currentSelection = config.buildType == "development" ? 1 : (config.buildType == "production_custom" ? 2 : 0);
+            int currentSelection = SetupWizardChecks.BuildTypeIndex(config.buildType);
+            // Production (Custom APK) is offered only to a project already saved on it (SDK-90).
+            bool offersCustomApk = _customApkOption.Holds(SetupWizardChecks.UsesCustomApk(config));
             // The Organization ID and Authorization Secret wording is for a project that has those fields (SDK-89).
             string buildTypeTooltip = SetupWizardChecks.ShowsLegacyScheme(config)
                 ? "Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution).\nDevelopment: OrgID and AuthSecret will be included in builds (for custom APKs only).\nProduction (Custom APK): For single-customer builds; requires Organization ID and Authorization Secret; API receives buildType Production."
                 : "Production: shared builds, including ArborXR-managed fleets; each device's organization comes from the device at runtime.\nDevelopment: your own test builds; they report to the organization that owns the app.\nProduction (Custom APK): For single-customer builds; requires Organization Token; API receives buildType Production.";
             int newSelection = EditorGUILayout.Popup(new GUIContent("Build Type", buildTypeTooltip),
-                currentSelection, buildTypeDisplayNames);
+                currentSelection, SetupWizardChecks.BuildTypeLabels(offersCustomApk));
 
-            if (newSelection != currentSelection) config.buildType = buildTypeValues[newSelection];
+            if (newSelection != currentSelection) config.buildType = SetupWizardChecks.BuildTypeAtIndex(newSelection);
                         
             EditorGUILayout.Space();
             

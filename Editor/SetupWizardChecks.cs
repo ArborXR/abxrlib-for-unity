@@ -219,6 +219,41 @@ namespace AbxrLib.Editor
 #endif
 
         // ---------------------------------------------------------------------------------------------------------
+        // Build Type choice
+        // ---------------------------------------------------------------------------------------------------------
+
+        private static readonly string[] BuildTypeValues = { "production", "development", "production_custom" };
+        private static readonly string[] BuildTypeLabelsWithCustomApk = { "Production", "Development", "Production (Custom APK)" };
+        private static readonly string[] BuildTypeLabelsWithoutCustomApk = { "Production", "Development" };
+
+        /// <summary>
+        /// Whether the project is saved as Production (Custom APK). Only then do the Configuration inspector and the
+        /// wizard offer that Build Type (SDK-90). On App Tokens it needs a customer's Organization Token, which
+        /// nothing issues, so other projects are offered Production and Development. A project put on it by setting
+        /// buildType in the asset keeps the option and everything it uses.
+        /// </summary>
+        internal static bool UsesCustomApk(AppConfig config) => config != null && config.buildType == "production_custom";
+
+        /// <summary>
+        /// The Build Type popup's labels. Production (Custom APK) is the last one, so leaving it out moves no other
+        /// option: an index stands for the same Build Type either way.
+        /// </summary>
+        internal static string[] BuildTypeLabels(bool offersCustomApk) =>
+            offersCustomApk ? BuildTypeLabelsWithCustomApk : BuildTypeLabelsWithoutCustomApk;
+
+        /// <summary>
+        /// The popup index for a stored Build Type. An unrecognised value reads as Production, as the runtime
+        /// normalises it. Callers write a Build Type back only when the developer changes the selection, so showing
+        /// the popup never rewrites one.
+        /// </summary>
+        internal static int BuildTypeIndex(string buildType) =>
+            buildType == "development" ? 1 : buildType == "production_custom" ? 2 : 0;
+
+        /// <summary>The Build Type a popup index stands for.</summary>
+        internal static string BuildTypeAtIndex(int index) =>
+            BuildTypeValues[Mathf.Clamp(index, 0, BuildTypeValues.Length - 1)];
+
+        // ---------------------------------------------------------------------------------------------------------
         // Credentials
         // ---------------------------------------------------------------------------------------------------------
 
