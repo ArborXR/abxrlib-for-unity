@@ -39,7 +39,8 @@ namespace AbxrLib.Editor
         private readonly SetupWizardChecks.OrgTokenFieldLatch _orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
         // Keeps the Use App Tokens checkbox up while this window is open, so a legacy project with nothing saved yet
         // can untick it again. With legacy values saved, the checkbox shows without this.
-        private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
+        private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle =
+            new SetupWizardChecks.ShownLatch(resetsWhenLeftoversAreCleared: true);
         // Keeps Production (Custom APK) in the Build Type choice while this window is open, so switching away can be undone.
         private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
         // Keep a legacy Organization ID or Authorization Secret field editable in Production once it has held a value.
@@ -370,7 +371,7 @@ namespace AbxrLib.Editor
             {
                 EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
                 if (offersClear && GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(_config), GUILayout.Width(160f)))
-                    SetupWizardChecks.ClearLeftoverValues(_config, _useAppTokensToggle);
+                    SetupWizardChecks.ClearLeftoverValues(_config);
             }
 
             if (EditorGUI.EndChangeCheck()) EditorUtility.SetDirty(_config);

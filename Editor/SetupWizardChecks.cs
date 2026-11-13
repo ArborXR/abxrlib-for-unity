@@ -398,8 +398,8 @@ namespace AbxrLib.Editor
         /// <summary>
         /// <see cref="ShowsUseAppTokensToggle(AppConfig)"/> for one open inspector or wizard. A project that was on the
         /// legacy scheme in this window keeps the checkbox after ticking it, even with nothing saved, so a mistaken
-        /// tick can be undone. Saved legacy values are read fresh each time and never latched, so once they are
-        /// cleared in either window the checkbox goes from both.
+        /// tick can be undone. Saved legacy values are read fresh each time, and the latch is one that the Clear
+        /// button resets, so once they are cleared in either window the checkbox goes from both.
         /// </summary>
         internal static bool ShowsUseAppTokensToggle(AppConfig config, ShownLatch wasOnLegacyScheme) =>
             wasOnLegacyScheme.Holds(ShowsLegacyScheme(config)) || HasLegacyValues(config);
@@ -506,10 +506,10 @@ namespace AbxrLib.Editor
 
         /// <summary>
         /// The Clear button under the leftover notice, for both editors: empties the other scheme's saved values as
-        /// one undoable step, drops the checkbox latch, since nothing is left to switch back to, and marks the asset
-        /// changed. False, changing nothing, unless <see cref="CanClearLeftoverValues"/>.
+        /// one undoable step, lets go of the latches that kept a way back to them, in every open window, and marks
+        /// the asset changed. False, changing nothing, unless <see cref="CanClearLeftoverValues"/>.
         /// </summary>
-        internal static bool ClearLeftoverValues(AppConfig config, ShownLatch useAppTokensToggle = null)
+        internal static bool ClearLeftoverValues(AppConfig config)
         {
             if (!CanClearLeftoverValues(config)) return false;
 
@@ -525,7 +525,7 @@ namespace AbxrLib.Editor
                 config.appToken = "";
                 config.orgToken = "";
             }
-            useAppTokensToggle?.Reset();
+            _leftoversCleared++;
             EditorUtility.SetDirty(config);
             return true;
         }
@@ -615,15 +615,38 @@ namespace AbxrLib.Editor
             "working, but new projects use an App Token. Tick Use App Tokens to switch.";
 
         /// <summary>
+        /// How many times the Clear button has emptied leftover values in this Editor session. The latches that exist
+        /// so a project can switch back to those values watch it, so clearing in one window drops them in every window.
+        /// </summary>
+        private static int _leftoversCleared;
+
+        /// <summary>
         /// For one open inspector or wizard: once something has shown, it stays until the window closes or is enabled
         /// again. Without it, the edit that makes a control unnecessary removes the control mid-edit, with no way back.
         /// </summary>
         internal sealed class ShownLatch
         {
+            private readonly bool _resetsWhenLeftoversAreCleared;
+            private int _leftoversClearedSeen = _leftoversCleared;
             private bool _shown;
 
+            /// <param name="resetsWhenLeftoversAreCleared">
+            /// For a latch that keeps a way back to the other scheme's values: the Clear button removes those values, in
+            /// whichever window it was pressed, so the latch lets go too.
+            /// </param>
+            internal ShownLatch(bool resetsWhenLeftoversAreCleared = false) =>
+                _resetsWhenLeftoversAreCleared = resetsWhenLeftoversAreCleared;
+
             /// <summary>True from the first call given true, until <see cref="Reset"/>.</summary>
-            internal bool Holds(bool showsNow) => _shown |= showsNow;
+            internal bool Holds(bool showsNow)
+            {
+                if (_resetsWhenLeftoversAreCleared && _leftoversClearedSeen != _leftoversCleared)
+                {
+                    _leftoversClearedSeen = _leftoversCleared;
+                    _shown = false;
+                }
+                return _shown |= showsNow;
+            }
 
             internal void Reset() => _shown = false;
         }
@@ -635,7 +658,7 @@ namespace AbxrLib.Editor
         /// </summary>
         internal sealed class OrgTokenFieldLatch
         {
-            private readonly ShownLatch _heldAValue = new ShownLatch();
+            private readonly ShownLatch _heldAValue = new ShownLatch(resetsWhenLeftoversAreCleared: true);
 
             internal bool Shows(AppConfig config)
             {

@@ -694,6 +694,9 @@ public class LegacySchemeTests
 
     // ── Switching, and the way back ───────────────────────────────
 
+    private static SetupWizardChecks.ShownLatch CheckboxLatch() =>
+        new SetupWizardChecks.ShownLatch(resetsWhenLeftoversAreCleared: true);
+
     [Test]
     public void TickingUseAppTokens_WithLegacyValuesSaved_KeepsTheCheckboxInAnyWindow()
     {
@@ -705,72 +708,86 @@ public class LegacySchemeTests
         _config.useAppTokens = true;
 
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(_config), "The legacy fields give way to the App Token.");
-        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, new SetupWizardChecks.ShownLatch()),
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, CheckboxLatch()),
             "Not only in the window that ticked it: after a recompile, in the other editor, in a later session.");
     }
 
     [Test]
-    public void TheClearButton_EmptiesTheLegacyValues_AndRemovesTheCheckboxToo()
+    public void TheClearButton_AfterSwitchingFromTheLegacyScheme_RemovesTheCheckboxFromEveryWindow()
     {
-        var checkbox = new SetupWizardChecks.ShownLatch();
-        OnAppTokensWithLegacyValues();
-        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox));
-
-        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config, checkbox);
-
-        Assert.IsTrue(cleared);
-        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
-        Assert.AreEqual("app.token.jwt", _config.appToken);
-        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox), "Nothing is left to switch back to.");
-        Assert.IsTrue(UnityEditor.EditorUtility.IsDirty(_config), "The asset is marked changed, so the save writes it.");
-    }
-
-    [Test]
-    public void ClearingInOneWindow_RemovesTheCheckboxFromTheOther()
-    {
-        var thisWindow = new SetupWizardChecks.ShownLatch();
-        var otherWindow = new SetupWizardChecks.ShownLatch();
-        OnAppTokensWithLegacyValues();
+        // Both windows saw the project on the legacy scheme, so both latched the checkbox. Without Clear letting go
+        // of those latches, the checkbox would outlive the values it switches back to.
+        var thisWindow = CheckboxLatch();
+        var otherWindow = CheckboxLatch();
+        _config.useAppTokens = false;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
         Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, thisWindow));
         Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, otherWindow));
 
-        SetupWizardChecks.ClearLeftoverValues(_config, thisWindow);
+        _config.useAppTokens = true;
+        _config.appToken = "app.token.jwt";
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, thisWindow));
 
-        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config, otherWindow),
-            "Saved values are read fresh, not latched, so the other window follows.");
+        Assert.IsTrue(SetupWizardChecks.ClearLeftoverValues(_config));
+
+        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config, thisWindow), "Nothing is left to switch back to.");
+        Assert.IsFalse(SetupWizardChecks.ShowsUseAppTokensToggle(_config, otherWindow), "Nor in the window that didn't press Clear.");
     }
 
     [Test]
-    public void TheClearButton_OnTheLegacyScheme_EmptiesTheTokens()
+    public void TheClearButton_LetsGoOfTheOrganizationTokenFieldToo()
     {
-        OnTheLegacySchemeWithTokens();
+        var orgTokenField = new SetupWizardChecks.OrgTokenFieldLatch();
+        _config.useAppTokens = true;
+        _config.buildType = "development";
+        _config.appToken = "app.token.jwt";
+        _config.orgToken = "org.token.jwt";
+        Assert.IsTrue(orgTokenField.Shows(_config));
 
-        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config, new SetupWizardChecks.ShownLatch());
+        _config.useAppTokens = false;
+        _config.appID = AppId;
+        Assert.IsTrue(SetupWizardChecks.ClearLeftoverValues(_config), "On the legacy scheme, the tokens are the leftovers.");
+        _config.useAppTokens = true;
 
-        Assert.IsTrue(cleared);
-        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(_config));
-        Assert.AreEqual(AppId, _config.appID);
+        Assert.IsFalse(orgTokenField.Shows(_config), "The token it was holding the field open for is gone.");
+    }
+
+    [Test]
+    public void TheClearButton_LeavesOtherLatchesAlone()
+    {
+        var customApkOption = new SetupWizardChecks.ShownLatch();
+        customApkOption.Holds(true);
+        OnAppTokensWithLegacyValues();
+
+        Assert.IsTrue(SetupWizardChecks.ClearLeftoverValues(_config));
+
+        Assert.IsTrue(customApkOption.Holds(false), "Only the latches that keep a way back to the cleared values let go.");
     }
 
     [Test]
     public void TheClearButton_WhereNothingMayBeCleared_ChangesNothing()
     {
-        var checkbox = new SetupWizardChecks.ShownLatch();
-        OnAppTokensWithLegacyValues(appToken: "");
+        var checkbox = CheckboxLatch();
+        _config.useAppTokens = false;
         Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox));
+        OnAppTokensWithLegacyValues(appToken: "");
 
-        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config, checkbox);
+        bool cleared = SetupWizardChecks.ClearLeftoverValues(_config);
 
         Assert.IsFalse(cleared);
         Assert.AreEqual(AppId, _config.appID);
-        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox), "The checkbox stays: it is the way back to those credentials.");
-        Assert.IsFalse(SetupWizardChecks.ClearLeftoverValues(null, checkbox));
+        _config.appID = "";
+        _config.orgID = "";
+        _config.authSecret = "";
+        Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox), "A refused Clear lets go of no latch.");
     }
 
     [Test]
     public void TickingUseAppTokens_WithNothingSaved_KeepsTheCheckboxUntilTheWindowCloses()
     {
-        var checkbox = new SetupWizardChecks.ShownLatch();
+        var checkbox = CheckboxLatch();
         _config.useAppTokens = false;
         Assert.IsTrue(SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox));
 
@@ -785,7 +802,7 @@ public class LegacySchemeTests
     [Test]
     public void UntickingAgain_BringsTheLegacyFieldsBack()
     {
-        var checkbox = new SetupWizardChecks.ShownLatch();
+        var checkbox = CheckboxLatch();
         _config.useAppTokens = false;
         SetupWizardChecks.ShowsUseAppTokensToggle(_config, checkbox);
         _config.useAppTokens = true;
@@ -798,6 +815,33 @@ public class LegacySchemeTests
     }
 
     // ── The latch ─────────────────────────────────────────────────
+
+    [Test]
+    public void ALatchThatKeepsAWayBack_LetsGoWhenLeftoversAreCleared_ThenLatchesAgain()
+    {
+        var latch = new SetupWizardChecks.ShownLatch(resetsWhenLeftoversAreCleared: true);
+        Assert.IsTrue(latch.Holds(true));
+        OnAppTokensWithLegacyValues();
+
+        Assert.IsTrue(SetupWizardChecks.ClearLeftoverValues(_config));
+
+        Assert.IsFalse(latch.Holds(false));
+        Assert.IsTrue(latch.Holds(true));
+        Assert.IsTrue(latch.Holds(false), "It is an ordinary latch again until the next Clear.");
+    }
+
+    [Test]
+    public void ALatchMadeAfterAClear_StartsEmpty()
+    {
+        OnAppTokensWithLegacyValues();
+        SetupWizardChecks.ClearLeftoverValues(_config);
+
+        var latch = new SetupWizardChecks.ShownLatch(resetsWhenLeftoversAreCleared: true);
+
+        Assert.IsFalse(latch.Holds(false));
+        Assert.IsTrue(latch.Holds(true));
+        Assert.IsTrue(latch.Holds(false), "An earlier Clear doesn't reset a latch made after it.");
+    }
 
     [Test]
     public void ShownLatch_HoldsFromTheFirstTrue_UntilReset()
