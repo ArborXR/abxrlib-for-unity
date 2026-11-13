@@ -224,6 +224,24 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// The build-time reminder for a Development build that uses its App Token as the Organization Token (SDK-85):
+        /// off an ArborXR-managed device, every device that runs it reports to the organization that owns the app, so
+        /// the build must stay inside the team. Null when the build doesn't do that. It is a valid configuration, not a
+        /// problem to fix, so the wizard doesn't list it.
+        /// </summary>
+        internal static string DescribeDevelopmentAppTokenOrg(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens || config.buildType != "development") return null;
+            // An invalid configuration gets the credential warning instead: nothing signs in with it.
+            if (!CredentialsAreValid(config)) return null;
+            if (!string.IsNullOrEmpty(config.orgToken) && config.orgToken != config.appToken) return null;
+
+            return "Build Type is Development and the App Token is used as the Organization Token, so on a device " +
+                   "without ArborXR MDM this build reports to the organization that owns the app. Keep it inside your " +
+                   "team, and use Build Type Production for a build you distribute.";
+        }
+
+        /// <summary>
         /// Describes what is missing from the credentials in terms of what to do about it, or null when they are
         /// valid. The runtime's own messages are deliberately vague (they reach end users); these do not, so they say
         /// which field is wrong and where the value comes from.

@@ -15,6 +15,10 @@ namespace AbxrLib.Editor
     ///
     /// Only Problem-severity checks are repeated. Warning-severity items (Android settings, ArborMdmClient off) can
     /// be deliberate, and a deliberately configured project should build quietly.
+    ///
+    /// The one exception is a Development build that uses its App Token as the Organization Token (SDK-85). It is a
+    /// valid configuration, but a copy that leaves the team reports other people's devices to the publisher's org,
+    /// and the build is the last place to say so.
     /// </summary>
     internal sealed class BuildValidation : IPreprocessBuildWithReport
     {
@@ -37,6 +41,9 @@ namespace AbxrLib.Editor
 
                 if (config != null && !SetupWizardChecks.CredentialsAreValid(config))
                     Logcat.Warning("AbxrLib setup: " + SetupWizardChecks.DescribeCredentialProblem(config));
+
+                string developmentOrg = SetupWizardChecks.DescribeDevelopmentAppTokenOrg(config);
+                if (developmentOrg != null) Logcat.Warning("AbxrLib setup: " + developmentOrg);
 
                 foreach (SetupWizardChecks.Check check in SetupWizardChecks.Run())
                 {
