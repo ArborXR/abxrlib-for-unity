@@ -484,7 +484,9 @@ namespace AbxrLib.Editor
         /// Says on the first page that AbxrLib's sign-in UI is a separate import, because the case that needs telling
         /// is an upgrade: the project already works, the package quietly stopped carrying the keyboard and PIN pad,
         /// and nothing else would surface that until a user is standing in front of a sign-in prompt that never
-        /// appears. A configured project is treated as an upgrade and warned; an empty one is just informed.
+        /// appears. A configured project is warned, since it can sign in and would reach that prompt; an empty one
+        /// is just informed. Valid credentials don't prove an upgrade (a new project has them as soon as its App
+        /// Token is pasted), so the text never says the project came from an earlier AbxrLib.
         /// </summary>
         private void DrawWorldSpaceCallout()
         {
@@ -493,23 +495,23 @@ namespace AbxrLib.Editor
             // Imported but not compiling is a different problem with a different fix; Project Setup covers it.
             if (_worldSpaceFilesImported) return;
 
-            bool looksLikeUpgrade = SetupWizardChecks.CredentialsAreValid(_config);
+            bool configured = SetupWizardChecks.CredentialsAreValid(_config);
 
             GUILayout.Space(8f);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             var previous = GUI.color;
-            GUI.color = looksLikeUpgrade ? _styles.WarnColor : _styles.InfoColor;
-            EditorGUILayout.LabelField(looksLikeUpgrade
+            GUI.color = configured ? _styles.WarnColor : _styles.InfoColor;
+            EditorGUILayout.LabelField(configured
                 ? "! Sign-in UI is not installed in this project"
                 : "i Sign-in UI is a separate import", EditorStyles.boldLabel);
             GUI.color = previous;
 
-            EditorGUILayout.LabelField(looksLikeUpgrade
-                    ? "This project is already configured, so it was set up with an earlier AbxrLib. The world-space " +
-                      "keyboard, PIN pad, and QR scanning used to be part of the package; they are now a separate " +
-                      "import, which keeps TextMeshPro, uGUI, and XR Interaction Toolkit out of projects that do not " +
-                      "draw AbxrLib's UI.\nWithout it, an authentication request that needs a PIN or email has " +
+            EditorGUILayout.LabelField(configured
+                    ? "The world-space keyboard, PIN pad, and QR scanning are a separate import. Before 3.0 they " +
+                      "were part of the package, so a project updated from an earlier AbxrLib has to import them " +
+                      "again. Keeping them separate keeps TextMeshPro, uGUI, and XR Interaction Toolkit out of " +
+                      "projects that do not draw AbxrLib's UI.\nWithout it, an authentication request that needs a PIN or email has " +
                       "nothing to show unless your app handles Abxr.OnInputRequested itself."
                     : "AbxrLib can draw its own sign-in UI - world-space keyboard, PIN pad, exit polls, and QR " +
                       "scanning - or your app can collect input itself through Abxr.OnInputRequested. Import it if " +
