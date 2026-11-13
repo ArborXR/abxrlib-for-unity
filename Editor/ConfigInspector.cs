@@ -36,24 +36,38 @@ namespace AbxrLib.Editor
                     "App Token", "App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on."), config.appToken);
                 
                 bool isProductionCustom = config.buildType == "production_custom";
-                EditorGUI.BeginDisabledGroup(isProduction);
-                string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token (optional)";
-                string orgTokenTooltip = isProductionCustom
-                    ? "Required for Production (Custom APK). Set the customer's org token from ArborXR Portal."
-                    : "Optional. In Development: leave empty to use the App Token as the Organization Token, which reports to the organization that owns the app. An ArborXR-managed device, or an org set at runtime, is used first. In Production this field is not used.";
-                config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
-                EditorGUI.EndDisabledGroup();
-                if (isProduction)
-                    EditorGUILayout.HelpBox("In Production, Organization Token from config is not sent. The field is disabled for shared production builds.", MessageType.Info);
-                else if (isProductionCustom)
+                // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from the
+                // device, and Development uses the App Token. A value an existing project already has stays visible.
+                if (SetupWizardChecks.ShowsOrgTokenField(config))
+                {
+                    string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token";
+                    string orgTokenTooltip = isProductionCustom
+                        ? "Required for Production (Custom APK). Set the customer's org token from ArborXR Portal."
+                        : "An Organization Token set earlier in this project. Clear it if it isn't needed.";
+                    config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
+                    // The field goes once it is cleared. Without dropping focus, the next text field drawn in its place
+                    // would take over its edit state.
+                    if (!SetupWizardChecks.ShowsOrgTokenField(config))
+                    {
+                        GUI.FocusControl(null);
+                        EditorGUIUtility.editingTextField = false;
+                    }
+                }
+
+                string orgTokenHint = SetupWizardChecks.OrgTokenFieldHint(config);
+                if (isProductionCustom)
                     EditorGUILayout.HelpBox(
                         "Production (Custom APK): For custom APKs per customer. Organization Token is required. The API receives buildType Production.",
                         MessageType.Info);
-                else
+                else if (config.buildType == "development")
                     EditorGUILayout.HelpBox(
-                        "In Development you can set an Organization Token, or leave it empty to use the App Token as the Organization Token: the app then reports to the organization that owns it. An ArborXR-managed device reports to its own organization either way.\n" +
+                        (orgTokenHint ?? "Development: the App Token is used as the Organization Token, so builds report to the organization that owns the app. An ArborXR-managed device reports to its own organization.") + "\n" +
                         "A Development build never shows passcode pairing. To test pairing, use Build Type Production.",
                         MessageType.Info);
+                else
+                    EditorGUILayout.HelpBox(
+                        orgTokenHint ?? "Production: each device reports to its own organization, which comes from ArborXR MDM or passcode pairing at runtime.",
+                        orgTokenHint != null ? MessageType.Warning : MessageType.Info);
             }
             else
             {

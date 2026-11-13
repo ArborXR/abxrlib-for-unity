@@ -294,11 +294,11 @@ namespace AbxrLib.Editor
 
             EditorGUILayout.LabelField(selected switch
             {
-                0 => "Shared builds, and the right choice for an ArborXR-managed fleet: leave Organization Token " +
-                     "empty and each device reports to its own organization at runtime.",
-                1 => "Your own test builds. Leave Organization Token empty to report to the organization that owns the app; " +
-                     "a managed device reports to its own organization. Passcode pairing never shows in Development: " +
-                     "use Production to test it.",
+                0 => "Shared builds, and the right choice for an ArborXR-managed fleet: each device reports to its own " +
+                     "organization at runtime.",
+                1 => "Your own test builds. They report to the organization that owns the app; a managed device " +
+                     "reports to its own organization. Passcode pairing never shows in Development: use Production " +
+                     "to test it.",
                 _ => "One customer per build: every device running this build reports to the organization set here, " +
                      "and the MDM is not consulted for it. Not for an ArborXR-managed fleet - use Production there."
             }, _styles.Hint);
@@ -314,25 +314,28 @@ namespace AbxrLib.Editor
                 _config.appToken = DrawPasteField("App Token (required)",
                     "The JWT that identifies your app and publisher.", _config.appToken);
 
-                bool orgTokenUsed = _config.buildType != "production";
-                using (new EditorGUI.DisabledScope(!orgTokenUsed))
+                // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from
+                // the device, and Development uses the App Token. A value an existing project already has stays visible.
+                if (SetupWizardChecks.ShowsOrgTokenField(_config))
                 {
+                    bool isCustomApk = _config.buildType == "production_custom";
                     _config.orgToken = DrawPasteField(
-                        _config.buildType == "production_custom" ? "Organization Token (required)" : "Organization Token (optional)",
-                        _config.buildType == "development"
-                            ? "An organization's JWT. Empty means the organization that owns the app, or the device's organization on a managed device."
-                            : "The customer's organization JWT. Empty means the organization comes from the device at runtime.",
+                        isCustomApk ? "Organization Token (required)" : "Organization Token",
+                        isCustomApk ? "The customer's organization JWT." : "An organization's JWT, set earlier in this project.",
                         _config.orgToken);
-                }
+                    // The field goes once it is cleared. Without dropping focus, the next text field drawn in its place
+                    // would take over its edit state.
+                    if (!SetupWizardChecks.ShowsOrgTokenField(_config))
+                    {
+                        GUI.FocusControl(null);
+                        EditorGUIUtility.editingTextField = false;
+                    }
 
-                if (!orgTokenUsed)
-                    EditorGUILayout.LabelField(
-                        "Production builds do not send an Organization Token from configuration, so the field is disabled.",
+                    EditorGUILayout.LabelField(isCustomApk
+                            ? "A specific customer's Organization Token is not self-serve in the portal - ArborXR provides it."
+                            : SetupWizardChecks.OrgTokenFieldHint(_config) ?? "",
                         _styles.Hint);
-                else if (_config.buildType == "production_custom")
-                    EditorGUILayout.LabelField(
-                        "A specific customer's Organization Token is not self-serve in the portal - ArborXR provides it.",
-                        _styles.Hint);
+                }
             }
             else
             {

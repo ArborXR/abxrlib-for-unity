@@ -224,6 +224,32 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// Whether the Configuration inspector and the wizard show the Organization Token field (SDK-87). Only a
+        /// Production (Custom APK) build needs one. A Development project that already has one keeps using it, so the
+        /// field stays while it holds a value; cleared, the App Token takes over (SDK-85) and the field goes.
+        /// Production never reads the value, but one that isn't a token still fails the credential check, so it
+        /// shows there too until it is cleared.
+        /// </summary>
+        internal static bool ShowsOrgTokenField(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens) return false;
+            if (config.buildType == "production_custom") return true;
+            if (string.IsNullOrEmpty(config.orgToken)) return false;
+            return config.buildType == "development" || !LooksLikeJwt(config.orgToken);
+        }
+
+        /// <summary>The hint under the Organization Token field, for the build types that show it without needing it.</summary>
+        internal static string OrgTokenFieldHint(AppConfig config)
+        {
+            if (config == null || config.buildType == "production_custom" || !ShowsOrgTokenField(config)) return null;
+            return config.buildType == "development"
+                ? "This project already has an Organization Token, so Development builds report to that organization. " +
+                  "Clear it to use the App Token instead: builds then report to the organization that owns the app."
+                : "Production doesn't use an Organization Token, but this leftover value isn't a token and fails the " +
+                  "credential check. Clear it.";
+        }
+
+        /// <summary>
         /// The build-time reminder for a Development build that uses its App Token as the Organization Token (SDK-85):
         /// off an ArborXR-managed device, every device that runs it reports to the organization that owns the app, so
         /// the build must stay inside the team. Null when the build doesn't do that. It is a valid configuration, not a
@@ -262,7 +288,7 @@ namespace AbxrLib.Editor
                 if (isCustomApk && string.IsNullOrWhiteSpace(config.orgToken))
                     return "Production (Custom APK) builds need that customer's Organization Token as well as the App Token. It is not self-serve in the portal - contact ArborXR for it.";
                 if (!string.IsNullOrWhiteSpace(config.orgToken) && !LooksLikeJwt(config.orgToken))
-                    return "Organization Token does not look like a token (three parts separated by periods). Clear the field to use the org the device reports, or re-copy the whole value.";
+                    return "Organization Token does not look like a token (three parts separated by periods). Clear the field, or re-copy the whole value.";
                 return "Credentials are incomplete.";
             }
 
