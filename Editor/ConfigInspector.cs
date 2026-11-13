@@ -37,13 +37,14 @@ namespace AbxrLib.Editor
                 
                 bool isProductionCustom = config.buildType == "production_custom";
                 // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from the
-                // device, and Development uses the App Token. A value an existing project already has stays visible.
-                if (SetupWizardChecks.ShowsOrgTokenField(config))
+                // device, and Development uses the App Token. A token the project already has saved always shows.
+                bool showsOrgToken = SetupWizardChecks.ShowsOrgTokenField(config);
+                if (showsOrgToken)
                 {
                     string orgTokenLabel = isProductionCustom ? "Organization Token (required)" : "Organization Token";
                     string orgTokenTooltip = isProductionCustom
                         ? "Required for Production (Custom APK). Set the customer's org token from ArborXR Portal."
-                        : "An Organization Token set earlier in this project. Clear it if it isn't needed.";
+                        : "An Organization Token saved in this project. Clear it if it isn't needed.";
                     config.orgToken = EditorGUILayout.TextField(new GUIContent(orgTokenLabel, orgTokenTooltip), config.orgToken);
                     // The field goes once it is cleared. Without dropping focus, the next text field drawn in its place
                     // would take over its edit state.
@@ -54,7 +55,8 @@ namespace AbxrLib.Editor
                     }
                 }
 
-                string orgTokenHint = SetupWizardChecks.OrgTokenFieldHint(config);
+                string orgTokenHint = SetupWizardChecks.OrgTokenFieldHint(config, out bool orgTokenWarn);
+                MessageType orgTokenHintType = orgTokenWarn ? MessageType.Warning : MessageType.Info;
                 if (isProductionCustom)
                     EditorGUILayout.HelpBox(
                         "Production (Custom APK): For custom APKs per customer. Organization Token is required. The API receives buildType Production.",
@@ -63,11 +65,11 @@ namespace AbxrLib.Editor
                     EditorGUILayout.HelpBox(
                         (orgTokenHint ?? "Development: the App Token is used as the Organization Token, so builds report to the organization that owns the app. An ArborXR-managed device reports to its own organization.") + "\n" +
                         "A Development build never shows passcode pairing. To test pairing, use Build Type Production.",
-                        MessageType.Info);
+                        orgTokenHintType);
                 else
                     EditorGUILayout.HelpBox(
                         orgTokenHint ?? "Production: each device reports to its own organization, which comes from ArborXR MDM or passcode pairing at runtime.",
-                        orgTokenHint != null ? MessageType.Warning : MessageType.Info);
+                        orgTokenHintType);
             }
             else
             {

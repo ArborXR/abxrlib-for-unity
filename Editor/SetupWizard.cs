@@ -317,13 +317,13 @@ namespace AbxrLib.Editor
                     "The JWT that identifies your app and publisher.", _config.appToken);
 
                 // Only a Custom APK build needs an Organization Token (SDK-87): Production takes the organization from
-                // the device, and Development uses the App Token. A value an existing project already has stays visible.
+                // the device, and Development uses the App Token. A token the project already has saved always shows.
                 if (SetupWizardChecks.ShowsOrgTokenField(_config))
                 {
                     bool isCustomApk = _config.buildType == "production_custom";
                     _config.orgToken = DrawPasteField(
                         isCustomApk ? "Organization Token (required)" : "Organization Token",
-                        isCustomApk ? "The customer's organization JWT." : "An organization's JWT, set earlier in this project.",
+                        isCustomApk ? "The customer's organization JWT." : "An Organization Token saved in this project.",
                         _config.orgToken);
                     // The field goes once it is cleared. Without dropping focus, the next text field drawn in its place
                     // would take over its edit state.
@@ -335,7 +335,7 @@ namespace AbxrLib.Editor
 
                     EditorGUILayout.LabelField(isCustomApk
                             ? "A specific customer's Organization Token is not self-serve in the portal - ArborXR provides it."
-                            : SetupWizardChecks.OrgTokenFieldHint(_config) ?? "",
+                            : SetupWizardChecks.OrgTokenFieldHint(_config, out _) ?? "",
                         _styles.Hint);
                 }
             }

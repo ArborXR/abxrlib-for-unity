@@ -1,6 +1,6 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // EditMode tests for when the Configuration inspector and the Setup Wizard show the Organization Token field (SDK-87):
-// only for Production (Custom APK), apart from a value an existing project already has.
+// for Production (Custom APK), and whenever the project has one saved. Also the hint under it.
 using AbxrLib.Editor;
 using AbxrLib.Runtime.Core;
 using NUnit.Framework;
@@ -9,6 +9,7 @@ using UnityEngine;
 [TestFixture]
 public class OrgTokenFieldTests
 {
+    private const string AppToken = "app.token.jwt";
     private const string OrgToken = "org.token.jwt";
 
     private AppConfig _config;
@@ -18,23 +19,27 @@ public class OrgTokenFieldTests
     {
         _config = ScriptableObject.CreateInstance<AppConfig>();
         _config.useAppTokens = true;
-        _config.appToken = "app.token.jwt";
+        _config.appToken = AppToken;
     }
 
     [TearDown]
     public void TearDown() => Object.DestroyImmediate(_config);
+
+    // ── The rule ──────────────────────────────────────────────────
 
     [TestCase("production_custom", "", ExpectedResult = true)]
     [TestCase("production_custom", OrgToken, ExpectedResult = true)]
     [TestCase("development", "", ExpectedResult = false)]
     [TestCase("development", null, ExpectedResult = false)]
     [TestCase("development", OrgToken, ExpectedResult = true)] // an existing project keeps using it
+    [TestCase("development", AppToken, ExpectedResult = true)] // what the wizard's old button wrote
     [TestCase("development", "not-a-token", ExpectedResult = true)]
     [TestCase("production", "", ExpectedResult = false)]
-    [TestCase("production", OrgToken, ExpectedResult = false)] // ignored at runtime
-    [TestCase("production", "not-a-token", ExpectedResult = true)] // fails the credential check until it is cleared
-    [TestCase("unknown", OrgToken, ExpectedResult = false)] // reads as Production
-    public bool ShowsOrgTokenField_OnlyForCustomApk_OrAValueAlreadyThere(string buildType, string orgToken)
+    [TestCase("production", OrgToken, ExpectedResult = true)] // unused, but it ships inside the build
+    [TestCase("production", "not-a-token", ExpectedResult = true)]
+    [TestCase("unknown", "", ExpectedResult = false)]
+    [TestCase("unknown", OrgToken, ExpectedResult = true)] // the runtime still sends it
+    public bool ShowsOrgTokenField_ForCustomApk_OrASavedValue(string buildType, string orgToken)
     {
         _config.buildType = buildType;
         _config.orgToken = orgToken;
@@ -42,43 +47,61 @@ public class OrgTokenFieldTests
         return SetupWizardChecks.ShowsOrgTokenField(_config);
     }
 
-    [Test]
-    public void ShowsOrgTokenField_OnTheLegacyScheme_IsFalse()
+    [TestCase("production_custom")]
+    [TestCase("development")]
+    [TestCase("production")]
+    public void ShowsOrgTokenField_OnTheLegacyScheme_IsFalse(string buildType)
     {
         _config.useAppTokens = false;
-        _config.buildType = "production_custom";
+        _config.buildType = buildType;
         _config.orgToken = OrgToken;
 
         Assert.IsFalse(SetupWizardChecks.ShowsOrgTokenField(_config));
+        Assert.IsNull(SetupWizardChecks.OrgTokenFieldHint(_config, out _));
     }
 
     [Test]
-    public void OrgTokenFieldHint_InDevelopment_SaysClearingItUsesTheAppToken()
+    public void WithoutAConfig_NothingShows()
     {
-        _config.buildType = "development";
-        _config.orgToken = OrgToken;
-
-        StringAssert.Contains("Clear it to use the App Token instead", SetupWizardChecks.OrgTokenFieldHint(_config));
+        Assert.IsFalse(SetupWizardChecks.ShowsOrgTokenField(null));
+        Assert.IsNull(SetupWizardChecks.OrgTokenFieldHint(null, out bool warn));
+        Assert.IsFalse(warn);
     }
 
-    [Test]
-    public void OrgTokenFieldHint_ForALeftoverValueInProduction_SaysToClearIt()
-    {
-        _config.buildType = "production";
-        _config.orgToken = "not-a-token";
+    // ── The hint ──────────────────────────────────────────────────
 
-        StringAssert.Contains("Production doesn't use an Organization Token", SetupWizardChecks.OrgTokenFieldHint(_config));
-    }
-
-    [TestCase("production_custom", OrgToken)]
-    [TestCase("development", "")]
-    [TestCase("production", "")]
-    [TestCase("production", OrgToken)]
-    public void OrgTokenFieldHint_WhereTheFieldIsRequiredOrHidden_IsNull(string buildType, string orgToken)
+    [TestCase("development", OrgToken, "Clear it to use the App Token instead", false)]
+    [TestCase("production", OrgToken, "ships inside the build", true)]
+    [TestCase("production", "not-a-token", "this value isn't one", true)]
+    [TestCase("Production", OrgToken, "Production doesn't use this Organization Token", true)] // the runtime ignores case here
+    [TestCase("unknown", OrgToken, "is still sent", true)]
+    [TestCase("", OrgToken, "is still sent", true)]
+    public void OrgTokenFieldHint_SaysWhatTheSavedValueDoes(string buildType, string orgToken, string expected, bool expectWarn)
     {
         _config.buildType = buildType;
         _config.orgToken = orgToken;
 
-        Assert.IsNull(SetupWizardChecks.OrgTokenFieldHint(_config));
+        StringAssert.Contains(expected, SetupWizardChecks.OrgTokenFieldHint(_config, out bool warn));
+        Assert.AreEqual(expectWarn, warn);
+    }
+
+    [Test]
+    public void OrgTokenFieldHint_ForAnUnrecognisedBuildType_DoesNotSayTheTokenIsUnused()
+    {
+        _config.buildType = "unknown";
+        _config.orgToken = OrgToken;
+
+        StringAssert.DoesNotContain("doesn't use", SetupWizardChecks.OrgTokenFieldHint(_config, out _));
+    }
+
+    [TestCase("")]
+    [TestCase(OrgToken)]
+    public void OrgTokenFieldHint_ForCustomApk_IsNull(string orgToken)
+    {
+        _config.buildType = "production_custom";
+        _config.orgToken = orgToken;
+
+        Assert.IsNull(SetupWizardChecks.OrgTokenFieldHint(_config, out bool warn));
+        Assert.IsFalse(warn);
     }
 }

@@ -235,29 +235,44 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
-        /// Whether the Configuration inspector and the wizard show the Organization Token field (SDK-87). Only a
-        /// Production (Custom APK) build needs one. A Development project that already has one keeps using it, so the
-        /// field stays while it holds a value; cleared, the App Token takes over (SDK-85) and the field goes.
-        /// Production never reads the value, but one that isn't a token still fails the credential check, so it
-        /// shows there too until it is cleared.
+        /// Whether the Configuration inspector and the wizard show the Organization Token field (SDK-87): for a
+        /// Production (Custom APK) build, which needs one, and whenever the project has one saved, so a saved value is
+        /// never hidden. Production doesn't use a saved value, but it still ships inside the build.
         /// </summary>
         internal static bool ShowsOrgTokenField(AppConfig config)
         {
             if (config == null || !config.useAppTokens) return false;
-            if (config.buildType == "production_custom") return true;
-            if (string.IsNullOrEmpty(config.orgToken)) return false;
-            return config.buildType == "development" || !LooksLikeJwt(config.orgToken);
+            return config.buildType == "production_custom" || !string.IsNullOrEmpty(config.orgToken);
         }
 
-        /// <summary>The hint under the Organization Token field, for the build types that show it without needing it.</summary>
-        internal static string OrgTokenFieldHint(AppConfig config)
+        /// <summary>
+        /// The hint under the Organization Token field where it shows without being required: what the saved value
+        /// does in this Build Type, and whether to clear it. Null for Production (Custom APK), which has its own text,
+        /// and for the legacy scheme. <paramref name="warn"/> is true when the value needs the developer's attention.
+        /// </summary>
+        internal static string OrgTokenFieldHint(AppConfig config, out bool warn)
         {
-            if (config == null || config.buildType == "production_custom" || !ShowsOrgTokenField(config)) return null;
-            return config.buildType == "development"
-                ? "This project already has an Organization Token, so Development builds report to that organization. " +
-                  "Clear it to use the App Token instead: builds then report to the organization that owns the app."
-                : "Production doesn't use an Organization Token, but this leftover value isn't a token and fails the " +
-                  "credential check. Clear it.";
+            warn = false;
+            if (config == null || !config.useAppTokens || config.buildType == "production_custom") return null;
+
+            if (string.IsNullOrEmpty(config.orgToken)) return null;
+
+            if (config.buildType == "development")
+                return "This project already has an Organization Token, so Development builds report to that " +
+                       "organization. Clear it to use the App Token instead: builds then report to the organization " +
+                       "that owns the app.";
+
+            warn = true;
+            // The runtime drops a saved token only when the stored Build Type is Production itself. Any other value
+            // shows as Production in the popup, but the token is still sent.
+            if (!string.Equals(config.buildType, "production", StringComparison.OrdinalIgnoreCase))
+                return "The saved Build Type isn't one AbxrLib recognises, so this Organization Token is still sent " +
+                       "and builds report to its organization. Clear it, or choose the Build Type again.";
+            return LooksLikeJwt(config.orgToken)
+                ? "Production doesn't use this Organization Token, but it is saved in the project and ships inside " +
+                  "the build. Clear it."
+                : "Production doesn't use an Organization Token, and this value isn't one: it fails the credential " +
+                  "check and ships inside the build. Clear it.";
         }
 
         /// <summary>
