@@ -207,6 +207,17 @@ namespace AbxrLib.Editor
             };
         }
 
+        /// <summary>
+        /// What this Editor calls the window that holds the build target and the scene list. Unity 6 renamed Build
+        /// Settings to Build Profiles, and a row that names the wrong one sends people to a menu item that isn't there.
+        /// </summary>
+        internal const string BuildWindowName =
+#if UNITY_6000_0_OR_NEWER
+            "Build Profiles";
+#else
+            "Build Settings";
+#endif
+
         // ---------------------------------------------------------------------------------------------------------
         // Credentials
         // ---------------------------------------------------------------------------------------------------------
@@ -852,7 +863,7 @@ namespace AbxrLib.Editor
         private static readonly System.Text.RegularExpressions.Regex SourcePrefabPattern =
             new(@"m_SourcePrefab: \{fileID: -?\d+, guid: ([0-9a-f]{32})");
 
-        /// <summary>The first enabled scene in Build Settings, which is where the app starts. Null when there is none.</summary>
+        /// <summary>The first enabled scene in Build Settings (Build Profiles in Unity 6), which is where the app starts. Null when there is none.</summary>
         internal static string LaunchScenePath() => EditorBuildSettings.scenes.FirstOrDefault(scene => scene.enabled)?.path;
 
         /// <summary>
@@ -970,7 +981,7 @@ namespace AbxrLib.Editor
             return new Check
             {
                 Title = "Launch scene has no EventSystem",
-                Detail = $"{sceneName}, the first scene in Build Settings, has no EventSystem, and the sign-in prompt " +
+                Detail = $"{sceneName}, the first scene in {BuildWindowName}, has no EventSystem, and the sign-in prompt " +
                          "takes taps and clicks only through one. On a flat screen AbxrLib adds one when a prompt " +
                          "opens, and on a headset XR Interaction Toolkit's ray interactors add their own. Add one to the " +
                          "scene so input doesn't depend on either. An EventSystem your code creates at runtime isn't " +
@@ -1382,7 +1393,7 @@ namespace AbxrLib.Editor
                 return new Check
                 {
                     Title = "Build target is " + EditorUserBuildSettings.activeBuildTarget,
-                    Detail = "Switch to Android in File > Build Settings when you build for a standalone headset " +
+                    Detail = $"Switch to Android in File > {BuildWindowName} when you build for a standalone headset " +
                              "(Quest, PICO). AbxrLib also runs in the Editor and in desktop builds.",
                     Severity = Severity.Info
                 };
