@@ -79,11 +79,12 @@ namespace AbxrLib.Editor
                         orgTokenHintType);
 
                 // Values left from the legacy scheme have no field here, and they still ship inside the build (SDK-89).
-                string leftoverLegacy = SetupWizardChecks.LeftoverLegacyValuesWarning(config);
-                if (leftoverLegacy != null)
+                // While they are the project's only credentials, this is the way back to them and offers no Clear.
+                string leftoverNotice = SetupWizardChecks.LeftoverValuesNotice(config, out bool offersClear);
+                if (leftoverNotice != null)
                 {
-                    EditorGUILayout.HelpBox(leftoverLegacy, MessageType.Warning);
-                    if (GUILayout.Button("Clear legacy values", GUILayout.Width(160f)))
+                    EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
+                    if (offersClear && GUILayout.Button("Clear legacy values", GUILayout.Width(160f)))
                     {
                         Undo.RecordObject(config, "Clear legacy AbxrLib values");
                         SetupWizardChecks.ClearLeftoverLegacyValues(config);

@@ -372,11 +372,13 @@ namespace AbxrLib.Editor
         /// The values are in the Resources asset, so they ship inside every build, and nothing shows them once the
         /// legacy fields are hidden. On App Tokens the SDK doesn't sign in with them, but a saved Organization ID is
         /// still what Abxr.GetOrgId() returns when no ArborXR client supplies one, so the text doesn't call it unused.
+        /// Null too while the project has no App Token: the legacy values are then its only credentials, so nothing
+        /// calls them leftovers. <see cref="SwitchBackMessage"/> speaks for that state.
         /// </summary>
         internal static string LeftoverLegacyValuesWarning(AppConfig config)
         {
             string[] names = LeftoverLegacyValues(config);
-            if (names.Length == 0) return null;
+            if (names.Length == 0 || string.IsNullOrWhiteSpace(config.appToken)) return null;
 
             bool one = names.Length == 1;
             string them = one ? "it" : "them";
@@ -392,14 +394,42 @@ namespace AbxrLib.Editor
 
         /// <summary>
         /// Empties <see cref="LeftoverLegacyValues"/>. Does nothing on the legacy scheme, where the same fields are the
-        /// project's credentials.
+        /// project's credentials, or while the project has no App Token, where they are its only ones.
         /// </summary>
         internal static void ClearLeftoverLegacyValues(AppConfig config)
         {
-            if (config == null || !config.useAppTokens) return;
+            if (LeftoverLegacyValuesWarning(config) == null) return;
             config.appID = "";
             config.orgID = "";
             config.authSecret = "";
+        }
+
+        /// <summary>
+        /// What a project is told when the scheme it is set to has no credential of its own while the other scheme's
+        /// are saved. That is how an asset last saved before Use App Tokens existed opens: ticked, with legacy
+        /// credentials and no App Token. Those credentials are all it has, so it is shown the way back to them
+        /// instead of an offer to clear them. Null in any other state.
+        /// </summary>
+        internal static string SwitchBackMessage(AppConfig config)
+        {
+            if (config == null) return null;
+            if (config.useAppTokens && string.IsNullOrWhiteSpace(config.appToken) && !string.IsNullOrEmpty(config.appID))
+                return "Use App Tokens is ticked, but this project has no App Token and has legacy credentials saved. " +
+                       "Untick Use App Tokens to keep using them, or paste an App Token (ArborXR portal: Content " +
+                       "Library > your app under Managed > Insights Hub tab).";
+            return null;
+        }
+
+        /// <summary>
+        /// What both editors show under the credential fields about the other scheme's saved values: the leftover
+        /// warning, with <paramref name="offersClear"/> set, or <see cref="SwitchBackMessage"/> when those values are
+        /// the project's only credentials. Null when neither applies.
+        /// </summary>
+        internal static string LeftoverValuesNotice(AppConfig config, out bool offersClear)
+        {
+            string warning = LeftoverLegacyValuesWarning(config);
+            offersClear = warning != null;
+            return warning ?? SwitchBackMessage(config);
         }
 
         /// <summary>
@@ -554,13 +584,12 @@ namespace AbxrLib.Editor
 
             bool isCustomApk = config.buildType == "production_custom";
 
+            // The other scheme's credentials are saved and this one has none: say how to get back to them.
+            string switchBack = SwitchBackMessage(config);
+            if (switchBack != null) return switchBack;
+
             if (config.useAppTokens)
             {
-                // An asset last saved before Use App Tokens existed loads with it ticked and its legacy credentials saved.
-                if (string.IsNullOrWhiteSpace(config.appToken) && !string.IsNullOrEmpty(config.appID))
-                    return "Use App Tokens is ticked, but this project has no App Token and has legacy credentials saved. " +
-                           "Untick Use App Tokens to keep using them, or paste an App Token (ArborXR portal: Content " +
-                           "Library > your app under Managed > Insights Hub tab).";
                 if (string.IsNullOrWhiteSpace(config.appToken))
                     return "App Token is required. In the ArborXR portal: Content Library > your app under Managed > Insights Hub tab.";
                 if (!LooksLikeJwt(config.appToken))

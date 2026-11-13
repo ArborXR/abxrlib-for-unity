@@ -246,13 +246,19 @@ public class LegacySchemeTests
 
     // ── Legacy values left on a project that uses App Tokens ──────
 
-    [Test]
-    public void LeftoverLegacyValues_NamesEachSavedValue()
+    private void OnAppTokensWithLegacyValues(string appToken = "app.token.jwt")
     {
         _config.useAppTokens = true;
+        _config.appToken = appToken;
         _config.appID = AppId;
         _config.orgID = OrgId;
         _config.authSecret = "secret";
+    }
+
+    [Test]
+    public void LeftoverLegacyValues_NamesEachSavedValue()
+    {
+        OnAppTokensWithLegacyValues();
 
         CollectionAssert.AreEqual(new[] { "Application ID", "Organization ID", "Authorization Secret" },
             SetupWizardChecks.LeftoverLegacyValues(_config));
@@ -274,14 +280,16 @@ public class LegacySchemeTests
     [Test]
     public void AProjectOnAppTokens_WithNoLegacyValues_HasNoWarning()
     {
-        Assert.IsTrue(_config.useAppTokens);
+        _config.appToken = "app.token.jwt";
 
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
         Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
+        Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear));
+        Assert.IsFalse(offersClear);
     }
 
     [Test]
-    public void ALegacyProject_HasNoLeftoverWarning_SinceItsValuesAreInUse()
+    public void ALegacyProject_HasNoLeftoverLegacyValues_SinceTheyAreInUse()
     {
         _config.useAppTokens = false;
         _config.appID = AppId;
@@ -297,15 +305,15 @@ public class LegacySchemeTests
     {
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(null));
         Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(null));
+        Assert.IsNull(SetupWizardChecks.SwitchBackMessage(null));
+        Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(null, out bool offersClear));
+        Assert.IsFalse(offersClear);
     }
 
     [Test]
     public void TheLeftoverWarning_WithAnOrganizationId_DoesNotCallItUnused()
     {
-        _config.useAppTokens = true;
-        _config.appID = AppId;
-        _config.orgID = OrgId;
-        _config.authSecret = "secret";
+        OnAppTokensWithLegacyValues();
 
         string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
 
@@ -321,6 +329,7 @@ public class LegacySchemeTests
     public void TheLeftoverWarning_WithoutAnOrganizationId_SaysTheSdkDoesNotReadIt()
     {
         _config.useAppTokens = true;
+        _config.appToken = "app.token.jwt";
         _config.authSecret = "secret";
 
         string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
@@ -334,9 +343,7 @@ public class LegacySchemeTests
     [Test]
     public void TheLeftoverWarning_NeverPrintsAValue()
     {
-        _config.useAppTokens = true;
-        _config.appID = AppId;
-        _config.orgID = OrgId;
+        OnAppTokensWithLegacyValues();
         _config.authSecret = "a-secret-value";
 
         string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
@@ -344,23 +351,59 @@ public class LegacySchemeTests
         StringAssert.DoesNotContain(AppId, warning);
         StringAssert.DoesNotContain(OrgId, warning);
         StringAssert.DoesNotContain("a-secret-value", warning);
+        StringAssert.DoesNotContain("app.token.jwt", warning);
+    }
+
+    [Test]
+    public void WithAnAppToken_TheNoticeIsTheLeftoverWarning_AndOffersClear()
+    {
+        OnAppTokensWithLegacyValues();
+
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+
+        Assert.AreEqual(SetupWizardChecks.LeftoverLegacyValuesWarning(_config), notice);
+        Assert.IsTrue(offersClear);
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    public void WithNoAppToken_TheLegacyValuesAreNotLeftovers_AndNothingOffersToClearThem(string appToken)
+    {
+        // How an asset last saved before Use App Tokens existed opens. Its legacy values are its only credentials.
+        OnAppTokensWithLegacyValues(appToken);
+
+        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+
+        Assert.IsFalse(offersClear, "One click must not delete the only credentials the project has.");
+        StringAssert.Contains("Untick Use App Tokens to keep using them, or paste an App Token", notice);
+        Assert.AreEqual(notice, SetupWizardChecks.DescribeCredentialProblem(_config), "The wizard's top box says the same.");
+    }
+
+    [Test]
+    public void ClearLeftoverLegacyValues_WithNoAppToken_LeavesTheOnlyCredentialsAlone()
+    {
+        OnAppTokensWithLegacyValues(appToken: "");
+
+        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
+
+        Assert.AreEqual(AppId, _config.appID);
+        Assert.AreEqual(OrgId, _config.orgID);
+        Assert.AreEqual("secret", _config.authSecret);
     }
 
     [Test]
     public void ClearLeftoverLegacyValues_EmptiesThem_AndNothingElse()
     {
-        _config.useAppTokens = true;
+        OnAppTokensWithLegacyValues();
         _config.buildType = "development";
-        _config.appToken = "app.token.jwt";
         _config.orgToken = "org.token.jwt";
-        _config.appID = AppId;
-        _config.orgID = OrgId;
-        _config.authSecret = "secret";
 
         SetupWizardChecks.ClearLeftoverLegacyValues(_config);
 
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
-        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config), "The warning and its button go once they are cleared.");
+        Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out _), "The warning and its button go once they are cleared.");
         Assert.IsTrue(_config.useAppTokens);
         Assert.AreEqual("development", _config.buildType);
         Assert.AreEqual("app.token.jwt", _config.appToken);
@@ -410,6 +453,7 @@ public class LegacySchemeTests
     {
         var checkbox = new SetupWizardChecks.ShownLatch();
         _config.useAppTokens = true;
+        _config.appToken = "app.token.jwt";
         _config.appID = AppId;
         _config.orgID = OrgId;
         _config.authSecret = "secret";
