@@ -258,6 +258,10 @@ namespace AbxrLib.Runtime.Services.Auth
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
             GetQueryData();
 #endif
+            // Last, so every source above wins: a Development build with no org signs in as the org that owns the app (SDK-85).
+            // That is an org credential, so a Development build never pairs.
+            _runtimeAuth.UseAppTokenAsOrgTokenInDevelopment();
+
             // Auth handoff (intent / CLI / test inject). Read before the pairing gate, since a launcher's session is an identity
             // too (SDK-80), and applied after validation. Only a session with a token stands in for an identity.
             string handoff = TakeAuthHandoffSession(out bool handoffHasToken);

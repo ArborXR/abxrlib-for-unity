@@ -92,6 +92,18 @@ namespace AbxrLib.Runtime.Types
             !string.IsNullOrEmpty(orgToken) || (!string.IsNullOrEmpty(orgId) && !string.IsNullOrEmpty(authSecret));
 
         /// <summary>
+        /// Development only (SDK-85): when no source supplied an org credential, the App Token is the Organization Token.
+        /// lib-backend accepts an App Token as the Organization Token of the org that owns the app, so an App Token alone
+        /// signs in from the Editor or a test build. Call after every other source (the ArborXR client, config,
+        /// SetOrgId/SetAuthSecret, the org_token intent or URL parameter) has been applied, since each of them wins.
+        /// </summary>
+        internal void UseAppTokenAsOrgTokenInDevelopment()
+        {
+            if (useAppTokens && buildType == "development" && !HasOrgCredential())
+                orgToken = appToken;
+        }
+
+        /// <summary>
         /// Shared auth-field validation used by both Configuration.IsValid() and RuntimeAuthConfig.IsValid().
         /// Returns null if valid, or a short error message (e.g. "App identification not set."). Configuration prefixes with "Authentication error: " when setting LastValidationErrorMessage.
         /// </summary>

@@ -260,20 +260,13 @@ public class AuthenticationDeviceTests : AbxrPlayModeTestBase
     }
 
     [UnityTest]
-    public IEnumerator AuthDevice_AppTokens_Dev_AppTokenOnly()
+    public IEnumerator AuthDevice_AppTokens_Dev_AppTokenOnly_Succeeds()
     {
         CreateSubsystem();
         SetRuntimeAuth(new RuntimeAuthConfig { authMechanism = AuthMechanismNone, useAppTokens = true, buildType = "development", appToken = ConfigAppToken, orgToken = "" });
-        bool deviceCanSupplyOrg = false;
-        yield return WaitForTransportAndPollDeviceCanSupplyOrg(v => deviceCanSupplyOrg = v);
-        if (!deviceCanSupplyOrg)
-            LogAssert.Expect(LogType.Log, new Regex(Regex.Escape(NoOrgIdentityLog)));
         bool success = false;
         yield return PerformAuth(r => success = r);
-        if (deviceCanSupplyOrg)
-            Assert.IsTrue(success, "With MDM or device service, auth should succeed (orgToken from device).");
-        else
-            Assert.IsFalse(success, "Without MDM, auth should fail: no organization identity.");
+        Assert.IsTrue(success, "With MDM or device service the org comes from the device; without, the App Token is the org token (SDK-85).");
     }
 
     [UnityTest]

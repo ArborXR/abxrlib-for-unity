@@ -1,7 +1,8 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode: which identity device auth uses (SDK-60 step 3, SDK-59 RFC §03 and D2). An org credential wins, then a
 // stored pairing, then none, which is quiet. The choice holds for the launch. A paired bootstrap refusal revokes on 401
-// and suspends on 403, without latching the session. An auth handoff signs in an unpaired app (SDK-80). Also the
+// and suspends on 403, without latching the session. An auth handoff signs in an unpaired app (SDK-80). A Development
+// build with no org uses its App Token as the org token, so it never pairs (SDK-85). Also the
 // subsystem's wiring around pairing: where the prompt and its input go, recording while unpaired, and auth after a new pairing.
 // Drives the real AbxrAuthService through AuthRetryTests' scripted transport and an in-memory pairing store, so no
 // network or PlayerPrefs is involved.
@@ -10,6 +11,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
+using AbxrLib.Runtime.Core;
 using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Services.Pairing;
@@ -316,6 +318,184 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.IsNull(transport.LastPayload.appInstanceToken);
         Assert.AreEqual(InstanceId, transport.LastPayload.priorAppInstanceId);
         Assert.AreEqual(InstanceToken, _store.Token, "The stored pairing is kept for a later migration.");
+    }
+
+    // ── Development: the App Token as the org (SDK-85) ────────────
+    // With no org from any source, a Development build uses its App Token as the Organization Token. Every other source
+    // wins. The ArborXR client and the org_token intent or URL parameter only run on a device or in a browser: each sets
+    // the org token before the fallback looks, which RuntimeAuthConfigTests covers.
+
+    [UnityTest]
+    public IEnumerator Development_WithoutAnOrg_SignsInWithTheAppTokenAsTheOrgToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports, "Not \"No organization identity\".");
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.appToken);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken, "lib-backend takes an App Token as the org token of the org that owns the app.");
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State, "It has an org, so it never pairs.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_ConfiguredWithOnlyAnAppToken_SignsInWithIt()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("development");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AConfiguredOrgToken_WinsOverTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("development", orgToken: OrgToken);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(OrgToken, transport.LastPayload.orgToken, "A project that already set an Organization Token keeps using it.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_SetOrgIdWithSetAuthSecret_WinsOverTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("development");
+        Abxr.SetOrgId(LegacyOrgId);
+        Abxr.SetAuthSecret("secret");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(Utils.BuildOrgTokenDynamic(LegacyOrgId, "secret"), transport.LastPayload.orgToken);
+        Assert.AreNotEqual(AppToken, transport.LastPayload.orgToken);
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AnOrgSetAfterTheAppTokenWasUsed_WinsOnTheNextAttempt()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("development");
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+
+        Abxr.SetOrgId(LegacyOrgId);
+        Abxr.SetAuthSecret("secret");
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.IsTrue(_reports[1].success);
+        Assert.AreEqual(Utils.BuildOrgTokenDynamic(LegacyOrgId, "secret"), transport.LastPayload.orgToken, "The App Token doesn't stick once something supplies an org.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_WithAStoredPairing_StillUsesTheAppToken()
+    {
+        // Like any org token, it wins over a pairing stored by a Production build of the same app.
+        var transport = Start(pairedAs: InstanceId, Authorized, buildType: "development");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.IsNull(transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(InstanceId, transport.LastPayload.priorAppInstanceId);
+        Assert.AreEqual(InstanceToken, _store.Token, "The pairing is still there for the next Production build.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_StartPairing_IsRefused()
+    {
+        Start(pairedAs: null, Authorized, buildType: "development");
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("already identifies this app's organization")));
+
+        Assert.IsFalse(Abxr.StartPairing(), "Testing pairing needs Build Type Production.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_WithoutAnAppToken_StillFailsValidation()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "development", appToken = "", orgToken = "" });
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: App identification not set.")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "App identification not set.") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls);
+    }
+
+    [UnityTest]
+    public IEnumerator Production_ConfiguredWithAnOrgToken_StillIgnoresIt_AndStaysQuiet()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("production", orgToken: OrgToken);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports, "The App Token stands in only in Development.");
+        Assert.AreEqual(0, transport.AuthCalls);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State);
+    }
+
+    [UnityTest]
+    public IEnumerator ProductionCustom_WithoutAnOrgToken_StillFailsValidation()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("production_custom");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Organization identification unavailable.")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "Organization identification unavailable.") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls);
+    }
+
+    [UnityTest]
+    public IEnumerator ProductionCustom_WithItsOrgToken_StillSendsIt()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("production_custom", orgToken: OrgToken);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(OrgToken, transport.LastPayload.orgToken);
+    }
+
+    [UnityTest]
+    public IEnumerator Legacy_Development_WithoutAnOrg_StillHasNoIdentity()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        SetRuntimeAuth(LegacyAuth(orgId: null, authSecret: null, buildType: "development"));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports, "The legacy scheme has no App Token to stand in.");
+        Assert.AreEqual(0, transport.AuthCalls);
     }
 
     // ── Auth handoff ──────────────────────────────────────────────
@@ -758,6 +938,19 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         AbxrSubsystem.UnitTestSsoSimulationFromConfigAllowed = false;
         Abxr.OnAuthCompleted += Record;
         return transport;
+    }
+
+    /// <summary>Reads auth from the Configuration asset, as a project's own build does, instead of injected runtime auth.</summary>
+    private void UseConfiguration(string buildType, string orgToken = "")
+    {
+        AbxrSubsystem.Instance.AuthServiceForTesting.ClearRuntimeAuthInjectionForTesting();
+        ModifyConfig("useAppTokens", true);
+        ModifyConfig("buildType", buildType);
+        ModifyConfig("appToken", AppToken);
+        ModifyConfig("orgToken", orgToken);
+        // A legacy org id left in the host's asset would otherwise reach GetOrgId().
+        ModifyConfig("orgID", "");
+        ModifyConfig("authSecret", "");
     }
 
     private const string LegacyAppId = "12345678-1234-1234-1234-123456789012";
