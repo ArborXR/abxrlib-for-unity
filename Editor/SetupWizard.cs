@@ -34,6 +34,7 @@ namespace AbxrLib.Editor
         private List<SetupWizardChecks.Check> _checks;
         private bool _worldSpaceInstalled;
         private bool _worldSpaceFilesImported;
+        private System.DateTime _checkedAt;
         private Vector2 _scroll;
         private Styles _styles;
 
@@ -77,6 +78,7 @@ namespace AbxrLib.Editor
             _checks = SetupWizardChecks.Run();
             _worldSpaceInstalled = SetupWizardChecks.WorldSpaceUiIsInstalled();
             _worldSpaceFilesImported = SetupWizardChecks.WorldSpaceUiFilesImported();
+            _checkedAt = System.DateTime.Now;
             Repaint();
         }
 
@@ -397,7 +399,11 @@ namespace AbxrLib.Editor
             foreach (var check in _checks) DrawCheck(check);
 
             GUILayout.Space(6f);
+            EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("Re-check", GUILayout.Width(120f))) Refresh();
+            // The rows also refresh whenever the window gets focus, so without the time a click changes nothing visible.
+            EditorGUILayout.LabelField($"Last checked {_checkedAt:T}. The checks also run when this window gets focus.", _styles.Hint);
+            EditorGUILayout.EndHorizontal();
         }
 
         private void DrawFirstEvents()
