@@ -243,74 +243,66 @@ public class BuildTypeChoiceTests
 
     // ── Nothing issues a customer's Organization Token ────────────
 
-    [Test]
-    public void NoTextSaysArborXRSuppliesOrProvidesAnOrganizationToken()
-    {
-        // The Portal only issues App Tokens, so a customer's Organization Token is "not self-serve, contact ArborXR".
-        string root = SetupWizardChecks.SelfPackage()?.resolvedPath;
-        if (string.IsNullOrEmpty(root)) Assert.Ignore("AbxrLib isn't installed as a package here, so its files can't be found.");
+    // The Portal only issues App Tokens, so a customer's Organization Token is "not self-serve, contact ArborXR".
+    // These are the phrasings 3.0 removed, in any sentence that is about an Organization Token.
+    private static readonly System.Text.RegularExpressions.Regex OrgTokenMention =
+        new System.Text.RegularExpressions.Regex(@"org(anization)?\s+token", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static readonly System.Text.RegularExpressions.Regex SupplyClaim = new System.Text.RegularExpressions.Regex(
+        @"ArborXR\s+(supplies|provides|issues)|(supplied|provided|issued)\s+by\s+ArborXR|from\s+(the\s+)?ArborXR\s+portal",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
+    /// <summary>The sentences in a file that are about an Organization Token and say where one comes from.</summary>
+    private static System.Collections.Generic.List<string> SupplyClaims(string text)
+    {
+        // A C# string split across lines with " + reads as one sentence.
+        text = System.Text.RegularExpressions.Regex.Replace(text, "\"\\s*\\+\\s*\\$?\"", "");
+        var claims = new System.Collections.Generic.List<string>();
+        foreach (string sentence in System.Text.RegularExpressions.Regex.Split(text, @"(?<=[.!?])\s+|\r?\n"))
+            if (OrgTokenMention.IsMatch(sentence) && SupplyClaim.IsMatch(sentence)) claims.Add(sentence.Trim());
+        return claims;
+    }
+
+    private static string PackageRoot([System.Runtime.CompilerServices.CallerFilePath] string thisFile = "") =>
+        System.IO.Path.GetFullPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(thisFile), "..", ".."));
+
+    [Test]
+    public void NoTextSaysWhereACustomersOrganizationTokenComesFrom()
+    {
+        string root = PackageRoot();
         var files = new System.Collections.Generic.List<string>
         {
             System.IO.Path.Combine(root, "README.md"),
             System.IO.Path.Combine(root, "INTEGRATION_INSTRUCTIONS.md"),
+            System.IO.Path.Combine(root, "AGENTS.md"),
             System.IO.Path.Combine(root, "Runtime", "Core", "AppConfig.cs"),
         };
-        files.AddRange(System.IO.Directory.GetFiles(System.IO.Path.Combine(root, "Editor"), "*.cs"));
-        var claim = new System.Text.RegularExpressions.Regex(@"ArborXR\s+(supplies|provides)\b",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        files.AddRange(System.IO.Directory.GetFiles(System.IO.Path.Combine(root, "Editor"), "*.cs", System.IO.SearchOption.AllDirectories));
 
         foreach (string file in files)
         {
             Assert.IsTrue(System.IO.File.Exists(file), file);
-            var match = claim.Match(System.IO.File.ReadAllText(file));
-            Assert.IsFalse(match.Success, $"{System.IO.Path.GetFileName(file)} says \"{match.Value}\".");
+            CollectionAssert.IsEmpty(SupplyClaims(System.IO.File.ReadAllText(file)), System.IO.Path.GetFileName(file));
         }
     }
 
-    [TestCase(false, "unknown")]
-    [TestCase(false, "")]
-    [TestCase(true, "unknown")]
-    public void TheHint_ForAnUnrecognisedBuildType_WithNothingSaved_PromisesNothingAboutCredentials(bool useAppTokens, string buildType)
+    [TestCase("That mode is for single-customer APKs, where ArborXR supplies the customer's org token (not self-serve).")]
+    [TestCase("Only a Custom APK build needs an Org Token in Configuration, and ArborXR supplies it.")]
+    [TestCase("A specific customer's Organization Token is not self-serve in the portal - ArborXR provides it.")]
+    [TestCase("Required for Production (Custom APK). Set the customer's org token from ArborXR Portal.")]
+    [TestCase("The Organization Token is supplied by ArborXR.")]
+    [TestCase("\"A customer's Organization Token is one that ArborXR \" +\n                \"issues on request.\"")]
+    public void TheScan_CatchesThePhrasingsThatWereRemoved(string text)
     {
-        _config.useAppTokens = useAppTokens;
-        _config.buildType = buildType;
-        _config.appID = "12345678-1234-1234-1234-123456789012";
-        _config.appToken = "app.token.jwt";
-
-        string hint = SetupWizardChecks.BuildTypeHint(_config, 0);
-
-        StringAssert.StartsWith("The saved Build Type isn't one AbxrLib recognises. It shows as Production.", hint);
-        StringAssert.DoesNotContain("sign in with", hint);
-        StringAssert.DoesNotContain("is still sent", hint);
-        StringAssert.DoesNotContain("its own organization", hint);
+        CollectionAssert.IsNotEmpty(SupplyClaims(text));
     }
 
-    [Test]
-    public void TheHint_ForAnUnrecognisedBuildType_AgreesWithTheLegacyFieldsHint()
+    [TestCase("A customer's Organization Token is not self-serve in the portal: contact ArborXR.")]
+    [TestCase("App Token (JWT) from ArborXR Portal - identifies app and publisher.")]
+    [TestCase("ArborXR provides device management. Set the Org Token only for Custom APK builds.")]
+    [TestCase("The device supplies it.")]
+    public void TheScan_LeavesOtherTextAlone(string text)
     {
-        _config.useAppTokens = false;
-        _config.buildType = "unknown";
-        _config.orgID = "87654321-4321-4321-4321-210987654321";
-
-        StringAssert.Contains("builds still sign in with the Organization ID and Authorization Secret saved here",
-            SetupWizardChecks.BuildTypeHint(_config, 0));
-        Assert.IsNotNull(SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn));
-        Assert.IsTrue(warn);
-    }
-
-    [Test]
-    public void TheHint_ForAnUnrecognisedBuildType_AgreesWithTheOrganizationTokenHint()
-    {
-        _config.useAppTokens = true;
-        _config.buildType = "unknown";
-        _config.orgToken = "org.token.jwt";
-
-        string hint = SetupWizardChecks.BuildTypeHint(_config, 0);
-
-        StringAssert.Contains("the saved Organization Token is still sent", hint);
-        StringAssert.DoesNotContain("its own organization", hint, "The warning under the field says the token is still sent.");
-        StringAssert.Contains("is still sent", SetupWizardChecks.OrgTokenFieldHint(_config, out _));
+        CollectionAssert.IsEmpty(SupplyClaims(text));
     }
 
     // ── Switching in an open window ───────────────────────────────
