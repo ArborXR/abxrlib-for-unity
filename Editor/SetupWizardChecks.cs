@@ -282,6 +282,10 @@ namespace AbxrLib.Editor
         private static bool IsProduction(string buildType) =>
             string.Equals(buildType, "production", StringComparison.OrdinalIgnoreCase);
 
+        /// <summary>A stored Build Type the runtime gives a meaning to. Any other value shows as Production in the popup.</summary>
+        private static bool IsRecognisedBuildType(string buildType) =>
+            IsProduction(buildType) || buildType == "development" || buildType == "production_custom";
+
         /// <summary>
         /// The Build Type tooltip, the same in the inspector and the wizard. It names the credentials the project's
         /// scheme has, and mentions Production (Custom APK) only where it is offered.
@@ -314,11 +318,18 @@ namespace AbxrLib.Editor
             {
                 case 0:
                     // The popup shows any stored value it doesn't know as Production, but the runtime drops saved
-                    // credentials only for Production itself, so the line must not promise that here.
-                    if (legacy && !IsProduction(config.buildType))
-                        return "The saved Build Type isn't one AbxrLib recognises. It shows as Production, but builds " +
-                               "still sign in with the Organization ID and Authorization Secret saved here. Switch " +
-                               "the Build Type to another option and back to set it.";
+                    // credentials only for Production itself, so the line must not promise that here. It says what
+                    // the hint under the fields says: saved credentials are still sent, when any are saved.
+                    if (config != null && !IsRecognisedBuildType(config.buildType))
+                    {
+                        string stillSent = "";
+                        if (legacy && (!string.IsNullOrEmpty(config.orgID) || !string.IsNullOrEmpty(config.authSecret)))
+                            stillSent = ", but builds still sign in with the Organization ID and Authorization Secret saved here";
+                        else if (!legacy && !string.IsNullOrEmpty(config.orgToken))
+                            stillSent = ", but the saved Organization Token is still sent";
+                        return "The saved Build Type isn't one AbxrLib recognises. It shows as Production" + stillSent +
+                               ". Switch the Build Type to another option and back to set it.";
+                    }
                     return legacy
                         ? "Shared builds, and the right choice for an ArborXR-managed fleet: the device's MDM supplies " +
                           "the Organization ID and Authorization Secret at runtime, and the SDK doesn't sign in with " +

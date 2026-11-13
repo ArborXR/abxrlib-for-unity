@@ -268,6 +268,51 @@ public class BuildTypeChoiceTests
         }
     }
 
+    [TestCase(false, "unknown")]
+    [TestCase(false, "")]
+    [TestCase(true, "unknown")]
+    public void TheHint_ForAnUnrecognisedBuildType_WithNothingSaved_PromisesNothingAboutCredentials(bool useAppTokens, string buildType)
+    {
+        _config.useAppTokens = useAppTokens;
+        _config.buildType = buildType;
+        _config.appID = "12345678-1234-1234-1234-123456789012";
+        _config.appToken = "app.token.jwt";
+
+        string hint = SetupWizardChecks.BuildTypeHint(_config, 0);
+
+        StringAssert.StartsWith("The saved Build Type isn't one AbxrLib recognises. It shows as Production.", hint);
+        StringAssert.DoesNotContain("sign in with", hint);
+        StringAssert.DoesNotContain("is still sent", hint);
+        StringAssert.DoesNotContain("its own organization", hint);
+    }
+
+    [Test]
+    public void TheHint_ForAnUnrecognisedBuildType_AgreesWithTheLegacyFieldsHint()
+    {
+        _config.useAppTokens = false;
+        _config.buildType = "unknown";
+        _config.orgID = "87654321-4321-4321-4321-210987654321";
+
+        StringAssert.Contains("builds still sign in with the Organization ID and Authorization Secret saved here",
+            SetupWizardChecks.BuildTypeHint(_config, 0));
+        Assert.IsNotNull(SetupWizardChecks.LegacyOrgFieldsHint(_config, out bool warn));
+        Assert.IsTrue(warn);
+    }
+
+    [Test]
+    public void TheHint_ForAnUnrecognisedBuildType_AgreesWithTheOrganizationTokenHint()
+    {
+        _config.useAppTokens = true;
+        _config.buildType = "unknown";
+        _config.orgToken = "org.token.jwt";
+
+        string hint = SetupWizardChecks.BuildTypeHint(_config, 0);
+
+        StringAssert.Contains("the saved Organization Token is still sent", hint);
+        StringAssert.DoesNotContain("its own organization", hint, "The warning under the field says the token is still sent.");
+        StringAssert.Contains("is still sent", SetupWizardChecks.OrgTokenFieldHint(_config, out _));
+    }
+
     // ── Switching in an open window ───────────────────────────────
 
     [Test]
