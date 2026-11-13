@@ -342,6 +342,13 @@ namespace AbxrLib.Editor
                             : SetupWizardChecks.OrgTokenFieldHint(_config, out _) ?? "",
                         _styles.Hint);
                 }
+
+                // Values left from the legacy scheme have no field here, and they still ship inside the build (SDK-89).
+                string leftoverLegacy = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
+                if (leftoverLegacy != null)
+                {
+                    EditorGUILayout.HelpBox(leftoverLegacy, MessageType.Warning);
+                }
             }
             else
             {

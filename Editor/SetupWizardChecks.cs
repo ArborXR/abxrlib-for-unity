@@ -252,6 +252,42 @@ namespace AbxrLib.Editor
         /// </summary>
         internal static bool ShowsLegacyScheme(AppConfig config) => config != null && !config.useAppTokens;
 
+        /// <summary>
+        /// The legacy values a project on App Tokens still has saved, by the name of their field. Empty on the legacy
+        /// scheme, where they are the credentials in use and their fields show.
+        /// </summary>
+        internal static string[] LeftoverLegacyValues(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens) return Array.Empty<string>();
+            var names = new List<string>();
+            if (!string.IsNullOrEmpty(config.appID)) names.Add("Application ID");
+            if (!string.IsNullOrEmpty(config.orgID)) names.Add("Organization ID");
+            if (!string.IsNullOrEmpty(config.authSecret)) names.Add("Authorization Secret");
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// What the inspector and the wizard say about <see cref="LeftoverLegacyValues"/>, or null when there are none.
+        /// The values are in the Resources asset, so they ship inside every build, and nothing shows them once the
+        /// legacy fields are hidden. On App Tokens the SDK doesn't sign in with them, but a saved Organization ID is
+        /// still what Abxr.GetOrgId() returns when no ArborXR client supplies one, so the text doesn't call it unused.
+        /// </summary>
+        internal static string LeftoverLegacyValuesWarning(AppConfig config)
+        {
+            string[] names = LeftoverLegacyValues(config);
+            if (names.Length == 0) return null;
+
+            bool one = names.Length == 1;
+            string them = one ? "it" : "them";
+            string text = $"This project is on App Tokens, but {string.Join(", ", names)} {(one ? "is" : "are")} " +
+                          $"still saved from the legacy scheme and {(one ? "ships" : "ship")} inside every build. ";
+            return string.IsNullOrEmpty(config.orgID)
+                ? text + $"The SDK doesn't read {them} on App Tokens. Clear {them}."
+                : text + $"The SDK doesn't sign in with {them}, but on a device without ArborXR MDM Abxr.GetOrgId() " +
+                  "still returns the Organization ID, and a secret set with Abxr.SetAuthSecret is paired with it. " +
+                  $"Clear {them} unless your app relies on that.";
+        }
+
         /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
         internal const string LegacySchemeNote =
             "This project uses the legacy scheme: Application ID, Organization ID and Authorization Secret. It keeps " +

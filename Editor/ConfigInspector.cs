@@ -78,6 +78,13 @@ namespace AbxrLib.Editor
                     EditorGUILayout.HelpBox(
                         orgTokenHint ?? "Production: each device reports to its own organization, which comes from ArborXR MDM or passcode pairing at runtime.",
                         orgTokenHintType);
+
+                // Values left from the legacy scheme have no field here, and they still ship inside the build (SDK-89).
+                string leftoverLegacy = SetupWizardChecks.LeftoverLegacyValuesWarning(config);
+                if (leftoverLegacy != null)
+                {
+                    EditorGUILayout.HelpBox(leftoverLegacy, MessageType.Warning);
+                }
             }
             else
             {

@@ -56,7 +56,7 @@ public class LegacySchemeTests
     [Test]
     public void AProjectOnAppTokens_WithLegacyValuesStillSaved_IsNotShownTheLegacyScheme()
     {
-        // Pins what the rule does today. The values still ship inside the build; see SDK-89 for what to do about them.
+        // The fields stay hidden. The values still ship inside the build, which the leftover warning below says.
         _config.useAppTokens = true;
         _config.appID = AppId;
         _config.orgID = OrgId;
@@ -77,6 +77,106 @@ public class LegacySchemeTests
     public void WithoutAConfig_TheLegacySchemeDoesNotShow()
     {
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(null));
+    }
+
+    // ── Legacy values left on a project that uses App Tokens ──────
+
+    [Test]
+    public void LeftoverLegacyValues_NamesEachSavedValue()
+    {
+        _config.useAppTokens = true;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        CollectionAssert.AreEqual(new[] { "Application ID", "Organization ID", "Authorization Secret" },
+            SetupWizardChecks.LeftoverLegacyValues(_config));
+    }
+
+    [TestCase(AppId, null, null, "Application ID")]
+    [TestCase("", OrgId, "", "Organization ID")]
+    [TestCase(null, null, "secret", "Authorization Secret")]
+    public void LeftoverLegacyValues_NamesOnlyWhatIsSaved(string appId, string orgId, string authSecret, string expected)
+    {
+        _config.useAppTokens = true;
+        _config.appID = appId;
+        _config.orgID = orgId;
+        _config.authSecret = authSecret;
+
+        CollectionAssert.AreEqual(new[] { expected }, SetupWizardChecks.LeftoverLegacyValues(_config));
+    }
+
+    [Test]
+    public void AProjectOnAppTokens_WithNoLegacyValues_HasNoWarning()
+    {
+        Assert.IsTrue(_config.useAppTokens);
+
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
+        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
+    }
+
+    [Test]
+    public void ALegacyProject_HasNoLeftoverWarning_SinceItsValuesAreInUse()
+    {
+        _config.useAppTokens = false;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
+        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config));
+    }
+
+    [Test]
+    public void WithoutAConfig_ThereIsNoLeftoverWarning()
+    {
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(null));
+        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(null));
+    }
+
+    [Test]
+    public void TheLeftoverWarning_WithAnOrganizationId_DoesNotCallItUnused()
+    {
+        _config.useAppTokens = true;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
+
+        StringAssert.Contains("Application ID, Organization ID, Authorization Secret are still saved", warning);
+        StringAssert.Contains("ship inside every build", warning);
+        StringAssert.Contains("Abxr.GetOrgId() still returns the Organization ID", warning);
+        StringAssert.DoesNotContain("doesn't read", warning);
+        StringAssert.DoesNotContain("unused", warning);
+    }
+
+    [Test]
+    public void TheLeftoverWarning_WithoutAnOrganizationId_SaysTheSdkDoesNotReadIt()
+    {
+        _config.useAppTokens = true;
+        _config.authSecret = "secret";
+
+        string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
+
+        StringAssert.Contains("Authorization Secret is still saved", warning);
+        StringAssert.Contains("ships inside every build", warning);
+        StringAssert.Contains("The SDK doesn't read it on App Tokens. Clear it.", warning);
+    }
+
+    [Test]
+    public void TheLeftoverWarning_NeverPrintsAValue()
+    {
+        _config.useAppTokens = true;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "a-secret-value";
+
+        string warning = SetupWizardChecks.LeftoverLegacyValuesWarning(_config);
+
+        StringAssert.DoesNotContain(AppId, warning);
+        StringAssert.DoesNotContain(OrgId, warning);
+        StringAssert.DoesNotContain("a-secret-value", warning);
     }
 
     // ── Switching in an open window ───────────────────────────────
