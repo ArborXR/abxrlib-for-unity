@@ -389,7 +389,7 @@ public static partial class Abxr
 	/// Assign your handler to collect auth input (e.g. PIN, email) instead of the default keyboard/PIN UI.
 	/// Only one handler is allowed; use assignment (=), not subscribe (+=). Your handler receives (type, prompt, domain, error).
 	/// Show your UI; when the user submits, call Abxr.OnInputSubmitted(enteredValue). Set to null in OnDestroy when your component is no longer responsible.
-	/// type is "text" | "pin" | "email"; error is empty on first request and may contain a previous failure message on retry.
+	/// type is "text" | "assessmentPin" | "email" ("assessmentPin" was "pin" in 2.0.10 and earlier); error is empty on first request and may contain a previous failure message on retry.
 	/// The pairing prompt (StartPairing) uses the same handler, with type "pairingPasscode", then "pairingDeviceName"
 	/// (Skip allowed) or "pairingDeviceNameRequired" when the passcode allows naming, and "pairingDeviceJoin" when the name
 	/// is taken: domain carries that name, and submitting it adds this app to that device.
