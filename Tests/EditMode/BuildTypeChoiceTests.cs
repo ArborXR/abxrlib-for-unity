@@ -241,6 +241,33 @@ public class BuildTypeChoiceTests
         StringAssert.Contains("Development builds and custom APKs", SetupWizardChecks.LegacyOrgValuesRule(offersCustomApk: true));
     }
 
+    // ── Nothing issues a customer's Organization Token ────────────
+
+    [Test]
+    public void NoTextSaysArborXRSuppliesOrProvidesAnOrganizationToken()
+    {
+        // The Portal only issues App Tokens, so a customer's Organization Token is "not self-serve, contact ArborXR".
+        string root = SetupWizardChecks.SelfPackage()?.resolvedPath;
+        if (string.IsNullOrEmpty(root)) Assert.Ignore("AbxrLib isn't installed as a package here, so its files can't be found.");
+
+        var files = new System.Collections.Generic.List<string>
+        {
+            System.IO.Path.Combine(root, "README.md"),
+            System.IO.Path.Combine(root, "INTEGRATION_INSTRUCTIONS.md"),
+            System.IO.Path.Combine(root, "Runtime", "Core", "AppConfig.cs"),
+        };
+        files.AddRange(System.IO.Directory.GetFiles(System.IO.Path.Combine(root, "Editor"), "*.cs"));
+        var claim = new System.Text.RegularExpressions.Regex(@"ArborXR\s+(supplies|provides)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        foreach (string file in files)
+        {
+            Assert.IsTrue(System.IO.File.Exists(file), file);
+            var match = claim.Match(System.IO.File.ReadAllText(file));
+            Assert.IsFalse(match.Success, $"{System.IO.Path.GetFileName(file)} says \"{match.Value}\".");
+        }
+    }
+
     // ── Switching in an open window ───────────────────────────────
 
     [Test]
