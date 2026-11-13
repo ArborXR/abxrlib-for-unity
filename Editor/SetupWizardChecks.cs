@@ -405,6 +405,51 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// The other direction: the App Token and Organization Token a project on the legacy scheme still has saved,
+        /// by the name of their field. Empty on App Tokens, where they are in use.
+        /// </summary>
+        internal static string[] LeftoverTokens(AppConfig config)
+        {
+            if (!ShowsLegacyScheme(config)) return Array.Empty<string>();
+            var names = new List<string>();
+            if (!string.IsNullOrEmpty(config.appToken)) names.Add("App Token");
+            if (!string.IsNullOrEmpty(config.orgToken)) names.Add("Organization Token");
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// What the inspector and the wizard say about <see cref="LeftoverTokens"/>, or null when there are none. The
+        /// legacy scheme has no field for them, the runtime doesn't read them there, and they still ship inside every
+        /// build. Null too while the project has no Application ID: the tokens are then its only credentials.
+        /// </summary>
+        internal static string LeftoverTokensWarning(AppConfig config)
+        {
+            string[] names = LeftoverTokens(config);
+            if (names.Length == 0 || string.IsNullOrWhiteSpace(config.appID)) return null;
+
+            bool one = names.Length == 1;
+            string them = one ? "it" : "them";
+            return $"This project is on the legacy scheme, but {string.Join(", ", names)} {(one ? "is" : "are")} " +
+                   $"still saved and {(one ? "ships" : "ship")} inside every build. The SDK doesn't read {them} on " +
+                   $"the legacy scheme. Tick Use App Tokens to go back to App Tokens, or clear {them}.";
+        }
+
+        /// <summary>
+        /// Empties <see cref="LeftoverTokens"/>. Does nothing on App Tokens, where they are the project's credentials,
+        /// or while the project has no Application ID, where they are its only ones.
+        /// </summary>
+        internal static void ClearLeftoverTokens(AppConfig config)
+        {
+            if (LeftoverTokensWarning(config) == null) return;
+            config.appToken = "";
+            config.orgToken = "";
+        }
+
+        /// <summary>The Clear button's label under the leftover warning, for the values the project's scheme leaves over.</summary>
+        internal static string ClearLeftoverValuesLabel(AppConfig config) =>
+            ShowsLegacyScheme(config) ? "Clear saved tokens" : "Clear legacy values";
+
+        /// <summary>
         /// What a project is told when the scheme it is set to has no credential of its own while the other scheme's
         /// are saved. That is how an asset last saved before Use App Tokens existed opens: ticked, with legacy
         /// credentials and no App Token. Those credentials are all it has, so it is shown the way back to them
@@ -417,6 +462,9 @@ namespace AbxrLib.Editor
                 return "Use App Tokens is ticked, but this project has no App Token and has legacy credentials saved. " +
                        "Untick Use App Tokens to keep using them, or paste an App Token (ArborXR portal: Content " +
                        "Library > your app under Managed > Insights Hub tab).";
+            if (!config.useAppTokens && string.IsNullOrWhiteSpace(config.appID) && !string.IsNullOrEmpty(config.appToken))
+                return "Use App Tokens is unticked, but this project has no Application ID and has an App Token saved. " +
+                       "Tick Use App Tokens to keep using it, or enter an Application ID.";
             return null;
         }
 
@@ -427,7 +475,7 @@ namespace AbxrLib.Editor
         /// </summary>
         internal static string LeftoverValuesNotice(AppConfig config, out bool offersClear)
         {
-            string warning = LeftoverLegacyValuesWarning(config);
+            string warning = LeftoverLegacyValuesWarning(config) ?? LeftoverTokensWarning(config);
             offersClear = warning != null;
             return warning ?? SwitchBackMessage(config);
         }

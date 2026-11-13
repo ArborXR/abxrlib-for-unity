@@ -335,23 +335,6 @@ namespace AbxrLib.Editor
                             : SetupWizardChecks.OrgTokenFieldHint(_config, out _) ?? "",
                         _styles.Hint);
                 }
-
-                // Values left from the legacy scheme have no field here, and they still ship inside the build (SDK-89).
-                // While they are the project's only credentials there is no Clear, and the box at the top of this page
-                // already says how to get back to them.
-                string leftoverNotice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
-                if (leftoverNotice != null && offersClear)
-                {
-                    EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
-                    if (GUILayout.Button("Clear legacy values", GUILayout.Width(160f)))
-                    {
-                        Undo.RecordObject(_config, "Clear legacy AbxrLib values");
-                        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
-                        // Nothing is left to switch back to, so the checkbox goes with the values.
-                        _useAppTokensToggle.Reset();
-                        EditorUtility.SetDirty(_config);
-                    }
-                }
             }
             else
             {
@@ -367,6 +350,24 @@ namespace AbxrLib.Editor
                 if (legacyOrgHint != null) EditorGUILayout.LabelField(legacyOrgHint, _styles.Hint);
 
                 EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
+            }
+
+            // Values saved for the scheme the project isn't on have no field, and they still ship inside the build
+            // (SDK-89). While they are the project's only credentials there is no Clear, and the box at the top of
+            // this page already says how to get back to them.
+            string leftoverNotice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+            if (leftoverNotice != null && offersClear)
+            {
+                EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
+                if (GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(_config), GUILayout.Width(160f)))
+                {
+                    Undo.RecordObject(_config, "Clear leftover AbxrLib values");
+                    SetupWizardChecks.ClearLeftoverLegacyValues(_config);
+                    SetupWizardChecks.ClearLeftoverTokens(_config);
+                    // Nothing is left to switch back to, so the checkbox goes with the values.
+                    _useAppTokensToggle.Reset();
+                    EditorUtility.SetDirty(_config);
+                }
             }
 
             if (EditorGUI.EndChangeCheck()) EditorUtility.SetDirty(_config);

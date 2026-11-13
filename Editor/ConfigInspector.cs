@@ -77,22 +77,6 @@ namespace AbxrLib.Editor
                     EditorGUILayout.HelpBox(
                         orgTokenHint ?? "Production: each device reports to its own organization, which comes from ArborXR MDM or passcode pairing at runtime.",
                         orgTokenHintType);
-
-                // Values left from the legacy scheme have no field here, and they still ship inside the build (SDK-89).
-                // While they are the project's only credentials, this is the way back to them and offers no Clear.
-                string leftoverNotice = SetupWizardChecks.LeftoverValuesNotice(config, out bool offersClear);
-                if (leftoverNotice != null)
-                {
-                    EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
-                    if (offersClear && GUILayout.Button("Clear legacy values", GUILayout.Width(160f)))
-                    {
-                        Undo.RecordObject(config, "Clear legacy AbxrLib values");
-                        SetupWizardChecks.ClearLeftoverLegacyValues(config);
-                        // Nothing is left to switch back to, so the checkbox goes with the values.
-                        _useAppTokensToggle.Reset();
-                        EditorUtility.SetDirty(config);
-                    }
-                }
             }
             else
             {
@@ -119,6 +103,24 @@ namespace AbxrLib.Editor
 
                 EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
             }
+
+            // Values saved for the scheme the project isn't on have no field, and they still ship inside the build
+            // (SDK-89). While they are the project's only credentials, this is the way back to them and offers no Clear.
+            string leftoverNotice = SetupWizardChecks.LeftoverValuesNotice(config, out bool offersClear);
+            if (leftoverNotice != null)
+            {
+                EditorGUILayout.HelpBox(leftoverNotice, MessageType.Warning);
+                if (offersClear && GUILayout.Button(SetupWizardChecks.ClearLeftoverValuesLabel(config), GUILayout.Width(160f)))
+                {
+                    Undo.RecordObject(config, "Clear leftover AbxrLib values");
+                    SetupWizardChecks.ClearLeftoverLegacyValues(config);
+                    SetupWizardChecks.ClearLeftoverTokens(config);
+                    // Nothing is left to switch back to, so the checkbox goes with the values.
+                    _useAppTokensToggle.Reset();
+                    EditorUtility.SetDirty(config);
+                }
+            }
+
             // Offered on the legacy scheme, and for as long as legacy values are saved (SDK-89). New projects use App Tokens.
             if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsUseAppTokensToggle(config)))
             {

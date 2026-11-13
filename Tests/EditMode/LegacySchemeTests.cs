@@ -431,6 +431,109 @@ public class LegacySchemeTests
         Assert.DoesNotThrow(() => SetupWizardChecks.ClearLeftoverLegacyValues(null));
     }
 
+    // ── Tokens left on a project that uses the legacy scheme ──────
+
+    private void OnTheLegacySchemeWithTokens(string appId = AppId)
+    {
+        _config.useAppTokens = false;
+        _config.appID = appId;
+        _config.appToken = "app.token.jwt";
+        _config.orgToken = "org.token.jwt";
+    }
+
+    [Test]
+    public void LeftoverTokens_NamesEachSavedToken()
+    {
+        OnTheLegacySchemeWithTokens();
+
+        CollectionAssert.AreEqual(new[] { "App Token", "Organization Token" }, SetupWizardChecks.LeftoverTokens(_config));
+    }
+
+    [Test]
+    public void AProjectOnAppTokens_HasNoLeftoverTokens_SinceTheyAreInUse()
+    {
+        _config.useAppTokens = true;
+        _config.appToken = "app.token.jwt";
+        _config.orgToken = "org.token.jwt";
+
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(_config));
+        Assert.IsNull(SetupWizardChecks.LeftoverTokensWarning(_config));
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(null));
+    }
+
+    [Test]
+    public void TheLeftoverTokensWarning_SaysTheyShip_AndNeverPrintsOne()
+    {
+        OnTheLegacySchemeWithTokens();
+
+        string warning = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+
+        Assert.IsTrue(offersClear);
+        StringAssert.Contains("App Token, Organization Token are still saved and ship inside every build", warning);
+        StringAssert.Contains("The SDK doesn't read them on the legacy scheme", warning);
+        StringAssert.Contains("Tick Use App Tokens to go back to App Tokens, or clear them", warning);
+        StringAssert.DoesNotContain("app.token.jwt", warning);
+        StringAssert.DoesNotContain("org.token.jwt", warning);
+        Assert.AreEqual("Clear saved tokens", SetupWizardChecks.ClearLeftoverValuesLabel(_config));
+    }
+
+    [Test]
+    public void OnAppTokens_TheClearButtonIsForTheLegacyValues()
+    {
+        OnAppTokensWithLegacyValues();
+
+        Assert.AreEqual("Clear legacy values", SetupWizardChecks.ClearLeftoverValuesLabel(_config));
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    public void WithNoApplicationId_TheTokensAreNotLeftovers_AndNothingOffersToClearThem(string appId)
+    {
+        // A project on App Tokens that unticked the checkbox: its App Token is its only credential.
+        OnTheLegacySchemeWithTokens(appId);
+
+        Assert.IsNull(SetupWizardChecks.LeftoverTokensWarning(_config));
+        string notice = SetupWizardChecks.LeftoverValuesNotice(_config, out bool offersClear);
+
+        Assert.IsFalse(offersClear);
+        StringAssert.Contains("Tick Use App Tokens to keep using it, or enter an Application ID", notice);
+        Assert.AreEqual(notice, SetupWizardChecks.DescribeCredentialProblem(_config));
+
+        SetupWizardChecks.ClearLeftoverTokens(_config);
+        Assert.AreEqual("app.token.jwt", _config.appToken, "Its only credential is left alone.");
+    }
+
+    [Test]
+    public void ClearLeftoverTokens_EmptiesThem_AndNothingElse()
+    {
+        OnTheLegacySchemeWithTokens();
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        SetupWizardChecks.ClearLeftoverTokens(_config);
+
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(_config));
+        Assert.IsNull(SetupWizardChecks.LeftoverValuesNotice(_config, out _));
+        Assert.IsFalse(_config.useAppTokens);
+        Assert.AreEqual(AppId, _config.appID);
+        Assert.AreEqual(OrgId, _config.orgID);
+        Assert.AreEqual("secret", _config.authSecret);
+    }
+
+    [Test]
+    public void ClearLeftoverTokens_OnAppTokens_LeavesItsCredentials()
+    {
+        _config.useAppTokens = true;
+        _config.appToken = "app.token.jwt";
+        _config.orgToken = "org.token.jwt";
+
+        SetupWizardChecks.ClearLeftoverTokens(_config);
+        SetupWizardChecks.ClearLeftoverTokens(null);
+
+        Assert.AreEqual("app.token.jwt", _config.appToken);
+        Assert.AreEqual("org.token.jwt", _config.orgToken);
+    }
+
     // ── Switching, and the way back ───────────────────────────────
 
     [Test]
