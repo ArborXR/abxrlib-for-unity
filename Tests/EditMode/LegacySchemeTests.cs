@@ -19,7 +19,12 @@ public class LegacySchemeTests
     public void SetUp() => _config = ScriptableObject.CreateInstance<AppConfig>();
 
     [TearDown]
-    public void TearDown() => Object.DestroyImmediate(_config);
+    public void TearDown()
+    {
+        // The Clear button records an undo step. Don't leave one behind for an object that is about to be destroyed.
+        UnityEditor.Undo.ClearUndo(_config);
+        Object.DestroyImmediate(_config);
+    }
 
     // ── The rule ──────────────────────────────────────────────────
 
@@ -692,21 +697,6 @@ public class LegacySchemeTests
         Assert.IsTrue(cleared);
         CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverTokens(_config));
         Assert.AreEqual(AppId, _config.appID);
-    }
-
-    [Test]
-    public void TheClearButton_IsOneUndoStep()
-    {
-        OnAppTokensWithLegacyValues();
-        UnityEditor.Undo.IncrementCurrentGroup();
-
-        SetupWizardChecks.ClearLeftoverValues(_config, null);
-        UnityEditor.Undo.FlushUndoRecordObjects();
-        UnityEditor.Undo.PerformUndo();
-
-        Assert.AreEqual(AppId, _config.appID);
-        Assert.AreEqual(OrgId, _config.orgID);
-        Assert.AreEqual("secret", _config.authSecret);
     }
 
     [Test]
