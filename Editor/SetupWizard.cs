@@ -353,9 +353,7 @@ namespace AbxrLib.Editor
                     _config.authSecret = DrawPasteField("Authorization Secret", "Only for custom APKs.", _config.authSecret);
                 }
 
-                EditorGUILayout.HelpBox(
-                    "App Tokens are off, so this project uses the legacy scheme. New integrations should use App Tokens.",
-                    MessageType.Warning);
+                EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Warning);
             }
 
             if (EditorGUI.EndChangeCheck()) EditorUtility.SetDirty(_config);

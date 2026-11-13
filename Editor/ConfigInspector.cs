@@ -102,6 +102,8 @@ namespace AbxrLib.Editor
                         "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization Secret are required. The API receives buildType Production.",
                         MessageType.Info);
                 }
+
+                EditorGUILayout.HelpBox(SetupWizardChecks.LegacySchemeNote, MessageType.Info);
             }
             // Only a project already on the legacy scheme is offered the choice (SDK-89). New projects use App Tokens.
             if (_useAppTokensToggle.Holds(SetupWizardChecks.ShowsLegacyScheme(config)))

@@ -252,6 +252,11 @@ namespace AbxrLib.Editor
         /// </summary>
         internal static bool ShowsLegacyScheme(AppConfig config) => config != null && !config.useAppTokens;
 
+        /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
+        internal const string LegacySchemeNote =
+            "This project uses the legacy scheme: Application ID, Organization ID and Authorization Secret. It keeps " +
+            "working, but new projects use an App Token. Tick Use App Tokens to switch.";
+
         /// <summary>
         /// For one open inspector or wizard: once something has shown, it stays until the window closes or is enabled
         /// again. Without it, the edit that makes a control unnecessary removes the control mid-edit, with no way back.

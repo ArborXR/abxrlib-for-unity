@@ -66,6 +66,14 @@ public class LegacySchemeTests
     }
 
     [Test]
+    public void TheLegacyNote_SaysTheSchemeIsLegacy_AndThatNewProjectsUseAnAppToken()
+    {
+        StringAssert.Contains("legacy scheme", SetupWizardChecks.LegacySchemeNote);
+        StringAssert.Contains("new projects use an App Token", SetupWizardChecks.LegacySchemeNote);
+        StringAssert.Contains("keeps working", SetupWizardChecks.LegacySchemeNote);
+    }
+
+    [Test]
     public void WithoutAConfig_TheLegacySchemeDoesNotShow()
     {
         Assert.IsFalse(SetupWizardChecks.ShowsLegacyScheme(null));
