@@ -246,22 +246,35 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// For one open inspector or wizard: once something has shown, it stays until the window closes or is enabled
+        /// again. Without it, the edit that makes a control unnecessary removes the control mid-edit, with no way back.
+        /// </summary>
+        internal sealed class ShownLatch
+        {
+            private bool _shown;
+
+            /// <summary>True from the first call given true, until <see cref="Reset"/>.</summary>
+            internal bool Holds(bool showsNow) => _shown |= showsNow;
+
+            internal void Reset() => _shown = false;
+        }
+
+        /// <summary>
         /// <see cref="ShowsOrgTokenField"/> for one open inspector or wizard, which keeps the field up once it has held
         /// a value. Emptying it would otherwise remove it on that keystroke, before a replacement can be typed or
         /// pasted. Lasts until the window closes or is enabled again.
         /// </summary>
         internal sealed class OrgTokenFieldLatch
         {
-            private bool _heldAValue;
+            private readonly ShownLatch _heldAValue = new ShownLatch();
 
             internal bool Shows(AppConfig config)
             {
                 if (config == null || !config.useAppTokens) return false;
-                if (!string.IsNullOrEmpty(config.orgToken)) _heldAValue = true;
-                return _heldAValue || ShowsOrgTokenField(config);
+                return _heldAValue.Holds(!string.IsNullOrEmpty(config.orgToken)) || ShowsOrgTokenField(config);
             }
 
-            internal void Reset() => _heldAValue = false;
+            internal void Reset() => _heldAValue.Reset();
         }
 
         /// <summary>
