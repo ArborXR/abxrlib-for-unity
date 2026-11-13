@@ -73,7 +73,7 @@ When the package finishes installing, the **AbxrLib Setup** wizard opens on its 
 - **Project setup** — Editor version, required packages, the optional sign-in UI, and the Android player settings a standalone headset build needs (each with a one-click fix).
 - **First events** — the assessment calls that turn on grading dashboards and LMS reporting.
 
-Reopen it any time from `Analytics for XR > Setup Wizard`. It edits the same `Assets/Resources/AbxrLib.asset` as `Analytics for XR > Configuration`, so either route works. Uncheck **Open automatically after install or update** in the wizard footer to stop it appearing on its own, and it never opens in batch mode or CI.
+Reopen it any time from `Analytics for XR > Setup Wizard`. It edits the same `Assets/Resources/AbxrLib.asset` as `Analytics for XR > Configuration`, so either route works. The wizard saves the asset as you move between its pages. Values typed into Configuration stay in memory until you save the project (`File > Save Project`), like any Unity asset, so save before you commit the asset or start a command-line build. Uncheck **Open automatically after install or update** in the wizard footer to stop it appearing on its own, and it never opens in batch mode or CI.
 
 ### Diagnostics
 
