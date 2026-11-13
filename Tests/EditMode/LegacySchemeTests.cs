@@ -179,6 +179,48 @@ public class LegacySchemeTests
         StringAssert.DoesNotContain("a-secret-value", warning);
     }
 
+    [Test]
+    public void ClearLeftoverLegacyValues_EmptiesThem_AndNothingElse()
+    {
+        _config.useAppTokens = true;
+        _config.buildType = "development";
+        _config.appToken = "app.token.jwt";
+        _config.orgToken = "org.token.jwt";
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
+
+        CollectionAssert.IsEmpty(SetupWizardChecks.LeftoverLegacyValues(_config));
+        Assert.IsNull(SetupWizardChecks.LeftoverLegacyValuesWarning(_config), "The warning and its button go once they are cleared.");
+        Assert.IsTrue(_config.useAppTokens);
+        Assert.AreEqual("development", _config.buildType);
+        Assert.AreEqual("app.token.jwt", _config.appToken);
+        Assert.AreEqual("org.token.jwt", _config.orgToken);
+    }
+
+    [Test]
+    public void ClearLeftoverLegacyValues_OnALegacyProject_LeavesItsCredentials()
+    {
+        _config.useAppTokens = false;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        SetupWizardChecks.ClearLeftoverLegacyValues(_config);
+
+        Assert.AreEqual(AppId, _config.appID);
+        Assert.AreEqual(OrgId, _config.orgID);
+        Assert.AreEqual("secret", _config.authSecret);
+    }
+
+    [Test]
+    public void ClearLeftoverLegacyValues_WithoutAConfig_DoesNothing()
+    {
+        Assert.DoesNotThrow(() => SetupWizardChecks.ClearLeftoverLegacyValues(null));
+    }
+
     // ── Switching in an open window ───────────────────────────────
 
     [Test]

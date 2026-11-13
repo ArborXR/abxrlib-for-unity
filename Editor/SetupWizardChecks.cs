@@ -288,6 +288,18 @@ namespace AbxrLib.Editor
                   $"Clear {them} unless your app relies on that.";
         }
 
+        /// <summary>
+        /// Empties <see cref="LeftoverLegacyValues"/>. Does nothing on the legacy scheme, where the same fields are the
+        /// project's credentials.
+        /// </summary>
+        internal static void ClearLeftoverLegacyValues(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens) return;
+            config.appID = "";
+            config.orgID = "";
+            config.authSecret = "";
+        }
+
         /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
         internal const string LegacySchemeNote =
             "This project uses the legacy scheme: Application ID, Organization ID and Authorization Secret. It keeps " +

@@ -84,6 +84,12 @@ namespace AbxrLib.Editor
                 if (leftoverLegacy != null)
                 {
                     EditorGUILayout.HelpBox(leftoverLegacy, MessageType.Warning);
+                    if (GUILayout.Button("Clear legacy values", GUILayout.Width(160f)))
+                    {
+                        Undo.RecordObject(config, "Clear legacy AbxrLib values");
+                        SetupWizardChecks.ClearLeftoverLegacyValues(config);
+                        EditorUtility.SetDirty(config);
+                    }
                 }
             }
             else
