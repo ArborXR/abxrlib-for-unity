@@ -570,10 +570,15 @@ namespace AbxrLib.Editor
         /// <summary>
         /// Whether a legacy Organization ID or Authorization Secret field is locked. Production takes neither, so an
         /// empty one can't be filled in there. One that holds a value stays editable: it still ships, and a malformed
-        /// Organization ID fails the credential check until it is fixed or cleared.
+        /// Organization ID fails the credential check until it is fixed or cleared. <paramref name="heldAValue"/> is
+        /// that field's latch in one open window: once the field has held a value there it stays editable, so the
+        /// keystroke that empties it doesn't lock it while it has focus.
         /// </summary>
-        internal static bool LegacyOrgFieldIsLocked(AppConfig config, string value) =>
-            config != null && config.buildType == "production" && string.IsNullOrEmpty(value);
+        internal static bool LegacyOrgFieldIsLocked(AppConfig config, string value, ShownLatch heldAValue)
+        {
+            bool held = heldAValue.Holds(!string.IsNullOrEmpty(value));
+            return config != null && IsProduction(config.buildType) && !held;
+        }
 
         /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
         internal const string LegacySchemeNote =

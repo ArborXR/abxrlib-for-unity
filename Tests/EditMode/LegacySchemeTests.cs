@@ -267,6 +267,7 @@ public class LegacySchemeTests
 
     [TestCase("production", "", ExpectedResult = true)]
     [TestCase("production", null, ExpectedResult = true)]
+    [TestCase("Production", "", ExpectedResult = true)] // the runtime ignores case here
     [TestCase("production", "not-a-uuid", ExpectedResult = false)] // it fails the credential check until fixed or cleared
     [TestCase("production", OrgId, ExpectedResult = false)]
     [TestCase("development", "", ExpectedResult = false)]
@@ -277,7 +278,7 @@ public class LegacySchemeTests
         _config.useAppTokens = false;
         _config.buildType = buildType;
 
-        return SetupWizardChecks.LegacyOrgFieldIsLocked(_config, value);
+        return SetupWizardChecks.LegacyOrgFieldIsLocked(_config, value, new SetupWizardChecks.ShownLatch());
     }
 
     [Test]
@@ -289,7 +290,39 @@ public class LegacySchemeTests
         _config.orgID = "not-a-uuid";
 
         Assert.IsFalse(SetupWizardChecks.CredentialsAreValid(_config), "The wizard asks for a fix.");
-        Assert.IsFalse(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID), "So the field must take one.");
+        Assert.IsFalse(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, new SetupWizardChecks.ShownLatch()),
+            "So the field must take one.");
+    }
+
+    [Test]
+    public void EmptyingALegacyFieldInProduction_DoesNotLockItUntilTheWindowCloses()
+    {
+        var field = new SetupWizardChecks.ShownLatch();
+        _config.useAppTokens = false;
+        _config.buildType = "production";
+        _config.orgID = OrgId;
+        Assert.IsFalse(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, field));
+
+        _config.orgID = "";
+
+        Assert.IsFalse(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, field), "It still has focus, and a corrected value may follow.");
+        field.Reset();
+        Assert.IsTrue(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, field), "A window opened after that locks the empty field.");
+    }
+
+    [Test]
+    public void AValueHeldInAnotherBuildType_KeepsTheFieldEditableAfterSwitchingToProduction()
+    {
+        var field = new SetupWizardChecks.ShownLatch();
+        _config.useAppTokens = false;
+        _config.buildType = "development";
+        _config.orgID = OrgId;
+        SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, field);
+
+        _config.buildType = "production";
+        _config.orgID = "";
+
+        Assert.IsFalse(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, field));
     }
 
     // ── Legacy values left on a project that uses App Tokens ──────

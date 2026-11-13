@@ -42,6 +42,9 @@ namespace AbxrLib.Editor
         private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
         // Keeps Production (Custom APK) in the Build Type choice while this window is open, so switching away can be undone.
         private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
+        // Keep a legacy Organization ID or Authorization Secret field editable in Production once it has held a value.
+        private readonly SetupWizardChecks.ShownLatch _legacyOrgIdField = new SetupWizardChecks.ShownLatch();
+        private readonly SetupWizardChecks.ShownLatch _legacyAuthSecretField = new SetupWizardChecks.ShownLatch();
         private Vector2 _scroll;
         private Styles _styles;
 
@@ -66,6 +69,8 @@ namespace AbxrLib.Editor
             window._orgTokenField.Reset();
             window._useAppTokensToggle.Reset();
             window._customApkOption.Reset();
+            window._legacyOrgIdField.Reset();
+            window._legacyAuthSecretField.Reset();
             window.Refresh();
             window.Show();
             window.Focus();
@@ -77,6 +82,8 @@ namespace AbxrLib.Editor
             _orgTokenField.Reset();
             _useAppTokensToggle.Reset();
             _customApkOption.Reset();
+            _legacyOrgIdField.Reset();
+            _legacyAuthSecretField.Reset();
             Refresh();
         }
 
@@ -340,10 +347,10 @@ namespace AbxrLib.Editor
             {
                 _config.appID = DrawPasteField("Application ID (required)",
                     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", _config.appID);
-                // Production takes neither, so empty fields are locked there. A saved value stays editable.
-                using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID)))
+                // Production takes neither, so empty fields are locked there. One that has held a value stays editable.
+                using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, _legacyOrgIdField)))
                     _config.orgID = DrawPasteField("Organization ID", "Used by Development and Custom APK builds.", _config.orgID);
-                using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.authSecret)))
+                using (new EditorGUI.DisabledScope(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.authSecret, _legacyAuthSecretField)))
                     _config.authSecret = DrawPasteField("Authorization Secret", "Used by Development and Custom APK builds.", _config.authSecret);
 
                 string legacyOrgHint = SetupWizardChecks.LegacyOrgFieldsHint(_config, out _);

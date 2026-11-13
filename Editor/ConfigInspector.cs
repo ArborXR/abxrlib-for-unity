@@ -14,12 +14,17 @@ namespace AbxrLib.Editor
         private readonly SetupWizardChecks.ShownLatch _useAppTokensToggle = new SetupWizardChecks.ShownLatch();
         // Keeps Production (Custom APK) in the Build Type choice while this inspector is open, so switching away can be undone.
         private readonly SetupWizardChecks.ShownLatch _customApkOption = new SetupWizardChecks.ShownLatch();
+        // Keep a legacy Organization ID or Authorization Secret field editable in Production once it has held a value.
+        private readonly SetupWizardChecks.ShownLatch _legacyOrgIdField = new SetupWizardChecks.ShownLatch();
+        private readonly SetupWizardChecks.ShownLatch _legacyAuthSecretField = new SetupWizardChecks.ShownLatch();
 
         private void OnEnable()
         {
             _orgTokenField.Reset();
             _useAppTokensToggle.Reset();
             _customApkOption.Reset();
+            _legacyOrgIdField.Reset();
+            _legacyAuthSecretField.Reset();
         }
 
         public override void OnInspectorGUI()
@@ -88,12 +93,12 @@ namespace AbxrLib.Editor
                 string orgIdTooltip = isProductionCustomLegacy
                     ? "Required for Production (Custom APK). Set the customer's organization ID from ArborXR Portal."
                     : "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";
-                // Production takes neither, so empty fields are locked there. A saved value stays editable.
-                EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.orgID));
+                // Production takes neither, so empty fields are locked there. One that has held a value stays editable.
+                EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.orgID, _legacyOrgIdField));
                 config.orgID = EditorGUILayout.TextField(new GUIContent(orgIdLabel, orgIdTooltip), config.orgID);
                 EditorGUI.EndDisabledGroup();
                 string authSecretLabel = isProductionCustomLegacy ? "Authorization Secret (required)" : "Authorization Secret (*)";
-                EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.authSecret));
+                EditorGUI.BeginDisabledGroup(SetupWizardChecks.LegacyOrgFieldIsLocked(config, config.authSecret, _legacyAuthSecretField));
                 config.authSecret = EditorGUILayout.TextField(new GUIContent(authSecretLabel, "Required for Production (Custom APK) when using legacy auth."), config.authSecret);
                 EditorGUI.EndDisabledGroup();
                 
