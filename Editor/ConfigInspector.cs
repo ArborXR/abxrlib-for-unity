@@ -166,7 +166,7 @@ namespace AbxrLib.Editor
             EditorGUILayout.Space();
         
             // Warning about production usage. It is about the legacy fields, so it shows where they do (SDK-89).
-            if (SetupWizardChecks.ShowsLegacyScheme(config))
+            if (SetupWizardChecks.ShowsProductionBuildWarning(config))
             {
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.LabelField("⚠️ PRODUCTION BUILD WARNING", EditorStyles.boldLabel);

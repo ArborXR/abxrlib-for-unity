@@ -349,6 +349,12 @@ namespace AbxrLib.Editor
         /// </summary>
         internal static bool ShowsLegacyScheme(AppConfig config) => config != null && !config.useAppTokens;
 
+        /// <summary>
+        /// Whether the inspector shows its production build warning. The box is about the legacy fields (the ones
+        /// marked with an asterisk), so it shows where they do.
+        /// </summary>
+        internal static bool ShowsProductionBuildWarning(AppConfig config) => ShowsLegacyScheme(config);
+
         /// <summary>Whether an Application ID, Organization ID or Authorization Secret is saved, on either scheme.</summary>
         internal static bool HasLegacyValues(AppConfig config) =>
             config != null && (!string.IsNullOrEmpty(config.appID) || !string.IsNullOrEmpty(config.orgID) ||

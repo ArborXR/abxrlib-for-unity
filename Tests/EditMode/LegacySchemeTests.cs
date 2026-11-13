@@ -325,6 +325,25 @@ public class LegacySchemeTests
         Assert.IsFalse(SetupWizardChecks.LegacyOrgFieldIsLocked(_config, _config.orgID, field));
     }
 
+    [TestCase(false, ExpectedResult = true)]
+    [TestCase(true, ExpectedResult = false)]
+    public bool TheProductionBuildWarning_ShowsOnlyWithTheLegacyFields(bool useAppTokens)
+    {
+        _config.useAppTokens = useAppTokens;
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        Assert.AreEqual(SetupWizardChecks.ShowsLegacyScheme(_config), SetupWizardChecks.ShowsProductionBuildWarning(_config));
+        return SetupWizardChecks.ShowsProductionBuildWarning(_config);
+    }
+
+    [Test]
+    public void TheProductionBuildWarning_WithoutAConfig_DoesNotShow()
+    {
+        Assert.IsFalse(SetupWizardChecks.ShowsProductionBuildWarning(null));
+    }
+
     // ── Legacy values left on a project that uses App Tokens ──────
 
     private void OnAppTokensWithLegacyValues(string appToken = "app.token.jwt")
