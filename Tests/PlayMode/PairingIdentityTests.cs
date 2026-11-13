@@ -498,6 +498,94 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.AreEqual(0, transport.AuthCalls);
     }
 
+    // A Development build is never let through on a handoff alone, since it always has an org. So a handoff that can't be
+    // applied continues with device authentication as the org that owns the app, where a Production build ends quietly.
+
+    [UnityTest]
+    public IEnumerator Development_AHandoff_IsAdopted()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls, "The launcher's session, not a device auth.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        StringAssert.Contains("\"OrgToken\":\"" + AppToken + "\"", AbxrSubsystem.Instance.GetHandoffJsonForTesting(),
+            "An onward handoff carries the App Token as the org token, as it would a configured one.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AnInvalidHandoff_SignsInWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        AbxrAuthService.SetAuthHandoffForTesting("{not json");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Failed to parse auth response")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports, "Production ends quietly here (AnInvalidHandoff_StillEndsQuietly).");
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AnExpiredHandoff_SignsInWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        // exp = 1: a token that expired in 1970.
+        AbxrAuthService.SetAuthHandoffForTesting(
+            "{\"Token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjF9.sig\",\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AHandoffTheServiceCantTake_SignsInWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        transport.IsServiceTransport = true;
+        transport.HandoffFailure = "SetAuthFromHandoff returned CORRUPT_JSON";
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(1, transport.HandoffCalls);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator Development_SetUserDataAfterAHandoff_ReAuthenticatesWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        var synced = new List<bool>();
+        Abxr.OnUserDataSyncCompleted += (success, _) => synced.Add(success);
+
+        Abxr.SetUserData("learner-2");
+        yield return WaitFor(() => synced.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { true }, synced);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken, "The re-auth is a device auth as the org that owns the app, not the launcher's.");
+    }
+
     // ── Auth handoff ──────────────────────────────────────────────
 
     private const string HandoffJson =
