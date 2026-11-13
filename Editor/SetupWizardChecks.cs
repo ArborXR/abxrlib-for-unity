@@ -466,6 +466,11 @@ namespace AbxrLib.Editor
 
             if (config.useAppTokens)
             {
+                // An asset last saved before Use App Tokens existed loads with it ticked and its legacy credentials saved.
+                if (string.IsNullOrWhiteSpace(config.appToken) && !string.IsNullOrEmpty(config.appID))
+                    return "Use App Tokens is ticked, but this project has no App Token and has legacy credentials saved. " +
+                           "Untick Use App Tokens to keep using them, or paste an App Token (ArborXR portal: Content " +
+                           "Library > your app under Managed > Insights Hub tab).";
                 if (string.IsNullOrWhiteSpace(config.appToken))
                     return "App Token is required. In the ArborXR portal: Content Library > your app under Managed > Insights Hub tab.";
                 if (!LooksLikeJwt(config.appToken))

@@ -54,6 +54,29 @@ public class LegacySchemeTests
         Assert.IsTrue(SetupWizardChecks.CredentialsAreValid(_config), "And the credentials it shipped with work again.");
     }
 
+    [Test]
+    public void LegacyCredentialsWithNoAppToken_AreToldToUntickOrPasteAnAppToken()
+    {
+        Assert.IsTrue(_config.useAppTokens);
+        _config.appID = AppId;
+        _config.orgID = OrgId;
+        _config.authSecret = "secret";
+
+        string problem = SetupWizardChecks.DescribeCredentialProblem(_config);
+
+        StringAssert.Contains("Untick Use App Tokens to keep using them", problem);
+        StringAssert.Contains("or paste an App Token", problem);
+    }
+
+    [Test]
+    public void ANewProjectWithNoAppToken_IsOnlyAskedForOne()
+    {
+        string problem = SetupWizardChecks.DescribeCredentialProblem(_config);
+
+        StringAssert.StartsWith("App Token is required.", problem);
+        StringAssert.DoesNotContain("Untick", problem);
+    }
+
     [TestCase(true, null, null, null, ExpectedResult = false)] // a new project
     [TestCase(true, "", "", "", ExpectedResult = false)]
     [TestCase(true, AppId, null, null, ExpectedResult = true)]
