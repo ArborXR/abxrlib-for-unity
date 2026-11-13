@@ -1,8 +1,8 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // PlayMode: which identity device auth uses (SDK-60 step 3, SDK-59 RFC §03 and D2). An org credential wins, then a
 // stored pairing, then none, which is quiet. The choice holds for the launch. A paired bootstrap refusal revokes on 401
-// and suspends on 403, without latching the session. Also the subsystem's wiring around pairing: where the prompt and
-// its input go, recording while unpaired, and auth after a new pairing.
+// and suspends on 403, without latching the session. An auth handoff signs in an unpaired app (SDK-80). Also the
+// subsystem's wiring around pairing: where the prompt and its input go, recording while unpaired, and auth after a new pairing.
 // Drives the real AbxrAuthService through AuthRetryTests' scripted transport and an in-memory pairing store, so no
 // network or PlayerPrefs is involved.
 using System;
@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using AbxrLib.Runtime;
 using AbxrLib.Runtime.Core.UI;
+using AbxrLib.Runtime.Services.Auth;
 using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Services.Transport;
 using AbxrLib.Runtime.Types;
@@ -315,6 +316,132 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.IsNull(transport.LastPayload.appInstanceToken);
         Assert.AreEqual(InstanceId, transport.LastPayload.priorAppInstanceId);
         Assert.AreEqual(InstanceToken, _store.Token, "The stored pairing is kept for a later migration.");
+    }
+
+    // ── Auth handoff ──────────────────────────────────────────────
+
+    private const string HandoffJson =
+        "{\"Token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDB9.sig\",\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}";
+
+    [UnityTest]
+    public IEnumerator APairedHubsHandoff_SignsInAnUnpairedApp()
+    {
+        Start(pairedAs: InstanceId, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        string hubToken = Abxr.GetAuthResponse().Token;
+        StringAssert.Contains("\"OrgToken\":\"\"", AbxrSubsystem.Instance.GetHandoffJsonForTesting(), "A paired hub has no org credential to hand over.");
+        Assert.IsTrue(AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest("com.example.module"));
+        FullTeardownForAppSwitch(clearAuthHandoff: false);
+        BaseSetUpForAppSwitch();
+
+        var transport = Start(pairedAs: null, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports, "Not \"No organization identity\".");
+        Assert.AreEqual(0, transport.AuthCalls, "The hub's session, not a device auth.");
+        Assert.AreEqual(hubToken, Abxr.GetAuthResponse().Token);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State, "The module stays unpaired.");
+        Assert.IsNull(_store.Token);
+    }
+
+    [UnityTest]
+    public IEnumerator AHandedOverSession_RecordsWhileUnpaired()
+    {
+        Start(pairedAs: null, Authorized);
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        Abxr.Event("while_resolving");
+        List<string> pendingAtReport = null;
+        Abxr.OnAuthCompleted += (_, _) => pendingAtReport ??= PendingEventNames();
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.IsTrue(pendingAtReport.Contains("while_resolving"), "Settling unpaired doesn't drop what the launcher's session recorded.");
+        Abxr.Event("after_handoff");
+        Assert.IsTrue(PendingEventNames().Contains("after_handoff"));
+    }
+
+    [UnityTest]
+    public IEnumerator AnInvalidHandoff_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        AbxrAuthService.SetAuthHandoffForTesting("{not json");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Failed to parse auth response")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls, "No device auth without an org credential.");
+    }
+
+    [UnityTest]
+    public IEnumerator AnExpiredHandoff_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        // exp = 1: a token that expired in 1970.
+        AbxrAuthService.SetAuthHandoffForTesting(
+            "{\"Token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjF9.sig\",\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls, "An expired session is no identity, so there is nothing to run device auth with.");
+    }
+
+    [UnityTest]
+    public IEnumerator AHandoffWithoutAToken_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        AbxrAuthService.SetAuthHandoffForTesting("{\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator AHandoffTheServiceCantTake_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        transport.IsServiceTransport = true;
+        transport.HandoffFailure = "SetAuthFromHandoff returned CORRUPT_JSON";
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(1, transport.HandoffCalls);
+        Assert.AreEqual(0, transport.AuthCalls, "The handoff was its only identity, so there is nothing to run device auth with.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator AHandoffDeliveredAfterEndingQuietly_SignsIn()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+
+        // The hub launches the module while it is still running: a new intent, read when focus returns.
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual(2, _reports.Count);
+        Assert.IsTrue(_reports[1].success, "The module adopts the hub's session without being restarted.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        Assert.AreEqual(0, transport.AuthCalls);
     }
 
     // ── Subsystem wiring ──────────────────────────────────────────

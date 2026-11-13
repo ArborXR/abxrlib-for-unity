@@ -68,7 +68,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Func<bool> stillCurrent, Action<AuthTransportResult> onComplete)
         {
             string url = RestUri(AuthPath).ToString();
             string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
@@ -105,6 +105,13 @@ namespace AbxrLib.Runtime.Services.Transport
             bool isAuthRejectedByApi = !success && (responseCode == 401 || responseCode == 403);
             bool networkError = requestResult == UnityWebRequest.Result.ConnectionError;
             return new AuthTransportResult(success, response, isAuthRejectedByApi, responseCode, networkError);
+        }
+
+        /// <summary>REST sends the handed-over token with each request, so there is nothing to set up.</summary>
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete)
+        {
+            onComplete?.Invoke(true, null);
+            yield break;
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)

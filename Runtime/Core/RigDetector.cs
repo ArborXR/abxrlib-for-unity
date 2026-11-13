@@ -19,7 +19,9 @@ namespace AbxrLib.Runtime.Core
             if (!string.IsNullOrEmpty(_prefabSuffix)) return _prefabSuffix;
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (IsOVRCameraRigInUse()) _prefabSuffix = "_Meta";
-            else _prefabSuffix = "_OpenXR";
+            // The _OpenXR prefabs carry XR Interaction Toolkit's raycaster, a missing script without the toolkit.
+            else if (GetCachedType("UnityEngine.XR.Interaction.Toolkit.UI.TrackedDeviceGraphicRaycaster") != null) _prefabSuffix = "_OpenXR";
+            else _prefabSuffix = "_Default";
 #else
             _prefabSuffix = "_Default";
 #endif

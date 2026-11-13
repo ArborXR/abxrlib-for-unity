@@ -38,7 +38,13 @@ namespace AbxrLib.Runtime.UI
             AbxrUi.RegisterAuthUi(new KeyboardAuthUi());
             AbxrUi.RegisterPollUi(new ExitPollUi());
             AbxrUi.RegisterSceneObjectAttacher(AttachSceneObjects);
-            AbxrUi.RegisterSceneChangedHandler(LaserPointerManager.OnSceneChanged);
+            AbxrUi.RegisterSceneChangedHandler(OnSceneChanged);
+        }
+
+        private static void OnSceneChanged()
+        {
+            LaserPointerManager.OnSceneChanged();
+            EventSystemFallback.OnSceneChanged();
         }
 
         private static void AttachSceneObjects()

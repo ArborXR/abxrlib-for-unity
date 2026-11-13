@@ -81,6 +81,11 @@ namespace AbxrLib.Runtime.Services.Auth
         internal bool HasAuthenticationStarted => _isAuthStarted;
         /// <summary>Testing only. Clears <see cref="HasAuthenticationStarted"/> so tests can run multiple auth scenarios in one session.</summary>
         internal void ResetAuthStartedForTesting() => _isAuthStarted = false;
+        /// <summary>
+        /// True once an <see cref="Authenticate"/> attempt has run, whatever came of it (signed in, failed, ended quietly).
+        /// An auth handoff delivered before that is applied by the first attempt; one delivered after starts a new session.
+        /// </summary>
+        internal bool HasAttemptedAuthentication { get; private set; }
         /// <summary>Testing only. Tests that invoke <see cref="OnInputRequested"/> directly bypass the request bookkeeping; this restores it.</summary>
         internal void SetInputRequestPendingForTesting(bool pending) => _inputRequestPending = pending;
         internal void SetUserAuthSubmitInFlightForTesting(bool inFlight) => IsUserAuthSubmitInFlight = inFlight;
@@ -111,6 +116,20 @@ namespace AbxrLib.Runtime.Services.Auth
         private string _returnToPackage;
         /// <summary>True when a valid auth_handoff was parsed; AuthenticateCoroutine skips device AuthRequestCoroutine and completes after GET config (same as normal flow).</summary>
         private bool _deviceAuthDeferredByHandoff;
+        /// <summary>True while identity settles for an attempt that read a valid auth_handoff, which it applies after validation.</summary>
+        private bool _authHandoffPending;
+        /// <summary>The handed-over session, kept until AuthenticateCoroutine gives it to the transport.</summary>
+        private string _handoffSessionJson;
+        /// <summary>True when this attempt was let through on the handed-over session alone, with nothing to run device auth with.</summary>
+        private bool _attemptAdmittedByHandoff;
+        /// <summary>The launcher's session id, for a session adopted from a handoff (<see cref="HandoffSessionId"/>).</summary>
+        private string _handoffSessionId;
+
+        /// <summary>
+        /// True when this session came from an auth handoff, and while an attempt that read one settles identity. The
+        /// subsystem keeps recording for it while the app is unpaired, since the launcher's session is the opt-in (SDK-80).
+        /// </summary>
+        internal bool HasAuthHandoff => _sessionUsedAuthHandoff || _authHandoffPending;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         /// <summary>WebGL: pre-filled assessment PIN from org token JWT claim <c>pin</c> (preferred) or from <c>assessment_pin</c>/<c>assessmentPin</c> URL query. When set, GET config can be overridden to assessmentPin and the first user-auth attempt auto-submits this value.</summary>
@@ -196,6 +215,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 return;
             }
             _attemptActive = true;
+            HasAttemptedAuthentication = true;
             StopReAuthPolling();
             if (clearStateFirst)
                 ClearAuthenticationState();
@@ -238,10 +258,21 @@ namespace AbxrLib.Runtime.Services.Auth
 #elif (UNITY_STANDALONE_WIN || UNITY_STANDALONE_OSX) && !UNITY_EDITOR
             GetQueryData();
 #endif
-            if (!ApplyPairingIdentity()) return;
+            // Auth handoff (intent / CLI / test inject). Read before the pairing gate, since a launcher's session is an identity
+            // too (SDK-80), and applied after validation. Only a session with a token stands in for an identity.
+            string handoff = TakeAuthHandoffSession(out bool handoffHasToken);
+            bool identified;
+            _authHandoffPending = handoffHasToken;
+            try { identified = ApplyPairingIdentity(); }
+            finally { _authHandoffPending = false; }
+            if (!identified) return;
 
-            // Paired mode has no org credential by design; the app side is still checked.
-            var validationError = _pairedInstanceId != null ? _runtimeAuth.IsValid() : _runtimeAuth.IsValidToSend();
+            // Paired mode has no org credential by design, and neither does an app let through on a handed-off session
+            // alone; the app side is still checked.
+            bool admittedByHandoff = handoffHasToken && _pairedInstanceId == null && !_runtimeAuth.HasOrgCredential();
+            _attemptAdmittedByHandoff = admittedByHandoff;
+            var validationError = _pairedInstanceId != null || admittedByHandoff
+                ? _runtimeAuth.IsValid() : _runtimeAuth.IsValidToSend();
             if (validationError != null)
             {
                 _attemptActive = false;
@@ -250,8 +281,20 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             _runtimeAuth.CopyAuthFieldsTo(_payload);
 
-            // Auth handoff (intent / CLI / test inject): on success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
-            CheckAuthHandoff();
+            // On success, session is loaded and AuthenticateCoroutine skips device auth but still runs GET config.
+            if (handoff != null)
+            {
+                Logcat.Info("Processing authentication handoff from external launcher");
+                if (!ParseAuthResponse(handoff, true))
+                {
+                    Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+                    if (admittedByHandoff)
+                    {
+                        EndWithoutHandoffIdentity();
+                        return;
+                    }
+                }
+            }
 
             // Use runtime auth mechanism for the device authentication request (e.g. test-injected type=none so backend gets auth_mechanism and does not require PIN).
             _authMechanism = _runtimeAuth.authMechanism != null ? CopyAuthMechanism(_runtimeAuth.authMechanism) : new AuthMechanism();
@@ -264,6 +307,7 @@ namespace AbxrLib.Runtime.Services.Auth
         /// Puts this attempt in the launch's identity mode (SDK-59 RFC §03). An org credential from the sources above wins,
         /// then a stored pairing, then nothing, which is quiet (D2). Settled on the launch's first attempt and held after
         /// that, so a late ArborXR client or SetOrgId takes effect next launch and one launch never sends as two identities.
+        /// An auth handoff stands in for nothing: the app stays unpaired and adopts the launcher's session (SDK-80).
         /// False when the attempt ends here, already reported.
         /// </summary>
         private bool ApplyPairingIdentity()
@@ -297,7 +341,11 @@ namespace AbxrLib.Runtime.Services.Auth
                     // without its org credential, is a misconfiguration rather than a store install, so it keeps the
                     // validation error.
                     if (_runtimeAuth.buildType == "production_custom" || _runtimeAuth.IsValid() != null) return true;
-                    return EndQuietly(NoIdentityMessage);
+                    if (!_authHandoffPending) return EndQuietly(NoIdentityMessage);
+                    // The launcher's session is the identity. An org token that arrived after the launch settled still
+                    // doesn't ride along, since a SetUserData re-auth or an onward handoff would send it.
+                    _runtimeAuth.orgToken = null;
+                    return true;
             }
         }
 
@@ -306,6 +354,21 @@ namespace AbxrLib.Runtime.Services.Auth
             _attemptActive = false;
             OnFailedQuietly?.Invoke(message);
             return false;
+        }
+
+        /// <summary>
+        /// Ends an attempt let through on a handed-over session alone once that session can't be applied: there is nothing to
+        /// run device authentication with.
+        /// </summary>
+        private void EndWithoutHandoffIdentity()
+        {
+            if (_pairing != null)
+            {
+                EndQuietly(NoIdentityMessage);
+                return;
+            }
+            _attemptActive = false;
+            OnFailed?.Invoke(_runtimeAuth.IsValidToSend() ?? NoIdentityMessage);
         }
 
         public void SetSessionId(string sessionId) => _payload.sessionId = sessionId;
@@ -461,19 +524,47 @@ namespace AbxrLib.Runtime.Services.Auth
         private IEnumerator AuthenticateCoroutine()
         {
             int generation = _sessionGeneration;
-            bool authOk;
+            bool authOk = false;
             string authError = null;
             // Set once device auth has reported its first transient failure as OnAuthCompleted(false) and kept retrying.
             // The app already has a failure for this attempt then, so only a later success is reported.
             bool reportedRetrying = false;
+            bool deviceAuth = true;
             if (_deviceAuthDeferredByHandoff)
             {
                 _deviceAuthDeferredByHandoff = false;
-                authOk = true;
+                // The ArborInsightsClient service has no session for a handoff until it is given one, and a handoff adopted
+                // while the app runs follows EndSession, which unbound it: the transport binds again and waits first.
+                var transport = _getTransport?.Invoke();
+                bool applied = true;
+                string applyFailure = null;
+                if (transport != null)
+                    yield return transport.ApplyAuthHandoffCoroutine(_handoffSessionJson, () => generation == _sessionGeneration,
+                        (ok, reason) => { applied = ok; applyFailure = reason; });
+                if (generation != _sessionGeneration) yield break;
+                _handoffSessionJson = null;
+                if (applied)
+                {
+                    // Re-auth polling is skipped on the service, which manages token refresh.
+                    if (transport?.IsServiceTransport == true)
+                        _usedArborInsightsClientForSession = true;
+                    deviceAuth = false;
+                    authOk = true;
+                }
+                else
+                {
+                    // Info, not Warning: release builds drop warnings.
+                    Logcat.Info($"The handed-over session couldn't be given to the ArborInsightsClient service ({applyFailure}); continuing with device authentication.");
+                    DropHandoffSession();
+                    if (_attemptAdmittedByHandoff)
+                    {
+                        EndWithoutHandoffIdentity();
+                        yield break;
+                    }
+                }
             }
-            else
+            if (deviceAuth)
             {
-                authOk = false;
                 yield return _runner.StartCoroutine(AuthRequestCoroutine((ok, err) =>
                 {
                     authOk = ok;
@@ -698,7 +789,7 @@ namespace AbxrLib.Runtime.Services.Auth
                     Logcat.Debug($"Auth request ({stageLabel}): no auth_mechanism");
 
                 AuthTransportResult result = default;
-                yield return transport.AuthRequestCoroutine(_payload, r => result = r);
+                yield return transport.AuthRequestCoroutine(_payload, () => generation == _sessionGeneration, r => result = r);
 
                 // The session was cleared while the request was in flight: drop the response instead of applying it to the new session.
                 if (generation != _sessionGeneration) yield break;
@@ -1044,6 +1135,8 @@ namespace AbxrLib.Runtime.Services.Auth
                 if (_tokenExpiry == DateTime.MinValue || _attemptActive) continue;
                 if (_tokenExpiry - DateTime.UtcNow <= TimeSpan.FromSeconds(ReAuthThresholdSeconds))
                 {
+                    if (_sessionUsedAuthHandoff)
+                        Logcat.Info($"The session handed over by the launcher expires at {_tokenExpiry:u}, and this app can't renew it. Re-authenticating.");
                     Authenticate();
                 }
             }
@@ -1197,10 +1290,24 @@ namespace AbxrLib.Runtime.Services.Auth
             _userData = null;
             _credentialsRejectedByApi = false;
             _deviceAuthDeferredByHandoff = false;
+            _handoffSessionJson = null;
+            _handoffSessionId = null;
             _ssoUserDataMergedBeforeAuthSucceeded = false;
 #if UNITY_WEBGL && !UNITY_EDITOR
             _webglUrlPinAutoSubmitAttempted = false;
 #endif
+        }
+
+        /// <summary>Undoes what applying a handoff set (ParseAuthResponse), for a session the transport couldn't take.</summary>
+        private void DropHandoffSession()
+        {
+            ResponseData = new AuthResponse();
+            _tokenExpiry = DateTime.MinValue;
+            _sessionUsedAuthHandoff = false;
+            _returnToPackage = null;
+            _userData = null;
+            _handoffSessionJson = null;
+            _handoffSessionId = null;
         }
 
         /// <summary>
@@ -1219,40 +1326,151 @@ namespace AbxrLib.Runtime.Services.Auth
         }
         
         /// <summary>
-        /// Check for authentication handoff from external launcher apps
-        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params.
+        /// Takes the authentication handoff from external launcher apps and returns its session JSON, or null when there is none.
+        /// Looks for auth_handoff parameter in command line args, Android intents, or WebGL query params, and takes each delivery once (<see cref="ReadAuthHandoff(bool)"/>).
         /// For TestRunner: tests can inject payload via SetAuthHandoffForTesting so the flow can be asserted without a real intent.
-        /// Invalid payload: logs and returns (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
+        /// Invalid payload: logs and returns null (same as if no handoff); normal device authentication runs in AuthenticateCoroutine.
         /// </summary>
-        private void CheckAuthHandoff()
+        /// <param name="hasToken">True when the session carries a token, which is what lets it stand in for an identity.</param>
+        private static string TakeAuthHandoffSession(out bool hasToken)
         {
-            string handoffPayload = null;
-            if (!string.IsNullOrEmpty(_authHandoffForTesting))
-            {
-                handoffPayload = _authHandoffForTesting;
-                _authHandoffForTesting = null;
-            }
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetAndroidIntentParam("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-                handoffPayload = Utils.GetCommandLineArg("auth_handoff");
-            if (string.IsNullOrEmpty(handoffPayload))
-            {
-#if UNITY_WEBGL && !UNITY_EDITOR
-                handoffPayload = Utils.GetQueryParam("auth_handoff", Application.absoluteURL);
-#endif
-            }
-            if (string.IsNullOrEmpty(handoffPayload)) return;
-            string normalized = NormalizeHandoffPayload(handoffPayload);
+            hasToken = false;
+            string handoffPayload = ReadAuthHandoff(consume: true);
+            if (string.IsNullOrEmpty(handoffPayload)) return null;
+            string json = ApplicableHandoffJson(handoffPayload, out AuthResponse session);
+            hasToken = session != null && !string.IsNullOrEmpty(session.Token);
+            return json;
+        }
+
+        /// <summary>
+        /// The session JSON in a delivered auth_handoff when it can be applied, with what it deserialised to. Otherwise null,
+        /// with the reason logged: not JSON, or a session that has already expired (<see cref="HandoffTokenExpiry"/>).
+        /// Checked before anything acts on the handoff (the pairing gate, ending a running session), so applying it can't fail.
+        /// </summary>
+        private static string ApplicableHandoffJson(string payload, out AuthResponse session)
+        {
+            session = null;
+            string normalized = NormalizeHandoffPayload(payload);
             if (string.IsNullOrEmpty(normalized))
             {
                 Logcat.Warning("auth_handoff was present but could not be normalized to JSON; continuing with device authentication.");
-                return;
+                return null;
             }
-            Logcat.Info("Processing authentication handoff from external launcher");
-            if (!ParseAuthResponse(normalized, true))
+            AuthResponse parsed = null;
+            try
+            {
+                parsed = JsonConvert.DeserializeObject<AuthResponse>(normalized);
+            }
+            catch (Exception e)
+            {
+                Logcat.Error($"Failed to parse auth response: {e.Message}");
+            }
+            if (parsed == null)
+            {
                 Logcat.Warning("auth_handoff was present but the session could not be applied; continuing with device authentication.");
+                return null;
+            }
+            DateTime expiry = HandoffTokenExpiry(parsed);
+            if (expiry <= DateTime.UtcNow)
+            {
+                // Info, not Warning: release builds drop warnings.
+                Logcat.Info($"The session handed over by the launcher expired at {expiry:u}.");
+                return null;
+            }
+            session = parsed;
+            return normalized;
         }
+
+        private const string AuthHandoffKey = "auth_handoff";
+
+        /// <summary>
+        /// The command-line or WebGL URL handoff already applied. Those can't be cleared and don't change while the process
+        /// runs, so each is applied once. Static because those sources belong to the process: a recreated subsystem mustn't
+        /// apply them again.
+        /// </summary>
+        private static string _appliedFixedAuthHandoff;
+
+        /// <summary>
+        /// The auth_handoff waiting to be applied, or null. With consume, nothing returns it again, so a later Authenticate()
+        /// (StartNewSession, re-auth near expiry) doesn't replay it: the intent extra is removed, and a command-line or WebGL URL
+        /// value is remembered. An intent extra present after that is a new delivery to the running app.
+        /// </summary>
+        private static string ReadAuthHandoff(bool consume)
+        {
+            if (!string.IsNullOrEmpty(_authHandoffForTesting))
+            {
+                string injected = _authHandoffForTesting;
+                if (consume) _authHandoffForTesting = null;
+                return injected;
+            }
+            string intentPayload = Utils.GetAndroidIntentParam(AuthHandoffKey);
+            if (!string.IsNullOrEmpty(intentPayload))
+            {
+                if (consume) Utils.RemoveAndroidIntentParam(AuthHandoffKey);
+                return intentPayload;
+            }
+            string fixedPayload = _fixedAuthHandoffForTesting ?? Utils.GetCommandLineArg(AuthHandoffKey);
+#if UNITY_WEBGL && !UNITY_EDITOR
+            if (string.IsNullOrEmpty(fixedPayload))
+                fixedPayload = Utils.GetQueryParam(AuthHandoffKey, Application.absoluteURL);
+#endif
+            if (string.IsNullOrEmpty(fixedPayload) || fixedPayload == _appliedFixedAuthHandoff) return null;
+            if (consume) _appliedFixedAuthHandoff = fixedPayload;
+            return fixedPayload;
+        }
+
+        /// <summary>
+        /// True when a handoff is waiting that would replace this session: one a launcher delivered to the running app (a new
+        /// intent). The caller starts a new session, whose Authenticate() applies it. A handoff carrying this session is
+        /// App 2 returning the launcher's own session, and one that can't be applied (unreadable, expired, or without a token
+        /// this transport can use) would only cost the session it replaced: both are consumed here instead, so the session
+        /// carries on and a later StartNewSession() doesn't adopt them.
+        /// </summary>
+        internal bool HasNewAuthHandoff()
+        {
+            string payload = ReadAuthHandoff(consume: false);
+            if (string.IsNullOrEmpty(payload)) return false;
+            ApplicableHandoffJson(payload, out AuthResponse session);
+            bool currentSession = session != null && CarriesCurrentSession(session);
+            // A session without a token comes from a launcher on the ArborInsightsClient transport, and only that transport
+            // can use it.
+            bool usable = session != null
+                && (!string.IsNullOrEmpty(session.Token) || _getTransport?.Invoke()?.IsServiceTransport == true);
+            if (usable && !currentSession) return true;
+            ReadAuthHandoff(consume: true);
+            Logcat.Info(currentSession
+                ? "Ignored an auth_handoff carrying the current session; the session continues."
+                : "Ignored an auth_handoff that can't be applied; the current session continues.");
+            return false;
+        }
+
+        /// <summary>
+        /// True when a handoff carries this app's own session, which App 2 is returning. Matched on SessionId, which App 2 sends
+        /// back unchanged even when its transport strips the token or it re-authenticated, and on UserData: a launcher that set
+        /// new user data keeps its SessionId, so a handoff with other user data is the launcher handing over the next learner.
+        /// An SDK before 3.0 sends no SessionId, so the token is compared then.
+        /// </summary>
+        private bool CarriesCurrentSession(AuthResponse handoff)
+        {
+            if (!string.IsNullOrEmpty(handoff.SessionId))
+                return handoff.SessionId == HandoffSessionId && SameUserData(handoff.UserData, ResponseData?.UserData);
+            return !string.IsNullOrEmpty(handoff.Token) && handoff.Token == ResponseData?.Token;
+        }
+
+        private static bool SameUserData(Dictionary<string, string> a, Dictionary<string, string> b)
+        {
+            if ((a?.Count ?? 0) != (b?.Count ?? 0)) return false;
+            if (a == null || b == null) return true;
+            foreach (var kvp in a)
+                if (!b.TryGetValue(kvp.Key, out var value) || value != kvp.Value) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// This session's id in the handoffs it sends: the launcher's, for a session adopted from a handoff, so it survives every
+        /// app it passes through; otherwise the session id device authentication sent. A new session gets a new one.
+        /// </summary>
+        private string HandoffSessionId => !string.IsNullOrEmpty(_handoffSessionId) ? _handoffSessionId : _payload?.sessionId;
 
         /// <summary>
         /// Returns the JSON string to use for handoff: if the value is raw JSON (starts with '{') use as-is;
@@ -1286,20 +1504,39 @@ namespace AbxrLib.Runtime.Services.Auth
             _authHandoffForTesting = handoffJson;
         }
 
+        /// <summary>
+        /// Testing only. Stands in for a command-line or WebGL URL auth_handoff, which stays for the life of the process,
+        /// unlike the one-shot <see cref="SetAuthHandoffForTesting"/> (an intent extra, removed once read).
+        /// </summary>
+        internal static void SetFixedAuthHandoffForTesting(string handoffJson)
+        {
+            _fixedAuthHandoffForTesting = handoffJson;
+        }
+
         /// <summary>Testing only. Clears any injected auth_handoff payload.</summary>
         internal static void ClearAuthHandoffForTesting()
         {
             _authHandoffForTesting = null;
+            _fixedAuthHandoffForTesting = null;
+        }
+
+        /// <summary>Testing only. Forgets the fixed handoff already applied, as a new process would.</summary>
+        internal static void ResetAppliedAuthHandoffForTesting()
+        {
+            _appliedFixedAuthHandoff = null;
         }
 
         private static string _authHandoffForTesting;
+        private static string _fixedAuthHandoffForTesting;
 
         public bool SessionUsedAuthHandoff() => _sessionUsedAuthHandoff;
 
         /// <summary>
         /// Builds the JSON payload passed via the auth_handoff Android intent extra.
         /// Includes all session credentials plus re-auth fields (AppToken, OrgToken, OrgId, DeviceId)
-        /// so the receiving app and its ArborInsightsClient service can fully adopt the session.
+        /// so the receiving app and its ArborInsightsClient service can fully adopt the session, and SessionId, which the receiving
+        /// app sends back unchanged so a launcher still running keeps its session (<see cref="HasNewAuthHandoff"/>) while the
+        /// user data is unchanged too.
         /// When includeReturnToPackage is true, adds ReturnToPackage (current app's identifier) so the receiving app can return the session when assessment completes.
         /// </summary>
         internal string GetHandoffJson(bool includeReturnToPackage = false)
@@ -1323,6 +1560,7 @@ namespace AbxrLib.Runtime.Services.Auth
                 ["OrgToken"]          = _payload?.orgToken ?? "",
                 ["OrgId"]             = _payload?.orgId ?? "",
                 ["TokenExpirationMs"] = expiryMs,
+                ["SessionId"]         = HandoffSessionId ?? "",
             };
             if (includeReturnToPackage)
                 handoff["ReturnToPackage"] = Application.identifier ?? "";
@@ -1667,34 +1905,28 @@ namespace AbxrLib.Runtime.Services.Auth
             
             if (handoff)
             {
-                // Set token expiry to far in the future since we're trusting the handoff
-                _tokenExpiry = DateTime.UtcNow.AddHours(24);
-                Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}");
+                DateTime expiry = HandoffTokenExpiry(ResponseData);
+                if (expiry <= DateTime.UtcNow)
+                {
+                    // Info, not Warning: release builds drop warnings.
+                    Logcat.Info($"The session handed over by the launcher expired at {expiry:u}.");
+                    ResponseData = new AuthResponse();
+                    return false;
+                }
+                _tokenExpiry = expiry;
+                Logcat.Info($"Auth handoff applied. Modules: {ResponseData.Modules?.Count ?? 0}. Token expires at {expiry:u}.");
                 _sessionUsedAuthHandoff = true;
                 _returnToPackage = ResponseData?.ReturnToPackage;
+                // A launcher on an SDK before 3.0 sends none; the session still needs one to come back to this app.
+                _handoffSessionId = !string.IsNullOrEmpty(ResponseData.SessionId) ? ResponseData.SessionId : Guid.NewGuid().ToString();
                 ResponseData.UserData ??= new Dictionary<string, string>();
                 _userData = new Dictionary<string, string>(ResponseData.UserData);
 
-                // For the ArborInsightsClient transport: the normal AuthRequestCoroutine is bypassed by handoff,
-                // so the service has no knowledge of this session. Pass the full auth response JSON so the
-                // service can set apiToken/apiSecret/restUrl atomically and start accepting events immediately.
-                var transport = _getTransport?.Invoke();
-                if (transport?.IsServiceTransport == true)
-                {
-#if UNITY_ANDROID && !UNITY_EDITOR
-                    try
-                    {
-                        string handoffRestUrl = Configuration.Instance?.restUrl ?? "";
-                        ArborInsightsClient.SetAuthFromHandoff(responseText, handoffRestUrl);
-                    }
-                    catch (Exception ex) { Logcat.Warning($"SetAuthFromHandoff failed: {ex.Message}"); }
-#endif
-                    // Mark as service-authenticated so re-auth polling is skipped (service manages token refresh)
-                    _usedArborInsightsClientForSession = true;
-                }
-
+                // AuthenticateCoroutine gives the session to the transport (the ArborInsightsClient service has no session
+                // otherwise, since the handoff skips AuthRequestCoroutine), runs GET config, then AuthSucceeded (user auth not
+                // re-required after handoff).
+                _handoffSessionJson = responseText;
                 _deviceAuthDeferredByHandoff = true;
-                // AuthenticateCoroutine runs GET config next, then AuthSucceeded (user auth not re-required after handoff).
                 return true;
             }
             
@@ -1723,6 +1955,28 @@ namespace AbxrLib.Runtime.Services.Auth
             }
             
             return true;
+        }
+
+        /// <summary>
+        /// When a handed-over token expires: its exp claim, then the launcher's TokenExpirationMs, then 24 hours from now
+        /// (a launcher on the ArborInsightsClient transport sends no token). The claim comes first because launchers write
+        /// now + 24 hours as TokenExpirationMs when their own expiry is unknown or already past.
+        /// </summary>
+        private static DateTime HandoffTokenExpiry(AuthResponse handoff)
+        {
+            var jwt = Utils.TryDecodeJwtPayload(handoff.Token);
+            if (jwt != null && jwt.TryGetValue("exp", out var exp))
+            {
+                try { return DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(exp)).UtcDateTime; }
+                catch (Exception) { /* not a Unix time; fall through */ }
+            }
+            // Smaller values aren't milliseconds after 2001 (seconds, or a placeholder such as 0), so they count as absent.
+            if (handoff.TokenExpirationMs >= 1_000_000_000_000L)
+            {
+                try { return DateTimeOffset.FromUnixTimeMilliseconds(handoff.TokenExpirationMs.Value).UtcDateTime; }
+                catch (ArgumentOutOfRangeException) { /* past year 9999; fall through */ }
+            }
+            return DateTime.UtcNow.AddHours(24);
         }
 
         // ── Testing only (For TestRunner) ───────────────────────────────

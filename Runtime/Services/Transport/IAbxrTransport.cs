@@ -38,8 +38,15 @@ namespace AbxrLib.Runtime.Services.Transport
         /// <summary>True when this transport is the ArborInsightsClient (service) implementation.</summary>
         bool IsServiceTransport { get; }
 
-        /// <summary>Perform auth request. onComplete receives the result with the transport's rejection verdict, HTTP status, and network-error flag, so the auth service can tell a refusal from a transient failure.</summary>
-        IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<AuthTransportResult> onComplete);
+        /// <summary>Perform auth request. onComplete receives the result with the transport's rejection verdict, HTTP status, and network-error flag, so the auth service can tell a refusal from a transient failure. The service binds again first when EndSession unbound it, and sends nothing when stillCurrent() turned false during that wait.</summary>
+        IEnumerator AuthRequestCoroutine(AuthPayload payload, Func<bool> stillCurrent, Action<AuthTransportResult> onComplete);
+
+        /// <summary>
+        /// Gives the transport a session adopted from an auth handoff, which skips <see cref="AuthRequestCoroutine"/>.
+        /// REST has nothing to do. The service binds again when EndSession unbound it, waits until it is ready, and takes the
+        /// session unless stillCurrent() turned false while it waited. onComplete(success, failureReason).
+        /// </summary>
+        IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete);
 
         /// <summary>Get app config JSON. onComplete(success, configJson).</summary>
         IEnumerator GetConfigCoroutine(Action<bool, string> onComplete);

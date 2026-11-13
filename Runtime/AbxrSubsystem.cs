@@ -33,6 +33,7 @@ namespace AbxrLib.Runtime
             _nextPairingStoreForTesting = null;
             _nextPairingRedeemClientForTesting = null;
             _pairingPlatformSupportedForTesting = false;
+            AbxrAuthService.ResetAppliedAuthHandoffForTesting();
             if (Instance != null) Instance._authService.ResetAuthStartedForTesting();
             Abxr.ResetQuitClosingEventDefaultsForTesting();
         }
@@ -382,7 +383,30 @@ namespace AbxrLib.Runtime
         
         private void OnApplicationFocus(bool hasFocus)
         {
-	        if (!hasFocus) SendAll();
+	        if (!hasFocus)
+	        {
+		        SendAll();
+		        return;
+	        }
+	        AdoptAuthHandoffDeliveredWhileRunning();
+        }
+
+        /// <summary>
+        /// A launcher can hand a session to this app while it runs: a new intent, read when focus returns. Before the first
+        /// authentication attempt there is nothing to replace, and that attempt applies it. After it, the handoff is adopted
+        /// whatever became of the session, since nothing else would authenticate again: an app that ended quietly as unpaired,
+        /// failed, or called EndSession starts a session for it. A running one ends the way EndSession does first, so what it
+        /// recorded is sent with its own token.
+        /// </summary>
+        private void AdoptAuthHandoffDeliveredWhileRunning()
+        {
+	        if (_authService == null) return;
+	        bool sessionRunning = _authService.Authenticated || _authService.IsAuthenticationAttemptActive;
+	        if (!sessionRunning && !_authService.HasAttemptedAuthentication) return;
+	        if (!_authService.HasNewAuthHandoff()) return;
+	        Logcat.Info("Received a new auth_handoff while running; starting the session it carries.");
+	        if (_authService.Authenticated) EndSession();
+	        StartNewSession();
         }
         
         private void OnApplicationQuit()
@@ -530,14 +554,14 @@ namespace AbxrLib.Runtime
         /// <summary>
         /// False while the app is unpaired and no pairing prompt is open (SDK-60 decision 1): a never-paired install
         /// would otherwise fill the queues, and a later pairing would send data recorded before anyone opted in.
-        /// Recording resumes when the prompt opens.
+        /// Recording resumes when the prompt opens. A session a launcher handed over records too (SDK-80).
         /// </summary>
-        private bool IsRecording => _endSessionInProgress ||
+        private bool IsRecording => _endSessionInProgress || _authService.HasAuthHandoff ||
             !(_pairingService != null && _pairingService.State == Abxr.PairingState.Unpaired && _pairingService.CanPair);
 
         private void StopRecordingWhileUnpaired()
         {
-            if (!_pairingService.CanPair) return;
+            if (!_pairingService.CanPair || _authService.HasAuthHandoff) return;
             _transport?.ClearAllPending();
             Logcat.Info("Not recording: this app isn't paired with an organization. Recording starts when the pairing prompt opens.");
         }
@@ -696,7 +720,9 @@ namespace AbxrLib.Runtime
 		/// <summary>Launches another Android app and passes the current auth session via the auth_handoff intent extra.
 		/// The target app must also use AbxrLib; it will adopt the session without re-authenticating.
 		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().
-		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.</summary>
+		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.
+		/// Launches the target's launcher activity explicitly. On Android 11 and later that needs the target to be visible to this app
+		/// (a &lt;queries&gt; entry in the manifest); without it the launch falls back to an implicit MAIN intent, which doesn't resolve for a stock Unity app.</summary>
 		internal bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false)
 		{
 			if (string.IsNullOrEmpty(packageName))
@@ -710,6 +736,7 @@ namespace AbxrLib.Runtime
 				return false;
 			}
 #if UNITY_ANDROID && !UNITY_EDITOR
+			bool implicitFallback = false;
 			try
 			{
 				string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
@@ -720,10 +747,16 @@ namespace AbxrLib.Runtime
 				}
 				using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 				using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-				using var intent = new AndroidJavaObject("android.content.Intent");
 				using var intentClass = new AndroidJavaClass("android.content.Intent");
-				intent.Call<AndroidJavaObject>("setAction", intentClass.GetStatic<string>("ACTION_MAIN"));
-				intent.Call<AndroidJavaObject>("setPackage", packageName);
+				using var packageManager = activity.Call<AndroidJavaObject>("getPackageManager");
+				// Null when the package isn't installed, has no launcher activity, or (Android 11+) isn't visible to this app.
+				using var launchIntent = packageManager.Call<AndroidJavaObject>("getLaunchIntentForPackage", packageName);
+				implicitFallback = launchIntent == null;
+				// startActivity resolves this implicit intent only if the target's MAIN filter has CATEGORY_DEFAULT,
+				// which a stock Unity launcher activity (MAIN + LAUNCHER) doesn't.
+				using var implicitIntent = implicitFallback ? new AndroidJavaObject("android.content.Intent", intentClass.GetStatic<string>("ACTION_MAIN")) : null;
+				var intent = launchIntent ?? implicitIntent;
+				if (implicitFallback) intent.Call<AndroidJavaObject>("setPackage", packageName);
 				intent.Call<AndroidJavaObject>("putExtra", "auth_handoff", handoffJson);
 				intent.Call<AndroidJavaObject>("addFlags", intentClass.GetStatic<int>("FLAG_ACTIVITY_NEW_TASK"));
 				activity.Call("startActivity", intent);
@@ -732,7 +765,11 @@ namespace AbxrLib.Runtime
 			}
 			catch (Exception ex)
 			{
-				Logcat.Error($"LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}");
+				string hint = !implicitFallback ? "" :
+					$" This app found no launcher activity for '{packageName}'. Check that it is installed and, on Android 11 and later, " +
+					$"that this app's AndroidManifest.xml has a <queries> entry that makes it visible: <package android:name=\"{packageName}\" />, " +
+					"or an <intent> with action android.intent.action.MAIN and category android.intent.category.LAUNCHER.";
+				Logcat.Error($"LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}{hint}");
 				return false;
 			}
 #else
@@ -851,7 +888,8 @@ namespace AbxrLib.Runtime
 		
 		/// <summary>
 		/// Starts an entirely fresh session: clears all API tokens, auth state, and pending data; then re-authenticates.
-		/// When using ArborInsightsClient (Android), unbinds and rebinds the service so the connection is fresh.
+		/// When using ArborInsightsClient (Android), unbinds and rebinds a bound service so the connection is fresh. After
+		/// EndSession the service is unbound, and the new attempt binds it and waits for it, for device auth and a handoff alike.
 		/// Equivalent to the user closing the app and starting it again from a session perspective.
 		/// </summary>
 internal void StartNewSession()
