@@ -586,6 +586,25 @@ public class PairingIdentityTests : AbxrPlayModeTestBase
         Assert.AreEqual(AppToken, transport.LastPayload.orgToken, "The re-auth is a device auth as the org that owns the app, not the launcher's.");
     }
 
+    [UnityTest]
+    public IEnumerator Development_ReAuthAfterAHandoff_SignsInWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+
+        // What ReAuthPollCoroutine calls when the handed-over token is about to expire.
+        AbxrSubsystem.Instance.AuthServiceForTesting.Authenticate();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((true, (string)null), _reports[1]);
+        Assert.AreEqual(1, transport.AuthCalls, "A device auth, not the handoff again.");
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken, "From here the session reports to the org that owns the app, not the launcher's.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
     // ── Auth handoff ──────────────────────────────────────────────
 
     private const string HandoffJson =
