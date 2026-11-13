@@ -178,18 +178,22 @@ namespace AbxrLib.Editor
                 EditorGUILayout.HelpBox("Pairing URL must be an http:// or https:// URL, or passcode pairing can't redeem.", MessageType.Warning);
             EditorGUILayout.Space();
         
-            // Warning about production usage
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField("⚠️ PRODUCTION BUILD WARNING", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("* Fields marked with asterisk should NOT be set when building for 3rd parties.", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.Space(2);
-            EditorGUILayout.LabelField("• Application ID should ALWAYS be set", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.LabelField("• Organization ID and Authorization Secret should ONLY be set for custom APKs", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.LabelField("• Setting these values inappropriately may violate Terms of Service with ArborXR or Meta", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.LabelField("• Only use these fields when building for a specific 3rd party who is aware and approves", EditorStyles.wordWrappedLabel);
-            EditorGUILayout.EndVertical();
-        
-            EditorGUILayout.Space();
+            // Warning about production usage. It is about the legacy fields, so it shows where they do (SDK-89).
+            if (SetupWizardChecks.ShowsLegacyScheme(config))
+            {
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                EditorGUILayout.LabelField("⚠️ PRODUCTION BUILD WARNING", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("* Fields marked with asterisk should NOT be set when building for 3rd parties.", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.Space(2);
+                EditorGUILayout.LabelField("• Application ID should ALWAYS be set", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField("• Organization ID and Authorization Secret should ONLY be set for custom APKs", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField("• Setting these values inappropriately may violate Terms of Service with ArborXR or Meta", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField("• Only use these fields when building for a specific 3rd party who is aware and approves", EditorStyles.wordWrappedLabel);
+                EditorGUILayout.EndVertical();
+
+                EditorGUILayout.Space();
+            }
+
             EditorGUILayout.LabelField("UI Behavior Control", EditorStyles.boldLabel);
             config.authUIFollowCamera = EditorGUILayout.Toggle(new GUIContent(
                 "Auth UI Follow Camera", "When enabled, UI panels will follow the camera. When disabled, panels will remain in fixed positions."), config.authUIFollowCamera);
