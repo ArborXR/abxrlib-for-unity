@@ -119,9 +119,9 @@ To use the ABXRLib SDK with ArborXR Insights, configure **app token** and **org 
 1. Open `Analytics for XR > Configuration` in the Unity Editor.
 2. **Use App Tokens** is on by default for new configuration; keep it enabled for JWT authentication.
 3. Set **App Token** (required): JWT for your app, from your distribution channel or ArborXR portal (**Content Library** → **Managed** app → **Insights Hub**).
-4. **Org Token:** Leave empty to use the **dynamic org token** (derived from device/org context when available). For single-customer builds (e.g. production_custom), set the org token as required. For local testing in the Editor, you can paste your **App Token** into the **Org Token** field when you need both fields populated.
+4. **Org Token:** Leave empty to use the **dynamic org token** (derived from device/org context when available). For single-customer builds (e.g. production_custom), set the org token as required. With **Build Type** `Development`, an empty Org Token uses your **App Token** as the org token.
 
-**Development / testing:** Set App Token; on ArborXR-managed devices, org context can be supplied at runtime (dynamic org token).
+**Development / testing:** Set **Build Type** to `Development` and set App Token. With the Org Token empty, the app signs in as the organization that owns the app, in the Editor or on any device, so an App Token alone is enough to test with. Something else that supplies an organization is used first: an ArborXR-managed device (dynamic org token), then an org token set in Configuration or at runtime (`Abxr.SetOrgId` with `Abxr.SetAuthSecret`, the `org_token` intent extra or URL parameter). A Development build never shows [passcode pairing](#headsets-without-arborxr-mdm-passcode-pairing); test pairing with Build Type `Production`.
 
 **Production builds:** Set App Token; use dynamic org token (empty org token in config) where the device or runtime provides org context.
 
@@ -134,7 +134,7 @@ On ArborXR-managed devices the organization is **not** configured — it is reso
 | Setting | Value | Why |
 |---|---|---|
 | **Build Type** | `Production` | Each device reports to its own organization. |
-| **Org Token** | leave empty | The device supplies it. Production ignores a configured org token anyway; in Development the runtime value replaces it. |
+| **Org Token** | leave empty | The device supplies it. Production ignores a configured org token anyway; in Development the device's value is used instead of a configured org token or the App Token. |
 | **Enable ArborMdmClient** (Advanced) | on (the default) | This is what reads the org ID and fingerprint. With it off there is no organization to authenticate against, and auth fails with *"Organization identification unavailable"* — the wizard warns if it has been turned off. |
 
 Do **not** use `Production (Custom APK)` for a managed fleet. It takes the organization from configuration by design and never consults the MDM, so every device in the build would report to the one org baked into it. That mode is for single-customer APKs, where ArborXR supplies the customer's org token (not self-serve).
@@ -170,6 +170,7 @@ void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason rea
 - Each launch's identity is decided once, at the first authentication. An org credential set after that (a late `SetOrgId`, for example) is ignored for the launch, and the SDK logs a warning. If your app only gets the credential after an async step, turn off **Enable Auto Start Authentication** and call `Abxr.StartAuthentication()` once it's set.
 - With **Enable Auto Start Authentication** off, the SDK decides the app's identity when you call `Abxr.StartAuthentication()`. Until then the state is `Resolving` and `StartPairing()` returns false.
 - Pairing runs only in Android and WebGL builds. When the ArborXR client or an org token identifies the organization, it wins, and pairing doesn't apply.
+- **To test pairing, use Build Type `Production`.** With Build Type `Development`, the SDK uses the App Token as the org token when nothing else supplies one, so a Development build always has an organization and never pairs. `Production` is the default, and it is separate from Unity's **Development Build** checkbox, so a pairing build can still be debugged.
 
 #### Legacy (App ID / Org ID / Auth Secret)
 
