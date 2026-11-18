@@ -27,6 +27,15 @@ public class SetupWizardVersionLogicTests
     }
 
     [Test]
+    public void BuildWindowName_IsWhatTheRunningEditorCallsIt()
+    {
+        Assert.IsTrue(SetupWizardChecks.TryParseUnityVersion(UnityEngine.Application.unityVersion, out int major, out _, out _));
+
+        // Unity 6 (6000.x) renamed File > Build Settings to File > Build Profiles.
+        Assert.AreEqual(major >= 6000 ? "Build Profiles" : "Build Settings", SetupWizardChecks.BuildWindowName);
+    }
+
+    [Test]
     public void CompareVersions_ComparesNumerically_NotLexicographically()
     {
         Assert.Less(SetupWizardChecks.CompareVersions("1.8.1", "1.12.0"), 0);

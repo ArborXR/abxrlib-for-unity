@@ -177,9 +177,9 @@ config.uiHorizontalOffset = 0.2f;
 The keyboard system automatically integrates with AbxrLib's authentication flow:
 
 ```csharp
-// Authentication automatically creates appropriate keyboards
-Abxr.Authenticate("username", "password");        // Full keyboard
-Abxr.Authenticate("assessmentPin", "123456");     // PIN pad
+// Authentication opens the keyboard it needs. The backend chooses the input type:
+// "text" and "email" open the full keyboard, "assessmentPin" opens the PIN pad.
+Abxr.StartAuthentication();
 ```
 
 ## Analytics Integration

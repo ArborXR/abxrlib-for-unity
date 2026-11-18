@@ -389,7 +389,8 @@ public static partial class Abxr
 	/// Assign your handler to collect auth input (e.g. PIN, email) instead of the default keyboard/PIN UI.
 	/// Only one handler is allowed; use assignment (=), not subscribe (+=). Your handler receives (type, prompt, domain, error).
 	/// Show your UI; when the user submits, call Abxr.OnInputSubmitted(enteredValue). Set to null in OnDestroy when your component is no longer responsible.
-	/// type is "text" | "pin" | "email"; error is empty on first request and may contain a previous failure message on retry.
+	/// type is the backend's auth mechanism type, passed through as-is: "assessmentPin" for a PIN ("pin" in 2.0.10 and earlier), "email" or "text".
+	/// error is empty on the first request; on a retry after a wrong entry it says what failed ("Authentication Failed" for sign-in).
 	/// The pairing prompt (StartPairing) uses the same handler, with type "pairingPasscode", then "pairingDeviceName"
 	/// (Skip allowed) or "pairingDeviceNameRequired" when the passcode allows naming, and "pairingDeviceJoin" when the name
 	/// is taken: domain carries that name, and submitting it adds this app to that device.
@@ -480,13 +481,15 @@ public static partial class Abxr
 
 	/// <summary>
 	/// Returns true if QR scanning for auth input is available. Use to show/hide a "Scan QR" option in custom auth UI.
-	/// On Pico this requires a supported Enterprise product name (allowlist) and a successful PXR_Enterprise service bind, analogous to Meta device checks in QRCodeReader.IsQRScanningAvailable().
-	/// On Pico the OS shows the scanner UI; on non-Pico you can embed the feed via GetQRScanCameraTexture().
+	/// True only while an auth input request is pending and a QR scanner is registered through AbxrUi.RegisterQrScanner.
+	/// The World-Space UI sample registers one on the headsets it supports: QRCodeReaderMeta (Meta Quest) or QRCodeReaderPico
+	/// (PICO, PICO SDK 3.4+), both in AbxrLib.Runtime.Core.QRScanner. A scanner your app registers counts too.
+	/// You can embed the camera feed via GetQRScanCameraTexture().
 	/// </summary>
 	public static bool IsQRScanForAuthAvailable() => X != null && X.IsQRScanForAuthAvailable();
 
 	/// <summary>
-	/// True when the SDK is waiting for auth input (OnInputRequested was invoked). Use with device QR availability to show "Scan QR" only when it will be accepted (e.g. Meta: IsAuthInputRequestPending() &amp;&amp; MetaQRCodeReader.Instance.IsQRScanningAvailable()).
+	/// True when the SDK is waiting for auth input (OnInputRequested was invoked). To show "Scan QR" only when it will be accepted, use IsQRScanForAuthAvailable(), which also checks for a QR reader on this device.
 	/// </summary>
 	public static bool IsAuthInputRequestPending() => X != null && X.IsAuthInputRequestPending();
 
@@ -502,12 +505,12 @@ public static partial class Abxr
 	public static void CancelQRScanForAuthInput() => X?.CancelQRScanForAuthInput();
 
 	/// <summary>
-	/// True when you can choose where to display the QR camera feed (non-Pico). If true, show your own panel/RawImage and assign GetQRScanCameraTexture() to it. If false (Pico), the platform shows its own scanner and you do not need a panel.
+	/// True when a QR reader is available on this device, so you can choose where to display its camera feed: show your own panel/RawImage and assign GetQRScanCameraTexture() to it.
 	/// </summary>
 	public static bool IsQRScanCameraTexturePlaceable() => X != null && X.IsQRScanCameraTexturePlaceable();
 
 	/// <summary>
-	/// Returns the camera texture used by the QR reader so you can choose where to display the scan view. Assign to a RawImage in your own UI; position and size the RawImage as desired. Null on Pico (platform shows its own scanner) or when not initialized. Call after StartQRScanForAuthInput so the reader is active; poll or assign in Update if the texture becomes available asynchronously.
+	/// Returns the camera texture used by the QR reader so you can choose where to display the scan view. Assign to a RawImage in your own UI; position and size the RawImage as desired. Null when no QR reader is available or its camera hasn't started. Call after StartQRScanForAuthInput so the reader is active; poll or assign in Update if the texture becomes available asynchronously.
 	/// </summary>
 	public static UnityEngine.Texture GetQRScanCameraTexture() => X?.GetQRScanCameraTexture();
 

@@ -19,20 +19,20 @@ namespace AbxrLib.Runtime.Core
     public class AppConfig : ScriptableObject
     {
         [Header("Build Type")]
-        [Tooltip("Production: OrgID and AuthSecret will NOT be included in builds (secure for 3rd party distribution). Development: OrgID and AuthSecret will be included in builds (for custom APKs only). Production (Custom APK): like Production for the API but requires and includes Organization Token for single-customer builds.")]
+        [Tooltip("Production: the SDK doesn't sign in with a saved OrgID and AuthSecret, but they stay in this asset and ship inside the build. Development: the SDK signs in with them. Production (Custom APK): kept for projects already saved on it; like Production for the API but requires and includes Organization Token for single-customer builds.")]
         public string buildType = "production";
 
         [Header("Application Identity")]
-        [Tooltip("Required")] public string appID;
-        [Tooltip("Optional - Only used when Build Type is Development")] public string orgID;
-        [Tooltip("Optional - Only used when Build Type is Development")] public string authSecret;
+        [Tooltip("Legacy scheme only: the Application ID, required there.")] public string appID;
+        [Tooltip("On the legacy scheme, Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it. On either scheme, Abxr.GetOrgId() returns it when no ArborXR client supplies one.")] public string orgID;
+        [Tooltip("Legacy scheme only. Development and Production (Custom APK) builds sign in with it; in Production the device's MDM supplies it.")] public string authSecret;
         [HideInInspector]
         [Tooltip("Optional")] public string launcherAppID;
 
         [Header("App Tokens")]
-        [Tooltip("When enabled, authenticate with App Token and Org Token (JWT) instead of App ID, Org ID, and Auth Secret. Defaults to true; disable only for legacy integrations.")] public bool useAppTokens = true;
-        [Tooltip("App Token (JWT) from ArborXR Portal – identifies app and publisher. Required when Use App Tokens is on.")] public string appToken;
-        [Tooltip("Optional. Organization Token (JWT) from ArborXR Portal. Leave empty for shared production builds; set for single-org or dev builds.")] public string orgToken;
+        [Tooltip("On: authenticate with an App Token (JWT). Off only in a project that already uses the legacy App ID, Org ID, and Auth Secret scheme; new projects use an App Token.")] public bool useAppTokens = true;
+        [Tooltip("App Token (JWT) from ArborXR Portal – identifies app and publisher. Required.")] public string appToken;
+        [Tooltip("Organization Token (JWT). Required for Production (Custom APK); a customer's token is not self-serve, so contact ArborXR. Not used in Production. Development uses the App Token unless a token is already saved here.")] public string orgToken;
 
         [Header("Service Provider")]
         public string restUrl = "https://lib-backend.xrdm.app/";
@@ -73,7 +73,7 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("When enabled, the next module in the sequence will automatically start after completion of a module")]
         public bool enableAutoAdvanceModules = true;
 
-        [Tooltip("Allow returnTo Launcher. When enabled, the app will either exit after EventAssessmentComplete() or support returning the session back to the app that launched it with Auth Handoff.")]
+        [Tooltip("Allow returnTo Launcher. When enabled, an app that got its session through Auth Handoff exits once the assessment is fully complete (after EventAssessmentComplete(), or the last module's), first returning the session to the app that launched it if the handoff asked for that.")]
         public bool enableReturnTo = true;
 
         [Tooltip("When enabled, the PIN pad shows Guest Access (skip user identification). When disabled, KeyboardManager.skipButton is hidden at runtime. Custom PIN prefabs should assign skipButton like the default.")]
@@ -111,7 +111,7 @@ namespace AbxrLib.Runtime.Core
         [Tooltip("When enabled on Android, ArborMdmClient is created and used (GetOrgId, GetFingerprint, deviceId, etc.). When disabled, ArborMdmClient is not created; auth uses Configuration or Abxr.SetOrgId/SetAuthSecret only. Set in the Unity asset only; not overridden by GET /v1/storage/config.")]
         public bool enableArborMdmClient = true;
 
-        [Tooltip("When enabled (Auth Handoff Launcher flow), the auth mechanism from config is overridden: if type is not already assessmentPin, it is set to assessmentPin with prompt \"Enter your 6-digit PIN\". Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false.")]
+        [Tooltip("When enabled (Learner Launcher Mode), the auth mechanism type from config is overridden to assessmentPin unless it already is; the prompt from config is kept. Use when a launcher collects PIN before StartAuthentication and submits via OnInputSubmitted. Default false.")]
         public bool enableLearnerLauncherMode = false;
 
         [Tooltip("When enabled, automatic telemetry collection runs. Defaults to true for new configs.")]

@@ -207,6 +207,149 @@ namespace AbxrLib.Editor
             };
         }
 
+        /// <summary>
+        /// What this Editor calls the window that holds the build target and the scene list. Unity 6 renamed Build
+        /// Settings to Build Profiles, and a row that names the wrong one sends people to a menu item that isn't there.
+        /// </summary>
+        internal const string BuildWindowName =
+#if UNITY_6000_0_OR_NEWER
+            "Build Profiles";
+#else
+            "Build Settings";
+#endif
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Build Type choice
+        // ---------------------------------------------------------------------------------------------------------
+
+        private static readonly string[] BuildTypeValues = { "production", "development", "production_custom" };
+        private static readonly string[] BuildTypeLabelsWithCustomApk = { "Production", "Development", "Production (Custom APK)" };
+        private static readonly string[] BuildTypeLabelsWithoutCustomApk = { "Production", "Development" };
+
+        /// <summary>
+        /// Whether the project is saved as Production (Custom APK). Only then do the Configuration inspector and the
+        /// wizard offer that Build Type (SDK-90). On App Tokens it needs a customer's Organization Token, which
+        /// nothing issues, so other projects are offered Production and Development. A project put on it by setting
+        /// buildType in the asset keeps the option and everything it uses.
+        /// </summary>
+        internal static bool UsesCustomApk(AppConfig config) => config != null && config.buildType == "production_custom";
+
+        /// <summary>
+        /// What a project that is offered Production (Custom APK) is told beside the Build Type choice. The option
+        /// follows the saved Build Type, so after switching away it is gone once the window is reopened (reselecting
+        /// the asset, entering Play mode and a recompile all do that), and nothing in the Editor brings it back.
+        /// Null where the option isn't offered.
+        /// </summary>
+        internal static string CustomApkOptionNote(bool offersCustomApk) => offersCustomApk
+            ? "Production (Custom APK) is offered only while this project is saved on it. After switching to another " +
+              "Build Type, it leaves this list once this window is reopened. To restore it, set buildType: " +
+              "production_custom in Assets/Resources/AbxrLib.asset."
+            : null;
+
+        /// <summary>
+        /// The Build Type popup's labels. Production (Custom APK) is the last one, so leaving it out moves no other
+        /// option: an index stands for the same Build Type either way.
+        /// </summary>
+        internal static string[] BuildTypeLabels(bool offersCustomApk) =>
+            offersCustomApk ? BuildTypeLabelsWithCustomApk : BuildTypeLabelsWithoutCustomApk;
+
+        /// <summary>
+        /// The popup index for a stored Build Type. An unrecognised value reads as Production, as the runtime
+        /// normalises it. Callers write a Build Type back only when the developer changes the selection, so showing
+        /// the popup never rewrites one.
+        /// </summary>
+        internal static int BuildTypeIndex(string buildType) =>
+            buildType == "development" ? 1 : buildType == "production_custom" ? 2 : 0;
+
+        /// <summary>The Build Type a popup index stands for. An index outside the list reads as its nearest end.</summary>
+        internal static string BuildTypeAtIndex(int index) =>
+            BuildTypeValues[Mathf.Clamp(index, 0, BuildTypeValues.Length - 1)];
+
+        /// <summary>
+        /// What a pick in the Build Type popup writes, for both editors: the Build Type at
+        /// <paramref name="pickedIndex"/>, or null when nothing is to be written. Nothing is written when the pick is
+        /// the option already shown, so drawing the popup never rewrites a stored value, an unrecognised one included,
+        /// or when the index isn't one of the options on offer.
+        /// </summary>
+        internal static string BuildTypePicked(string stored, bool offersCustomApk, int pickedIndex)
+        {
+            if (pickedIndex == BuildTypeIndex(stored)) return null;
+            if (pickedIndex < 0 || pickedIndex >= BuildTypeLabels(offersCustomApk).Length) return null;
+            return BuildTypeAtIndex(pickedIndex);
+        }
+
+        /// <summary>Production as the runtime reads it: it drops saved org credentials only for this value, whatever its case.</summary>
+        private static bool IsProduction(string buildType) =>
+            string.Equals(buildType, "production", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>A stored Build Type the runtime gives a meaning to. Any other value shows as Production in the popup.</summary>
+        private static bool IsRecognisedBuildType(string buildType) =>
+            IsProduction(buildType) || buildType == "development" || buildType == "production_custom";
+
+        /// <summary>
+        /// The Build Type tooltip, the same in the inspector and the wizard. It names the credentials the project's
+        /// scheme has, and mentions Production (Custom APK) only where it is offered.
+        /// </summary>
+        internal static string BuildTypeTooltip(AppConfig config, bool offersCustomApk)
+        {
+            bool legacy = ShowsLegacyScheme(config);
+            string tooltip = legacy
+                ? "Production: shared builds, including ArborXR-managed fleets. The device's MDM supplies the " +
+                  "Organization ID and Authorization Secret; the SDK doesn't sign in with ones saved here, but they " +
+                  "ship inside the build.\n" +
+                  "Development: your own test builds; they sign in with the Organization ID and Authorization Secret " +
+                  "saved here."
+                : "Production: shared builds, including ArborXR-managed fleets; each device's organization comes from " +
+                  "the device at runtime.\n" +
+                  "Development: your own test builds; they report to the organization that owns the app.";
+            if (!offersCustomApk) return tooltip;
+            return tooltip + (legacy
+                ? "\nProduction (Custom APK): one customer per build; Organization ID and Authorization Secret are " +
+                  "required and the MDM is not consulted for them. The API receives buildType Production."
+                : "\nProduction (Custom APK): one customer per build; the Organization Token is required and the MDM " +
+                  "is not consulted for it. The API receives buildType Production.");
+        }
+
+        /// <summary>The line under the wizard's Build Type choice, for the option at <paramref name="index"/>.</summary>
+        internal static string BuildTypeHint(AppConfig config, int index)
+        {
+            bool legacy = ShowsLegacyScheme(config);
+            switch (index)
+            {
+                case 0:
+                    // The popup shows any stored value it doesn't know as Production, but the runtime drops saved
+                    // credentials only for Production itself, so the line must not promise that here. It says what
+                    // the hint under the fields says: saved credentials are still sent, when any are saved.
+                    if (config != null && !IsRecognisedBuildType(config.buildType))
+                    {
+                        string stillSent = "";
+                        if (legacy && (!string.IsNullOrEmpty(config.orgID) || !string.IsNullOrEmpty(config.authSecret)))
+                            stillSent = ", but builds still sign in with the Organization ID and Authorization Secret saved here";
+                        else if (!legacy && !string.IsNullOrEmpty(config.orgToken))
+                            stillSent = ", but the saved Organization Token is still sent";
+                        return "The saved Build Type isn't one AbxrLib recognises. It shows as Production" + stillSent +
+                               ". Switch the Build Type to another option and back to set it.";
+                    }
+                    return legacy
+                        ? "Shared builds, and the right choice for an ArborXR-managed fleet: the device's MDM supplies " +
+                          "the Organization ID and Authorization Secret at runtime, and the SDK doesn't sign in with " +
+                          "ones saved here."
+                        : "Shared builds, and the right choice for an ArborXR-managed fleet: each device reports to " +
+                          "its own organization at runtime.";
+                case 1:
+                    return legacy
+                        ? "Your own test builds. They sign in with the Organization ID and Authorization Secret saved " +
+                          "here; a managed device uses its own."
+                        : "Your own test builds. They report to the organization that owns the app; a managed device " +
+                          "reports to its own organization. Passcode pairing never shows in Development: use " +
+                          "Production to test it.";
+                default:
+                    return "One customer per build: every device running this build reports to the organization set " +
+                           "here, and the MDM is not consulted for it. Not for an ArborXR-managed fleet - use " +
+                           "Production there.";
+            }
+        }
+
         // ---------------------------------------------------------------------------------------------------------
         // Credentials
         // ---------------------------------------------------------------------------------------------------------
@@ -224,6 +367,392 @@ namespace AbxrLib.Editor
         }
 
         /// <summary>
+        /// Whether the Configuration inspector and the wizard show the Organization Token field (SDK-87): for a
+        /// Production (Custom APK) build, which needs one, and whenever the project has one saved, so a saved value is
+        /// never hidden. Production doesn't use a saved value, but it still ships inside the build.
+        /// </summary>
+        internal static bool ShowsOrgTokenField(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens) return false;
+            return config.buildType == "production_custom" || !string.IsNullOrEmpty(config.orgToken);
+        }
+
+        /// <summary>
+        /// Whether the project is on the legacy scheme (Application ID, Organization ID, Authorization Secret). Only
+        /// then do the Configuration inspector and the wizard show its fields, its note and its wording (SDK-89).
+        /// Every new project is on App Tokens, and is never offered the legacy scheme. The Use App Tokens checkbox
+        /// has its own rule, <see cref="ShowsUseAppTokensToggle"/>.
+        /// </summary>
+        internal static bool ShowsLegacyScheme(AppConfig config) => config != null && !config.useAppTokens;
+
+        /// <summary>
+        /// Whether the inspector shows its production build warning. The box is about the legacy fields (the ones
+        /// marked with an asterisk), so it shows where they do.
+        /// </summary>
+        internal static bool ShowsProductionBuildWarning(AppConfig config) => ShowsLegacyScheme(config);
+
+        /// <summary>Whether an Application ID, Organization ID or Authorization Secret is saved, on either scheme.</summary>
+        internal static bool HasLegacyValues(AppConfig config) =>
+            config != null && (!string.IsNullOrEmpty(config.appID) || !string.IsNullOrEmpty(config.orgID) ||
+                               !string.IsNullOrEmpty(config.authSecret));
+
+        /// <summary>
+        /// Whether the inspector and the wizard show the Use App Tokens checkbox: on the legacy scheme, so the project
+        /// can switch, and on App Tokens for as long as legacy values are saved, so it can switch back. The second
+        /// case is also how an asset last saved before the checkbox existed opens: it has no value for it, so it loads
+        /// as ticked, with its legacy credentials still there, and unticking it is the only way back to them. Only a
+        /// project with the checkbox ticked and no legacy values, which every new project is, never sees it.
+        /// </summary>
+        internal static bool ShowsUseAppTokensToggle(AppConfig config) =>
+            ShowsLegacyScheme(config) || HasLegacyValues(config);
+
+        /// <summary>
+        /// <see cref="ShowsUseAppTokensToggle(AppConfig)"/> for one open inspector or wizard. A project that was on the
+        /// legacy scheme in this window keeps the checkbox after ticking it, even with nothing saved, so a mistaken
+        /// tick can be undone. Saved legacy values are read fresh each time, and the latch is one that the Clear
+        /// button resets, so once they are cleared in either window the checkbox goes from both.
+        /// </summary>
+        internal static bool ShowsUseAppTokensToggle(AppConfig config, ShownLatch wasOnLegacyScheme) =>
+            wasOnLegacyScheme.Holds(ShowsLegacyScheme(config)) || HasLegacyValues(config);
+
+        /// <summary>
+        /// The legacy values a project on App Tokens still has saved, by the name of their field. Empty on the legacy
+        /// scheme, where they are the credentials in use and their fields show.
+        /// </summary>
+        internal static string[] LeftoverLegacyValues(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens) return Array.Empty<string>();
+            var names = new List<string>();
+            if (!string.IsNullOrEmpty(config.appID)) names.Add("Application ID");
+            if (!string.IsNullOrEmpty(config.orgID)) names.Add("Organization ID");
+            if (!string.IsNullOrEmpty(config.authSecret)) names.Add("Authorization Secret");
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// The other direction: the App Token and Organization Token a project on the legacy scheme still has saved,
+        /// by the name of their field. Empty on App Tokens, where they are in use.
+        /// </summary>
+        internal static string[] LeftoverTokens(AppConfig config)
+        {
+            if (!ShowsLegacyScheme(config)) return Array.Empty<string>();
+            var names = new List<string>();
+            if (!string.IsNullOrEmpty(config.appToken)) names.Add("App Token");
+            if (!string.IsNullOrEmpty(config.orgToken)) names.Add("Organization Token");
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// Whether values are saved for the scheme the project isn't on. They have no field there, the SDK doesn't
+        /// sign in with them, and they still ship inside every build, so the editors always say so.
+        /// </summary>
+        internal static bool HasLeftoverValues(AppConfig config) =>
+            LeftoverLegacyValues(config).Length > 0 || LeftoverTokens(config).Length > 0;
+
+        /// <summary>Whether the saved credentials would pass validation with Use App Tokens set the given way.</summary>
+        private static bool CredentialsWouldBeValid(AppConfig config, bool useAppTokens) =>
+            config != null && RuntimeAuthConfig.ValidateAuthFields(useAppTokens, config.buildType, config.appID,
+                config.orgID, config.authSecret, config.appToken, config.orgToken) == null;
+
+        /// <summary>
+        /// Whether the credentials saved for the other scheme would sign in if the project switched to it. A project
+        /// that can't sign in as it stands is told about that way out.
+        /// </summary>
+        internal static bool OtherSchemeWouldWork(AppConfig config) =>
+            config != null && CredentialsWouldBeValid(config, !config.useAppTokens);
+
+        /// <summary>
+        /// Whether the editors offer to clear the leftover values: only when the scheme the project is on has valid
+        /// credentials of its own. Until then the other scheme's values may be the only ones that work. An asset last
+        /// saved before Use App Tokens existed opens ticked, with legacy credentials and no App Token, and a token
+        /// that is half pasted into it must not make those credentials look disposable.
+        /// </summary>
+        internal static bool CanClearLeftoverValues(AppConfig config) =>
+            HasLeftoverValues(config) && CredentialsAreValid(config);
+
+        /// <summary>
+        /// What both editors show under the credential fields whenever values are saved for the scheme the project
+        /// isn't on, or null when none are. It names them and says they ship: they are in the Resources asset, and
+        /// nothing shows them once that scheme's fields are hidden. A saved Organization ID is not called unused,
+        /// since Abxr.GetOrgId() still returns it when no ArborXR client supplies one. <paramref name="offersClear"/>
+        /// is <see cref="CanClearLeftoverValues"/>. Without it, the text says what stops the project signing in, and
+        /// that switching scheme is a way out when the leftover credentials would work.
+        /// </summary>
+        internal static string LeftoverValuesNotice(AppConfig config, out bool offersClear)
+        {
+            offersClear = CanClearLeftoverValues(config);
+            if (!HasLeftoverValues(config)) return null;
+
+            bool onAppTokens = config.useAppTokens;
+            string[] names = onAppTokens ? LeftoverLegacyValues(config) : LeftoverTokens(config);
+            bool one = names.Length == 1;
+            string them = one ? "it" : "them";
+
+            string text = onAppTokens ? "This project is on App Tokens, but " : "This project is on the legacy scheme, but ";
+            text += $"{string.Join(", ", names)} {(one ? "is" : "are")} still saved ";
+            if (onAppTokens) text += "from the legacy scheme ";
+            text += $"and {(one ? "ships" : "ship")} inside every build. ";
+            if (!onAppTokens)
+                text += $"The SDK doesn't read {them} on the legacy scheme. ";
+            else if (string.IsNullOrEmpty(config.orgID))
+                text += $"The SDK doesn't read {them} on App Tokens. ";
+            else
+                text += $"The SDK doesn't sign in with {them}, but on a device without ArborXR MDM Abxr.GetOrgId() " +
+                        "still returns the Organization ID, and a secret set with Abxr.SetAuthSecret is paired with it. ";
+
+            if (offersClear)
+                return text + (onAppTokens
+                    ? $"Untick Use App Tokens to go back to the legacy scheme, or clear {them}, which also removes that checkbox."
+                    : $"Tick Use App Tokens to go back to App Tokens, or clear {them}.");
+
+            // The scheme in use can't sign in yet, so nothing offers to clear what may be the only credentials that work.
+            text += $"Clearing {them} is offered once the project can sign in. As it stands it can't: " +
+                    DescribeOwnCredentialProblem(config);
+            if (OtherSchemeWouldWork(config))
+                text += onAppTokens
+                    ? $" Or untick Use App Tokens to keep using the legacy scheme."
+                    : $" Or tick Use App Tokens to keep using App Tokens.";
+            return text;
+        }
+
+        /// <summary>
+        /// The Clear button under the leftover notice, for both editors: empties the other scheme's saved values as
+        /// one undoable step, lets go of the latches that kept a way back to them, in every open window, and marks
+        /// the asset changed. False, changing nothing, unless <see cref="CanClearLeftoverValues"/>.
+        /// </summary>
+        internal static bool ClearLeftoverValues(AppConfig config)
+        {
+            if (!CanClearLeftoverValues(config)) return false;
+
+            Undo.RecordObject(config, "Clear leftover AbxrLib values");
+            if (config.useAppTokens)
+            {
+                config.appID = "";
+                config.orgID = "";
+                config.authSecret = "";
+            }
+            else
+            {
+                config.appToken = "";
+                config.orgToken = "";
+            }
+            _leftoversCleared++;
+            EditorUtility.SetDirty(config);
+            return true;
+        }
+
+        /// <summary>The Clear button's label under the leftover notice, for the values the project's scheme leaves over.</summary>
+        internal static string ClearLeftoverValuesLabel(AppConfig config) =>
+            ShowsLegacyScheme(config) ? "Clear saved tokens" : "Clear legacy values";
+
+        /// <summary>
+        /// The wizard's reminder about what not to ship. It names the credentials the project's scheme has, so a
+        /// project on App Tokens isn't warned about a secret it never sees.
+        /// </summary>
+        internal static string ShippingNote(AppConfig config) => ShowsLegacyScheme(config)
+            ? "Never ship an Organization ID with its Authorization Secret in a publicly distributed APK.\n\nFor " +
+              "shared builds use Production and let ArborXR-managed devices supply the organization."
+            : "Never ship an Organization Token in a publicly distributed APK.\n\nA Development build uses the App " +
+              "Token as the Organization Token, so it is for internal or single-org builds only.\n\nFor shared " +
+              "builds use Production and let ArborXR-managed devices supply the organization.";
+
+        /// <summary>
+        /// The hint under the legacy scheme's Organization ID and Authorization Secret. Production doesn't sign in
+        /// with saved ones, but nothing strips them from the Resources asset, so they still ship inside the build, and
+        /// a saved Organization ID is still what Abxr.GetOrgId() returns when no ArborXR client supplies one, so the
+        /// text doesn't call it unused. An unrecognised Build Type shows as Production while builds still sign in
+        /// with both. <paramref name="warn"/> is true in those cases. Null where there is nothing to say.
+        /// </summary>
+        internal static string LegacyOrgFieldsHint(AppConfig config, out bool warn)
+        {
+            warn = false;
+            if (!ShowsLegacyScheme(config)) return null;
+            if (config.buildType == "production_custom")
+                return "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization " +
+                       "Secret are required. The API receives buildType Production.";
+            if (config.buildType == "development") return null;
+
+            bool hasOrgId = !string.IsNullOrEmpty(config.orgID);
+            bool hasValue = hasOrgId || !string.IsNullOrEmpty(config.authSecret);
+            if (!IsProduction(config.buildType))
+            {
+                if (!hasValue) return null;
+                warn = true;
+                return "The saved Build Type isn't one AbxrLib recognises, so builds still sign in with the " +
+                       "Organization ID and Authorization Secret saved here. Switch the Build Type to another option " +
+                       "and back to set it.";
+            }
+
+            if (!hasValue)
+                return "Production doesn't take an Organization ID or Authorization Secret: the device's MDM supplies them.";
+            warn = true;
+            string text = "Production doesn't sign in with the Organization ID or Authorization Secret saved here " +
+                          "(the device's MDM supplies them), but they ship inside the build";
+            return hasOrgId
+                ? text + ", and on a device without ArborXR MDM Abxr.GetOrgId() still returns the Organization ID, " +
+                  "which a secret set with Abxr.SetAuthSecret is paired with. Clear them unless your app relies on that."
+                : text + ". Clear them.";
+        }
+
+        /// <summary>
+        /// Whether a legacy Organization ID or Authorization Secret field is locked. Production takes neither, so an
+        /// empty one can't be filled in there. One that holds a value stays editable: it still ships, and a malformed
+        /// Organization ID fails the credential check until it is fixed or cleared. <paramref name="heldAValue"/> is
+        /// that field's latch in one open window: once the field has held a value there it stays editable, so the
+        /// keystroke that empties it doesn't lock it while it has focus.
+        /// </summary>
+        internal static bool LegacyOrgFieldIsLocked(AppConfig config, string value, ShownLatch heldAValue)
+        {
+            bool held = heldAValue.Holds(!string.IsNullOrEmpty(value));
+            return config != null && IsProduction(config.buildType) && !held;
+        }
+
+        /// <summary>
+        /// The tooltip on a legacy Organization ID or Authorization Secret field. It mentions Custom APK builds only
+        /// to a project that is offered that Build Type.
+        /// </summary>
+        internal static string LegacyOrgFieldTooltip(bool offersCustomApk) =>
+            (offersCustomApk ? "Development and Custom APK builds sign in with it." : "Development builds sign in with it.") +
+            " In Production the device's MDM supplies it.";
+
+        /// <summary>
+        /// The production build warning's lines about when the Organization ID and Authorization Secret may be set:
+        /// in a project's own Development builds, and, where that Build Type is offered, in a custom APK built for
+        /// one 3rd party who knows. The line about 3rd parties is about custom APKs, so it shows only with them.
+        /// </summary>
+        internal static string[] LegacyOrgValuesRules(bool offersCustomApk) => offersCustomApk
+            ? new[]
+            {
+                "• Organization ID and Authorization Secret should ONLY be set for your own Development builds and for custom APKs",
+                "• Only build a custom APK for a specific 3rd party who is aware and approves"
+            }
+            : new[] { "• Organization ID and Authorization Secret should ONLY be set for your own Development builds" };
+
+        /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
+        internal const string LegacySchemeNote =
+            "This project uses the legacy scheme: Application ID, Organization ID and Authorization Secret. It keeps " +
+            "working, but new projects use an App Token. Tick Use App Tokens to switch.";
+
+        /// <summary>
+        /// How many times the Clear button has emptied leftover values in this Editor session. The latches that exist
+        /// so a project can switch back to those values watch it, so clearing in one window drops them in every window.
+        /// </summary>
+        private static int _leftoversCleared;
+
+        /// <summary>
+        /// For one open inspector or wizard: once something has shown, it stays until the window closes or is enabled
+        /// again. Without it, the edit that makes a control unnecessary removes the control mid-edit, with no way back.
+        /// </summary>
+        internal sealed class ShownLatch
+        {
+            private readonly bool _resetsWhenLeftoversAreCleared;
+            private int _leftoversClearedSeen = _leftoversCleared;
+            private bool _shown;
+
+            /// <param name="resetsWhenLeftoversAreCleared">
+            /// For a latch that keeps a way back to the other scheme's values: the Clear button removes those values, in
+            /// whichever window it was pressed, so the latch lets go too.
+            /// </param>
+            internal ShownLatch(bool resetsWhenLeftoversAreCleared = false) =>
+                _resetsWhenLeftoversAreCleared = resetsWhenLeftoversAreCleared;
+
+            /// <summary>True from the first call given true, until <see cref="Reset"/>.</summary>
+            internal bool Holds(bool showsNow)
+            {
+                if (_resetsWhenLeftoversAreCleared && _leftoversClearedSeen != _leftoversCleared)
+                {
+                    _leftoversClearedSeen = _leftoversCleared;
+                    _shown = false;
+                }
+                return _shown |= showsNow;
+            }
+
+            internal void Reset() => _shown = false;
+        }
+
+        /// <summary>
+        /// <see cref="ShowsOrgTokenField"/> for one open inspector or wizard, which keeps the field up once it has held
+        /// a value. Emptying it would otherwise remove it on that keystroke, before a replacement can be typed or
+        /// pasted. Lasts until the window closes or is enabled again.
+        /// </summary>
+        internal sealed class OrgTokenFieldLatch
+        {
+            private readonly ShownLatch _heldAValue = new ShownLatch(resetsWhenLeftoversAreCleared: true);
+
+            internal bool Shows(AppConfig config)
+            {
+                if (config == null || !config.useAppTokens) return false;
+                return _heldAValue.Holds(!string.IsNullOrEmpty(config.orgToken)) || ShowsOrgTokenField(config);
+            }
+
+            internal void Reset() => _heldAValue.Reset();
+        }
+
+        /// <summary>
+        /// The hint under the Organization Token field where it shows without being required: what the saved value
+        /// does in this Build Type, and whether to clear it. Null for Production (Custom APK), which has its own text,
+        /// and for the legacy scheme. <paramref name="warn"/> is true when the value needs the developer's attention.
+        /// </summary>
+        internal static string OrgTokenFieldHint(AppConfig config, out bool warn)
+        {
+            warn = false;
+            if (config == null || !config.useAppTokens || config.buildType == "production_custom") return null;
+
+            bool empty = string.IsNullOrEmpty(config.orgToken);
+            bool isToken = LooksLikeJwt(config.orgToken);
+
+            if (config.buildType == "development")
+            {
+                if (empty) return "Empty: Development builds use the App Token as the Organization Token.";
+                if (!isToken)
+                {
+                    warn = true;
+                    return "This value isn't a token, so Development builds can't sign in with it. Clear it to use " +
+                           "the App Token, or re-copy the whole Organization Token.";
+                }
+                if (config.orgToken == config.appToken)
+                    return "This is a copy of the App Token, which Development builds use as the Organization Token " +
+                           "anyway. Clear it: a copy left here goes stale when the App Token changes.";
+                return "This project already has an Organization Token, so Development builds report to that " +
+                       "organization. Clear it to use the App Token instead: builds then report to the organization " +
+                       "that owns the app.";
+            }
+
+            if (empty) return "Empty, as Production expects: each device's organization comes from ArborXR MDM or passcode pairing.";
+
+            warn = true;
+            // The runtime drops a saved token only when the stored Build Type is Production itself. Any other value
+            // shows as Production in the popup, but the token is still sent.
+            if (!string.Equals(config.buildType, "production", StringComparison.OrdinalIgnoreCase))
+                return "The saved Build Type isn't one AbxrLib recognises, so this Organization Token is still sent " +
+                       "and builds report to its organization. Clear it, or switch the Build Type to another option " +
+                       "and back to set it.";
+            return isToken
+                ? "Production doesn't use this Organization Token, but it is saved in the project and ships inside " +
+                  "the build. Clear it."
+                : "Production doesn't use an Organization Token, and this value isn't one: it fails the credential " +
+                  "check and ships inside the build. Clear it.";
+        }
+
+        /// <summary>
+        /// The build-time reminder for a Development build that uses its App Token as the Organization Token (SDK-85):
+        /// off an ArborXR-managed device, every device that runs it reports to the organization that owns the app, so
+        /// the build must stay inside the team. Null when the build doesn't do that. It is a valid configuration, not a
+        /// problem to fix, so the wizard doesn't list it.
+        /// </summary>
+        internal static string DescribeDevelopmentAppTokenOrg(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens || config.buildType != "development") return null;
+            // An invalid configuration gets the credential warning instead: nothing signs in with it.
+            if (!CredentialsAreValid(config)) return null;
+            if (!string.IsNullOrEmpty(config.orgToken) && config.orgToken != config.appToken) return null;
+
+            return "Build Type is Development and the App Token is used as the Organization Token, so on a device " +
+                   "without ArborXR MDM this build reports to the organization that owns the app. Keep it inside your " +
+                   "team, and use Build Type Production for a build you distribute.";
+        }
+
+        /// <summary>
         /// Describes what is missing from the credentials in terms of what to do about it, or null when they are
         /// valid. The runtime's own messages are deliberately vague (they reach end users); these do not, so they say
         /// which field is wrong and where the value comes from.
@@ -233,6 +762,18 @@ namespace AbxrLib.Editor
             if (config == null) return "No AbxrLib configuration could be loaded yet.";
             if (CredentialsAreValid(config)) return null;
 
+            string problem = DescribeOwnCredentialProblem(config);
+            // The other scheme's saved credentials would work: say so, since switching is the short way out. An asset
+            // last saved before Use App Tokens existed opens like this, ticked with only legacy credentials.
+            if (!OtherSchemeWouldWork(config)) return problem;
+            return problem + (config.useAppTokens
+                ? " This project also has legacy credentials saved that would work: untick Use App Tokens to keep using them."
+                : " This project also has an App Token saved that would work: tick Use App Tokens to keep using it.");
+        }
+
+        /// <summary>What is wrong with the credentials of the scheme the project is on. Only called when they are invalid.</summary>
+        private static string DescribeOwnCredentialProblem(AppConfig config)
+        {
             bool isCustomApk = config.buildType == "production_custom";
 
             if (config.useAppTokens)
@@ -244,7 +785,7 @@ namespace AbxrLib.Editor
                 if (isCustomApk && string.IsNullOrWhiteSpace(config.orgToken))
                     return "Production (Custom APK) builds need that customer's Organization Token as well as the App Token. It is not self-serve in the portal - contact ArborXR for it.";
                 if (!string.IsNullOrWhiteSpace(config.orgToken) && !LooksLikeJwt(config.orgToken))
-                    return "Organization Token does not look like a token (three parts separated by periods). Clear the field to use the org the device reports, or re-copy the whole value.";
+                    return "Organization Token does not look like a token (three parts separated by periods). Clear the field, or re-copy the whole value.";
                 return "Credentials are incomplete.";
             }
 
@@ -808,7 +1349,7 @@ namespace AbxrLib.Editor
         private static readonly System.Text.RegularExpressions.Regex SourcePrefabPattern =
             new(@"m_SourcePrefab: \{fileID: -?\d+, guid: ([0-9a-f]{32})");
 
-        /// <summary>The first enabled scene in Build Settings, which is where the app starts. Null when there is none.</summary>
+        /// <summary>The first enabled scene in Build Settings (Build Profiles in Unity 6), which is where the app starts. Null when there is none.</summary>
         internal static string LaunchScenePath() => EditorBuildSettings.scenes.FirstOrDefault(scene => scene.enabled)?.path;
 
         /// <summary>
@@ -926,7 +1467,7 @@ namespace AbxrLib.Editor
             return new Check
             {
                 Title = "Launch scene has no EventSystem",
-                Detail = $"{sceneName}, the first scene in Build Settings, has no EventSystem, and the sign-in prompt " +
+                Detail = $"{sceneName}, the first scene in {BuildWindowName}, has no EventSystem, and the sign-in prompt " +
                          "takes taps and clicks only through one. On a flat screen AbxrLib adds one when a prompt " +
                          "opens, and on a headset XR Interaction Toolkit's ray interactors add their own. Add one to the " +
                          "scene so input doesn't depend on either. An EventSystem your code creates at runtime isn't " +
@@ -1338,7 +1879,7 @@ namespace AbxrLib.Editor
                 return new Check
                 {
                     Title = "Build target is " + EditorUserBuildSettings.activeBuildTarget,
-                    Detail = "Switch to Android in File > Build Settings when you build for a standalone headset " +
+                    Detail = $"Switch to Android in File > {BuildWindowName} when you build for a standalone headset " +
                              "(Quest, PICO). AbxrLib also runs in the Editor and in desktop builds.",
                     Severity = Severity.Info
                 };
