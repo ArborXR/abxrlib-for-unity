@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.UI;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.UI.Keyboard;
 using TMPro;
@@ -23,12 +24,7 @@ namespace AbxrLib.Runtime.UI.ExitPoll
         private const string PollResponseString = "answer";
         private const string PollQuestionString = "prompt";
 
-        private static string _prompt;
-    
-        private static readonly List<Tuple<string, PollType>> Polls = new();
-        private static readonly Dictionary<string, List<string>> Responses = new();
-        private static readonly Dictionary<string, Action<string>> Callbacks = new();
-        private static bool _isProcessing;
+        private static readonly PollQueue Polls = new(ShowPoll, OnPollsDone);
 
         /// <summary>True while a poll is up, including one hidden behind the keyboard.</summary>
         public static bool IsOpen => _pollInstance;
@@ -66,23 +62,13 @@ namespace AbxrLib.Runtime.UI.ExitPoll
     
         public static void AddPoll(string prompt, PollType pollType, List<string> responses, Action<string> callback)
         {
-            Polls.Add(new Tuple<string, PollType>(prompt, pollType));
-            if (responses != null) Responses[prompt] = responses;
-            if (callback != null) Callbacks[prompt] = callback;
-        
-            if (!_isProcessing) ProcessPoll();
+            Polls.Add(new QueuedPoll(prompt, pollType, responses, callback));
         }
 
-        private static void ProcessNextPoll()
+        private static void OnPollsDone()
         {
-            // Clearing the flag after starting the next poll let another AddPoll open a second one on top of it.
-            if (Polls.Count > 0) ProcessPoll();
-            else
-            {
-                _isProcessing = false;
-                // The answer's callback may have opened a keyboard, which still needs the rays.
-                if (!KeyboardHandler.IsOpen) LaserPointerManager.RestoreLaserPointerStates();
-            }
+            // The answer's callback may have opened a keyboard, which still needs the rays.
+            if (!KeyboardHandler.IsOpen) LaserPointerManager.RestoreLaserPointerStates();
         }
 
         /// <summary>Clears what an Editor play session left behind when domain reload is off: its polls died with it.</summary>
@@ -90,32 +76,28 @@ namespace AbxrLib.Runtime.UI.ExitPoll
         private static void ResetStatics()
         {
             Polls.Clear();
-            Responses.Clear();
-            Callbacks.Clear();
-            _isProcessing = false;
             _pollInstance = null;
             _panelInstance = null;
-            _prompt = null;
         }
 
-        private static void CreatePoll(PollType pollType)
+        private static void CreatePoll(QueuedPoll poll)
         {
-            if (pollType == PollType.Rating)
+            if (poll.Type == PollType.Rating)
             {
                 _pollInstance = Instantiate(_ratingPrefab);
             }
-            else if (pollType == PollType.Thumbs)
+            else if (poll.Type == PollType.Thumbs)
             {
                 _pollInstance = Instantiate(_thumbsPrefab);
             }
-            else if (pollType == PollType.MultipleChoice)
+            else if (poll.Type == PollType.MultipleChoice)
             {
                 _pollInstance = Instantiate(_multiPrefab);
                 Transform panel = _pollInstance.transform.Find("Panel");
                 RectTransform panelTransform = panel.GetComponentInChildren<RectTransform>();
-                float panelShift = 0.02f - (Responses[_prompt].Count - 2) * 0.03f;
+                float panelShift = 0.02f - (poll.Responses.Count - 2) * 0.03f;
                 panelTransform.transform.position += new Vector3(0, panelShift, 0);
-                foreach (var response in Responses[_prompt])
+                foreach (var response in poll.Responses)
                 {
                     AddButton(response, panelTransform);
                 }
@@ -130,14 +112,14 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             EventSystemFallback.Ensure();
         }
     
-        private static void CreatePanel(GameObject prefab)
+        private static void CreatePanel(GameObject prefab, string prompt)
         {
             _panelInstance = Instantiate(prefab);
             DontDestroyOnLoad(_panelInstance); // Outlives a scene load, like the poll.
             // The backdrop has nothing to press, and on a flat screen its raycaster would compete with the poll's for taps.
             foreach (var raycaster in _panelInstance.GetComponentsInChildren<GraphicRaycaster>()) raycaster.enabled = false;
             var message = _panelInstance.GetComponent<PanelMessage>();
-            if (message) message.Text = _prompt;
+            if (message) message.Text = prompt;
             // An older copy of the backdrop, from before PanelMessage. Show the poll without its question rather than none.
             else Logcat.Error("AbxrDarkPanelWithText has no PanelMessage, so the exit poll shows without its question. Re-import the World-Space UI sample.");
         }
@@ -152,18 +134,40 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             if (pollCanvas && panelCanvas) pollCanvas.sortingOrder = panelCanvas.sortingOrder + 1;
         }
 
-        private static void ProcessPoll()
+        // Draws the queue's current poll. One that can't be drawn leaves nothing behind: a backdrop with no poll on it
+        // can't be answered, so it would sit there and hold up every poll after it.
+        private static bool ShowPoll(QueuedPoll poll)
         {
-            _isProcessing = true;
+            // Destroy waits for the end of the frame, so the poll just answered still looks alive here.
+            _pollInstance = null;
+            _panelInstance = null;
+            try
+            {
+                CreatePanel(_panelPrefab, poll.Prompt);
+                CreatePoll(poll);
+                if (!_pollInstance)
+                {
+                    Logcat.Error($"Couldn't show the poll \"{poll.Prompt}\": no {poll.Type} poll prefab");
+                    DestroyInstances();
+                    return false;
+                }
+                FaceCamera.FitTogether(_panelInstance, _pollInstance); // The poll sits on its backdrop, so they fit as one.
+                DrawPollOverBackdrop();
+                return true;
+            }
+            catch
+            {
+                DestroyInstances();
+                throw; // The queue logs it and moves on to the next poll.
+            }
+        }
 
-            Tuple<string, PollType> poll = Polls[0];
-            _prompt = poll.Item1;
-            CreatePanel(_panelPrefab);
-            CreatePoll(poll.Item2);
-            FaceCamera.FitTogether(_panelInstance, _pollInstance); // The poll sits on its backdrop, so they fit as one.
-            DrawPollOverBackdrop();
-            Polls.RemoveAt(0);
-            Responses.Remove(_prompt);
+        private static void DestroyInstances()
+        {
+            if (_pollInstance) Destroy(_pollInstance);
+            if (_panelInstance) Destroy(_panelInstance);
+            _pollInstance = null;
+            _panelInstance = null;
         }
     
         private static void AddButton(string response, RectTransform panel)
@@ -179,22 +183,22 @@ namespace AbxrLib.Runtime.UI.ExitPoll
         {
             Destroy(_pollInstance);
             Destroy(_panelInstance);
-            if (Callbacks.TryGetValue(_prompt, out var callback)) callback.Invoke(response);
+            QueuedPoll answered = Polls.Answer(response);
             // The SDK records the answer to the app's PollUser, so AbxrObserver reports it as automatic.
             using (AbxrObserver.AutomaticScope())
             {
                 Abxr.Event(PollEventString, new Dictionary<string, string>
                 {
-                    [PollQuestionString] = _prompt,
+                    [PollQuestionString] = answered?.Prompt,
                     [PollResponseString] = response
                 });
             }
-            ProcessNextPoll();
+            Polls.ShowNext();
         }
     
         private static void PauseExitPolling()
         {
-            _isProcessing = true;
+            Polls.Pause();
             if (_pollInstance) _pollInstance.SetActive(false);
             if (_panelInstance) _panelInstance.SetActive(false);
         }
@@ -208,7 +212,7 @@ namespace AbxrLib.Runtime.UI.ExitPoll
                 // Closing the keyboard put the rays back the way it found them.
                 LaserPointerManager.EnableLaserPointersForInteraction();
             }
-            else ProcessNextPoll();
+            else Polls.ShowNext();
         }
     }
 }
