@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 3813856338820227199}
   - component: {fileID: 8863035862406499337}
+  - component: {fileID: 8829996208818321467}
   m_Layer: 0
   m_Name: AbxrDarkPanelWithText
   m_TagString: Untagged
@@ -50,6 +51,19 @@ MonoBehaviour:
   distanceFromCamera: 1.62
   verticalOffset: 0.1
   useConfigurationValues: 1
+--- !u!114 &8829996208818321467
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1377300176178464800}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8691e019d83b4c8b846016c972ef166d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  label: {fileID: 364943590779652070}
 --- !u!1 &1457430707783499973
 GameObject:
   m_ObjectHideFlags: 0

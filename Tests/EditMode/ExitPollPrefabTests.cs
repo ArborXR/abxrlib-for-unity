@@ -1,7 +1,8 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // Pins that every button field on the exit poll components is wired in the base prefabs (SDK-76). An empty field
 // throws in Start, which leaves that button and every one after it without a listener, so the poll can't be answered
-// with them. The prefabs live in Samples~, which Unity doesn't import, so this reads their YAML.
+// with them. Also pins where the poll's backdrop shows the question (SDK-95). The prefabs live in Samples~, which Unity
+// doesn't import, so this reads their YAML.
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,6 +14,11 @@ public class ExitPollPrefabTests
 {
     // uGUI's Button script GUID in com.unity.ugui.
     private const string ButtonGuid = "4e29b1a8efbd4b44bb3f3716e73f07ff";
+    // TextMeshProUGUI's script GUID in com.unity.ugui.
+    private const string TextMeshProGuid = "f4688fdb7df04437aeb418b961361dc5";
+    // The World-Space UI sample's PanelMessage script GUID.
+    private const string PanelMessageGuid = "8691e019d83b4c8b846016c972ef166d";
+    private const string Backdrop = "AbxrDarkPanelWithText";
 
     private static readonly Regex DocumentHeader = new(@"^--- !u!(\d+) &(-?\d+)( stripped)?", RegexOptions.Multiline);
 
@@ -39,6 +45,47 @@ public class ExitPollPrefabTests
             Assert.That(target, Does.Contain($"guid: {ButtonGuid}"), $"{prefab}: {name} doesn't point at a Button");
         }
     }
+
+    [Test]
+    public void Backdrop_ShowsItsMessageInDynamicMessage()
+    {
+        // ExitPollHandler writes the question through PanelMessage. Looked up with GetComponentInChildren, it went to the
+        // first label in the backdrop, the header's "ArborXR", and DynamicMessage stayed empty.
+        var docs = ReadDocuments(PrefabPath(Backdrop));
+        var root = docs.Values.Single(d => d.StartsWith("--- !u!1 ") && Name(d) == Backdrop);
+        var panelMessage = Components(docs, root).SingleOrDefault(c => c.Contains($"guid: {PanelMessageGuid}"));
+        Assert.IsNotNull(panelMessage, $"{Backdrop}'s root has no PanelMessage");
+
+        string labelId = Field(panelMessage, "label");
+        Assert.AreNotEqual("0", labelId, "PanelMessage's label is empty");
+        Assert.IsTrue(docs.TryGetValue(labelId, out var label), $"PanelMessage's label points at {labelId}, which isn't in the prefab");
+        Assert.That(label, Does.Contain($"guid: {TextMeshProGuid}"), "PanelMessage's label isn't a TextMeshProUGUI");
+        Assert.AreEqual("DynamicMessage", Name(docs[Field(label, "m_GameObject")]), "PanelMessage's label isn't DynamicMessage");
+    }
+
+    [Test]
+    public void Backdrop_KeepsItsBrandLabels()
+    {
+        // Every label but DynamicMessage is part of the backdrop's design and must keep its text.
+        var docs = ReadDocuments(PrefabPath(Backdrop));
+        var labels = docs.Values.Where(d => d.Contains($"guid: {TextMeshProGuid}"))
+            .Select(d => (Owner: Name(docs[Field(d, "m_GameObject")]), Text: Regex.Match(d, @"^  m_text: ?(.*)$", RegexOptions.Multiline).Groups[1].Value.Trim()))
+            .ToList();
+
+        Assert.AreEqual("", labels.Single(l => l.Owner == "DynamicMessage").Text, "DynamicMessage should start empty");
+        CollectionAssert.AreEquivalent(new[] { "ArborXR", "ArborXR", "Powered by" },
+            labels.Where(l => l.Owner != "DynamicMessage").Select(l => l.Text), "the header and footer labels changed");
+    }
+
+    private static IEnumerable<string> Components(Dictionary<string, string> docs, string gameObject) =>
+        Regex.Matches(gameObject, @"component: \{fileID: (-?\d+)\}").Select(m => docs[m.Groups[1].Value]);
+
+    private static string Name(string doc) => Regex.Match(doc, @"^  m_Name: ?(.*)$", RegexOptions.Multiline).Groups[1].Value.Trim();
+
+    private static string Field(string doc, string field) =>
+        Regex.Match(doc, $@"^  {field}: (?:\{{fileID: (-?\d+)\}}|(.*))$", RegexOptions.Multiline) is var m && m.Groups[1].Success
+            ? m.Groups[1].Value
+            : m.Groups[2].Value.Trim();
 
     private static string PrefabPath(string prefab)
     {
