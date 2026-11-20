@@ -423,11 +423,11 @@ namespace AbxrLib.Runtime.UI.Examples
             {
                 GameObject panelInstance = Instantiate(panelPrefab);
                 
-                // Set custom message text
-                var panelText = panelInstance.GetComponentInChildren<TMPro.TextMeshProUGUI>();
-                if (panelText != null)
+                // Set custom message text. The panel has other labels (its "ArborXR" header), so go through PanelMessage.
+                var panelMessage = panelInstance.GetComponent<PanelMessage>();
+                if (panelMessage != null)
                 {
-                    panelText.text = "This is an independent panel for custom messages.\nAuthentication keyboards have built-in panels.";
+                    panelMessage.Text = "This is an independent panel for custom messages.\nAuthentication keyboards have built-in panels.";
                 }
                 
                 // Auto-destroy after 5 seconds
