@@ -61,12 +61,22 @@ namespace AbxrLib.Runtime.Core.UI
             if (!IsBusy) ShowNext();
         }
 
-        /// <summary>Runs the current poll's callback with the answer and returns that poll. Call <see cref="ShowNext"/> after.</summary>
+        /// <summary>
+        /// Runs the current poll's callback with the answer and returns that poll. Call <see cref="ShowNext"/> after.
+        /// A callback that throws is logged, so the app's bug can't stop the answer being recorded or the next poll opening.
+        /// </summary>
         public QueuedPoll Answer(string response)
         {
             QueuedPoll answered = Current;
             Current = null;
-            answered?.Callback?.Invoke(response);
+            try
+            {
+                answered?.Callback?.Invoke(response);
+            }
+            catch (Exception e)
+            {
+                Logcat.Error($"The callback for the poll \"{answered.Prompt}\" threw: {e}");
+            }
             return answered;
         }
 

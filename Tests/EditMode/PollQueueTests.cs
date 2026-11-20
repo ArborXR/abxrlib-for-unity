@@ -141,6 +141,21 @@ public class PollQueueTests
     }
 
     [Test]
+    public void ACallbackThatThrows_DoesNotStopTheNextPoll()
+    {
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("The callback for the poll \"first\" threw")));
+        _queue.Add(Poll("first", callback: _ => throw new InvalidOperationException("app bug")));
+        _queue.Add(Poll("second"));
+
+        QueuedPoll answered = null;
+        Assert.DoesNotThrow(() => answered = _queue.Answer("yes"));
+        Assert.AreEqual("first", answered.Prompt);
+
+        _queue.ShowNext();
+        Assert.AreEqual("second", _queue.Current.Prompt);
+    }
+
+    [Test]
     public void Paused_HoldsNewPollsUntilShowNext()
     {
         _queue.Pause();
