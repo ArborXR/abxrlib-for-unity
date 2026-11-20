@@ -1,0 +1,1158 @@
+// Copyright (c) 2026 ArborXR. All rights reserved.
+// PlayMode: which identity device auth uses (SDK-60 step 3, SDK-59 RFC §03 and D2). An org credential wins, then a
+// stored pairing, then none, which is quiet. The choice holds for the launch. A paired bootstrap refusal revokes on 401
+// and suspends on 403, without latching the session. An auth handoff signs in an unpaired app (SDK-80). A Development
+// build with no org uses its App Token as the org token, so it never pairs (SDK-85). Also the
+// subsystem's wiring around pairing: where the prompt and its input go, recording while unpaired, and auth after a new pairing.
+// Drives the real AbxrAuthService through AuthRetryTests' scripted transport and an in-memory pairing store, so no
+// network or PlayerPrefs is involved.
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using AbxrLib.Runtime;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.UI;
+using AbxrLib.Runtime.Services.Auth;
+using AbxrLib.Runtime.Services.Pairing;
+using AbxrLib.Runtime.Services.Transport;
+using AbxrLib.Runtime.Types;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+
+[TestFixture]
+public class PairingIdentityTests : AbxrPlayModeTestBase
+{
+    private const string AppToken = "eyJhbGciOiJub25lIn0.eyJhcHAiOiJ0ZXN0In0.sig";
+    private const string OrgToken = "eyJhbGciOiJub25lIn0.eyJvcmciOiJ0ZXN0In0.sig";
+    private const string InstanceToken = "0123456789abcdef0123456789abcdef01234567";
+    private const string InstanceId = "9b2c6a58-2f61-4c1e-9d0a-3f6f1d1e2a11";
+    private const string OtherInstanceToken = "fedcba9876543210fedcba9876543210fedcba98";
+    private const string OtherInstanceId = "0d5e3c1b-7a24-4f9e-8b6d-2c1a0f9e8d77";
+    private const string RetryingLog =
+        "Authentication failure: Device authentication failed (no connection); the SDK is retrying in the background.";
+
+    private const string AuthorizedBody =
+        "{\"token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDB9.sig\",\"secret\":\"test-secret\",\"appId\":\"12345678-1234-1234-1234-123456789012\"";
+    private static readonly AuthTransportResult Authorized = new AuthTransportResult(true, AuthorizedBody + "}", false, 200);
+    // lib-backend's real body for a revoked instance: its exception handler sends "message", not FastAPI's "detail".
+    private static readonly AuthTransportResult Unauthorized =
+        new AuthTransportResult(false, "{\"message\":\"Invalid AppInstanceToken\"}", true, 401);
+    private static readonly AuthTransportResult Forbidden =
+        new AuthTransportResult(false, "{\"detail\":\"Access suspended\"}", true, 403);
+    private static readonly AuthTransportResult Offline =
+        new AuthTransportResult(false, "No response body.", false, 0, networkError: true);
+
+    private MemoryPairingStore _store;
+    private readonly List<(bool success, string reason)> _reports = new List<(bool, string)>();
+
+    protected override void CreateSubsystemIfNeeded()
+    {
+        // Each test chooses its stored pairing first, then creates the subsystem.
+    }
+
+    private FakeAuthUi _ui;
+    private readonly List<(Abxr.PairingState state, Abxr.PairingChangeReason reason)> _stateEvents =
+        new List<(Abxr.PairingState, Abxr.PairingChangeReason)>();
+
+    private void RecordState(Abxr.PairingState state, Abxr.PairingChangeReason reason) => _stateEvents.Add((state, reason));
+
+    [TearDown]
+    public void UnsubscribeReports()
+    {
+        Abxr.OnAuthCompleted -= Record;
+        Abxr.OnPairingStateChanged -= RecordState;
+        _stateEvents.Clear();
+        if (_ui != null) AbxrUi.UnregisterAuthUi(_ui);
+        _ui = null;
+    }
+
+    private void Record(bool success, string reason) => _reports.Add((success, reason));
+
+    // ── No identity ───────────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator NoIdentity_IsQuiet()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        LogAssert.Expect(LogType.Log, new Regex(Regex.Escape("Not authenticating: No organization identity.")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports, "One report, and no error log.");
+        Assert.AreEqual(0, transport.AuthCalls);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State);
+    }
+
+    [UnityTest]
+    public IEnumerator FirstAttempt_ReportsOnALaterFrame()
+    {
+        Start(pairedAs: null, Authorized);
+
+        Abxr.StartAuthentication();
+        Assert.IsEmpty(_reports, "Nothing fires inside the call, so subscribers added this frame still hear it.");
+        Assert.AreEqual(Abxr.PairingState.Resolving, Pairing.State);
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual(1, _reports.Count);
+    }
+
+    [UnityTest]
+    public IEnumerator IdentityHoldsForTheLaunch_ALaterOrgTokenIsIgnored()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        // A development build honors a baked org token, so without the hold this one would authenticate.
+        SetRuntimeAuth(Auth(OrgToken, "development"));
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("turn off Enable Auto Start Authentication")));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((false, "No organization identity"), _reports[1]);
+        Assert.AreEqual(0, transport.AuthCalls, "Unpaired at startup stays unpaired until the next launch.");
+    }
+
+    [UnityTest]
+    public IEnumerator WherePairingCantRun_ALaterOrgToken_Authenticates()
+    {
+        var transport = Start(pairedAs: null, Authorized, pairingPlatform: false);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        SetRuntimeAuth(Auth(OrgToken, "development"));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((true, (string)null), _reports[1], "A standalone or Editor build that sets its org late still signs in.");
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+    }
+
+    [UnityTest]
+    public IEnumerator WithoutAnAppToken_ALateOrgCredential_Authenticates()
+    {
+        // A legacy (App ID) app on a pairing platform: it can't pair, so the launch-long hold doesn't apply to it.
+        var transport = Start(pairedAs: null, Authorized);
+        SetRuntimeAuth(LegacyAuth(orgId: null, authSecret: null, buildType: "production"));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.IsFalse(Pairing.CanPair);
+
+        SetRuntimeAuth(LegacyAuth(LegacyOrgId, "secret", "development"));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((true, (string)null), _reports[1]);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+    }
+
+    [UnityTest]
+    public IEnumerator StartNewSession_WhileResolving_SettlesOnALaterFrame()
+    {
+        Start(pairedAs: null, Authorized);
+
+        Abxr.StartNewSession();
+        Assert.AreEqual(Abxr.PairingState.Resolving, Pairing.State, "The first attempt waits, like auto-start, before deciding identity.");
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State);
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+    }
+
+    // ── Paired bootstrap ──────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator StoredPairing_BootstrapsAsTheInstance()
+    {
+        var transport = Start(pairedAs: InstanceId, Authorized);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(Abxr.PairingState.Paired, Pairing.State);
+        Assert.AreEqual(AppToken, transport.LastPayload.appToken);
+        Assert.AreEqual(InstanceToken, transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(InstanceId, transport.LastPayload.deviceId, "The instance id is the device id.");
+        Assert.IsNull(transport.LastPayload.orgToken);
+        Assert.IsNull(transport.LastPayload.priorAppInstanceId);
+    }
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_StoresTheDeviceNameItReturns()
+    {
+        Start(pairedAs: InstanceId, new AuthTransportResult(true, AuthorizedBody + ",\"deviceName\":\"Headset 12\"}", false, 200));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual("Headset 12", Pairing.DeviceName);
+        Assert.AreEqual("Headset 12", _store.DeviceName);
+    }
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_WithoutADeviceNameKey_KeepsTheStoredName()
+    {
+        Start(pairedAs: InstanceId, Authorized, deviceName: "Headset 12");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual("Headset 12", _store.DeviceName, "A backend that doesn't send the key mustn't clear the name.");
+    }
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_Unauthorized_RevokesWithoutLatching()
+    {
+        var transport = Start(pairedAs: InstanceId, Unauthorized);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Pairing revoked")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual((false, "Pairing revoked"), _reports[0]);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State);
+        Assert.IsNull(_store.Token);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+        Assert.AreEqual((false, "No organization identity"), _reports[1], "Not the session-wide rejection latch.");
+        Assert.AreEqual(1, transport.AuthCalls);
+    }
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_FastApiDefault401_Revokes()
+    {
+        Start(pairedAs: InstanceId, new AuthTransportResult(false, "{\"detail\":\"Invalid AppInstanceToken\"}", true, 401));
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Pairing revoked")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State, "FastAPI's default shape still means the instance is gone.");
+        Assert.IsNull(_store.Token);
+    }
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_ADifferentFastApi401_KeepsThePairing() =>
+        A401NotARevoke_KeepsThePairing("{\"detail\":\"Unauthorized\"}");
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_AnHtml401_KeepsThePairing() =>
+        A401NotARevoke_KeepsThePairing("<html><body>401 Authorization Required</body></html>");
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_AGateway401_KeepsThePairing() =>
+        A401NotARevoke_KeepsThePairing("{\"message\":\"Unauthorized\"}");
+
+    private IEnumerator A401NotARevoke_KeepsThePairing(string body)
+    {
+        Start(pairedAs: InstanceId, new AuthTransportResult(false, body, true, 401));
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("got a 401 that isn't lib-backend's revoked-instance error, so the pairing is kept")));
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Access suspended")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual(Abxr.PairingState.Paired, Pairing.State, "A proxy's 401 mustn't unpair the headset.");
+        Assert.AreEqual(InstanceToken, _store.Token);
+        Assert.IsTrue(Pairing.IsSuspendedForSession);
+    }
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_Forbidden_KeepsThePairingAndStopsForTheLaunch()
+    {
+        var transport = Start(pairedAs: InstanceId, Forbidden);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Access suspended")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.AreEqual((false, "Access suspended"), _reports[0]);
+        Assert.AreEqual(Abxr.PairingState.Paired, Pairing.State);
+        Assert.AreEqual(InstanceToken, _store.Token);
+        Assert.IsTrue(Pairing.IsSuspendedForSession);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+        Assert.AreEqual((false, "Access suspended"), _reports[1]);
+        Assert.AreEqual(1, transport.AuthCalls, "Nothing more is sent with a suspended pairing this launch.");
+    }
+
+    [UnityTest]
+    public IEnumerator PairedBootstrap_Offline_RetriesAndKeepsThePairing()
+    {
+        var transport = Start(pairedAs: InstanceId, Offline);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+            "Authentication failure: Device authentication failed (no connection); the SDK is retrying in the background.")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => transport.AuthCalls >= 2, 5f);
+
+        Assert.GreaterOrEqual(transport.AuthCalls, 2);
+        Assert.AreEqual(Abxr.PairingState.Paired, Pairing.State);
+        Assert.AreEqual(InstanceToken, _store.Token);
+        Abxr.EndSession();
+    }
+
+    // ── Managed ───────────────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator OrgToken_WinsOverAStoredPairing_AndSendsItAsThePriorInstance()
+    {
+        // A development build, since production ignores a baked org token and only takes one from the device or a launch.
+        var transport = Start(pairedAs: InstanceId, Authorized, orgToken: OrgToken, buildType: "development");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+        Assert.AreEqual(OrgToken, transport.LastPayload.orgToken);
+        Assert.IsNull(transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(InstanceId, transport.LastPayload.priorAppInstanceId);
+        Assert.AreEqual(InstanceToken, _store.Token, "The stored pairing is kept for a later migration.");
+    }
+
+    // ── Development: the App Token as the org (SDK-85) ────────────
+    // With no org from any source, a Development build uses its App Token as the Organization Token. Every other source
+    // wins. The ArborXR client and the org_token intent or URL parameter only run on a device or in a browser, so no
+    // test here reaches them. RuntimeAuthConfigTests covers the rule alone (an org credential already there is kept),
+    // not that Authenticate() applies those sources before the fallback.
+
+    [UnityTest]
+    public IEnumerator Development_WithoutAnOrg_SignsInWithTheAppTokenAsTheOrgToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        var logs = new List<string>();
+        Application.LogCallback capture = (message, _, _) => logs.Add(message);
+        Application.logMessageReceived += capture;
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Application.logMessageReceived -= capture;
+
+        string said = logs.Find(line => line.Contains("using the App Token as the Organization Token"));
+        Assert.IsNotNull(said, "The sign-in looks like any other, so the SDK says which org it used.");
+        StringAssert.DoesNotContain(AppToken, said, "The token itself is never logged.");
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports, "Not \"No organization identity\".");
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.appToken);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken, "lib-backend takes an App Token as the org token of the org that owns the app.");
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State, "It has an org, so it never pairs.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_ConfiguredWithOnlyAnAppToken_SignsInWithIt()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("development");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AConfiguredOrgToken_WinsOverTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("development", orgToken: OrgToken);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(OrgToken, transport.LastPayload.orgToken, "A project that already set an Organization Token keeps using it.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_SetOrgIdWithSetAuthSecret_WinsOverTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("development");
+        Abxr.SetOrgId(LegacyOrgId);
+        Abxr.SetAuthSecret("secret");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(Utils.BuildOrgTokenDynamic(LegacyOrgId, "secret"), transport.LastPayload.orgToken);
+        Assert.AreNotEqual(AppToken, transport.LastPayload.orgToken);
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AnOrgSetAfterTheAppTokenWasUsed_WinsOnTheNextAttempt()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("development");
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+
+        Abxr.SetOrgId(LegacyOrgId);
+        Abxr.SetAuthSecret("secret");
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.IsTrue(_reports[1].success);
+        Assert.AreEqual(Utils.BuildOrgTokenDynamic(LegacyOrgId, "secret"), transport.LastPayload.orgToken, "The App Token doesn't stick once something supplies an org.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_WithAStoredPairing_StillUsesTheAppToken()
+    {
+        // Like any org token, it wins over a pairing stored by a Production build of the same app.
+        var transport = Start(pairedAs: InstanceId, Authorized, buildType: "development");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(Abxr.PairingState.Managed, Pairing.State);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.IsNull(transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(InstanceId, transport.LastPayload.priorAppInstanceId);
+        Assert.AreEqual(InstanceToken, _store.Token, "The pairing is still there for the next Production build.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_StartPairing_IsRefused()
+    {
+        Start(pairedAs: null, Authorized, buildType: "development");
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("already identifies this app's organization")));
+
+        Assert.IsFalse(Abxr.StartPairing(), "Testing pairing needs Build Type Production.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_WithoutAnAppToken_StillFailsValidation()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        SetRuntimeAuth(new RuntimeAuthConfig { useAppTokens = true, buildType = "development", appToken = "", orgToken = "" });
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: App identification not set.")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "App identification not set.") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls);
+    }
+
+    [UnityTest]
+    public IEnumerator Production_ConfiguredWithAnOrgToken_StillIgnoresIt_AndStaysQuiet()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("production", orgToken: OrgToken);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports, "The App Token stands in only in Development.");
+        Assert.AreEqual(0, transport.AuthCalls);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State);
+    }
+
+    [UnityTest]
+    public IEnumerator ProductionCustom_WithoutAnOrgToken_StillFailsValidation()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("production_custom");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Authentication failure: Organization identification unavailable.")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "Organization identification unavailable.") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls);
+    }
+
+    [UnityTest]
+    public IEnumerator ProductionCustom_WithItsOrgToken_StillSendsIt()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        UseConfiguration("production_custom", orgToken: OrgToken);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.AreEqual(OrgToken, transport.LastPayload.orgToken);
+    }
+
+    [UnityTest]
+    public IEnumerator Legacy_Development_WithoutAnOrg_StillHasNoIdentity()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        SetRuntimeAuth(LegacyAuth(orgId: null, authSecret: null, buildType: "development"));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports, "The legacy scheme has no App Token to stand in.");
+        Assert.AreEqual(0, transport.AuthCalls);
+    }
+
+    // A Development build is never let through on a handoff alone, since it always has an org. So a handoff that can't be
+    // applied continues with device authentication as the org that owns the app, where a Production build ends quietly.
+
+    [UnityTest]
+    public IEnumerator Development_AHandoff_IsAdopted()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls, "The launcher's session, not a device auth.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        StringAssert.Contains("\"OrgToken\":\"" + AppToken + "\"", AbxrSubsystem.Instance.GetHandoffJsonForTesting(),
+            "An onward handoff carries the App Token as the org token, as it would a configured one.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AnInvalidHandoff_SignsInWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        AbxrAuthService.SetAuthHandoffForTesting("{not json");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Failed to parse auth response")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports, "Production ends quietly here (AnInvalidHandoff_StillEndsQuietly).");
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AnExpiredHandoff_SignsInWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        // exp = 1: a token that expired in 1970.
+        AbxrAuthService.SetAuthHandoffForTesting(
+            "{\"Token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjF9.sig\",\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator Development_AHandoffTheServiceCantTake_SignsInWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        transport.IsServiceTransport = true;
+        transport.HandoffFailure = "SetAuthFromHandoff returned CORRUPT_JSON";
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports);
+        Assert.AreEqual(1, transport.HandoffCalls);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator Development_SetUserDataAfterAHandoff_ReAuthenticatesWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        var synced = new List<bool>();
+        Abxr.OnUserDataSyncCompleted += (success, _) => synced.Add(success);
+
+        Abxr.SetUserData("learner-2");
+        yield return WaitFor(() => synced.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { true }, synced);
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken, "The re-auth is a device auth as the org that owns the app, not the launcher's.");
+    }
+
+    [UnityTest]
+    public IEnumerator Development_ReAuthAfterAHandoff_SignsInWithTheAppToken()
+    {
+        var transport = Start(pairedAs: null, Authorized, buildType: "development");
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+
+        // What ReAuthPollCoroutine calls when the handed-over token is about to expire.
+        AbxrSubsystem.Instance.AuthServiceForTesting.Authenticate();
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((true, (string)null), _reports[1]);
+        Assert.AreEqual(1, transport.AuthCalls, "A device auth, not the handoff again.");
+        Assert.AreEqual(AppToken, transport.LastPayload.orgToken, "From here the session reports to the org that owns the app, not the launcher's.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    // ── Auth handoff ──────────────────────────────────────────────
+
+    private const string HandoffJson =
+        "{\"Token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjQxMDI0NDQ4MDB9.sig\",\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}";
+
+    [UnityTest]
+    public IEnumerator APairedHubsHandoff_SignsInAnUnpairedApp()
+    {
+        Start(pairedAs: InstanceId, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        string hubToken = Abxr.GetAuthResponse().Token;
+        StringAssert.Contains("\"OrgToken\":\"\"", AbxrSubsystem.Instance.GetHandoffJsonForTesting(), "A paired hub has no org credential to hand over.");
+        Assert.IsTrue(AbxrSubsystem.Instance.LaunchAppWithAuthHandoffForTest("com.example.module"));
+        FullTeardownForAppSwitch(clearAuthHandoff: false);
+        BaseSetUpForAppSwitch();
+
+        var transport = Start(pairedAs: null, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (true, (string)null) }, _reports, "Not \"No organization identity\".");
+        Assert.AreEqual(0, transport.AuthCalls, "The hub's session, not a device auth.");
+        Assert.AreEqual(hubToken, Abxr.GetAuthResponse().Token);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State, "The module stays unpaired.");
+        Assert.IsNull(_store.Token);
+    }
+
+    [UnityTest]
+    public IEnumerator AHandedOverSession_RecordsWhileUnpaired()
+    {
+        Start(pairedAs: null, Authorized);
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        Abxr.Event("while_resolving");
+        List<string> pendingAtReport = null;
+        Abxr.OnAuthCompleted += (_, _) => pendingAtReport ??= PendingEventNames();
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(_reports[0].success);
+        Assert.IsTrue(pendingAtReport.Contains("while_resolving"), "Settling unpaired doesn't drop what the launcher's session recorded.");
+        Abxr.Event("after_handoff");
+        Assert.IsTrue(PendingEventNames().Contains("after_handoff"));
+    }
+
+    [UnityTest]
+    public IEnumerator AnInvalidHandoff_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        AbxrAuthService.SetAuthHandoffForTesting("{not json");
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("Failed to parse auth response")));
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls, "No device auth without an org credential.");
+    }
+
+    [UnityTest]
+    public IEnumerator AnExpiredHandoff_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        // exp = 1: a token that expired in 1970.
+        AbxrAuthService.SetAuthHandoffForTesting(
+            "{\"Token\":\"eyJhbGciOiJub25lIn0.eyJleHAiOjF9.sig\",\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls, "An expired session is no identity, so there is nothing to run device auth with.");
+    }
+
+    [UnityTest]
+    public IEnumerator AHandoffWithoutAToken_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        AbxrAuthService.SetAuthHandoffForTesting("{\"Secret\":\"test-secret\",\"AppId\":\"12345678-1234-1234-1234-123456789012\"}");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(0, transport.AuthCalls);
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator AHandoffTheServiceCantTake_StillEndsQuietly()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        transport.IsServiceTransport = true;
+        transport.HandoffFailure = "SetAuthFromHandoff returned CORRUPT_JSON";
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+        Assert.AreEqual(1, transport.HandoffCalls);
+        Assert.AreEqual(0, transport.AuthCalls, "The handoff was its only identity, so there is nothing to run device auth with.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+    }
+
+    [UnityTest]
+    public IEnumerator AHandoffDeliveredAfterEndingQuietly_SignsIn()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        CollectionAssert.AreEqual(new[] { (false, "No organization identity") }, _reports);
+
+        // The hub launches the module while it is still running: a new intent, read when focus returns.
+        AbxrAuthService.SetAuthHandoffForTesting(HandoffJson);
+        SubsystemGO.SendMessage("OnApplicationFocus", true);
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual(2, _reports.Count);
+        Assert.IsTrue(_reports[1].success, "The module adopts the hub's session without being restarted.");
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.SessionUsedAuthHandoff());
+        Assert.AreEqual(0, transport.AuthCalls);
+    }
+
+    // ── Subsystem wiring ──────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator Unpaired_RecordsNothingUntilThePromptOpens()
+    {
+        Start(pairedAs: null, Authorized);
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Abxr.Event("before_pairing");
+        Assert.IsFalse(PendingEventNames().Contains("before_pairing"), "A never-paired install records nothing.");
+
+        Assert.IsTrue(Pairing.StartPairing());
+        Abxr.Event("while_prompting");
+        Assert.IsTrue(PendingEventNames().Contains("while_prompting"), "Opening the prompt is the opt-in.");
+    }
+
+    [UnityTest]
+    public IEnumerator SettlingUnpaired_DropsWhatWasRecordedWhileResolving()
+    {
+        Start(pairedAs: null, Authorized);
+        Abxr.Event("while_resolving");
+        Assert.IsTrue(PendingEventNames().Contains("while_resolving"), "Resolving buffers, as before.");
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsFalse(PendingEventNames().Contains("while_resolving"), "A later pairing mustn't send data recorded before anyone opted in.");
+    }
+
+    [UnityTest]
+    public IEnumerator ThePrompt_GoesToTheAppHandler_AndItsInputComesBack()
+    {
+        Start(pairedAs: null, Authorized);
+        var requests = new List<string>();
+        Abxr.OnInputRequested = (type, _, _, _) => requests.Add(type);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(Pairing.StartPairing());
+        CollectionAssert.AreEqual(new[] { AbxrPairingService.PasscodeInputType }, requests);
+
+        Abxr.OnInputSubmitted("**skip**");
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Pairing.State, "The input went to pairing, whose skip closes the prompt.");
+    }
+
+    [UnityTest]
+    public IEnumerator ThePrompt_WithoutAHandler_ShowsThePinPad()
+    {
+        Start(pairedAs: null, Authorized);
+        _ui = new FakeAuthUi();
+        AbxrUi.RegisterAuthUi(_ui);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(Pairing.StartPairing());
+
+        Assert.AreEqual(AuthUiKind.PairingPasscode, _ui.Shown);
+        Assert.AreEqual("Enter Pairing Passcode", _ui.Prompt);
+    }
+
+    [UnityTest]
+    public IEnumerator ARateLimit_CountsDownInThePrompt()
+    {
+        AbxrSubsystem.NextPairingRedeemClientForTesting = new RateLimitedRedeemClient("3");
+        Start(pairedAs: null, Authorized);
+        _ui = new FakeAuthUi();
+        AbxrUi.RegisterAuthUi(_ui);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Assert.IsTrue(Pairing.StartPairing());
+        Abxr.OnInputSubmitted("123456");
+        Assert.AreEqual("Too many attempts. Try again in 3 seconds.\nEnter Pairing Passcode", _ui.Prompt);
+
+        yield return WaitFor(() => _ui.Prompt.Contains("in 2 seconds"), 2f);
+        StringAssert.Contains("in 2 seconds", _ui.Prompt, "The wait counts down without another attempt.");
+
+        yield return WaitFor(() => _ui.Prompt == "Enter Pairing Passcode", 4f);
+        Assert.AreEqual("Enter Pairing Passcode", _ui.Prompt, "The line goes once the wait is over.");
+    }
+
+    [UnityTest]
+    public IEnumerator ANewPairing_StartsAuthAsTheInstance()
+    {
+        var transport = Start(pairedAs: null, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Assert.AreEqual(0, transport.AuthCalls);
+
+        Pairing.SetAppInstanceToken(InstanceToken, InstanceId);
+        yield return WaitFor(() => _reports.Count > 1, 5f);
+
+        Assert.AreEqual((true, (string)null), _reports[1], "False at startup, then true once paired.");
+        Assert.AreEqual(1, transport.AuthCalls);
+        Assert.AreEqual(InstanceToken, transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(InstanceId, transport.LastPayload.deviceId);
+    }
+
+    // ── Public API ────────────────────────────────────────────────
+
+    [UnityTest]
+    public IEnumerator OnPairingStateChanged_ReportsStartup_AndGetPairingStateAgrees()
+    {
+        Start(pairedAs: null, Authorized);
+        Abxr.OnPairingStateChanged += RecordState;
+        Assert.AreEqual(Abxr.PairingState.Resolving, Abxr.GetPairingState());
+
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Startup) }, _stateEvents);
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Abxr.GetPairingState());
+    }
+
+    [UnityTest]
+    public IEnumerator StartPairing_ThenCancelPairing_Dismisses()
+    {
+        Start(pairedAs: null, Authorized);
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Abxr.OnPairingStateChanged += RecordState;
+
+        Assert.IsTrue(Abxr.StartPairing());
+        Assert.AreEqual(Abxr.PairingState.Prompting, Abxr.GetPairingState());
+        Abxr.CancelPairing();
+
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Dismissed) }, _stateEvents,
+            "Prompting itself never fires the event.");
+    }
+
+    [UnityTest]
+    public IEnumerator NotNow_WhileThePasscodeIsRedeeming_CancelsInsteadOfReachingAuth()
+    {
+        var client = new HeldRedeemClient();
+        AbxrSubsystem.NextPairingRedeemClientForTesting = client;
+        Start(pairedAs: null, Authorized);
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Abxr.OnPairingStateChanged += RecordState;
+
+        Assert.IsTrue(Abxr.StartPairing());
+        Abxr.OnInputSubmitted("483921");
+        Assert.AreEqual(Abxr.PairingState.Redeeming, Abxr.GetPairingState());
+        Abxr.OnInputSubmitted("**skip**");
+        client.Respond(new PairingHttpResponse(400, "{\"error\":\"nope\"}"));
+
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Abxr.GetPairingState());
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Dismissed) }, _stateEvents,
+            "The failure dismisses instead of reopening the prompt the person closed.");
+    }
+
+    [UnityTest]
+    public IEnumerator RedeemPairingPasscode_WhenPaired_CallsBackWithInvalidState()
+    {
+        Start(pairedAs: InstanceId, Authorized, deviceName: "Headset 12");
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        var results = new List<Abxr.PairingRedeemResult>();
+
+        Abxr.RedeemPairingPasscode("483921", results.Add);
+
+        Assert.AreEqual(1, results.Count);
+        Assert.AreEqual(Abxr.PairingRedeemError.InvalidState, results[0].Error);
+        Assert.AreEqual(Abxr.PairingRedeemError.InvalidState, Abxr.GetLastPairingRedeemResult().Error);
+        Assert.AreEqual("Headset 12", Abxr.GetPairedDeviceName());
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_FromPaired_FiresCleared()
+    {
+        Start(pairedAs: InstanceId, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        Abxr.OnPairingStateChanged += RecordState;
+
+        Abxr.ClearPairing();
+
+        CollectionAssert.AreEqual(new[] { (Abxr.PairingState.Unpaired, Abxr.PairingChangeReason.Cleared) }, _stateEvents);
+        Assert.IsNull(_store.Token);
+        Assert.IsNull(Abxr.GetPairedDeviceName());
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_WhileAuthenticated_EndsTheSession()
+    {
+        var transport = Start(pairedAs: InstanceId, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        AbxrSubsystem.Instance.SetTransportForTesting(transport);
+        Assert.IsTrue(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
+
+        Abxr.ClearPairing();
+
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated, "Storage and the AI proxy mustn't keep using the cleared instance.");
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_WhileAuthenticated_FlushesAndClosesWhatItRecorded()
+    {
+        var transport = Start(pairedAs: InstanceId, Authorized);
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        AbxrSubsystem.Instance.SetTransportForTesting(transport);
+        bool authenticatedAtFlush = false;
+        transport.OnQuitCalled = () => authenticatedAtFlush = AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated;
+        Abxr.EventAssessmentStart("open_assessment");
+        Abxr.Event("done");
+        transport.Events.Clear();
+
+        Abxr.ClearPairing();
+
+        Assert.AreEqual(1, transport.QuitCalls, "The old pairing's queue is flushed, not dropped.");
+        Assert.IsTrue(authenticatedAtFlush, "The flush signs with the old session's token, before it's cleared.");
+        Assert.IsTrue(transport.Events.Exists(e => e.name == "open_assessment"), "Its open assessment is closed and recorded for its own org.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
+    }
+
+    [UnityTest]
+    public IEnumerator ClearPairing_WhileRetrying_StopsTheOldAttempt()
+    {
+        var transport = Start(pairedAs: InstanceId, Offline);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(RetryingLog)));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Abxr.ClearPairing();
+        int callsAtClear = transport.AuthCalls;
+        transport.AnswerNextWith(Authorized);
+        yield return new WaitForSecondsRealtime(3f);
+
+        Assert.AreEqual(callsAtClear, transport.AuthCalls, "The cleared instance's attempt stopped retrying.");
+        Assert.IsFalse(_reports.Exists(r => r.success), "Nothing authenticates as the cleared instance.");
+        Assert.IsFalse(AbxrSubsystem.Instance.AuthServiceForTesting.Authenticated);
+    }
+
+    [UnityTest]
+    public IEnumerator RePairing_WhileTheOldAttemptRetries_AuthenticatesAsTheNewInstance()
+    {
+        var transport = Start(pairedAs: InstanceId, Offline);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(RetryingLog)));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        Abxr.ClearPairing();
+        transport.AnswerNextWith(Authorized);
+        Pairing.SetAppInstanceToken(OtherInstanceToken, OtherInstanceId);
+        yield return WaitFor(() => _reports.Exists(r => r.success), 5f);
+
+        Assert.IsTrue(_reports.Exists(r => r.success));
+        Assert.AreEqual(OtherInstanceToken, transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(OtherInstanceId, transport.LastPayload.deviceId);
+    }
+
+    [UnityTest]
+    public IEnumerator ReplacingAPairing_WhileItsAttemptRetries_AuthenticatesAsTheNewInstance()
+    {
+        var transport = Start(pairedAs: InstanceId, Offline);
+        LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(RetryingLog)));
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+
+        transport.AnswerNextWith(Authorized);
+        Pairing.SetAppInstanceToken(OtherInstanceToken, OtherInstanceId);
+        yield return WaitFor(() => _reports.Exists(r => r.success), 5f);
+
+        Assert.IsTrue(_reports.Exists(r => r.success));
+        Assert.AreEqual(OtherInstanceToken, transport.LastPayload.appInstanceToken);
+        Assert.AreEqual(OtherInstanceId, transport.LastPayload.deviceId);
+    }
+
+    [UnityTest]
+    public IEnumerator AnInvalidPairingUrl_RefusesStartPairing()
+    {
+        Start(pairedAs: null, Authorized);
+        ModifyConfig("pairingUrl", "api.xrdm.app");
+        Abxr.OnInputRequested = (_, _, _, _) => { };
+        Abxr.StartAuthentication();
+        yield return WaitFor(() => _reports.Count > 0, 5f);
+        LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("isn't an HTTP or HTTPS URL")));
+
+        Assert.IsFalse(Abxr.StartPairing());
+        Assert.AreEqual(Abxr.PairingState.Unpaired, Abxr.GetPairingState());
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────
+
+    private static List<string> PendingEventNames() =>
+        AbxrSubsystem.Instance.GetTransportForTesting().GetPendingEventsForTesting().ConvertAll(e => e.name);
+
+    private static AbxrPairingService Pairing => AbxrSubsystem.Instance.PairingServiceForTesting;
+
+    /// <summary>A production build with an App Token, optionally a stored pairing, routed through a scripted transport.</summary>
+    private AuthRetryTests.ScriptedAuthTransport Start(string pairedAs, AuthTransportResult response, string orgToken = null,
+        string deviceName = null, string buildType = "production", bool pairingPlatform = true)
+    {
+        _reports.Clear();
+        _store = new MemoryPairingStore();
+        if (pairedAs != null) _store.Save(InstanceToken, pairedAs, deviceName);
+        AbxrSubsystem.NextPairingStoreForTesting = _store;
+        AbxrSubsystem.PairingPlatformSupportedForTesting = pairingPlatform;
+        CreateSubsystem();
+
+        var transport = new AuthRetryTests.ScriptedAuthTransport(response);
+        AbxrSubsystem.Instance.AuthServiceForTesting.SetTransportGetter(() => transport);
+        SetRuntimeAuth(Auth(orgToken, buildType));
+        ModifyConfig("sendRetryIntervalSeconds", 1);
+        // A host whose AbxrLib asset sets unit-test SSO would otherwise start a SetUserData re-auth after each success.
+        AbxrSubsystem.UnitTestSsoSimulationFromConfigAllowed = false;
+        Abxr.OnAuthCompleted += Record;
+        return transport;
+    }
+
+    /// <summary>Reads auth from the Configuration asset, as a project's own build does, instead of injected runtime auth.</summary>
+    private void UseConfiguration(string buildType, string orgToken = "")
+    {
+        AbxrSubsystem.Instance.AuthServiceForTesting.ClearRuntimeAuthInjectionForTesting();
+        ModifyConfig("useAppTokens", true);
+        ModifyConfig("buildType", buildType);
+        ModifyConfig("appToken", AppToken);
+        ModifyConfig("orgToken", orgToken);
+        // A legacy org id left in the host's asset would otherwise reach GetOrgId().
+        ModifyConfig("orgID", "");
+        ModifyConfig("authSecret", "");
+    }
+
+    private const string LegacyAppId = "12345678-1234-1234-1234-123456789012";
+    private const string LegacyOrgId = "87654321-4321-4321-4321-210987654321";
+
+    private static RuntimeAuthConfig LegacyAuth(string orgId, string authSecret, string buildType) => new RuntimeAuthConfig
+    {
+        authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "" },
+        useAppTokens = false,
+        buildType = buildType,
+        appId = LegacyAppId,
+        orgId = orgId,
+        authSecret = authSecret
+    };
+
+    private static RuntimeAuthConfig Auth(string orgToken, string buildType) => new RuntimeAuthConfig
+    {
+        authMechanism = new AuthMechanism { type = "none", prompt = "", domain = "" },
+        useAppTokens = true,
+        buildType = buildType,
+        appToken = AppToken,
+        orgToken = orgToken
+    };
+
+    private static IEnumerator WaitFor(Func<bool> condition, float timeoutSeconds)
+    {
+        float deadline = Time.realtimeSinceStartup + timeoutSeconds;
+        while (!condition() && Time.realtimeSinceStartup < deadline)
+            yield return null;
+    }
+
+    private sealed class FakeAuthUi : IAbxrAuthUi
+    {
+        public AuthUiKind? Shown;
+        public string Prompt;
+        public void Show(AuthUiKind kind) => Shown = kind;
+        public void SetPrompt(string prompt) => Prompt = prompt;
+        public void Hide() { }
+        public void StopProcessing() { }
+    }
+
+    /// <summary>Answers every redeem with a 429 and the given Retry-After.</summary>
+    private sealed class RateLimitedRedeemClient : IPairingRedeemClient
+    {
+        private readonly string _retryAfter;
+        public RateLimitedRedeemClient(string retryAfter) => _retryAfter = retryAfter;
+        public void Send(string url, string json, Action<PairingHttpResponse> onComplete) =>
+            onComplete(new PairingHttpResponse(429, "{\"error\":\"Too many attempts\"}", _retryAfter));
+    }
+
+    /// <summary>Holds each redeem until the test answers it, like a request still on the wire.</summary>
+    private sealed class HeldRedeemClient : IPairingRedeemClient
+    {
+        private Action<PairingHttpResponse> _pending;
+        public void Send(string url, string json, Action<PairingHttpResponse> onComplete) => _pending = onComplete;
+        public void Respond(PairingHttpResponse response) => _pending(response);
+    }
+
+    private sealed class MemoryPairingStore : IPairingStore
+    {
+        public string Token;
+        public string InstanceId;
+        public string DeviceName;
+
+        public bool TryLoad(out string token, out string instanceId)
+        {
+            token = Token;
+            instanceId = InstanceId;
+            return !string.IsNullOrEmpty(Token) && !string.IsNullOrEmpty(InstanceId);
+        }
+
+        public string LoadDeviceName() => DeviceName;
+
+        public void Save(string token, string instanceId, string deviceName)
+        {
+            Token = token;
+            InstanceId = instanceId;
+            DeviceName = deviceName;
+        }
+
+        public void SaveDeviceName(string deviceName) => DeviceName = deviceName;
+
+        public void Clear()
+        {
+            Token = null;
+            InstanceId = null;
+            DeviceName = null;
+        }
+    }
+}

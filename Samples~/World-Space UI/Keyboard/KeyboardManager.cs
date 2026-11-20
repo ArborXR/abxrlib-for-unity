@@ -1,0 +1,261 @@
+using TMPro;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.UI;
+using AbxrLib.Runtime.Core.QRScanner;
+using AbxrLib.Runtime.Services.Auth;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.Scripting;
+using UnityEngine.UI;
+
+namespace AbxrLib.Runtime.UI.Keyboard
+{
+    // Only ever instantiated by loading a shipped prefab, so the managed linker cannot see it referenced.
+    [Preserve]
+    public class KeyboardManager : MonoBehaviour
+    {
+        public static KeyboardManager Instance;
+        public Button shiftButton1;
+        public Button shiftButton2;
+        public Button deleteButton;
+        public Button spaceButton;
+        public Button submitButton;
+        public Button qrCodeButton;
+        public Button skipButton;
+
+        public TMP_InputField inputField;
+
+        [Header("Passcode pairing (optional)")]
+        [Tooltip("The keypad and its prompt, hidden while the gate or the confirm is up.")]
+        public GameObject keypadGroup;
+        [Tooltip("The screen before the passcode: what pairing is, Enter Pairing Passcode, and Not now. Without it the keypad opens straight away.")]
+        public GameObject pairingGate;
+        public Button gateConnectButton;
+        public Button gateNotNowButton;
+        [Tooltip("The line under the gate's buttons that explains Not now. Hidden with Not now when dismissing is off.")]
+        public GameObject gateFooter;
+        [Tooltip("Asks whether to add this app to a device that already has the name. Without it the person types the name on the keyboard.")]
+        public GameObject pairingConfirm;
+        public TextMeshProUGUI confirmTitle;
+        public Button confirmJoinButton;
+        public TextMeshProUGUI confirmJoinLabel;
+        public Button confirmOtherButton;
+#if UNITY_ANDROID && !UNITY_EDITOR 
+        // Cache button state to avoid repeated logs
+        private bool? _lastQRButtonState = null;
+#endif
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
+        private void Awake()
+        {
+            // The newest one wins: a prompt reopened in the frame the old one is destroyed must not keep the old one's.
+            Instance = this;
+
+            // Trigger on press (OnPointerDown) instead of release (onClick)
+            // onClick listeners removed to prevent double-firing
+            AddPointerDownHandler(shiftButton1, HandleShift);
+            AddPointerDownHandler(shiftButton2, HandleShift);
+            AddPointerDownHandler(spaceButton, Space);
+            AddPointerDownHandler(deleteButton, Delete);
+            AddPointerDownHandler(submitButton, Submit);
+            AddPointerDownHandler(qrCodeButton, QRCode);
+            AddPointerDownHandler(skipButton, Skip);
+            AddPointerDownHandler(gateConnectButton, KeyboardHandler.LeavePairingGate);
+            AddPointerDownHandler(gateNotNowButton, NotNow);
+            AddPointerDownHandler(confirmJoinButton, JoinExistingHeadset);
+            AddPointerDownHandler(confirmOtherButton, NotNow);
+        }
+
+        private void OnEnable()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // PIN/keyboard prefab may enable after PICO enterprise bind completes; clear cache so we do not keep a stale "hidden" state.
+            _lastQRButtonState = null;
+            CheckAndEnableQRButton();
+#endif
+        }
+
+        private void Start()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            // On VR, the controller ray often hits the input field's rect before the keys.
+            // Disable the input field as a raycast target so pointer events reach KeyboardKey
+            // components (same input path as the PIN pad, which has no large input field).
+            if (inputField != null && inputField.targetGraphic != null) inputField.targetGraphic.raycastTarget = false;
+#endif
+            // Check for QR reader instances immediately
+            CheckAndEnableQRButton();
+            
+            // Also check after a short delay in case initialization hasn't completed yet
+            StartCoroutine(DelayedQRButtonCheck());
+        }
+        
+        private System.Collections.IEnumerator DelayedQRButtonCheck()
+        {
+            // Wait a frame to ensure all Awake() methods have completed
+            yield return null;
+            
+            // Check again after a short delay
+            yield return new WaitForSeconds(0.5f);
+            
+            CheckAndEnableQRButton();
+            
+            // Periodically recheck in case permissions are granted later
+            while (true)
+            {
+                yield return new WaitForSeconds(2.0f); // Check every 2 seconds
+                CheckAndEnableQRButton();
+            }
+        }
+        
+        /// <summary>
+        /// Call when PICO enterprise bind (or other QR availability) changes after keyboard UI already ran its initial check.
+        /// </summary>
+        public static void RefreshQrButtonAvailability()
+        {
+            if (Instance == null) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            Instance._lastQRButtonState = null;
+            Instance.CheckAndEnableQRButton();
+#endif
+        }
+
+        private void CheckAndEnableQRButton()
+        {
+            if (qrCodeButton == null) return;
+            // A pairing passcode can't be scanned, so the button stays hidden until the PIN pad is back to sign-in.
+            if (KeyboardHandler.IsPairing)
+            {
+                qrCodeButton.gameObject.SetActive(false);
+                return;
+            }
+#if UNITY_ANDROID && !UNITY_EDITOR
+            bool isAvailable = AbxrUi.QrScanner != null;
+            if (_lastQRButtonState != isAvailable)
+            {
+                qrCodeButton.gameObject.SetActive(isAvailable);
+                if (isAvailable)
+                    Logcat.Info("QR Code button enabled.");
+                else
+                    Logcat.Warning("QR Code button hidden - no supported QR scanner is active for this device.");
+                _lastQRButtonState = isAvailable;
+            }
+#endif
+        }
+
+        private void AddPointerDownHandler(Button button, UnityEngine.Events.UnityAction action)
+        {
+            if (button == null || action == null) return;
+            
+            // Get or add EventTrigger component
+            EventTrigger trigger = button.gameObject.GetComponent<EventTrigger>();
+            if (trigger == null)
+            {
+                trigger = button.gameObject.AddComponent<EventTrigger>();
+            }
+            
+            // Create entry for pointer down event
+            var downEntry = new EventTrigger.Entry
+            {
+                eventID = EventTriggerType.PointerDown
+            };
+            downEntry.callback.AddListener(_ => {
+                // Ignore input during the opening guard window to prevent accidental presses
+                if (KeyboardHandler.IsInputGuarded) return;
+                action();
+            });
+            trigger.triggers.Add(downEntry);
+            
+            // Add pointer up handler to reset button state
+            var upEntry = new EventTrigger.Entry();
+            upEntry.eventID = EventTriggerType.PointerUp;
+            upEntry.callback.AddListener(_ => { 
+                if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+            });
+            trigger.triggers.Add(upEntry);
+            
+            // Add pointer exit handler to reset button state when cursor leaves
+            var exitEntry = new EventTrigger.Entry
+            {
+                eventID = EventTriggerType.PointerExit
+            };
+            exitEntry.callback.AddListener(_ => { 
+                if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
+            });
+            trigger.triggers.Add(exitEntry);
+        }
+
+        private void Space() => inputField.text += " ";
+
+        private void Delete()
+        {
+            if (inputField.text.Length > 0)
+            {
+                int length = inputField.text.Length - 1;
+                inputField.text = inputField.text.Substring(0, length);
+            }
+        }
+
+        private void Submit()
+        {
+            try
+            {
+                StartCoroutine(KeyboardHandler.ProcessingVisual());
+                // Ensure inputSource is set to "user" for manual keyboard input
+                AbxrUi.AuthBridge?.SetInputSource("user");
+                AbxrSubsystem.Instance.SubmitInput(inputField.text);
+                inputField.text = "";
+            }
+            catch (System.Exception ex)
+            {
+                Logcat.Error($"KeyboardManager - Error during authentication submission: {ex.Message}");
+                // Stop processing visual and clear input on error
+                inputField.text = "";
+            }
+        }
+        
+        /// <summary>Guest Access while signing in. While pairing it's Back to the gate, or "Not now" on a PIN pad without one.</summary>
+        private static void Skip()
+        {
+            if (KeyboardHandler.IsPairing && KeyboardHandler.ReturnToPairingGate()) return;
+            NotNow();
+        }
+
+        /// <summary>"**skip**": closes the pairing prompt from the gate, and picks another name from the confirm.</summary>
+        private static void NotNow() => AbxrSubsystem.Instance.SubmitInput("**skip**");
+
+        private void JoinExistingHeadset()
+        {
+            StartCoroutine(KeyboardHandler.ProcessingVisual());
+            AbxrSubsystem.Instance.SubmitInput(Abxr.GetLastPairingRedeemResult().DeviceName);
+        }
+
+        private void QRCode()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            IAbxrQrScanner scanner = AbxrUi.QrScanner;
+            if (scanner != null)
+            {
+                if (scanner.IsScanning || scanner.IsInitializing)
+                    scanner.CancelScan();
+                else
+                    scanner.ScanQRCode();
+            }
+#endif
+            inputField.text = "";
+        }
+
+        private void HandleShift()
+        {
+            // Notify all KeyboardKey instances to toggle their shift state
+            KeyboardKey[] allKeys = Utils.FindObjects<KeyboardKey>();
+            foreach (KeyboardKey key in allKeys)
+            {
+                key.ToggleShift();
+            }
+        }
+    }
+}

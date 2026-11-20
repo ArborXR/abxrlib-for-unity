@@ -23,10 +23,6 @@ namespace AbxrLib.Runtime.Services.Telemetry
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _rightTriggerValues = new();
         private readonly Dictionary<InputFeatureUsage<bool>, bool> _leftTriggerValues = new();
 
-        // Cached once at class load: avoids reflection overhead every 10 s
-        private static readonly bool _hasLongMemoryApi =
-            typeof(UnityEngine.Profiling.Profiler).GetMethod("GetTotalAllocatedMemoryLong") != null;
-
         // Reused to avoid allocations in telemetry hot paths
         private readonly Dictionary<string, string> _batteryData = new Dictionary<string, string>(2);
         private readonly Dictionary<string, string> _memoryData = new Dictionary<string, string>(4);
@@ -116,24 +112,17 @@ namespace AbxrLib.Runtime.Services.Telemetry
             _batteryData.Clear();
             _batteryData["Percentage"] = (int)(SystemInfo.batteryLevel * 100 + 0.5) + "%";
             _batteryData["Status"] = SystemInfo.batteryStatus.ToString();
-            Abxr.Telemetry("Battery", _batteryData);
+            using (AbxrObserver.AutomaticScope()) Abxr.Telemetry("Battery", _batteryData);
 
             _memoryData.Clear();
             try
             {
-                if (_hasLongMemoryApi)
-                {
-                    // Unity 2020.1+
-                    _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
-                    _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
-                    _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
-                }
-                else
-                {
-                    // Unity 2019.x and earlier
-                    _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemory() / 1000000 + " MB";
-                    _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemory() / 1000000 + " MB";
-                }
+                // The Long variants exist from Unity 2020.1, below AbxrLib's minimum Editor version, so they are the
+                // only path. The 32-bit originals they replaced are deprecated (capped at 4 GB) and were only ever
+                // reached on Unity 2019 and earlier, which AbxrLib does not support.
+                _memoryData["Total Allocated"] = UnityEngine.Profiling.Profiler.GetTotalAllocatedMemoryLong() / 1000000 + " MB";
+                _memoryData["Total Reserved"] = UnityEngine.Profiling.Profiler.GetTotalReservedMemoryLong() / 1000000 + " MB";
+                _memoryData["Total Unused Reserved"] = UnityEngine.Profiling.Profiler.GetTotalUnusedReservedMemoryLong() / 1000000 + " MB";
             }
             catch (System.Exception ex)
             {
@@ -143,7 +132,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 _memoryData["Total Unused Reserved"] = "N/A";
             }
             
-            Abxr.Telemetry("Memory", _memoryData);
+            using (AbxrObserver.AutomaticScope()) Abxr.Telemetry("Memory", _memoryData);
         }
         
         public void RecordLocationData()
@@ -168,14 +157,14 @@ namespace AbxrLib.Runtime.Services.Telemetry
             _positionData["x"] = position.x.ToString(CultureInfo.InvariantCulture);
             _positionData["y"] = position.y.ToString(CultureInfo.InvariantCulture);
             _positionData["z"] = position.z.ToString(CultureInfo.InvariantCulture);
-            Abxr.Telemetry(deviceName + " Position", _positionData);
+            using (AbxrObserver.AutomaticScope()) Abxr.Telemetry(deviceName + " Position", _positionData);
 
             _rotationData.Clear();
             _rotationData["x"] = rotation.x.ToString(CultureInfo.InvariantCulture);
             _rotationData["y"] = rotation.y.ToString(CultureInfo.InvariantCulture);
             _rotationData["z"] = rotation.z.ToString(CultureInfo.InvariantCulture);
             _rotationData["w"] = rotation.w.ToString(CultureInfo.InvariantCulture);
-            Abxr.Telemetry(deviceName + " Rotation", _rotationData);
+            using (AbxrObserver.AutomaticScope()) Abxr.Telemetry(deviceName + " Rotation", _rotationData);
         }
 
         private void CheckTriggers()
@@ -196,7 +185,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 {
                     _triggerData.Clear();
                     _triggerData[trigger.name] = isPressed ? "Pressed" : "Released";
-                    Abxr.Telemetry($"Right Controller {trigger.name}", _triggerData);
+                    using (AbxrObserver.AutomaticScope()) Abxr.Telemetry($"Right Controller {trigger.name}", _triggerData);
                     _rightTriggerValues[trigger] = isPressed;
                 }
             }
@@ -209,7 +198,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
                 {
                     _triggerData.Clear();
                     _triggerData[trigger.name] = isPressed ? "Pressed" : "Released";
-                    Abxr.Telemetry($"Left Controller {trigger.name}", _triggerData);
+                    using (AbxrObserver.AutomaticScope()) Abxr.Telemetry($"Left Controller {trigger.name}", _triggerData);
                     _leftTriggerValues[trigger] = isPressed;
                 }
             }

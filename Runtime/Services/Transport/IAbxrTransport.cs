@@ -5,6 +5,30 @@ using AbxrLib.Runtime.Types;
 
 namespace AbxrLib.Runtime.Services.Transport
 {
+    /// <summary>What one auth request produced, as the transport saw it.</summary>
+    internal readonly struct AuthTransportResult
+    {
+        /// <summary>The response is a valid auth success (AuthResponse.IsValidSuccess).</summary>
+        public readonly bool Success;
+        /// <summary>The transport's own verdict that the API refused the credentials: REST 401/403, ArborInsightsClient getLastAuthRejected().</summary>
+        public readonly bool IsAuthRejectedByApi;
+        /// <summary>No HTTP response arrived: offline, DNS, refused connection, timeout, or TLS failure.</summary>
+        public readonly bool NetworkError;
+        /// <summary>Response body as received; null or empty when the response had none.</summary>
+        public readonly string Body;
+        /// <summary>HTTP status, or 0 when no response arrived or the transport has none (ArborInsightsClient).</summary>
+        public readonly long StatusCode;
+
+        public AuthTransportResult(bool success, string body, bool isAuthRejectedByApi, long statusCode = 0, bool networkError = false)
+        {
+            Success = success;
+            Body = body;
+            IsAuthRejectedByApi = isAuthRejectedByApi;
+            StatusCode = statusCode;
+            NetworkError = networkError;
+        }
+    }
+
     /// <summary>
     /// Transport abstraction for sending auth, config, data, and storage requests.
     /// Implementations: REST (UnityWebRequest) or ArborInsightsClient (device service).
@@ -14,25 +38,36 @@ namespace AbxrLib.Runtime.Services.Transport
         /// <summary>True when this transport is the ArborInsightsClient (service) implementation.</summary>
         bool IsServiceTransport { get; }
 
-        /// <summary>Perform auth request. onComplete(success, responseJson, isAuthRejectedByApi). Transport decides whether the API rejected auth (e.g. 401/403 or device-service equivalent) and passes a single flag; auth service has no knowledge of HTTP codes.</summary>
-        IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, bool> onComplete);
+        /// <summary>Perform auth request. onComplete receives the result with the transport's rejection verdict, HTTP status, and network-error flag, so the auth service can tell a refusal from a transient failure. The service binds again first when EndSession unbound it, and sends nothing when stillCurrent() turned false during that wait.</summary>
+        IEnumerator AuthRequestCoroutine(AuthPayload payload, Func<bool> stillCurrent, Action<AuthTransportResult> onComplete);
+
+        /// <summary>
+        /// Gives the transport a session adopted from an auth handoff, which skips <see cref="AuthRequestCoroutine"/>.
+        /// REST has nothing to do. The service binds again when EndSession unbound it, waits until it is ready, and takes the
+        /// session unless stillCurrent() turned false while it waited. onComplete(success, failureReason).
+        /// </summary>
+        IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete);
 
         /// <summary>Get app config JSON. onComplete(success, configJson).</summary>
         IEnumerator GetConfigCoroutine(Action<bool, string> onComplete);
 
-        void AddEvent(string name, Dictionary<string, string> meta);
-        void AddTelemetry(string name, Dictionary<string, string> meta);
-        void AddLog(string logLevel, string text, Dictionary<string, string> meta);
+        /// <summary>Queue or hand off one record. False when it was dropped because the queue is full. recordId is the observer id (0 when nobody observes); REST reports it with the batch's send result.</summary>
+        bool AddEvent(string name, Dictionary<string, string> meta, long recordId = 0);
+        /// <summary>See <see cref="AddEvent"/>.</summary>
+        bool AddTelemetry(string name, Dictionary<string, string> meta, long recordId = 0);
+        /// <summary>See <see cref="AddEvent"/>.</summary>
+        bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long recordId = 0);
         void ForceSend();
 
-        void StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy);
+        /// <summary>See <see cref="AddEvent"/>.</summary>
+        bool StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy, long recordId = 0);
         IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete);
         IEnumerator StorageDeleteCoroutine(global::Abxr.StorageScope scope, string name, Action<bool> onComplete);
 
         /// <summary>Flush and release. REST: ForceSend; service: Unbind.</summary>
         void OnQuit();
 
-        /// <summary>Clear pending data/storage (e.g. for StartNewSession). REST: clear queues; Service: no-op.</summary>
+        /// <summary>Clear pending data/storage (e.g. for StartNewSession). REST: clear queues and report them dropped; Service: no-op.</summary>
         void ClearAllPending();
 
         /// <summary>For testing only. Pending events (REST: in-memory queue; service: empty, not available on device).</summary>

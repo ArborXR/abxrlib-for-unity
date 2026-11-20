@@ -8,7 +8,6 @@
  * - User authentication and session management
  * - Data storage and retrieval
  * - Telemetry collection
- * - AI proxy functionality
  * - Exit polling and user feedback
  * 
  * The Abxr class serves as the main entry point for all AbxrLib functionality,
@@ -20,8 +19,8 @@ using System.Collections.Generic;
 using AbxrLib.Runtime;
 using UnityEngine;
 using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Types;
-using AbxrLib.Runtime.UI.ExitPoll;
 
 public static partial class Abxr
 {
@@ -31,6 +30,12 @@ public static partial class Abxr
 	/// Event triggered when authentication completes
 	/// 'true' for success and 'false' for failure (string argument will contain the error message on failure)
 	/// Subscribe to this event to handle authentication results
+	/// It can fire 'false' and later 'true' for the same sign-in, so make the handler safe to run more than once.
+	/// When device authentication can't reach the backend (offline, captive portal, outage), it fires 'false' once, with a
+	/// message saying the SDK is retrying in the background, and 'true' when a retry succeeds. If the backend refuses the
+	/// credentials during those retries, the SDK stops retrying without firing again.
+	/// At the PIN or email step, each failed submission fires 'false', even one that failed for lack of a connection,
+	/// and the SDK asks for the input again.
 	/// </summary>
 	public static Action<bool, string> OnAuthCompleted;
 
@@ -118,6 +123,102 @@ public static partial class Abxr
 		User
 	}
 
+	/// <summary>Where this app stands on passcode pairing. Read it with GetPairingState().</summary>
+	public enum PairingState
+	{
+		/// <summary>
+		/// Startup. The SDK hasn't decided this app's organization identity yet, for example while it waits for the ArborXR
+		/// client. With Enable Auto Start Authentication off, it decides when the app calls StartAuthentication().
+		/// </summary>
+		Resolving,
+		/// <summary>The ArborXR client or an org token identifies the organization, so pairing doesn't apply.</summary>
+		Managed,
+		/// <summary>No organization identity and no stored pairing. The app runs without sending data until it pairs.</summary>
+		Unpaired,
+		/// <summary>The pairing prompt is open, waiting for a passcode.</summary>
+		Prompting,
+		/// <summary>A passcode is being redeemed.</summary>
+		Redeeming,
+		/// <summary>A stored pairing identifies this app's organization.</summary>
+		Paired
+	}
+
+	/// <summary>Why the pairing state changed. OnPairingStateChanged carries it.</summary>
+	public enum PairingChangeReason
+	{
+		/// <summary>
+		/// The SDK decided this app's identity at startup. In an app that can't pair (no App Token, or a platform without
+		/// pairing), also when an org credential set after a startup with none replaces Unpaired with Managed.
+		/// </summary>
+		Startup,
+		/// <summary>A passcode was redeemed.</summary>
+		Paired,
+		/// <summary>The prompt closed without pairing. Nothing was stored.</summary>
+		Dismissed,
+		/// <summary>ClearPairing removed the stored pairing.</summary>
+		Cleared,
+		/// <summary>The backend no longer accepts the stored pairing, so the SDK removed it.</summary>
+		Revoked
+	}
+
+	/// <summary>Why a passcode redemption failed.</summary>
+	public enum PairingRedeemError
+	{
+		/// <summary>The redeem succeeded, or none has been attempted.</summary>
+		None,
+		/// <summary>The passcode is wrong, expired, or revoked. These can't be told apart, on purpose.</summary>
+		InvalidPasscode,
+		/// <summary>
+		/// The passcode is valid and allows a name for the device. Ask for one with the option to skip, then redeem
+		/// again with the name, or with a null name to skip. Nothing was created yet.
+		/// </summary>
+		DeviceNameRequested,
+		/// <summary>The passcode requires a name for the device, and none was given. Ask for one, without the option to skip.</summary>
+		DeviceNameRequired,
+		/// <summary>The name can't be used, for example because it's longer than 64 characters.</summary>
+		DeviceNameInvalid,
+		/// <summary>
+		/// A paired device in the organization already has this name, for example from another app.
+		/// DeviceName holds its name. Confirm with the person, then redeem again with joinExistingDevice to add this app to it.
+		/// </summary>
+		DeviceNameExists,
+		/// <summary>The pairing service didn't accept this build, for example its App Token. A problem for the app's developer, not the person pairing.</summary>
+		BuildRejected,
+		/// <summary>Too many failed attempts for this app. Wait RetryAfterSeconds before trying again.</summary>
+		RateLimited,
+		/// <summary>The pairing service couldn't be reached, or had a problem.</summary>
+		Unavailable,
+		/// <summary>The call isn't valid in the current pairing state, or on this platform. Nothing was sent.</summary>
+		InvalidState
+	}
+
+	/// <summary>
+	/// How a passcode redemption ended. Message is English display text; branch on Error, and localize from it.
+	/// A default value, with Error None and Success false, means no attempt has been made.
+	/// </summary>
+	public readonly struct PairingRedeemResult
+	{
+		public bool Success { get; }
+		public PairingRedeemError Error { get; }
+		/// <summary>For RateLimited, the seconds to wait before the next attempt. Zero otherwise.</summary>
+		public int RetryAfterSeconds { get; }
+		public string Message { get; }
+		/// <summary>
+		/// On success, the name of the paired device this app joined, or null when it has none. For
+		/// DeviceNameExists, the existing device's name, for the confirm. Null otherwise.
+		/// </summary>
+		public string DeviceName { get; }
+
+		internal PairingRedeemResult(bool success, PairingRedeemError error, int retryAfterSeconds, string message, string deviceName = null)
+		{
+			Success = success;
+			Error = error;
+			RetryAfterSeconds = retryAfterSeconds;
+			Message = message;
+			DeviceName = deviceName;
+		}
+	}
+
 	// ── Application quit / EndSession: auto-complete open assessment tree ─────────────────────────
 	/// <summary>
 	/// When the app quits or <see cref="EndSession"/> runs, the SDK completes any assessment, objective, or interaction
@@ -181,7 +282,7 @@ public static partial class Abxr
 	/// <param name="pollType">What kind of poll would you like</param>
 	/// <param name="responses">If a multiple choice poll, you need to provide between 2 and 8 possible responses</param>
 	/// <param name="callback">Optional callback that will be called with the selected string value (Multiple-choice poll only)</param>
-	public static void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses = null, Action<string> callback = null) =>
+	public static void PollUser(string prompt, PollType pollType, List<string> responses = null, Action<string> callback = null) =>
 		X?.PollUser(prompt, pollType, responses, callback);
 	
 	/// <summary>
@@ -207,6 +308,9 @@ public static partial class Abxr
 	/// The target app must also use AbxrLib; it will adopt the active session without re-authenticating.
 	/// Call this in your OnAuthCompleted handler. The PackageName from GetAuthResponse() is the typical target.
 	/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's package) so the receiving app can return the session when assessment completes (return-to-launcher flow).
+	/// On Android 11 and later this app must be able to see the target: add a &lt;queries&gt; entry to its AndroidManifest.xml,
+	/// either &lt;package android:name="..." /&gt; for each target or an &lt;intent&gt; with action android.intent.action.MAIN and category android.intent.category.LAUNCHER.
+	/// With includeReturnToPackage, the receiving app needs an entry for this app too.
 	/// No-op on non-Android platforms.
 	/// </summary>
 	/// <param name="packageName">Android package name of the app to launch (e.g. "com.example.myapp")</param>
@@ -270,15 +374,26 @@ public static partial class Abxr
 	/// Manually start the authentication process
 	/// Use this when Enable Auto Start Authentication is off in configuration
 	/// or when you want to trigger authentication at a specific time in your app
+	/// Does nothing while an authentication attempt is in progress, including while device authentication keeps retrying
+	/// in the background after OnAuthCompleted(false): the SDK retries on its own and fires OnAuthCompleted(true) when a
+	/// retry succeeds.
 	/// </summary>
 	public static void StartAuthentication() => X?.StartAuthentication();
+	/// <summary>
+	/// Same as <see cref="StartAuthentication"/>, so it also does nothing while an authentication attempt is in progress,
+	/// including while device authentication keeps retrying in the background.
+	/// </summary>
 	public static void ReAuthenticate() => X?.StartAuthentication();
 
 	/// <summary>
 	/// Assign your handler to collect auth input (e.g. PIN, email) instead of the default keyboard/PIN UI.
 	/// Only one handler is allowed; use assignment (=), not subscribe (+=). Your handler receives (type, prompt, domain, error).
 	/// Show your UI; when the user submits, call Abxr.OnInputSubmitted(enteredValue). Set to null in OnDestroy when your component is no longer responsible.
-	/// type is "text" | "pin" | "email"; error is empty on first request and may contain a previous failure message on retry.
+	/// type is the backend's auth mechanism type, passed through as-is: "assessmentPin" for a PIN ("pin" in 2.0.10 and earlier), "email" or "text".
+	/// error is empty on the first request; on a retry after a wrong entry it says what failed ("Authentication Failed" for sign-in).
+	/// The pairing prompt (StartPairing) uses the same handler, with type "pairingPasscode", then "pairingDeviceName"
+	/// (Skip allowed) or "pairingDeviceNameRequired" when the passcode allows naming, and "pairingDeviceJoin" when the name
+	/// is taken: domain carries that name, and submitting it adds this app to that device.
 	/// </summary>
 	public static Action<string, string, string, string> OnInputRequested //(type, prompt, domain, error)
 	{
@@ -292,15 +407,89 @@ public static partial class Abxr
 	/// </summary>
 	public static void OnInputSubmitted(string input) => X?.SubmitInput(input);
 
+	// ── Passcode pairing (MDM-less) ──────────────────────────────────────────────────────────────
+
+	/// <summary>
+	/// Fired when pairing settles: once at startup, when the SDK has decided this app's identity (Startup), and later
+	/// when a passcode pairs, the prompt closes without pairing, ClearPairing runs, or the backend revokes the pairing.
+	/// Never fired for Prompting or Redeeming, or for a failed attempt the prompt asks again for.
+	/// The usual place to offer pairing is (Unpaired, Startup). Startup can fire before a late subscriber exists, so
+	/// subscribe, then check GetPairingState().
+	/// </summary>
+	public static event Action<PairingState, PairingChangeReason> OnPairingStateChanged;
+
+	internal static void RaisePairingStateChanged(PairingState state, PairingChangeReason reason)
+	{
+		try
+		{
+			OnPairingStateChanged?.Invoke(state, reason);
+		}
+		catch (Exception ex)
+		{
+			Logcat.Error($"An OnPairingStateChanged handler threw: {ex}");
+		}
+	}
+
+	/// <summary>Where this app stands on passcode pairing. Resolving until the SDK decides this app's identity.</summary>
+	public static PairingState GetPairingState() => X?.Pairing?.State ?? PairingState.Resolving;
+
+	/// <summary>
+	/// Opens the pairing prompt, through OnInputRequested or the world-space UI. The SDK never prompts on its own.
+	/// Returns false, with a warning that says why, unless the app is Unpaired and something can show the prompt.
+	/// Pairing runs in Android and WebGL builds only.
+	/// </summary>
+	public static bool StartPairing() => X?.Pairing?.StartPairing() ?? false;
+
+	/// <summary>Closes the pairing prompt without pairing. Replaces submitting "**skip**" from a custom UI.</summary>
+	public static void CancelPairing() => X?.Pairing?.CancelPairing();
+
+	/// <summary>
+	/// Redeems a passcode from the app's own UI, with no prompt. Valid while Unpaired or while the prompt is open.
+	/// onComplete always fires, refused calls included. When the passcode allows naming the device, the result is
+	/// DeviceNameRequested (offer a Skip) or DeviceNameRequired (no Skip): ask for a name, then call the overload that takes one.
+	/// </summary>
+	public static void RedeemPairingPasscode(string passcode, Action<PairingRedeemResult> onComplete)
+	{
+		AbxrPairingService pairing = X?.Pairing;
+		if (pairing == null) onComplete?.Invoke(PairingOutcomes.Refused("the SDK isn't initialized yet."));
+		else pairing.RedeemPairingPasscode(passcode, onComplete);
+	}
+
+	/// <summary>
+	/// Redeems a passcode with the person's answer to the name step. A null or blank deviceName skips naming. After
+	/// DeviceNameExists, confirm with the person, then call again with joinExistingDevice true to add this app to that device.
+	/// </summary>
+	public static void RedeemPairingPasscode(string passcode, string deviceName, bool joinExistingDevice, Action<PairingRedeemResult> onComplete)
+	{
+		AbxrPairingService pairing = X?.Pairing;
+		if (pairing == null) onComplete?.Invoke(PairingOutcomes.Refused("the SDK isn't initialized yet."));
+		else pairing.RedeemPairingPasscode(passcode, deviceName, joinExistingDevice, onComplete);
+	}
+
+	/// <summary>The last redeem's outcome, refused calls included, for a custom UI answering OnInputRequested. Default when none has run.</summary>
+	public static PairingRedeemResult GetLastPairingRedeemResult() => X?.Pairing?.LastRedeemResult ?? default;
+
+	/// <summary>The name of the device this app is paired on, or null when it has none or the app isn't paired. Renames in the Portal arrive at the next session.</summary>
+	public static string GetPairedDeviceName() => X?.Pairing?.DeviceName;
+
+	/// <summary>
+	/// Deletes the stored pairing. A paired app becomes Unpaired and stops sending; whether to offer pairing again is the
+	/// app's call. A signed-in session ends the way EndSession() does: open assessments close, queued data is flushed to
+	/// the organization it belongs to (blocking, like EndSession), and super metadata is cleared.
+	/// </summary>
+	public static void ClearPairing() => X?.Pairing?.ClearPairing();
+
 	/// <summary>
 	/// Returns true if QR scanning for auth input is available. Use to show/hide a "Scan QR" option in custom auth UI.
-	/// On Pico this requires a supported Enterprise product name (allowlist) and a successful PXR_Enterprise service bind, analogous to Meta device checks in QRCodeReader.IsQRScanningAvailable().
-	/// On Pico the OS shows the scanner UI; on non-Pico you can embed the feed via GetQRScanCameraTexture().
+	/// True only while an auth input request is pending and a QR scanner is registered through AbxrUi.RegisterQrScanner.
+	/// The World-Space UI sample registers one on the headsets it supports: QRCodeReaderMeta (Meta Quest) or QRCodeReaderPico
+	/// (PICO, PICO SDK 3.4+), both in AbxrLib.Runtime.Core.QRScanner. A scanner your app registers counts too.
+	/// You can embed the camera feed via GetQRScanCameraTexture().
 	/// </summary>
 	public static bool IsQRScanForAuthAvailable() => X != null && X.IsQRScanForAuthAvailable();
 
 	/// <summary>
-	/// True when the SDK is waiting for auth input (OnInputRequested was invoked). Use with device QR availability to show "Scan QR" only when it will be accepted (e.g. Meta: IsAuthInputRequestPending() &amp;&amp; MetaQRCodeReader.Instance.IsQRScanningAvailable()).
+	/// True when the SDK is waiting for auth input (OnInputRequested was invoked). To show "Scan QR" only when it will be accepted, use IsQRScanForAuthAvailable(), which also checks for a QR reader on this device.
 	/// </summary>
 	public static bool IsAuthInputRequestPending() => X != null && X.IsAuthInputRequestPending();
 
@@ -316,12 +505,12 @@ public static partial class Abxr
 	public static void CancelQRScanForAuthInput() => X?.CancelQRScanForAuthInput();
 
 	/// <summary>
-	/// True when you can choose where to display the QR camera feed (non-Pico). If true, show your own panel/RawImage and assign GetQRScanCameraTexture() to it. If false (Pico), the platform shows its own scanner and you do not need a panel.
+	/// True when a QR reader is available on this device, so you can choose where to display its camera feed: show your own panel/RawImage and assign GetQRScanCameraTexture() to it.
 	/// </summary>
 	public static bool IsQRScanCameraTexturePlaceable() => X != null && X.IsQRScanCameraTexturePlaceable();
 
 	/// <summary>
-	/// Returns the camera texture used by the QR reader so you can choose where to display the scan view. Assign to a RawImage in your own UI; position and size the RawImage as desired. Null on Pico (platform shows its own scanner) or when not initialized. Call after StartQRScanForAuthInput so the reader is active; poll or assign in Update if the texture becomes available asynchronously.
+	/// Returns the camera texture used by the QR reader so you can choose where to display the scan view. Assign to a RawImage in your own UI; position and size the RawImage as desired. Null when no QR reader is available or its camera hasn't started. Call after StartQRScanForAuthInput so the reader is active; poll or assign in Update if the texture becomes available asynchronously.
 	/// </summary>
 	public static UnityEngine.Texture GetQRScanCameraTexture() => X?.GetQRScanCameraTexture();
 
@@ -347,8 +536,11 @@ public static partial class Abxr
 	/// <param name="eventName">Name of the event</param>
 	/// <param name="metadata">Any additional information (optional)</param>
 	/// <param name="sendTelemetry">Send telemetry with the event (optional)</param>
-	public static void Event(string eventName, Dictionary<string, string> metadata = null, bool sendTelemetry = true) =>
+	public static void Event(string eventName, Dictionary<string, string> metadata = null, bool sendTelemetry = true)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, metadata);
 		X?.Event(eventName, metadata, sendTelemetry);
+	}
 
 	/// <summary>
 	/// Add event information
@@ -356,8 +548,11 @@ public static partial class Abxr
 	/// <param name="eventName">Name of the event</param>
 	/// <param name="position">Adds position tracking of the object</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void Event(string eventName, Vector3 position, Dictionary<string, string> metadata = null) =>
+	public static void Event(string eventName, Vector3 position, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, metadata);
 		X?.Event(eventName, position, metadata);
+	}
 
 	/// <summary>
 	/// Start timing an event
@@ -375,8 +570,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="assessmentName">Name of the assessment to start</param>
 	/// <param name="meta">Optional metadata with assessment details</param>
-	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null) =>
+	public static void EventAssessmentStart(string assessmentName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventAssessmentStart(assessmentName, meta);
+	}
 
 	/// <summary>
 	/// Complete an assessment with score and status - triggers LMS grade recording
@@ -387,8 +585,11 @@ public static partial class Abxr
 	/// <param name="score">Numerical score achieved (typically 0-100; if your range differs, set score_min and score_max in meta)</param>
 	/// <param name="status">Result status of the assessment (Pass, Fail, Complete, etc.)</param>
 	/// <param name="meta">Optional metadata; include score_min and score_max when your scoring range is not 0-100</param>
-	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
+	public static void EventAssessmentComplete(string assessmentName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventAssessmentComplete(assessmentName, score, status, meta);
+	}
 	public static void EventAssessmentComplete(string assessmentName, string score) =>
 		EventAssessmentComplete(assessmentName, int.Parse(score), EventStatus.Complete);  // disambiguating 2-arg overload
 	public static void EventAssessmentComplete(string assessmentName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
@@ -403,8 +604,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="experienceName">Name of the experience to start</param>
 	/// <param name="meta">Optional metadata with experience details</param>
-	public static void EventExperienceStart(string experienceName, Dictionary<string, string> meta = null) =>
+	public static void EventExperienceStart(string experienceName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventExperienceStart(experienceName, meta);
+	}
 	
 	/// <summary>
 	/// Complete an experience - developer-friendly wrapper for EventAssessmentComplete
@@ -413,8 +617,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="experienceName">Name of the experience (must match the start event)</param>
 	/// <param name="meta">Optional metadata with completion details</param>
-	public static void EventExperienceComplete(string experienceName, Dictionary<string, string> meta = null) =>
+	public static void EventExperienceComplete(string experienceName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventExperienceComplete(experienceName, meta);
+	}
 	
 	/// <summary>
 	/// Start tracking an objective - individual learning goals within assessments
@@ -422,8 +629,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="objectiveName">Name of the objective to start</param>
 	/// <param name="meta">Optional metadata with objective details</param>
-	public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null) =>
+	public static void EventObjectiveStart(string objectiveName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventObjectiveStart(objectiveName, meta);
+	}
 
 	/// <summary>
 	/// Complete an objective with score and status - contributes to overall assessment
@@ -434,8 +644,11 @@ public static partial class Abxr
 	/// <param name="score">Numerical score achieved (typically 0-100; if your range differs, set score_min and score_max in meta)</param>
 	/// <param name="status">Result status (Complete, Pass, Fail, etc.)</param>
 	/// <param name="meta">Optional metadata; include score_min and score_max when your scoring range is not 0-100</param>
-	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null) =>
+	public static void EventObjectiveComplete(string objectiveName, int score, EventStatus status = EventStatus.Complete, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventObjectiveComplete(objectiveName, score, status, meta);
+	}
 	public static void EventObjectiveComplete(string objectiveName, string score, EventStatus result = EventStatus.Complete, Dictionary<string, string> meta = null) =>
 		EventObjectiveComplete(objectiveName, int.Parse(score), result, meta);  // just here for backwards compatibility
 	
@@ -445,8 +658,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="interactionName">Name of the interaction to start</param>
 	/// <param name="meta">Optional metadata with interaction context</param>
-	public static void EventInteractionStart(string interactionName, Dictionary<string, string> meta = null) =>
+	public static void EventInteractionStart(string interactionName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventInteractionStart(interactionName, meta);
+	}
 
 	/// <summary>
 	/// Complete an interaction with type, response, and optional metadata
@@ -459,8 +675,11 @@ public static partial class Abxr
 	/// <param name="meta">Optional metadata with interaction details</param>
 	public static void EventInteractionComplete(string interactionName, InteractionType type) =>
 		EventInteractionComplete(interactionName, type, InteractionResult.Neutral, null);  // disambiguating 2-arg overload
-	public static void EventInteractionComplete(string interactionName, InteractionType type, InteractionResult result = InteractionResult.Neutral, string response = null, Dictionary<string, string> meta = null) =>
+	public static void EventInteractionComplete(string interactionName, InteractionType type, InteractionResult result = InteractionResult.Neutral, string response = null, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventInteractionComplete(interactionName, type, result, response, meta);
+	}
 	public static void EventInteractionComplete(string interactionName, InteractionType type, string response = "", Dictionary<string, string> meta = null) =>
 		EventInteractionComplete(interactionName, type, InteractionResult.Neutral, response, meta); // Just here for backwards compatability
 	// backwards compatibility for very old method signature (string, string, string, InteractionType, meta)
@@ -483,8 +702,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="levelName">Name of the level to start</param>
 	/// <param name="meta">Optional metadata with level details</param>
-	public static void EventLevelStart(string levelName, Dictionary<string, string> meta = null) =>
+	public static void EventLevelStart(string levelName, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventLevelStart(levelName, meta);
+	}
 	
 	/// <summary>
 	/// Complete a level with score and optional metadata
@@ -493,8 +715,11 @@ public static partial class Abxr
 	/// <param name="levelName">Name of the level (must match the start event)</param>
 	/// <param name="score">Numerical score achieved for this level</param>
 	/// <param name="meta">Optional metadata with completion details</param>
-	public static void EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null) =>
+	public static void EventLevelComplete(string levelName, int score, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventLevelComplete(levelName, score, meta);
+	}
 	public static void EventLevelComplete(string levelName, string score, Dictionary<string, string> meta = null) =>
 		EventLevelComplete(levelName, int.Parse(score), meta); // backwards compatibility
 	
@@ -505,8 +730,11 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="label">Label for the critical event (will be prefixed with CRITICAL_ABXR_)</param>
 	/// <param name="meta">Optional metadata with critical event details</param>
-	public static void EventCritical(string label, Dictionary<string, string> meta = null) =>
+	public static void EventCritical(string label, Dictionary<string, string> meta = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Event, meta);
 		X?.EventCritical(label, meta);
+	}
 	
 	
 	// ── Logging ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -517,48 +745,66 @@ public static partial class Abxr
 	/// <param name="logMessage">The log message</param>
 	/// <param name="logLevel">Log level (defaults to LogLevel.Info)</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null) =>
+	public static void Log(string logMessage, LogLevel logLevel = LogLevel.Info, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		X?.Log(logMessage, logLevel, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Debug' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogDebug(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogDebug(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Debug, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Informational' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogInfo(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogInfo(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Info, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Warning' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogWarn(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogWarn(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Warn, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Error' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogError(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogError(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Error, metadata);
+	}
 
 	/// <summary>
 	/// Add log information at the 'Critical' level
 	/// </summary>
 	/// <param name="logText">The log text</param>
 	/// <param name="metadata">Any additional information (optional)</param>
-	public static void LogCritical(string logText, Dictionary<string, string> metadata = null) =>
+	public static void LogCritical(string logText, Dictionary<string, string> metadata = null)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Log, metadata);
 		Log(logText, LogLevel.Critical, metadata);
+	}
 
 	
 	// ── Telemetry ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -577,12 +823,18 @@ public static partial class Abxr
 	/// </summary>
 	/// <param name="telemetryName">Type of telemetry data (e.g., "headset_position", "frame_rate", "battery_level")</param>
 	/// <param name="telemetryData">Key-value pairs of telemetry measurements</param>
-	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData) =>
+	public static void Telemetry(string telemetryName, Dictionary<string, string> telemetryData)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Telemetry, telemetryData);
 		X?.Telemetry(telemetryName, telemetryData);
+	}
 	
 	// BACKWARD COMPATIBILITY ONLY - DO NOT DOCUMENT
-	public static void TelemetryEntry(string telemetryName, Dictionary<string, string> telemetryData) =>
+	public static void TelemetryEntry(string telemetryName, Dictionary<string, string> telemetryData)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Telemetry, telemetryData);
 		X?.Telemetry(telemetryName, telemetryData);
+	}
 	
 	
 	// ── Storage ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -620,8 +872,11 @@ public static partial class Abxr
 	/// <param name="entry">The data to store</param>
 	/// <param name="scope">Store under 'device' or 'user'</param>
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
-	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest) =>
+	public static void StorageSetDefaultEntry(Dictionary<string, string> entry, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Storage, entry);
 		X?.StorageSetDefaultEntry(entry, scope, policy);
+	}
 	
 	/// <summary>
 	/// Set the session data with the given name
@@ -630,8 +885,11 @@ public static partial class Abxr
 	/// <param name="entryData">The data to store</param>
 	/// <param name="scope">Store under 'device' or 'user'</param>
 	/// <param name="policy">How should this be stored, 'keep latest' or 'append history' (defaults to 'keep latest')</param>
-	public static void StorageSetEntry(string entryName, Dictionary<string, string> entryData, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest) =>
+	public static void StorageSetEntry(string entryName, Dictionary<string, string> entryData, StorageScope scope, StoragePolicy policy = StoragePolicy.KeepLatest)
+	{
+		using var observed = AbxrObserver.AppScope(AbxrObserver.RecordKind.Storage, entryData);
 		X?.StorageSetEntry(entryName, entryData, scope, policy);
+	}
 	
 	/// <summary>
 	/// Remove the session data stored under the default name 'state'
@@ -656,35 +914,6 @@ public static partial class Abxr
 		X?.StorageRemoveMultipleEntries(scope);
 	
 	
-	// ── AI Proxy ────────────────────────────────────────────────────────────────────────────────────────────────────
-	
-	/// <summary>
-	/// Send a prompt to the LLM provider
-	/// StartCoroutine(AIProxy(prompt, llmProvider, result => {
-	///	    Logcat.Info("Result: " + result);
-	/// }));
-	/// </summary>
-	/// <param name="prompt">The prompt to send</param>
-	/// <param name="llmProvider">The LLM being used</param>
-	/// <param name="callback">Return value when finished</param>
-	/// <returns>The string returned by the LLM</returns>
-	public static IEnumerator AIProxy(string prompt, string llmProvider, Action<string> callback) =>
-		X?.AIProxy(prompt, llmProvider, callback);
-	
-	///  <summary>
-	///  Send a prompt to the LLM provider
-	///  StartCoroutine(AIProxy(prompt, llmProvider, result => {
-	/// 	    Logcat.Info("Result: " + result);
-	///  }));
-	///  </summary>
-	///  <param name="prompt">The prompt to send</param>
-	///  <param name="pastMessages">Previous messages sent to the LLM</param>
-	///  <param name="llmProvider">The LLM being used</param>
-	///  <param name="callback">Return value when finished</param>
-	///  <returns>The string returned by the LLM</returns>
-	public static IEnumerator AIProxy(string prompt, List<string> pastMessages, string llmProvider, Action<string> callback) =>
-		X?.AIProxy(prompt, pastMessages, llmProvider, callback);
-
 	/// <summary>
 	/// Register a super metadata that will be automatically included in all events
 	/// super metadata persist across app sessions and are stored locally
@@ -773,13 +1002,17 @@ public static partial class Abxr
 
 	/// <summary>
 	///   Sets the organization ID to use for auth. When set, this value is used instead of ArborMdmClient or Configuration.
-	///   Call before StartAuthentication(). Pass null to clear the override.
+	///   Call before StartAuthentication(). Pass null to clear the override. On an Android or WebGL build that can pair, the
+	///   first authentication decides the launch's identity, so a value set after a launch settled with no organization is
+	///   ignored for that launch. An app that gets it after an async step should turn off auto-start and call
+	///   StartAuthentication() once it's set.
 	/// </summary>
 	public static void SetOrgId(string orgId) => X?.SetOrgId(orgId);
 
 	/// <summary>
 	///   Sets the auth secret (fingerprint) to use for auth. When set, this value is used instead of ArborMdmClient.
-	///   Call before StartAuthentication(). Pass null to clear the override.
+	///   Call before StartAuthentication(). Pass null to clear the override. Like SetOrgId, a value set after a launch
+	///   settled with no organization is ignored for that launch where the app can pair.
 	/// </summary>
 	public static void SetAuthSecret(string authSecret) => X?.SetAuthSecret(authSecret);
 
@@ -822,7 +1055,7 @@ public static partial class Abxr
 	/// <summary>
 	/// Sets the Insights REST base URL at runtime (e.g. staging vs production). Allowed only before authentication has been started for the first time this run
 	/// (call before <see cref="StartAuthentication"/> or any path that calls into auth). After the first auth flow starts, the URL cannot be changed until the app restarts.
-	/// Updates <see cref="Configuration.Instance"/>; also refreshes the LLM proxy URL and syncs ArborInsightsClient when the JNI bridge is initialized (Android).
+	/// Updates <see cref="Configuration.Instance"/>; also syncs ArborInsightsClient when the JNI bridge is initialized (Android).
 	/// </summary>
 	/// <returns>True if the URL was applied; false if validation failed or authentication has already started (<paramref name="errorMessage"/> explains why).</returns>
 	public static bool TrySetRestUrl(string restUrl, out string errorMessage)

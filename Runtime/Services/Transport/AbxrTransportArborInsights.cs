@@ -16,26 +16,42 @@ namespace AbxrLib.Runtime.Services.Transport
     {
         public bool IsServiceTransport => true;
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, bool> onComplete)
+        /// <summary>
+        /// Binds again when the service is unbound (EndSession's OnQuit unbinds it), and waits until it is ready. The AAR doesn't
+        /// rebind on its own: after Unbind() it sends calls to the old connection. onFailure(reason) when it can't bind in time.
+        /// </summary>
+        private static IEnumerator BindIfUnboundCoroutine(Action<string> onFailure)
+        {
+            if (ArborInsightsClient.IsServiceBound()) yield break;
+            if (!ArborInsightsClient.Bind(null))
+            {
+                onFailure("ArborInsightsClient.Bind failed");
+                yield break;
+            }
+            const int maxAttempts = 40;
+            const float intervalSeconds = 0.25f;
+            for (int i = 0; i < maxAttempts && !ArborInsightsClient.ServiceIsFullyInitialized(); i++)
+                yield return new WaitForSecondsRealtime(intervalSeconds);
+            if (!ArborInsightsClient.ServiceIsFullyInitialized())
+                onFailure("ArborInsightsClient service not ready after bind");
+        }
+
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Func<bool> stillCurrent, Action<AuthTransportResult> onComplete)
         {
             // If unbound (e.g. after EndSession), re-establish bind so StartAuthentication() works without StartNewSession.
             // Yields must be outside any try-catch block in C# iterators.
-            if (!ArborInsightsClient.IsServiceBound())
+            string bindFailure = null;
+            yield return BindIfUnboundCoroutine(reason => bindFailure = reason);
+            if (bindFailure != null)
             {
-                if (!ArborInsightsClient.Bind(null))
-                {
-                    onComplete?.Invoke(false, "ArborInsightsClient.Bind failed", false);
-                    yield break;
-                }
-                const int maxAttempts = 40;
-                const float intervalSeconds = 0.25f;
-                for (int i = 0; i < maxAttempts && !ArborInsightsClient.ServiceIsFullyInitialized(); i++)
-                    yield return new WaitForSecondsRealtime(intervalSeconds);
-                if (!ArborInsightsClient.ServiceIsFullyInitialized())
-                {
-                    onComplete?.Invoke(false, "ArborInsightsClient service not ready after bind", false);
-                    yield break;
-                }
+                onComplete?.Invoke(new AuthTransportResult(false, bindFailure, false));
+                yield break;
+            }
+            // EndSession or StartNewSession cleared the session during the wait, and the payload already carries the next one's id.
+            if (stillCurrent != null && !stillCurrent())
+            {
+                onComplete?.Invoke(new AuthTransportResult(false, "The session ended before the service was ready", false));
+                yield break;
             }
 
             try
@@ -44,23 +60,56 @@ namespace AbxrLib.Runtime.Services.Transport
                 ArborInsightsClient.SetAuthPayloadForRequest(restUrl, payload);
                 string responseJson = ArborInsightsClient.AuthRequest(payload.userId ?? "", Utils.DictToString(payload.authMechanism));
                 // Device client (AAR/service) decides if the API rejected auth (e.g. 401/403); we only pass the flag.
+                // It exposes no HTTP status, so the result's StatusCode stays 0.
                 bool isAuthRejectedByApi = ArborInsightsClient.GetLastAuthRejected();
                 // Use same success rule as auth service (AuthResponse.IsValidSuccess): full success or second-stage required.
                 bool success = !string.IsNullOrEmpty(responseJson) && ParseAndCheckValidSuccess(responseJson);
-                // Normalize empty failure body so auth service logs the same message for both transports.
-                string body = responseJson ?? "";
-                if (string.IsNullOrEmpty(body) && !success)
-                    body = "No response body.";
                 if (!success)
-                    Logcat.Warning($"AuthRequest failed: {body}");
-                onComplete?.Invoke(success, body, isAuthRejectedByApi);
+                    Logcat.Warning($"AuthRequest failed: {(string.IsNullOrEmpty(responseJson) ? "(empty)" : responseJson)}");
+                onComplete?.Invoke(new AuthTransportResult(success, responseJson, isAuthRejectedByApi));
             }
             catch (Exception ex)
             {
                 Logcat.Error($"ArborInsights auth failed: {ex.Message}");
-                onComplete?.Invoke(false, ex.Message, false);
+                onComplete?.Invoke(new AuthTransportResult(false, ex.Message, false));
             }
             yield return null;
+        }
+
+        /// <summary>
+        /// The service has no session for a handoff otherwise, since a handoff skips AuthRequestCoroutine. A handoff adopted
+        /// while the app runs follows EndSession, which unbound the service, so this binds again and waits first.
+        /// </summary>
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete)
+        {
+            string bindFailure = null;
+            yield return BindIfUnboundCoroutine(reason => bindFailure = reason);
+            if (bindFailure != null)
+            {
+                onComplete?.Invoke(false, bindFailure);
+                yield break;
+            }
+            // EndSession or a newer handoff replaced this session during the wait, and the service must not end up holding it.
+            if (stillCurrent != null && !stillCurrent())
+            {
+                onComplete?.Invoke(false, "The session ended before the service was ready");
+                yield break;
+            }
+            int result;
+            try
+            {
+                // The full auth response JSON, so the service sets apiToken/apiSecret/restUrl together and accepts events at once.
+                result = ArborInsightsClient.SetAuthFromHandoff(sessionJson, Configuration.Instance?.restUrl ?? "");
+            }
+            catch (Exception ex)
+            {
+                Logcat.Error($"ArborInsights SetAuthFromHandoff failed: {ex.Message}");
+                result = (int)AbxrResult.NOT_INITIALIZED;
+            }
+            if (result == (int)AbxrResult.OK)
+                onComplete?.Invoke(true, null);
+            else
+                onComplete?.Invoke(false, $"SetAuthFromHandoff returned {(AbxrResult)result}");
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
@@ -78,17 +127,20 @@ namespace AbxrLib.Runtime.Services.Transport
             yield return null;
         }
 
-        public void AddEvent(string name, Dictionary<string, string> meta)
+        // The client app queues and sends, so these always accept the record. Its records get no send result.
+        public bool AddEvent(string name, Dictionary<string, string> meta, long recordId = 0)
         {
             ArborInsightsClient.Event(name ?? "", meta ?? new Dictionary<string, string>());
+            return true;
         }
 
-        public void AddTelemetry(string name, Dictionary<string, string> meta)
+        public bool AddTelemetry(string name, Dictionary<string, string> meta, long recordId = 0)
         {
             ArborInsightsClient.AddTelemetryEntry(name ?? "", meta ?? new Dictionary<string, string>());
+            return true;
         }
 
-        public void AddLog(string logLevel, string text, Dictionary<string, string> meta)
+        public bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long recordId = 0)
         {
             var dict = meta ?? new Dictionary<string, string>();
             string level = (logLevel ?? "").ToUpperInvariant();
@@ -98,6 +150,7 @@ namespace AbxrLib.Runtime.Services.Transport
             else if (level == "ERROR") ArborInsightsClient.LogError(text ?? "", dict);
             else if (level == "CRITICAL") ArborInsightsClient.LogCritical(text ?? "", dict);
             else ArborInsightsClient.LogInfo(text ?? "", dict);
+            return true;
         }
 
         public void ForceSend()
@@ -105,7 +158,7 @@ namespace AbxrLib.Runtime.Services.Transport
             try { ArborInsightsClient.ForceSendUnsent(); } catch { /* ignore */ }
         }
 
-        public void StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy)
+        public bool StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
@@ -124,6 +177,7 @@ namespace AbxrLib.Runtime.Services.Transport
                 ArborInsightsClient.StorageSetDefaultEntryFromString(json, keepLatest, "unity", sessionData);
             else
                 ArborInsightsClient.StorageSetEntryFromString(name, json, keepLatest, "unity", sessionData);
+            return true;
         }
 
         public IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)

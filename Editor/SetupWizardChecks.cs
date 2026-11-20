@@ -1,0 +1,1932 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Types;
+using UnityEditor;
+using UnityEditor.Build;
+using UnityEditor.PackageManager;
+using UnityEditor.PackageManager.UI;
+using UnityEngine;
+// UnityEditor also has a legacy PackageInfo, so name the Package Manager one explicitly.
+using PackageInfo = UnityEditor.PackageManager.PackageInfo;
+
+namespace AbxrLib.Editor
+{
+    internal static class SetupWizardChecks
+    {
+        /// <summary>How a check is drawn: Problem blocks a working integration, Warning is worth fixing, Info is context only.</summary>
+        internal enum Severity { Ok, Info, Warning, Problem }
+
+        internal sealed class Check
+        {
+            public string Title;
+            public string Detail;
+            public Severity Severity;
+            /// <summary>Button text for the one-click fix, or null when there is nothing to click.</summary>
+            public string FixLabel;
+            public Action Fix;
+        }
+
+        /// <summary>
+        /// Inspects the project and returns the checks in the order the wizard shows them. Cheap enough to call on
+        /// step entry, window focus, or a "Re-check" click, but not per-frame: callers cache the result.
+        /// </summary>
+        internal static List<Check> Run()
+        {
+            var checks = new List<Check>
+            {
+                CheckUnityVersion(),
+                CheckDuplicateWorldSpaceImports(),
+                CheckWorldSpaceUi(),
+                CheckTextMeshPro(),
+                CheckEventSystem(),
+                CheckRequiredPackages(),
+                CheckArborMdmClient(),
+                CheckPairing(),
+                CheckHeadsetSdk(),
+                CheckAndroidPlayerSettings()
+            };
+
+            // A check returns null when it has nothing to say about this project, rather than padding the list with
+            // rows confirming that a default was left alone.
+            checks.RemoveAll(check => check == null);
+            return checks;
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Editor version and packages
+        //
+        // Nothing here hardcodes a package version. What a given dependency resolves to depends on the Editor: on
+        // Unity 2021.3 com.unity.textmeshpro comes from the registry and Input System resolves to the pinned 1.8.1,
+        // while on Unity 6 TextMeshPro is served from the built-in com.unity.ugui and Input System resolves forward
+        // to a newer release. So the required versions are read from AbxrLib's own manifest and reported against
+        // what this Editor actually registered, which is correct in every version by construction.
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>Used only when AbxrLib's manifest cannot be read (for example a copy dropped into Assets/).</summary>
+        private const string FallbackMinimumUnityVersion = "2021.3";
+
+        /// <summary>
+        /// First Unity version where TextMeshPro stopped shipping as its own package and moved into com.unity.ugui.
+        /// From here on, the registry's com.unity.textmeshpro is a deprecated shim, so the wizard must not send
+        /// anyone to install it.
+        /// </summary>
+        private const int TmpMergedMajor = 2023;
+        private const int TmpMergedMinor = 2;
+
+        /// <summary>AbxrLib's own package manifest, or null when it is not installed as a package.</summary>
+        internal static PackageInfo SelfPackage()
+        {
+            try { return PackageInfo.FindForAssembly(typeof(SetupWizardChecks).Assembly); }
+            catch (Exception) { return null; }
+        }
+
+        /// <summary>
+        /// The version the Package Manager knows this install as - the same value it names sample import folders
+        /// with. <see cref="AbxrLibVersion.Version"/> is only the fallback for a source copy with no manifest:
+        /// the constant and package.json are synced by hand, and comparing a folder name against the constant
+        /// turns any drift between them into a permanent "stale import" warning that re-importing cannot clear.
+        /// </summary>
+        internal static string InstalledPackageVersion() => SelfPackage()?.version ?? AbxrLibVersion.Version;
+
+        /// <summary>Only the two fields needed out of package.json; JsonUtility ignores the rest of the manifest.</summary>
+        [Serializable]
+        private class UnityRequirement
+        {
+            public string unity;
+            public string unityRelease;
+        }
+
+        /// <summary>
+        /// AbxrLib's declared minimum Editor version. PackageInfo does not surface the manifest's "unity" field, so
+        /// package.json is read from the resolved package folder; <see cref="FallbackMinimumUnityVersion"/> stands in
+        /// when there is no manifest to read (a source copy under Assets/) or it cannot be parsed.
+        /// </summary>
+        private static void GetMinimumUnityVersion(out string version, out string release)
+        {
+            version = FallbackMinimumUnityVersion;
+            release = "";
+
+            var self = SelfPackage();
+            if (self == null || string.IsNullOrEmpty(self.resolvedPath)) return;
+
+            try
+            {
+                string manifestPath = Path.Combine(self.resolvedPath, "package.json");
+                if (!File.Exists(manifestPath)) return;
+
+                var parsed = JsonUtility.FromJson<UnityRequirement>(File.ReadAllText(manifestPath));
+                if (parsed == null || string.IsNullOrEmpty(parsed.unity)) return;
+
+                version = parsed.unity;
+                release = parsed.unityRelease ?? "";
+            }
+            catch (Exception)
+            {
+                // Keep the fallback: an unreadable manifest is not worth reporting as a setup problem.
+            }
+        }
+
+        private static bool TmpIsPartOfUgui() =>
+            TryParseUnityVersion(Application.unityVersion, out int major, out int minor, out _) &&
+            (major > TmpMergedMajor || (major == TmpMergedMajor && minor >= TmpMergedMinor));
+
+        /// <summary>
+        /// Reads a Unity version string ("2021.3", "2021.3.57f2", "6000.0.36f1"). Unity's major numbers stay
+        /// comparable as plain integers across the 6000 renumbering, so a numeric compare is enough.
+        /// </summary>
+        internal static bool TryParseUnityVersion(string version, out int major, out int minor, out int patch)
+        {
+            major = minor = patch = 0;
+            if (string.IsNullOrEmpty(version)) return false;
+
+            string[] parts = version.Split('.');
+            if (parts.Length < 2) return false;
+            if (!int.TryParse(parts[0], out major)) return false;
+            if (!int.TryParse(parts[1], out minor)) return false;
+
+            // The third part carries the release suffix ("57f2"); only the leading digits are the patch number.
+            if (parts.Length > 2)
+            {
+                string digits = new string(parts[2].TakeWhile(char.IsDigit).ToArray());
+                int.TryParse(digits, out patch);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Compares the running Editor against the minimum in AbxrLib's manifest. A project below the minimum is
+        /// reported rather than fixed - the only fix is opening the project in a newer Editor.
+        /// </summary>
+        private static Check CheckUnityVersion()
+        {
+            GetMinimumUnityVersion(out string required, out string requiredRelease);
+            string requiredDisplay = string.IsNullOrEmpty(requiredRelease) ? required : $"{required}.{requiredRelease}";
+            string running = Application.unityVersion;
+
+            if (!TryParseUnityVersion(running, out int major, out int minor, out int patch) ||
+                !TryParseUnityVersion(required + ".0", out int reqMajor, out int reqMinor, out _))
+            {
+                return new Check
+                {
+                    Title = $"Unity {running}",
+                    Detail = $"AbxrLib declares Unity {requiredDisplay} or newer as its minimum.",
+                    Severity = Severity.Info
+                };
+            }
+
+            // Only compare the release when the minimum names one and major.minor already match.
+            int requiredPatch = 0;
+            if (!string.IsNullOrEmpty(requiredRelease))
+                int.TryParse(new string(requiredRelease.TakeWhile(char.IsDigit).ToArray()), out requiredPatch);
+
+            bool tooOld = major < reqMajor
+                          || (major == reqMajor && minor < reqMinor)
+                          || (major == reqMajor && minor == reqMinor && patch < requiredPatch);
+
+            if (tooOld)
+            {
+                return new Check
+                {
+                    Title = $"Unity {running} is below AbxrLib's minimum",
+                    Detail = $"AbxrLib supports Unity {requiredDisplay} and newer. On an older Editor its packages may " +
+                             "not resolve and APIs it relies on can be missing.\nWHAT TO DO: open this project in " +
+                             $"Unity {requiredDisplay} or newer.",
+                    Severity = Severity.Problem
+                };
+            }
+
+            return new Check
+            {
+                Title = $"Unity {running} is supported",
+                Detail = $"AbxrLib's minimum is Unity {requiredDisplay}.",
+                Severity = Severity.Ok
+            };
+        }
+
+        /// <summary>
+        /// What this Editor calls the window that holds the build target and the scene list. Unity 6 renamed Build
+        /// Settings to Build Profiles, and a row that names the wrong one sends people to a menu item that isn't there.
+        /// </summary>
+        internal const string BuildWindowName =
+#if UNITY_6000_0_OR_NEWER
+            "Build Profiles";
+#else
+            "Build Settings";
+#endif
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Build Type choice
+        // ---------------------------------------------------------------------------------------------------------
+
+        private static readonly string[] BuildTypeValues = { "production", "development", "production_custom" };
+        private static readonly string[] BuildTypeLabelsWithCustomApk = { "Production", "Development", "Production (Custom APK)" };
+        private static readonly string[] BuildTypeLabelsWithoutCustomApk = { "Production", "Development" };
+
+        /// <summary>
+        /// Whether the project is saved as Production (Custom APK). Only then do the Configuration inspector and the
+        /// wizard offer that Build Type (SDK-90). On App Tokens it needs a customer's Organization Token, which
+        /// nothing issues, so other projects are offered Production and Development. A project put on it by setting
+        /// buildType in the asset keeps the option and everything it uses.
+        /// </summary>
+        internal static bool UsesCustomApk(AppConfig config) => config != null && config.buildType == "production_custom";
+
+        /// <summary>
+        /// What a project that is offered Production (Custom APK) is told beside the Build Type choice. The option
+        /// follows the saved Build Type, so after switching away it is gone once the window is reopened (reselecting
+        /// the asset, entering Play mode and a recompile all do that), and nothing in the Editor brings it back.
+        /// Null where the option isn't offered.
+        /// </summary>
+        internal static string CustomApkOptionNote(bool offersCustomApk) => offersCustomApk
+            ? "Production (Custom APK) is offered only while this project is saved on it. After switching to another " +
+              "Build Type, it leaves this list once this window is reopened. To restore it, set buildType: " +
+              "production_custom in Assets/Resources/AbxrLib.asset."
+            : null;
+
+        /// <summary>
+        /// The Build Type popup's labels. Production (Custom APK) is the last one, so leaving it out moves no other
+        /// option: an index stands for the same Build Type either way.
+        /// </summary>
+        internal static string[] BuildTypeLabels(bool offersCustomApk) =>
+            offersCustomApk ? BuildTypeLabelsWithCustomApk : BuildTypeLabelsWithoutCustomApk;
+
+        /// <summary>
+        /// The popup index for a stored Build Type. An unrecognised value reads as Production, as the runtime
+        /// normalises it. Callers write a Build Type back only when the developer changes the selection, so showing
+        /// the popup never rewrites one.
+        /// </summary>
+        internal static int BuildTypeIndex(string buildType) =>
+            buildType == "development" ? 1 : buildType == "production_custom" ? 2 : 0;
+
+        /// <summary>The Build Type a popup index stands for. An index outside the list reads as its nearest end.</summary>
+        internal static string BuildTypeAtIndex(int index) =>
+            BuildTypeValues[Mathf.Clamp(index, 0, BuildTypeValues.Length - 1)];
+
+        /// <summary>
+        /// What a pick in the Build Type popup writes, for both editors: the Build Type at
+        /// <paramref name="pickedIndex"/>, or null when nothing is to be written. Nothing is written when the pick is
+        /// the option already shown, so drawing the popup never rewrites a stored value, an unrecognised one included,
+        /// or when the index isn't one of the options on offer.
+        /// </summary>
+        internal static string BuildTypePicked(string stored, bool offersCustomApk, int pickedIndex)
+        {
+            if (pickedIndex == BuildTypeIndex(stored)) return null;
+            if (pickedIndex < 0 || pickedIndex >= BuildTypeLabels(offersCustomApk).Length) return null;
+            return BuildTypeAtIndex(pickedIndex);
+        }
+
+        /// <summary>Production as the runtime reads it: it drops saved org credentials only for this value, whatever its case.</summary>
+        private static bool IsProduction(string buildType) =>
+            string.Equals(buildType, "production", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>A stored Build Type the runtime gives a meaning to. Any other value shows as Production in the popup.</summary>
+        private static bool IsRecognisedBuildType(string buildType) =>
+            IsProduction(buildType) || buildType == "development" || buildType == "production_custom";
+
+        /// <summary>
+        /// The Build Type tooltip, the same in the inspector and the wizard. It names the credentials the project's
+        /// scheme has, and mentions Production (Custom APK) only where it is offered.
+        /// </summary>
+        internal static string BuildTypeTooltip(AppConfig config, bool offersCustomApk)
+        {
+            bool legacy = ShowsLegacyScheme(config);
+            string tooltip = legacy
+                ? "Production: shared builds, including ArborXR-managed fleets. The device's MDM supplies the " +
+                  "Organization ID and Authorization Secret; the SDK doesn't sign in with ones saved here, but they " +
+                  "ship inside the build.\n" +
+                  "Development: your own test builds; they sign in with the Organization ID and Authorization Secret " +
+                  "saved here."
+                : "Production: shared builds, including ArborXR-managed fleets; each device's organization comes from " +
+                  "the device at runtime.\n" +
+                  "Development: your own test builds; they report to the organization that owns the app.";
+            if (!offersCustomApk) return tooltip;
+            return tooltip + (legacy
+                ? "\nProduction (Custom APK): one customer per build; Organization ID and Authorization Secret are " +
+                  "required and the MDM is not consulted for them. The API receives buildType Production."
+                : "\nProduction (Custom APK): one customer per build; the Organization Token is required and the MDM " +
+                  "is not consulted for it. The API receives buildType Production.");
+        }
+
+        /// <summary>The line under the wizard's Build Type choice, for the option at <paramref name="index"/>.</summary>
+        internal static string BuildTypeHint(AppConfig config, int index)
+        {
+            bool legacy = ShowsLegacyScheme(config);
+            switch (index)
+            {
+                case 0:
+                    // The popup shows any stored value it doesn't know as Production, but the runtime drops saved
+                    // credentials only for Production itself, so the line must not promise that here. It says what
+                    // the hint under the fields says: saved credentials are still sent, when any are saved.
+                    if (config != null && !IsRecognisedBuildType(config.buildType))
+                    {
+                        string stillSent = "";
+                        if (legacy && (!string.IsNullOrEmpty(config.orgID) || !string.IsNullOrEmpty(config.authSecret)))
+                            stillSent = ", but builds still sign in with the Organization ID and Authorization Secret saved here";
+                        else if (!legacy && !string.IsNullOrEmpty(config.orgToken))
+                            stillSent = ", but the saved Organization Token is still sent";
+                        return "The saved Build Type isn't one AbxrLib recognises. It shows as Production" + stillSent +
+                               ". Switch the Build Type to another option and back to set it.";
+                    }
+                    return legacy
+                        ? "Shared builds, and the right choice for an ArborXR-managed fleet: the device's MDM supplies " +
+                          "the Organization ID and Authorization Secret at runtime, and the SDK doesn't sign in with " +
+                          "ones saved here."
+                        : "Shared builds, and the right choice for an ArborXR-managed fleet: each device reports to " +
+                          "its own organization at runtime.";
+                case 1:
+                    return legacy
+                        ? "Your own test builds. They sign in with the Organization ID and Authorization Secret saved " +
+                          "here; a managed device uses its own."
+                        : "Your own test builds. They report to the organization that owns the app; a managed device " +
+                          "reports to its own organization. Passcode pairing never shows in Development: use " +
+                          "Production to test it.";
+                default:
+                    return "One customer per build: every device running this build reports to the organization set " +
+                           "here, and the MDM is not consulted for it. Not for an ArborXR-managed fleet - use " +
+                           "Production there.";
+            }
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Credentials
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// True when the configuration's credentials would pass the same validation the runtime applies on launch.
+        /// <see cref="RuntimeAuthConfig.ValidateAuthFields"/> is the single authority so the wizard can never call a
+        /// configuration good that the runtime then rejects.
+        /// </summary>
+        internal static bool CredentialsAreValid(AppConfig config)
+        {
+            if (config == null) return false;
+            return RuntimeAuthConfig.ValidateAuthFields(config.useAppTokens, config.buildType, config.appID,
+                config.orgID, config.authSecret, config.appToken, config.orgToken) == null;
+        }
+
+        /// <summary>
+        /// Whether the Configuration inspector and the wizard show the Organization Token field (SDK-87): for a
+        /// Production (Custom APK) build, which needs one, and whenever the project has one saved, so a saved value is
+        /// never hidden. Production doesn't use a saved value, but it still ships inside the build.
+        /// </summary>
+        internal static bool ShowsOrgTokenField(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens) return false;
+            return config.buildType == "production_custom" || !string.IsNullOrEmpty(config.orgToken);
+        }
+
+        /// <summary>
+        /// Whether the project is on the legacy scheme (Application ID, Organization ID, Authorization Secret). Only
+        /// then do the Configuration inspector and the wizard show its fields, its note and its wording (SDK-89).
+        /// Every new project is on App Tokens, and is never offered the legacy scheme. The Use App Tokens checkbox
+        /// has its own rule, <see cref="ShowsUseAppTokensToggle"/>.
+        /// </summary>
+        internal static bool ShowsLegacyScheme(AppConfig config) => config != null && !config.useAppTokens;
+
+        /// <summary>
+        /// Whether the inspector shows its production build warning. The box is about the legacy fields (the ones
+        /// marked with an asterisk), so it shows where they do.
+        /// </summary>
+        internal static bool ShowsProductionBuildWarning(AppConfig config) => ShowsLegacyScheme(config);
+
+        /// <summary>Whether an Application ID, Organization ID or Authorization Secret is saved, on either scheme.</summary>
+        internal static bool HasLegacyValues(AppConfig config) =>
+            config != null && (!string.IsNullOrEmpty(config.appID) || !string.IsNullOrEmpty(config.orgID) ||
+                               !string.IsNullOrEmpty(config.authSecret));
+
+        /// <summary>
+        /// Whether the inspector and the wizard show the Use App Tokens checkbox: on the legacy scheme, so the project
+        /// can switch, and on App Tokens for as long as legacy values are saved, so it can switch back. The second
+        /// case is also how an asset last saved before the checkbox existed opens: it has no value for it, so it loads
+        /// as ticked, with its legacy credentials still there, and unticking it is the only way back to them. Only a
+        /// project with the checkbox ticked and no legacy values, which every new project is, never sees it.
+        /// </summary>
+        internal static bool ShowsUseAppTokensToggle(AppConfig config) =>
+            ShowsLegacyScheme(config) || HasLegacyValues(config);
+
+        /// <summary>
+        /// <see cref="ShowsUseAppTokensToggle(AppConfig)"/> for one open inspector or wizard. A project that was on the
+        /// legacy scheme in this window keeps the checkbox after ticking it, even with nothing saved, so a mistaken
+        /// tick can be undone. Saved legacy values are read fresh each time, and the latch is one that the Clear
+        /// button resets, so once they are cleared in either window the checkbox goes from both.
+        /// </summary>
+        internal static bool ShowsUseAppTokensToggle(AppConfig config, ShownLatch wasOnLegacyScheme) =>
+            wasOnLegacyScheme.Holds(ShowsLegacyScheme(config)) || HasLegacyValues(config);
+
+        /// <summary>
+        /// The legacy values a project on App Tokens still has saved, by the name of their field. Empty on the legacy
+        /// scheme, where they are the credentials in use and their fields show.
+        /// </summary>
+        internal static string[] LeftoverLegacyValues(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens) return Array.Empty<string>();
+            var names = new List<string>();
+            if (!string.IsNullOrEmpty(config.appID)) names.Add("Application ID");
+            if (!string.IsNullOrEmpty(config.orgID)) names.Add("Organization ID");
+            if (!string.IsNullOrEmpty(config.authSecret)) names.Add("Authorization Secret");
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// The other direction: the App Token and Organization Token a project on the legacy scheme still has saved,
+        /// by the name of their field. Empty on App Tokens, where they are in use.
+        /// </summary>
+        internal static string[] LeftoverTokens(AppConfig config)
+        {
+            if (!ShowsLegacyScheme(config)) return Array.Empty<string>();
+            var names = new List<string>();
+            if (!string.IsNullOrEmpty(config.appToken)) names.Add("App Token");
+            if (!string.IsNullOrEmpty(config.orgToken)) names.Add("Organization Token");
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// Whether values are saved for the scheme the project isn't on. They have no field there, the SDK doesn't
+        /// sign in with them, and they still ship inside every build, so the editors always say so.
+        /// </summary>
+        internal static bool HasLeftoverValues(AppConfig config) =>
+            LeftoverLegacyValues(config).Length > 0 || LeftoverTokens(config).Length > 0;
+
+        /// <summary>Whether the saved credentials would pass validation with Use App Tokens set the given way.</summary>
+        private static bool CredentialsWouldBeValid(AppConfig config, bool useAppTokens) =>
+            config != null && RuntimeAuthConfig.ValidateAuthFields(useAppTokens, config.buildType, config.appID,
+                config.orgID, config.authSecret, config.appToken, config.orgToken) == null;
+
+        /// <summary>
+        /// Whether the credentials saved for the other scheme would sign in if the project switched to it. A project
+        /// that can't sign in as it stands is told about that way out.
+        /// </summary>
+        internal static bool OtherSchemeWouldWork(AppConfig config) =>
+            config != null && CredentialsWouldBeValid(config, !config.useAppTokens);
+
+        /// <summary>
+        /// Whether the editors offer to clear the leftover values: only when the scheme the project is on has valid
+        /// credentials of its own. Until then the other scheme's values may be the only ones that work. An asset last
+        /// saved before Use App Tokens existed opens ticked, with legacy credentials and no App Token, and a token
+        /// that is half pasted into it must not make those credentials look disposable.
+        /// </summary>
+        internal static bool CanClearLeftoverValues(AppConfig config) =>
+            HasLeftoverValues(config) && CredentialsAreValid(config);
+
+        /// <summary>
+        /// What both editors show under the credential fields whenever values are saved for the scheme the project
+        /// isn't on, or null when none are. It names them and says they ship: they are in the Resources asset, and
+        /// nothing shows them once that scheme's fields are hidden. A saved Organization ID is not called unused,
+        /// since Abxr.GetOrgId() still returns it when no ArborXR client supplies one. <paramref name="offersClear"/>
+        /// is <see cref="CanClearLeftoverValues"/>. Without it, the text says what stops the project signing in, and
+        /// that switching scheme is a way out when the leftover credentials would work.
+        /// </summary>
+        internal static string LeftoverValuesNotice(AppConfig config, out bool offersClear)
+        {
+            offersClear = CanClearLeftoverValues(config);
+            if (!HasLeftoverValues(config)) return null;
+
+            bool onAppTokens = config.useAppTokens;
+            string[] names = onAppTokens ? LeftoverLegacyValues(config) : LeftoverTokens(config);
+            bool one = names.Length == 1;
+            string them = one ? "it" : "them";
+
+            string text = onAppTokens ? "This project is on App Tokens, but " : "This project is on the legacy scheme, but ";
+            text += $"{string.Join(", ", names)} {(one ? "is" : "are")} still saved ";
+            if (onAppTokens) text += "from the legacy scheme ";
+            text += $"and {(one ? "ships" : "ship")} inside every build. ";
+            if (!onAppTokens)
+                text += $"The SDK doesn't read {them} on the legacy scheme. ";
+            else if (string.IsNullOrEmpty(config.orgID))
+                text += $"The SDK doesn't read {them} on App Tokens. ";
+            else
+                text += $"The SDK doesn't sign in with {them}, but on a device without ArborXR MDM Abxr.GetOrgId() " +
+                        "still returns the Organization ID, and a secret set with Abxr.SetAuthSecret is paired with it. ";
+
+            if (offersClear)
+                return text + (onAppTokens
+                    ? $"Untick Use App Tokens to go back to the legacy scheme, or clear {them}, which also removes that checkbox."
+                    : $"Tick Use App Tokens to go back to App Tokens, or clear {them}.");
+
+            // The scheme in use can't sign in yet, so nothing offers to clear what may be the only credentials that work.
+            text += $"Clearing {them} is offered once the project can sign in. As it stands it can't: " +
+                    DescribeOwnCredentialProblem(config);
+            if (OtherSchemeWouldWork(config))
+                text += onAppTokens
+                    ? $" Or untick Use App Tokens to keep using the legacy scheme."
+                    : $" Or tick Use App Tokens to keep using App Tokens.";
+            return text;
+        }
+
+        /// <summary>
+        /// The Clear button under the leftover notice, for both editors: empties the other scheme's saved values as
+        /// one undoable step, lets go of the latches that kept a way back to them, in every open window, and marks
+        /// the asset changed. False, changing nothing, unless <see cref="CanClearLeftoverValues"/>.
+        /// </summary>
+        internal static bool ClearLeftoverValues(AppConfig config)
+        {
+            if (!CanClearLeftoverValues(config)) return false;
+
+            Undo.RecordObject(config, "Clear leftover AbxrLib values");
+            if (config.useAppTokens)
+            {
+                config.appID = "";
+                config.orgID = "";
+                config.authSecret = "";
+            }
+            else
+            {
+                config.appToken = "";
+                config.orgToken = "";
+            }
+            _leftoversCleared++;
+            EditorUtility.SetDirty(config);
+            return true;
+        }
+
+        /// <summary>The Clear button's label under the leftover notice, for the values the project's scheme leaves over.</summary>
+        internal static string ClearLeftoverValuesLabel(AppConfig config) =>
+            ShowsLegacyScheme(config) ? "Clear saved tokens" : "Clear legacy values";
+
+        /// <summary>
+        /// The wizard's reminder about what not to ship. It names the credentials the project's scheme has, so a
+        /// project on App Tokens isn't warned about a secret it never sees.
+        /// </summary>
+        internal static string ShippingNote(AppConfig config) => ShowsLegacyScheme(config)
+            ? "Never ship an Organization ID with its Authorization Secret in a publicly distributed APK.\n\nFor " +
+              "shared builds use Production and let ArborXR-managed devices supply the organization."
+            : "Never ship an Organization Token in a publicly distributed APK.\n\nA Development build uses the App " +
+              "Token as the Organization Token, so it is for internal or single-org builds only.\n\nFor shared " +
+              "builds use Production and let ArborXR-managed devices supply the organization.";
+
+        /// <summary>
+        /// The hint under the legacy scheme's Organization ID and Authorization Secret. Production doesn't sign in
+        /// with saved ones, but nothing strips them from the Resources asset, so they still ship inside the build, and
+        /// a saved Organization ID is still what Abxr.GetOrgId() returns when no ArborXR client supplies one, so the
+        /// text doesn't call it unused. An unrecognised Build Type shows as Production while builds still sign in
+        /// with both. <paramref name="warn"/> is true in those cases. Null where there is nothing to say.
+        /// </summary>
+        internal static string LegacyOrgFieldsHint(AppConfig config, out bool warn)
+        {
+            warn = false;
+            if (!ShowsLegacyScheme(config)) return null;
+            if (config.buildType == "production_custom")
+                return "Production (Custom APK): For custom APKs per customer. Organization ID and Authorization " +
+                       "Secret are required. The API receives buildType Production.";
+            if (config.buildType == "development") return null;
+
+            bool hasOrgId = !string.IsNullOrEmpty(config.orgID);
+            bool hasValue = hasOrgId || !string.IsNullOrEmpty(config.authSecret);
+            if (!IsProduction(config.buildType))
+            {
+                if (!hasValue) return null;
+                warn = true;
+                return "The saved Build Type isn't one AbxrLib recognises, so builds still sign in with the " +
+                       "Organization ID and Authorization Secret saved here. Switch the Build Type to another option " +
+                       "and back to set it.";
+            }
+
+            if (!hasValue)
+                return "Production doesn't take an Organization ID or Authorization Secret: the device's MDM supplies them.";
+            warn = true;
+            string text = "Production doesn't sign in with the Organization ID or Authorization Secret saved here " +
+                          "(the device's MDM supplies them), but they ship inside the build";
+            return hasOrgId
+                ? text + ", and on a device without ArborXR MDM Abxr.GetOrgId() still returns the Organization ID, " +
+                  "which a secret set with Abxr.SetAuthSecret is paired with. Clear them unless your app relies on that."
+                : text + ". Clear them.";
+        }
+
+        /// <summary>
+        /// Whether a legacy Organization ID or Authorization Secret field is locked. Production takes neither, so an
+        /// empty one can't be filled in there. One that holds a value stays editable: it still ships, and a malformed
+        /// Organization ID fails the credential check until it is fixed or cleared. <paramref name="heldAValue"/> is
+        /// that field's latch in one open window: once the field has held a value there it stays editable, so the
+        /// keystroke that empties it doesn't lock it while it has focus.
+        /// </summary>
+        internal static bool LegacyOrgFieldIsLocked(AppConfig config, string value, ShownLatch heldAValue)
+        {
+            bool held = heldAValue.Holds(!string.IsNullOrEmpty(value));
+            return config != null && IsProduction(config.buildType) && !held;
+        }
+
+        /// <summary>
+        /// The tooltip on a legacy Organization ID or Authorization Secret field. It mentions Custom APK builds only
+        /// to a project that is offered that Build Type.
+        /// </summary>
+        internal static string LegacyOrgFieldTooltip(bool offersCustomApk) =>
+            (offersCustomApk ? "Development and Custom APK builds sign in with it." : "Development builds sign in with it.") +
+            " In Production the device's MDM supplies it.";
+
+        /// <summary>
+        /// The production build warning's lines about when the Organization ID and Authorization Secret may be set:
+        /// in a project's own Development builds, and, where that Build Type is offered, in a custom APK built for
+        /// one 3rd party who knows. The line about 3rd parties is about custom APKs, so it shows only with them.
+        /// </summary>
+        internal static string[] LegacyOrgValuesRules(bool offersCustomApk) => offersCustomApk
+            ? new[]
+            {
+                "• Organization ID and Authorization Secret should ONLY be set for your own Development builds and for custom APKs",
+                "• Only build a custom APK for a specific 3rd party who is aware and approves"
+            }
+            : new[] { "• Organization ID and Authorization Secret should ONLY be set for your own Development builds" };
+
+        /// <summary>What a project on the legacy scheme is told, in the inspector and the wizard.</summary>
+        internal const string LegacySchemeNote =
+            "This project uses the legacy scheme: Application ID, Organization ID and Authorization Secret. It keeps " +
+            "working, but new projects use an App Token. Tick Use App Tokens to switch.";
+
+        /// <summary>
+        /// How many times the Clear button has emptied leftover values in this Editor session. The latches that exist
+        /// so a project can switch back to those values watch it, so clearing in one window drops them in every window.
+        /// </summary>
+        private static int _leftoversCleared;
+
+        /// <summary>
+        /// For one open inspector or wizard: once something has shown, it stays until the window closes or is enabled
+        /// again. Without it, the edit that makes a control unnecessary removes the control mid-edit, with no way back.
+        /// </summary>
+        internal sealed class ShownLatch
+        {
+            private readonly bool _resetsWhenLeftoversAreCleared;
+            private int _leftoversClearedSeen = _leftoversCleared;
+            private bool _shown;
+
+            /// <param name="resetsWhenLeftoversAreCleared">
+            /// For a latch that keeps a way back to the other scheme's values: the Clear button removes those values, in
+            /// whichever window it was pressed, so the latch lets go too.
+            /// </param>
+            internal ShownLatch(bool resetsWhenLeftoversAreCleared = false) =>
+                _resetsWhenLeftoversAreCleared = resetsWhenLeftoversAreCleared;
+
+            /// <summary>True from the first call given true, until <see cref="Reset"/>.</summary>
+            internal bool Holds(bool showsNow)
+            {
+                if (_resetsWhenLeftoversAreCleared && _leftoversClearedSeen != _leftoversCleared)
+                {
+                    _leftoversClearedSeen = _leftoversCleared;
+                    _shown = false;
+                }
+                return _shown |= showsNow;
+            }
+
+            internal void Reset() => _shown = false;
+        }
+
+        /// <summary>
+        /// <see cref="ShowsOrgTokenField"/> for one open inspector or wizard, which keeps the field up once it has held
+        /// a value. Emptying it would otherwise remove it on that keystroke, before a replacement can be typed or
+        /// pasted. Lasts until the window closes or is enabled again.
+        /// </summary>
+        internal sealed class OrgTokenFieldLatch
+        {
+            private readonly ShownLatch _heldAValue = new ShownLatch(resetsWhenLeftoversAreCleared: true);
+
+            internal bool Shows(AppConfig config)
+            {
+                if (config == null || !config.useAppTokens) return false;
+                return _heldAValue.Holds(!string.IsNullOrEmpty(config.orgToken)) || ShowsOrgTokenField(config);
+            }
+
+            internal void Reset() => _heldAValue.Reset();
+        }
+
+        /// <summary>
+        /// The hint under the Organization Token field where it shows without being required: what the saved value
+        /// does in this Build Type, and whether to clear it. Null for Production (Custom APK), which has its own text,
+        /// and for the legacy scheme. <paramref name="warn"/> is true when the value needs the developer's attention.
+        /// </summary>
+        internal static string OrgTokenFieldHint(AppConfig config, out bool warn)
+        {
+            warn = false;
+            if (config == null || !config.useAppTokens || config.buildType == "production_custom") return null;
+
+            bool empty = string.IsNullOrEmpty(config.orgToken);
+            bool isToken = LooksLikeJwt(config.orgToken);
+
+            if (config.buildType == "development")
+            {
+                if (empty) return "Empty: Development builds use the App Token as the Organization Token.";
+                if (!isToken)
+                {
+                    warn = true;
+                    return "This value isn't a token, so Development builds can't sign in with it. Clear it to use " +
+                           "the App Token, or re-copy the whole Organization Token.";
+                }
+                if (config.orgToken == config.appToken)
+                    return "This is a copy of the App Token, which Development builds use as the Organization Token " +
+                           "anyway. Clear it: a copy left here goes stale when the App Token changes.";
+                return "This project already has an Organization Token, so Development builds report to that " +
+                       "organization. Clear it to use the App Token instead: builds then report to the organization " +
+                       "that owns the app.";
+            }
+
+            if (empty) return "Empty, as Production expects: each device's organization comes from ArborXR MDM or passcode pairing.";
+
+            warn = true;
+            // The runtime drops a saved token only when the stored Build Type is Production itself. Any other value
+            // shows as Production in the popup, but the token is still sent.
+            if (!string.Equals(config.buildType, "production", StringComparison.OrdinalIgnoreCase))
+                return "The saved Build Type isn't one AbxrLib recognises, so this Organization Token is still sent " +
+                       "and builds report to its organization. Clear it, or switch the Build Type to another option " +
+                       "and back to set it.";
+            return isToken
+                ? "Production doesn't use this Organization Token, but it is saved in the project and ships inside " +
+                  "the build. Clear it."
+                : "Production doesn't use an Organization Token, and this value isn't one: it fails the credential " +
+                  "check and ships inside the build. Clear it.";
+        }
+
+        /// <summary>
+        /// The build-time reminder for a Development build that uses its App Token as the Organization Token (SDK-85):
+        /// off an ArborXR-managed device, every device that runs it reports to the organization that owns the app, so
+        /// the build must stay inside the team. Null when the build doesn't do that. It is a valid configuration, not a
+        /// problem to fix, so the wizard doesn't list it.
+        /// </summary>
+        internal static string DescribeDevelopmentAppTokenOrg(AppConfig config)
+        {
+            if (config == null || !config.useAppTokens || config.buildType != "development") return null;
+            // An invalid configuration gets the credential warning instead: nothing signs in with it.
+            if (!CredentialsAreValid(config)) return null;
+            if (!string.IsNullOrEmpty(config.orgToken) && config.orgToken != config.appToken) return null;
+
+            return "Build Type is Development and the App Token is used as the Organization Token, so on a device " +
+                   "without ArborXR MDM this build reports to the organization that owns the app. Keep it inside your " +
+                   "team, and use Build Type Production for a build you distribute.";
+        }
+
+        /// <summary>
+        /// Describes what is missing from the credentials in terms of what to do about it, or null when they are
+        /// valid. The runtime's own messages are deliberately vague (they reach end users); these do not, so they say
+        /// which field is wrong and where the value comes from.
+        /// </summary>
+        internal static string DescribeCredentialProblem(AppConfig config)
+        {
+            if (config == null) return "No AbxrLib configuration could be loaded yet.";
+            if (CredentialsAreValid(config)) return null;
+
+            string problem = DescribeOwnCredentialProblem(config);
+            // The other scheme's saved credentials would work: say so, since switching is the short way out. An asset
+            // last saved before Use App Tokens existed opens like this, ticked with only legacy credentials.
+            if (!OtherSchemeWouldWork(config)) return problem;
+            return problem + (config.useAppTokens
+                ? " This project also has legacy credentials saved that would work: untick Use App Tokens to keep using them."
+                : " This project also has an App Token saved that would work: tick Use App Tokens to keep using it.");
+        }
+
+        /// <summary>What is wrong with the credentials of the scheme the project is on. Only called when they are invalid.</summary>
+        private static string DescribeOwnCredentialProblem(AppConfig config)
+        {
+            bool isCustomApk = config.buildType == "production_custom";
+
+            if (config.useAppTokens)
+            {
+                if (string.IsNullOrWhiteSpace(config.appToken))
+                    return "App Token is required. In the ArborXR portal: Content Library > your app under Managed > Insights Hub tab.";
+                if (!LooksLikeJwt(config.appToken))
+                    return "App Token does not look like a token (a token has three parts separated by periods). Re-copy the whole value - it is easy to miss the end of it.";
+                if (isCustomApk && string.IsNullOrWhiteSpace(config.orgToken))
+                    return "Production (Custom APK) builds need that customer's Organization Token as well as the App Token. It is not self-serve in the portal - contact ArborXR for it.";
+                if (!string.IsNullOrWhiteSpace(config.orgToken) && !LooksLikeJwt(config.orgToken))
+                    return "Organization Token does not look like a token (three parts separated by periods). Clear the field, or re-copy the whole value.";
+                return "Credentials are incomplete.";
+            }
+
+            if (string.IsNullOrWhiteSpace(config.appID))
+                return "Application ID is required when App Tokens are off. It looks like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.";
+            if (!LooksLikeUuid(config.appID))
+                return "Application ID must be a UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).";
+            if (isCustomApk && (string.IsNullOrWhiteSpace(config.orgID) || string.IsNullOrWhiteSpace(config.authSecret)))
+                return "Production (Custom APK) builds need Organization ID and Authorization Secret as well as the Application ID.";
+            if (!string.IsNullOrWhiteSpace(config.orgID) && !LooksLikeUuid(config.orgID))
+                return "Organization ID must be a UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).";
+            return "Credentials are incomplete.";
+        }
+
+        /// <summary>Shape check only - matches how the runtime recognizes a token, so the wizard agrees with it.</summary>
+        internal static bool LooksLikeJwt(string value) =>
+            !string.IsNullOrEmpty(value) && value.Split('.').Length == 3;
+
+        private static bool LooksLikeUuid(string value) =>
+            !string.IsNullOrEmpty(value) &&
+            System.Text.RegularExpressions.Regex.IsMatch(value,
+                "^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$");
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Project checks
+        // ---------------------------------------------------------------------------------------------------------
+
+        // ---------------------------------------------------------------------------------------------------------
+        // World-space UI (optional sample)
+        // ---------------------------------------------------------------------------------------------------------
+
+        private const string WorldSpaceSampleName = "World-Space UI";
+
+        /// <summary>
+        /// Type the world-space objects register themselves through. Found by name rather than by reference: core's
+        /// Editor assembly must not depend on an assembly that only exists once the sample has been imported.
+        /// </summary>
+        private const string WorldSpaceBootstrapType = "AbxrLib.Runtime.UI.AbxrWorldSpaceBootstrap, AbxrLib.WorldSpace";
+
+        /// <summary>
+        /// True when the world-space objects are present in this project. Detected by looking for their assembly, so
+        /// it answers correctly whether they arrived through the Package Manager's Import button or by hand.
+        /// </summary>
+        internal static bool WorldSpaceUiIsInstalled() => Type.GetType(WorldSpaceBootstrapType) != null;
+
+        /// <summary>
+        /// True when the sample's files are in the project, whether or not they compiled. Package Manager's own
+        /// Samples list imports without installing anything, so a project can end up with the scripts present and the
+        /// assembly missing - a different problem from never having imported them. Scanned broadly on purpose: a
+        /// copy that was moved or vendored outside Assets/Samples has the same symptom, and answering "not imported"
+        /// for it offers an import that would create a duplicate.
+        /// </summary>
+        internal static bool WorldSpaceUiFilesImported() => AllBootstrapPathsInProject().Count > 0;
+
+        /// <summary>Asset path of the imported bootstrap script, or null when the sample is not in the project.</summary>
+        private static string ImportedBootstrapPath() => ImportedBootstrapPaths().FirstOrDefault();
+
+        /// <summary>
+        /// Every imported copy of the sample. Normally one - but Package Manager's Samples list imports into a folder
+        /// named after the package version, so importing again after an upgrade leaves the old copy in place and the
+        /// project ends up with two. Only the canonical import root counts: what this list finds feeds the
+        /// duplicate-copy delete and the stale-version re-import, and a copy someone moved or vendored elsewhere is
+        /// theirs - it must never be classified as stale or deleted by a path coincidence.
+        /// </summary>
+        private const string SampleImportRoot = "Assets/Samples/";
+
+        /// <summary>
+        /// FindAssets matches asset names by substring, so a duplicated "AbxrWorldSpaceBootstrap 1", a
+        /// "AbxrWorldSpaceBootstrap.cs.bak", or anything else carrying the token comes back too. Only the script
+        /// itself marks a copy of the sample - anything looser turns stray files into phantom duplicates.
+        /// </summary>
+        private static bool IsBootstrapScript(string path) =>
+            Path.GetFileName(path) == "AbxrWorldSpaceBootstrap.cs";
+
+        private static List<string> ImportedBootstrapPaths()
+        {
+            var paths = new List<string>();
+            foreach (string guid in AssetDatabase.FindAssets("AbxrWorldSpaceBootstrap"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (path.StartsWith(SampleImportRoot) && IsBootstrapScript(path)) paths.Add(path);
+            }
+
+            return paths;
+        }
+
+        /// <summary>
+        /// Every copy of the sample's files anywhere under Assets/, for detection only. Broader than
+        /// <see cref="ImportedBootstrapPaths"/> on purpose: a copy that was moved or vendored outside Assets/Samples
+        /// still means "the files are in this project" when diagnosing a missing assembly, and still collides on
+        /// assembly names when counting duplicates. Nothing this scan finds is ever deleted or version-classified.
+        /// </summary>
+        private static List<string> AllBootstrapPathsInProject()
+        {
+            var paths = new List<string>();
+            foreach (string guid in AssetDatabase.FindAssets("AbxrWorldSpaceBootstrap"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (path.StartsWith("Assets/") && IsBootstrapScript(path)) paths.Add(path);
+            }
+
+            return paths;
+        }
+
+        /// <summary>One folder per copy of the sample found anywhere under Assets/, for duplicate reporting.</summary>
+        internal static List<string> SampleCopyFolders()
+        {
+            var folders = new List<string>();
+            foreach (string path in AllBootstrapPathsInProject())
+            {
+                string folder = path.Substring(0, path.LastIndexOf('/'));
+                if (!folders.Contains(folder)) folders.Add(folder);
+            }
+
+            return folders;
+        }
+
+        /// <summary>
+        /// The version folders holding imported copies, e.g. "Assets/Samples/AbxrLib for Unity/2.0.11". Deleting one
+        /// of these removes that entire copy.
+        /// </summary>
+        internal static List<string> ImportedWorldSpaceCopies()
+        {
+            var copies = new List<string>();
+            foreach (string path in ImportedBootstrapPaths())
+            {
+                // .../Samples/<display name>/<version>/<sample name>/AbxrWorldSpaceBootstrap.cs
+                // A real copy has at least one path segment below the version folder - without requiring that,
+                // a bootstrap sitting two levels under Samples makes Take(i + 3) return the script file itself,
+                // and "delete the stale copy" deletes one file while the duplicate assembly error stays.
+                string[] parts = path.Split('/');
+                for (int i = 0; i < parts.Length; i++)
+                {
+                    if (parts[i] != "Samples" || i + 3 >= parts.Length) continue;
+
+                    string copy = string.Join("/", parts.Take(i + 3));
+                    if (!copies.Contains(copy)) copies.Add(copy);
+                    break;
+                }
+            }
+
+            return copies;
+        }
+
+        /// <summary>
+        /// Two imported copies means two asmdefs declaring the same assembly names, which Unity reports as
+        /// "Assembly with name 'AbxrLib.WorldSpace' already exists" - once per assembly, for both copies - and then
+        /// refuses to compile anything. Deleting the stale copy is the whole fix, so name it plainly.
+        /// </summary>
+        /// <summary>
+        /// The copy the duplicate fix preserves: the one matching the running version when there is one, otherwise
+        /// the newest by its version folder. FindAssets order says nothing about age, so "last one found" could
+        /// keep the stale copy and delete the current one.
+        /// </summary>
+        internal static string CopyToKeep(List<string> copies)
+        {
+            string current = copies.FirstOrDefault(c => c.EndsWith("/" + InstalledPackageVersion()));
+            if (current != null) return current;
+
+            string newest = copies[0];
+            foreach (string copy in copies.Skip(1))
+                if (CompareVersions(VersionFolder(copy), VersionFolder(newest)) > 0) newest = copy;
+
+            return newest;
+        }
+
+        /// <summary>The version segment of a copy path ("Assets/Samples/(display name)/2.0.11" -> "2.0.11").</summary>
+        private static string VersionFolder(string copy) => copy.Substring(copy.LastIndexOf('/') + 1);
+
+        private static Check CheckDuplicateWorldSpaceImports()
+        {
+            List<string> folders = SampleCopyFolders();
+            if (folders.Count < 2) return null;
+
+            List<string> canonical = ImportedWorldSpaceCopies();
+            int deletable = canonical.Count > 0 ? canonical.Count - 1 : 0;
+
+            string problem =
+                "Each copy declares the same assembly names, so Unity reports \"Assembly with name " +
+                "'AbxrLib.WorldSpace' already exists\" and stops compiling until only one is left.\n" +
+                "Copies found: " + string.Join(", ", folders) + ".\n";
+
+            // The one-click fix only ever deletes canonical imports under Assets/Samples. A copy living anywhere
+            // else is the developer's own file - possibly vendored on purpose, possibly edited - so when deleting
+            // the stale canonical copies would not get the project down to one, this row can only explain.
+            if (folders.Count - deletable > 1)
+            {
+                return new Check
+                {
+                    Title = "The world-space UI is in this project more than once",
+                    Detail = problem +
+                             "WHAT TO DO: delete all but one copy, then let Unity recompile. Copies outside " +
+                             "Assets/Samples are yours to choose between - the wizard does not delete those.",
+                    Severity = Severity.Problem
+                };
+            }
+
+            return new Check
+            {
+                Title = "The world-space UI is imported more than once",
+                Detail = problem +
+                         $"Keeping {CopyToKeep(canonical)} and deleting the rest fixes it. Package Manager's Samples " +
+                         "list imports into a folder named after the package version, so importing again after an " +
+                         "upgrade adds a copy instead of replacing one - the wizard's own import replaces in place.",
+                Severity = Severity.Problem,
+                FixLabel = "Delete the older copies",
+                Fix = DeleteStaleWorldSpaceCopies
+            };
+        }
+
+        private static void DeleteStaleWorldSpaceCopies()
+        {
+            // Everything is recomputed at click time, not captured when the check ran: the copy set can change in
+            // between (a re-import, a manual delete), and a keep chosen from the old set could put every current
+            // copy on the delete list.
+            List<string> copies = ImportedWorldSpaceCopies();
+            if (copies.Count < 2) return;
+
+            string keep = CopyToKeep(copies);
+            List<string> stale = copies.Where(copy => copy != keep).ToList();
+            if (stale.Count == 0) return;
+
+            // DeleteAsset skips the OS trash, and the stale copy may hold edits the developer made to the sample.
+            // Same rule as the uninstall cleanup: show exactly what goes away, delete nothing unattended.
+            bool confirmed = EditorUtility.DisplayDialog("AbxrLib Setup",
+                "Delete the older world-space UI copies?\n\n" +
+                string.Join("\n", stale) + "\n\n" +
+                $"Keeping {keep}.\n\n" +
+                "Deleted folders do not go to the system trash - any edits made inside them are lost.",
+                "Delete", "Cancel");
+            if (!confirmed) return;
+
+            foreach (string copy in stale)
+            {
+                if (AssetDatabase.DeleteAsset(copy)) Logcat.Info($"Deleted the duplicate world-space UI copy {copy}.");
+                else Logcat.Warning($"Could not delete {copy}.\nWHAT TO DO: delete that folder in the Project window.");
+            }
+
+            AssetDatabase.Refresh();
+        }
+
+        /// <summary>
+        /// The version of the imported world-space objects, read from the import folder's name - which Package
+        /// Manager takes from the manifest version of the package that was installed when the import happened.
+        /// Because samples are imported into Assets/ rather than resolved as a package, updating AbxrLib leaves the
+        /// old copy in place - so this is compared against the installed version to catch a stale import.
+        /// </summary>
+        private static string ImportedWorldSpaceVersion()
+        {
+            string path = ImportedBootstrapPath();
+            if (path == null) return null;
+
+            // .../Samples/<display name>/<version>/<sample name>/AbxrWorldSpaceBootstrap.cs
+            // Same depth rule as ImportedWorldSpaceCopies: the segment two below "Samples" is only a version
+            // when something sits beneath it. In a shallower layout it would be the script's own file name,
+            // which then reads as a bogus "older AbxrLib" and arms a re-import nobody needs.
+            string[] parts = path.Split('/');
+            for (int i = 0; i < parts.Length; i++)
+                if (parts[i] == "Samples" && i + 3 < parts.Length) return parts[i + 2];
+
+            return null;
+        }
+
+        /// <summary>
+        /// Reports whether AbxrLib's own sign-in UI is available, and offers to import it. This is the one check that
+        /// a project can legitimately fail on purpose: an app that collects user input itself does not want this UI.
+        /// </summary>
+        private static Check CheckWorldSpaceUi()
+        {
+            if (!WorldSpaceUiIsInstalled())
+            {
+                // Files there but no assembly: the import happened without its dependencies, which is what Package
+                // Manager's own Samples > Import does - it copies files and installs nothing.
+                if (WorldSpaceUiFilesImported()) return CheckImportedButNotCompiling();
+
+                return new Check
+                {
+                    Title = "World-space UI not installed",
+                    Detail = "AbxrLib's built-in sign-in UI - world-space keyboard, PIN pad, exit poll, and QR-code " +
+                             "scanning - is an optional import, so a project that does not need it stays free of " +
+                             "TextMeshPro, uGUI, and XR Interaction Toolkit.\n" +
+                             "Import it to have AbxrLib ask the user for PIN or email itself. Skip it if your app " +
+                             "collects input and submits it through Abxr.OnInputRequested / Abxr.OnInputSubmitted.",
+                    Severity = Severity.Warning,
+                    FixLabel = "Import world-space UI",
+                    Fix = ImportWorldSpaceUi
+                };
+            }
+
+            string imported = ImportedWorldSpaceVersion();
+            if (!string.IsNullOrEmpty(imported) && imported != InstalledPackageVersion())
+            {
+                return new Check
+                {
+                    Title = "World-space UI is from an older AbxrLib",
+                    Detail = $"AbxrLib is {InstalledPackageVersion()} but the imported world-space UI came from " +
+                             $"{imported}. Because it is imported into Assets/ rather than resolved as a package, " +
+                             "updating AbxrLib leaves the old copy behind.\nRe-importing overwrites it - any edits you " +
+                             "made to those files will be replaced.",
+                    Severity = Severity.Warning,
+                    FixLabel = "Re-import world-space UI",
+                    Fix = ImportWorldSpaceUi
+                };
+            }
+
+            return new Check
+            {
+                Title = "World-space UI installed",
+                Detail = "AbxrLib can show its own sign-in UI (keyboard, PIN pad, QR) and exit polls.",
+                Severity = Severity.Ok
+            };
+        }
+
+        /// <summary>Set while a TextMeshPro install is in flight so the import can finish after the domain reload.</summary>
+        private const string PendingWorldSpaceImportKey = "AbxrLib.SetupWizard.PendingWorldSpaceImport";
+
+        /// <summary>
+        /// Whether TextMeshPro is actually usable in this project, which is not the same question as which package
+        /// provides it. A core-only Unity 6 project has neither com.unity.textmeshpro nor uGUI 2.0, so the assembly is
+        /// genuinely absent even though newer editors can supply it.
+        /// </summary>
+        private static bool TmpAssemblyAvailable() => Type.GetType("TMPro.TMP_Settings, Unity.TextMeshPro") != null;
+
+        /// <summary>Which package supplies TextMeshPro on this Editor: uGUI absorbed it in 2023.2.</summary>
+        private static string TmpPackageForThisEditor() =>
+            TmpIsPartOfUgui() ? "com.unity.ugui" : "com.unity.textmeshpro";
+
+        /// <summary>
+        /// The sample's files are in the project but its assembly is not, so something stopped it compiling. The
+        /// usual cause is importing from Package Manager's own Samples list, which copies files and installs nothing:
+        /// without TextMeshPro (and the uGUI that comes with it) the UI cannot build, and the Console fills with
+        /// errors naming TMPro and UnityEngine.UI.
+        /// </summary>
+        private static Check CheckImportedButNotCompiling()
+        {
+            if (!TmpAssemblyAvailable())
+            {
+                string package = TmpPackageForThisEditor();
+                return new Check
+                {
+                    Title = "World-space UI is imported but cannot compile",
+                    Detail = "Its scripts are in this project, but TextMeshPro is not - so the UI assembly is not " +
+                             $"built and the Console shows missing TMPro and UnityEngine.UI types. Adding {package} " +
+                             "fixes it.\nImporting from Package Manager > Samples copies the files without installing " +
+                             "what they need; the wizard's own import adds it for you.",
+                    Severity = Severity.Problem,
+                    FixLabel = "Add TextMeshPro",
+                    Fix = AddTmpPackage
+                };
+            }
+
+            // Re-import only helps a canonical import: Sample.Import overrides previous imports under
+            // Assets/Samples and nothing else, so for a copy living elsewhere it would ADD a second copy - and
+            // with it the duplicate assembly names that stop the whole compile.
+            if (ImportedWorldSpaceCopies().Count == 0)
+            {
+                return new Check
+                {
+                    Title = "World-space UI is in this project but not compiling",
+                    Detail = "Its scripts are in this project (outside the Assets/Samples import root) and " +
+                             "TextMeshPro is present, so something else is stopping the AbxrLib.WorldSpace assembly " +
+                             "from building.\nWHAT TO DO: check the Console for the first compile error. If that " +
+                             "copy is beyond repair, delete it first, then import the sample fresh from here or " +
+                             "from Package Manager.",
+                    Severity = Severity.Problem
+                };
+            }
+
+            return new Check
+            {
+                Title = "World-space UI is imported but not compiling",
+                Detail = "Its scripts are in this project and TextMeshPro is present, so something else is stopping " +
+                         "the AbxrLib.WorldSpace assembly from building.\nWHAT TO DO: check the Console for the first " +
+                         "compile error. Re-importing the sample replaces the files with a clean copy.",
+                Severity = Severity.Problem,
+                FixLabel = "Re-import world-space UI",
+                Fix = ImportWorldSpaceUi
+            };
+        }
+
+        private static void AddTmpPackage()
+        {
+            string package = TmpPackageForThisEditor();
+            Logcat.Info($"Adding {package} so AbxrLib's imported world-space UI can compile.");
+            Client.Add(package);
+        }
+
+        /// <summary>
+        /// Imports the world-space sample. The UI does not compile without TextMeshPro, so that is installed first
+        /// when missing and the import resumes once it lands - installing a package reloads the domain, which is why
+        /// the intent is parked in SessionState rather than held in a callback.
+        /// </summary>
+        internal static void ImportWorldSpaceUi()
+        {
+            if (SelfPackage() == null)
+            {
+                EditorUtility.DisplayDialog("AbxrLib Setup",
+                    "AbxrLib is not installed as a package here, so its samples cannot be imported.\n\n" +
+                    "WHAT TO DO: install AbxrLib through Window > Package Manager, then run this again.", "OK");
+                return;
+            }
+
+            if (TmpAssemblyAvailable())
+            {
+                ImportWorldSpaceSample();
+                return;
+            }
+
+            string tmpPackage = TmpPackageForThisEditor();
+            SessionState.SetBool(PendingWorldSpaceImportKey, true);
+            Logcat.Info($"AbxrLib's world-space UI needs TextMeshPro, which this project does not have. Adding " +
+                        $"{tmpPackage}; the UI will be imported as soon as that finishes.");
+            Client.Add(tmpPackage);
+        }
+
+        /// <summary>
+        /// Finishes an import that was waiting on TextMeshPro. Called after each Editor load, because installing the
+        /// package reloads the domain and discards whatever was mid-flight.
+        /// </summary>
+        internal static void ResumePendingWorldSpaceImport()
+        {
+            if (!SessionState.GetBool(PendingWorldSpaceImportKey, false)) return;
+
+            // Still resolving: try again on the next load rather than importing UI that cannot compile yet.
+            if (!TmpAssemblyAvailable()) return;
+
+            SessionState.EraseBool(PendingWorldSpaceImportKey);
+            ImportWorldSpaceSample();
+        }
+
+        private static void ImportWorldSpaceSample()
+        {
+            var self = SelfPackage();
+            if (self == null) return;
+
+            var sample = Sample.FindByPackage(self.name, self.version)
+                .FirstOrDefault(s => s.displayName == WorldSpaceSampleName);
+
+            if (sample.importPath == null)
+            {
+                EditorUtility.DisplayDialog("AbxrLib Setup",
+                    $"Could not find the \"{WorldSpaceSampleName}\" sample in AbxrLib {self.version}.\n\n" +
+                    "WHAT TO DO: open Window > Package Manager, select AbxrLib for Unity, and import it from the " +
+                    "Samples section.", "OK");
+                return;
+            }
+
+            // Overwrite a previous import so an upgrade lands in place; two copies would define the same types twice.
+            if (!sample.Import(Sample.ImportOptions.OverridePreviousImports))
+            {
+                EditorUtility.DisplayDialog("AbxrLib Setup",
+                    "Unity could not import the world-space UI.\n\n" +
+                    "WHAT TO DO: import it from Window > Package Manager > AbxrLib for Unity > Samples.", "OK");
+                return;
+            }
+
+            AssetDatabase.Refresh();
+            Logcat.Info($"Imported AbxrLib's world-space UI to {sample.importPath}. AbxrLib will now show its own " +
+                        "keyboard and PIN pad when the backend asks the user to sign in.");
+        }
+
+        private static bool PackageIsRegistered(string packageName)
+        {
+            try { return PackageInfo.GetAllRegisteredPackages().Any(p => p.name == packageName); }
+            catch (Exception) { return false; }
+        }
+
+        /// <summary>
+        /// TextMeshPro ships with Unity but its fonts and shaders ("Essential Resources") are imported per project.
+        /// Without them the PIN pad and keyboard render as blank quads at runtime, which is the most common
+        /// "AbxrLib UI is invisible" report.
+        /// </summary>
+        private static Check CheckTextMeshPro()
+        {
+            // Nothing to say unless there is UI that needs the fonts and the fonts are missing: a core-only project
+            // never draws with TextMeshPro, and a project whose resources are already imported does not need a row
+            // confirming it.
+            if (!WorldSpaceUiIsInstalled()) return null;
+            if (TmpEssentialsImported()) return null;
+
+            // Which package provides TextMeshPro depends on the Editor, so name the one this version actually uses -
+            // otherwise the developer goes looking in Package Manager for something that is not there. The importer
+            // menu path is the same either way (verified on 2021.3 and Unity 6).
+            string provider = TmpIsPartOfUgui()
+                ? "TextMeshPro is part of the com.unity.ugui package on this Editor version"
+                : "TextMeshPro comes from the com.unity.textmeshpro package on this Editor version";
+
+            return new Check
+            {
+                Title = "TextMeshPro essential resources missing",
+                Detail = "AbxrLib's keyboard and PIN pad use TextMeshPro. Until its essential resources (fonts and " +
+                         $"shaders) are imported into this project, that UI renders without text. {provider}; the " +
+                         "resources themselves are imported per project either way.",
+                Severity = Severity.Problem,
+                FixLabel = "Import TMP Essentials",
+                Fix = ImportTmpEssentials
+            };
+        }
+
+        /// <summary>
+        /// True when this project has the TMP essentials. Checked through the AssetDatabase rather than
+        /// TMP_Settings.instance because reading that property is what triggers TMP's own import prompt, and two
+        /// prompts for the same thing is worse than one.
+        /// </summary>
+        internal static bool TmpEssentialsImported()
+        {
+            // Type names as strings, not typeof: core no longer references the TextMeshPro assembly, because a
+            // core-only project may not have TextMeshPro installed at all. An unknown type filter simply finds
+            // nothing, which is the same answer as "not imported".
+            bool hasSettings = AssetDatabase.FindAssets("t:TMP_Settings").Length > 0;
+            bool hasFont = AssetDatabase.FindAssets("t:TMP_FontAsset").Length > 0;
+            return hasSettings && hasFont;
+        }
+
+        private static void ImportTmpEssentials()
+        {
+            // TMP's importer is a window, so this opens it rather than importing silently - the developer still
+            // confirms. If the menu path is not there (TMP not installed at all), say so instead of failing quietly.
+            if (EditorApplication.ExecuteMenuItem("Window/TextMeshPro/Import TMP Essential Resources")) return;
+
+            string install = TmpIsPartOfUgui()
+                ? "add com.unity.ugui (TextMeshPro is part of it on this Editor version)"
+                : "install TextMeshPro";
+            EditorUtility.DisplayDialog("AbxrLib Setup",
+                "Unity could not open the TextMeshPro importer.\n\n" +
+                $"WHAT TO DO: {install} in Window > Package Manager, then use " +
+                "Window > TextMeshPro > Import TMP Essential Resources.", "OK");
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // EventSystem
+        //
+        // uGUI passes taps and clicks to the sign-in prompt only through an EventSystem, and a new scene has none.
+        // The world-space UI adds one at runtime on a flat screen, and XR Interaction Toolkit's ray interactors add
+        // their own on a headset, so this is context rather than a problem. It looks only at the launch scene, where
+        // the prompt first opens, and reads the scene's file so it never has to open it.
+        // ---------------------------------------------------------------------------------------------------------
+
+        /// <summary>GUID of uGUI's EventSystem script. The same in every com.unity.ugui release.</summary>
+        internal const string EventSystemScriptGuid = "76c392e42b5098c458856cdf6ecaaaa1";
+
+        // By name: core's Editor assembly doesn't reference uGUI, the Input System or XR Interaction Toolkit.
+        private const string EventSystemTypeName = "UnityEngine.EventSystems.EventSystem, UnityEngine.UI";
+        private const string StandaloneInputModuleTypeName = "UnityEngine.EventSystems.StandaloneInputModule, UnityEngine.UI";
+        private const string InputSystemUiInputModuleTypeName = "UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem";
+        private const string XrUiInputModuleFullName = "UnityEngine.XR.Interaction.Toolkit.UI.XRUIInputModule";
+        private const string XrUiInputModuleTypeName = XrUiInputModuleFullName + ", Unity.XR.Interaction.Toolkit";
+
+        /// <summary>The Input System's own UI actions. InputSystemUIInputModule uses the same ones when it has none.</summary>
+        private const string DefaultInputActionsPath =
+            "Packages/com.unity.inputsystem/InputSystem/Plugins/PlayerInput/DefaultInputActions.inputactions";
+
+        /// <summary>XRUIInputModule's action properties and the default UI action each one gets.</summary>
+        private static readonly (string Property, string Action)[] XrUiDefaultActions =
+        {
+            ("pointAction", "UI/Point"), ("leftClickAction", "UI/Click"), ("middleClickAction", "UI/MiddleClick"),
+            ("rightClickAction", "UI/RightClick"), ("scrollWheelAction", "UI/ScrollWheel"),
+            ("navigateAction", "UI/Navigate"), ("submitAction", "UI/Submit"), ("cancelAction", "UI/Cancel")
+        };
+
+        private static readonly System.Text.RegularExpressions.Regex SourcePrefabPattern =
+            new(@"m_SourcePrefab: \{fileID: -?\d+, guid: ([0-9a-f]{32})");
+
+        /// <summary>The first enabled scene in Build Settings (Build Profiles in Unity 6), which is where the app starts. Null when there is none.</summary>
+        internal static string LaunchScenePath() => EditorBuildSettings.scenes.FirstOrDefault(scene => scene.enabled)?.path;
+
+        /// <summary>
+        /// Whether a scene or prefab file has an EventSystem, following the prefabs it instances. Null when the file
+        /// isn't text (binary serialization), since then the answer is unknown. A nested prefab that can't be read
+        /// counts as having none.
+        /// </summary>
+        /// <param name="readAssetByGuid">Returns an asset's file contents by GUID, or null when it can't be read.</param>
+        internal static bool? YamlHasEventSystem(string yaml, Func<string, string> readAssetByGuid) =>
+            YamlHasEventSystem(yaml, readAssetByGuid, new HashSet<string>());
+
+        private static bool? YamlHasEventSystem(string yaml, Func<string, string> readAssetByGuid, HashSet<string> visited)
+        {
+            if (yaml == null || !yaml.StartsWith("%YAML")) return null;
+            if (yaml.Contains("guid: " + EventSystemScriptGuid)) return true;
+            foreach (System.Text.RegularExpressions.Match match in SourcePrefabPattern.Matches(yaml))
+            {
+                string guid = match.Groups[1].Value;
+                if (!visited.Add(guid)) continue;
+                if (YamlHasEventSystem(readAssetByGuid(guid), readAssetByGuid, visited) == true) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Whether the scene has an EventSystem. Looks at the live scene when it's open, so unsaved edits count, and
+        /// reads the file otherwise. Null when uGUI isn't installed or the file can't be read as text.
+        /// </summary>
+        internal static bool? SceneHasEventSystem(string scenePath)
+        {
+            Type eventSystemType = Type.GetType(EventSystemTypeName);
+            if (eventSystemType == null) return null;
+
+            UnityEngine.SceneManagement.Scene scene = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(scenePath);
+            if (scene.isLoaded)
+                return scene.GetRootGameObjects().Any(root => root.GetComponentInChildren(eventSystemType, true) != null);
+
+            return YamlHasEventSystem(ReadProjectFile(scenePath), ReadPrefabByGuid);
+        }
+
+        /// <summary>
+        /// Only a .prefab file can hold an EventSystem. A scene also instances models (.fbx, .blend), which can be
+        /// hundreds of megabytes and carry no components of their own: anything added to one is saved in the scene.
+        /// </summary>
+        private static string ReadPrefabByGuid(string guid)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            return path.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase) ? ReadProjectFile(path) : null;
+        }
+
+        private static string ReadProjectFile(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath)) return null;
+            // Physical path, so a prefab inside a package (Packages/...) resolves to the package cache.
+            try { return File.ReadAllText(FileUtil.GetPhysicalPath(assetPath)); }
+            catch (IOException) { return null; }
+            catch (UnauthorizedAccessException) { return null; }
+        }
+
+        /// <summary>
+        /// The input module that matches the project. With XR Interaction Toolkit installed it's the toolkit's: its
+        /// interactors reuse the XRUIInputModule on the current EventSystem, or add one beside any other module, and two
+        /// modules on one EventSystem fight. On the Input System it needs action references to take a touch press (see
+        /// <see cref="AssignDefaultUiActions"/>). Otherwise the module for
+        /// the Active Input Handling: Input System (or Both) gets InputSystemUIInputModule, Input Manager (old) alone
+        /// gets StandaloneInputModule. The Editor's own defines follow that setting, since changing it restarts the Editor.
+        /// </summary>
+        internal static Type InputModuleTypeForProject()
+        {
+            // XR Interaction Toolkit before 2.1 has no action references on its module, so it can't be given the
+            // default UI actions; those projects get the plain module instead.
+            Type xrUi = Type.GetType(XrUiInputModuleTypeName);
+            if (xrUi != null && xrUi.GetProperty("pointAction") != null) return xrUi;
+#if ENABLE_INPUT_SYSTEM
+            Type inputSystemUi = Type.GetType(InputSystemUiInputModuleTypeName);
+            if (inputSystemUi != null) return inputSystemUi;
+#endif
+            return Type.GetType(StandaloneInputModuleTypeName);
+        }
+
+        /// <summary>
+        /// Without action references, XRUIInputModule reads devices directly on the Input System, and that reads a
+        /// touch's position but never its press, so taps on a touch screen do nothing. The default UI actions bind a
+        /// touch press as Click, alongside the mouse, pen and gamepad. Does nothing on the Input Manager (old), where the
+        /// module reads touches itself.
+        /// </summary>
+        private static void AssignDefaultUiActions(Component xrUiInputModule)
+        {
+#if ENABLE_INPUT_SYSTEM
+            // The importer stores each action's reference twice; the hidden copy only keeps old file IDs working.
+            var references = AssetDatabase.LoadAllAssetsAtPath(DefaultInputActionsPath)
+                .Where(asset => asset != null && asset.GetType().Name == "InputActionReference" &&
+                                (asset.hideFlags & HideFlags.HideInHierarchy) == 0)
+                .GroupBy(asset => asset.name)
+                .ToDictionary(group => group.Key, group => group.First());
+            Type moduleType = xrUiInputModule.GetType();
+            foreach (var (property, action) in XrUiDefaultActions)
+            {
+                var setter = moduleType.GetProperty(property);
+                if (setter != null && references.TryGetValue(action, out var reference)) setter.SetValue(xrUiInputModule, reference);
+                else Logcat.Warning($"AbxrLib - Couldn't assign {action} to the EventSystem's {property}; set it in the Inspector.");
+            }
+#endif
+        }
+
+        private static Check CheckEventSystem()
+        {
+            if (!WorldSpaceUiIsInstalled()) return null;
+            string scenePath = LaunchScenePath();
+            if (string.IsNullOrEmpty(scenePath)) return null;
+            // Has one, or there's no way to tell.
+            if (SceneHasEventSystem(scenePath) != false) return null;
+
+            string sceneName = Path.GetFileNameWithoutExtension(scenePath);
+            return new Check
+            {
+                Title = "Launch scene has no EventSystem",
+                Detail = $"{sceneName}, the first scene in {BuildWindowName}, has no EventSystem, and the sign-in prompt " +
+                         "takes taps and clicks only through one. On a flat screen AbxrLib adds one when a prompt " +
+                         "opens, and on a headset XR Interaction Toolkit's ray interactors add their own. Add one to the " +
+                         "scene so input doesn't depend on either. An EventSystem your code creates at runtime isn't " +
+                         "detected." + (EditorApplication.isPlayingOrWillChangePlaymode ? "\nExit Play mode to add one." : ""),
+                Severity = Severity.Info,
+                // Added in Play mode, it would go into the runtime copy of the scene and be lost on exit.
+                FixLabel = EditorApplication.isPlayingOrWillChangePlaymode ? null : "Add an EventSystem",
+                Fix = EditorApplication.isPlayingOrWillChangePlaymode ? null : () => AddEventSystemToScene(scenePath)
+            };
+        }
+
+        /// <summary>
+        /// Adds an EventSystem with the project's input module to the scene. An open scene is only marked dirty, so
+        /// saving stays with the developer along with their other edits. A closed one is opened, saved and closed.
+        /// </summary>
+        internal static void AddEventSystemToScene(string scenePath)
+        {
+            Type eventSystemType = Type.GetType(EventSystemTypeName);
+            Type inputModuleType = InputModuleTypeForProject();
+            if (eventSystemType == null || inputModuleType == null)
+            {
+                Logcat.Warning("AbxrLib - Couldn't add an EventSystem: uGUI (com.unity.ugui) isn't installed.");
+                return;
+            }
+
+            UnityEngine.SceneManagement.Scene scene = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(scenePath);
+            bool wasOpen = scene.isLoaded;
+            // A scene listed unloaded in the Hierarchy stays listed after the save.
+            bool wasListed = scene.IsValid();
+            if (!wasOpen)
+            {
+                scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath,
+                    UnityEditor.SceneManagement.OpenSceneMode.Additive);
+            }
+
+            var eventSystem = new GameObject("EventSystem", eventSystemType, inputModuleType);
+            if (inputModuleType.FullName == XrUiInputModuleFullName) AssignDefaultUiActions(eventSystem.GetComponent(inputModuleType));
+            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(eventSystem, scene);
+
+            if (wasOpen)
+            {
+                Undo.RegisterCreatedObjectUndo(eventSystem, "Add EventSystem");
+                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(scene);
+                Selection.activeGameObject = eventSystem;
+            }
+            else
+            {
+                UnityEditor.SceneManagement.EditorSceneManager.SaveScene(scene);
+                UnityEditor.SceneManagement.EditorSceneManager.CloseScene(scene, removeScene: !wasListed);
+            }
+            Logcat.Info($"Added an EventSystem with {inputModuleType.Name} to {Path.GetFileNameWithoutExtension(scenePath)}.");
+        }
+
+        /// <summary>
+        /// Reports each package AbxrLib's manifest depends on against the version this Editor resolved for it, so
+        /// what the wizard shows is always what the project actually has rather than the numbers written in the
+        /// manifest. A dependency that is not registered at all means resolution has not finished or has failed,
+        /// which is a resolve problem rather than something to install by hand.
+        /// </summary>
+        private static Check CheckRequiredPackages()
+        {
+            var self = SelfPackage();
+            if (self?.dependencies == null || self.dependencies.Length == 0) return CheckRequiredAssemblies();
+
+            Dictionary<string, PackageInfo> registered;
+            try
+            {
+                registered = PackageInfo.GetAllRegisteredPackages()
+                    .GroupBy(p => p.name)
+                    .ToDictionary(g => g.Key, g => g.First());
+            }
+            catch (Exception)
+            {
+                // No package registry to read (rare, and not worth guessing about) - fall back to what loaded.
+                return CheckRequiredAssemblies();
+            }
+
+            if (registered.Count == 0) return CheckRequiredAssemblies();
+
+            var missing = new List<string>();
+            var older = new List<string>();
+            var present = new List<string>();
+
+            foreach (var dependency in self.dependencies)
+            {
+                if (!registered.TryGetValue(dependency.name, out var info))
+                {
+                    missing.Add($"{dependency.name} (needs {dependency.version})");
+                    continue;
+                }
+
+                string name = string.IsNullOrEmpty(info.displayName) ? info.name : info.displayName;
+                // Built-in packages ship with the Editor, so saying where it came from explains why the version can
+                // differ from the manifest without anything being wrong.
+                string source = info.source == PackageSource.BuiltIn ? " (built in)" : "";
+                present.Add($"{name} {info.version}{source}");
+
+                if (CompareVersions(info.version, dependency.version) < 0)
+                    older.Add($"{name} {info.version} (AbxrLib needs {dependency.version})");
+            }
+
+            if (missing.Count > 0)
+            {
+                return new Check
+                {
+                    Title = "Some required packages are not registered",
+                    Detail = "AbxrLib's manifest depends on: " + string.Join(", ", missing) + ". These install " +
+                             "automatically with the package, so this usually means resolution has not finished or " +
+                             "failed.",
+                    Severity = Severity.Problem,
+                    FixLabel = "Resolve packages",
+                    Fix = () => Client.Resolve()
+                };
+            }
+
+            if (older.Count > 0)
+            {
+                return new Check
+                {
+                    Title = "A required package is older than AbxrLib needs",
+                    Detail = string.Join("; ", older) + ".\nWHAT TO DO: update it in Window > Package Manager. A " +
+                             "version pinned in this project's manifest overrides what AbxrLib asks for.",
+                    Severity = Severity.Warning,
+                    FixLabel = "Resolve packages",
+                    Fix = () => Client.Resolve()
+                };
+            }
+
+            return new Check
+            {
+                Title = "Required packages installed",
+                Detail = string.Join(", ", present),
+                Severity = Severity.Ok
+            };
+        }
+
+        /// <summary>
+        /// Fallback when AbxrLib's manifest is unavailable - for instance a source copy under Assets/ rather than an
+        /// installed package. Checks the assemblies its code needs instead of package versions it cannot know.
+        /// </summary>
+        private static Check CheckRequiredAssemblies()
+        {
+            var loaded = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).ToList();
+            var missing = new List<string>();
+            // TextMeshPro is deliberately not checked: only the world-space UI needs it, and that carries its own
+            // requirement.
+            if (!loaded.Contains("Newtonsoft.Json")) missing.Add("Newtonsoft Json (com.unity.nuget.newtonsoft-json)");
+            if (!loaded.Contains("Unity.InputSystem")) missing.Add("Input System (com.unity.inputsystem)");
+
+            if (missing.Count == 0)
+            {
+                return new Check
+                {
+                    Title = "Required assemblies present",
+                    Detail = "Newtonsoft Json and Input System are loaded.",
+                    Severity = Severity.Ok
+                };
+            }
+
+            return new Check
+            {
+                Title = "Required packages not loaded",
+                Detail = "AbxrLib needs " + string.Join(" and ", missing) + ".\nWHAT TO DO: install the missing " +
+                         "package in Window > Package Manager.",
+                Severity = Severity.Problem,
+                FixLabel = "Resolve packages",
+                Fix = () => Client.Resolve()
+            };
+        }
+
+        /// <summary>
+        /// Numeric comparison of two package versions ("1.8.1" against "1.12.0" - 1.12 is newer). Pre-release
+        /// suffixes are compared only as far as their leading digits, which is enough to tell "older than required"
+        /// from "at or above".
+        /// </summary>
+        internal static int CompareVersions(string left, string right)
+        {
+            string[] a = (left ?? "").Split('.');
+            string[] b = (right ?? "").Split('.');
+
+            for (int i = 0; i < Mathf.Max(a.Length, b.Length); i++)
+            {
+                int result = PartValue(a, i).CompareTo(PartValue(b, i));
+                if (result != 0) return result;
+            }
+
+            return 0;
+
+            int PartValue(string[] parts, int index)
+            {
+                if (index >= parts.Length) return 0;
+                string digits = new string(parts[index].TakeWhile(char.IsDigit).ToArray());
+                return int.TryParse(digits, out int value) ? value : 0;
+            }
+        }
+
+        /// <summary>
+        /// Catches the one Advanced setting that quietly breaks authentication on an ArborXR-managed fleet.
+        ///
+        /// On a managed device the organization is not configured at all - it is resolved at runtime from the MDM,
+        /// which AbxrLib does by building a dynamic org token out of the device's org id and fingerprint. That whole
+        /// path starts with ArborMdmClient, so with it switched off there is no organization to authenticate against
+        /// and the failure reads "Organization identification unavailable", pointing nowhere near this checkbox.
+        ///
+        /// Returns null - nothing to report - in the two cases where it is off for a good reason: a project not using
+        /// ArborXR as its MDM at all, and a Production (Custom APK) build, which takes its organization from
+        /// configuration by design and never consults the MDM for it.
+        /// </summary>
+        private static Check CheckArborMdmClient()
+        {
+            // Read-only on purpose: this check also runs from the build hook, which must not create or migrate the
+            // asset. Null while Unity is still settling or when there is no asset yet; the wizard reports both separately.
+            var config = Core.TryGetLoadedConfig();
+            if (config == null) return null;
+            if (config.enableArborMdmClient) return null;
+            if (config.buildType == "production_custom") return null;
+
+            return new Check
+            {
+                Title = "ArborMdmClient is turned off",
+                Detail = "On ArborXR-managed devices the organization is supplied at runtime by the MDM, and that " +
+                         "needs ArborMdmClient. With it off, builds on managed devices have no organization to " +
+                         "authenticate against and fail with \"Organization identification unavailable\".\n" +
+                         "Leave it off only if this project does not run on ArborXR-managed devices.",
+                Severity = Severity.Warning,
+                FixLabel = "Turn ArborMdmClient on",
+                Fix = EnableArborMdmClient
+            };
+        }
+
+        // ---------------------------------------------------------------------------------------------------------
+        // Passcode pairing (MDM-less)
+        //
+        // The Editor can't see the device or browser, so this reads the project only: whether code calls the pairing
+        // API, whether anything can show the prompt, and the two pairing settings. None of it is a build-blocking
+        // Problem, so the build hook stays quiet. GetPairingState() answers the rest at runtime.
+        // ---------------------------------------------------------------------------------------------------------
+
+        private static readonly string[] PairingCalls = { "StartPairing(", "RedeemPairingPasscode(" };
+
+        /// <summary>A text scan of Assets/**/*.cs. A call made only from a precompiled DLL is missed, and the row says so.</summary>
+        internal static bool ProjectCallsPairing() => ProjectScriptsContain(PairingCalls);
+
+        private static bool ProjectScriptsContain(string[] needles)
+        {
+            foreach (string path in Directory.EnumerateFiles(Application.dataPath, "*.cs", SearchOption.AllDirectories))
+            {
+                string text;
+                try { text = File.ReadAllText(path); }
+                catch (IOException) { continue; }
+                catch (UnauthorizedAccessException) { continue; }
+                if (needles.Any(needle => text.Contains(needle))) return true;
+            }
+            return false;
+        }
+
+        private static Check CheckPairing()
+        {
+            var config = Core.TryGetLoadedConfig();
+            if (config == null) return null;
+
+            var notes = new List<string>();
+            BuildTarget target = EditorUserBuildSettings.activeBuildTarget;
+            if (target != BuildTarget.Android && target != BuildTarget.WebGL)
+                notes.Add("The active build target isn't Android or WebGL, so pairing compiles out and StartPairing() returns false.");
+            if (!config.enablePairingDismiss)
+                notes.Add("Enable Pairing Dismiss is off, so the default prompt has no Not now. A prompt opened at launch can't be closed by someone without a passcode.");
+            string Notes() => notes.Count == 0 ? "" : "\n" + string.Join("\n", notes);
+
+            if (!Utils.IsValidUrl(config.pairingUrl))
+            {
+                return new Check
+                {
+                    Title = "Pairing URL isn't a valid URL",
+                    Detail = $"Passcode pairing redeems at the Pairing URL, and \"{config.pairingUrl}\" isn't an http:// or " +
+                             "https:// URL, so every redeem fails as a build problem. The default is https://api.xrdm.app/." + Notes(),
+                    Severity = Severity.Warning
+                };
+            }
+
+            if (!ProjectCallsPairing())
+            {
+                return new Check
+                {
+                    Title = "Passcode pairing isn't wired in",
+                    Detail = "No script in Assets/ calls Abxr.StartPairing() or Abxr.RedeemPairingPasscode(), so the pairing " +
+                             "prompt never shows and a headset with no organization stays quiet. That's fine for apps used " +
+                             "only on ArborXR-managed headsets. A call made only from a precompiled DLL isn't detected." + Notes(),
+                    Severity = Severity.Info
+                };
+            }
+
+            if (!WorldSpaceUiIsInstalled() && !ProjectScriptsContain(new[] { "OnInputRequested" }))
+            {
+                return new Check
+                {
+                    Title = "Nothing can show the pairing prompt",
+                    Detail = "Code calls the pairing API, but the world-space UI isn't installed and no script assigns " +
+                             "Abxr.OnInputRequested, so StartPairing() returns false. Import the world-space UI, or show your " +
+                             "own prompt from Abxr.OnInputRequested and answer with Abxr.OnInputSubmitted." + Notes(),
+                    Severity = Severity.Warning,
+                    FixLabel = "Import world-space UI",
+                    Fix = ImportWorldSpaceUi
+                };
+            }
+
+            return new Check
+            {
+                Title = "Passcode pairing wired in",
+                Detail = "The app can offer pairing when nothing else identifies its organization." + Notes(),
+                Severity = notes.Count == 0 ? Severity.Ok : Severity.Info
+            };
+        }
+
+        private static void EnableArborMdmClient()
+        {
+            var config = Core.GetConfig();
+            if (config == null) return;
+
+            config.enableArborMdmClient = true;
+            EditorUtility.SetDirty(config);
+            AssetDatabase.SaveAssets();
+            Logcat.Info("Turned ArborMdmClient on, so builds on ArborXR-managed devices can get their organization " +
+                        "from the MDM at runtime.");
+        }
+
+        /// <summary>
+        /// Headset SDKs present in the project, recognized by assembly name: "PICO", "Meta", "OpenXR". Shared with the
+        /// diagnostics report so the two never disagree about what is installed.
+        /// </summary>
+        internal static List<string> DetectedHeadsetSdks()
+        {
+            var names = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetName().Name).ToList();
+            var sdks = new List<string>();
+            if (names.Any(n => n == "Unity.XR.PICO")) sdks.Add("PICO");
+            if (names.Any(n => n.Contains("Oculus") || n.Contains("OVR"))) sdks.Add("Meta");
+            if (names.Any(n => n.Contains("OpenXR"))) sdks.Add("OpenXR");
+            return sdks;
+        }
+
+        /// <summary>
+        /// The build target groups a scripting define is set for, out of Android (where headset builds live) and the
+        /// selected group when that is something else. Empty when the define is set for neither.
+        /// </summary>
+        internal static List<BuildTargetGroup> GroupsWithDefine(string define)
+        {
+            var groups = new List<BuildTargetGroup>();
+            if (BuildDefines.Has(define, BuildTargetGroup.Android)) groups.Add(BuildTargetGroup.Android);
+
+            BuildTargetGroup selected = EditorUserBuildSettings.selectedBuildTargetGroup;
+            if (selected != BuildTargetGroup.Android && BuildDefines.Has(define, selected)) groups.Add(selected);
+            return groups;
+        }
+
+        /// <summary>
+        /// Reports when QR-code sign-in cannot work. QR is part of the world-space UI, so this says nothing at all in
+        /// a core-only project, and nothing when QR is already available - only when the UI is installed and the
+        /// headset support it needs is missing.
+        ///
+        /// Events, telemetry, logs, and PIN or email sign-in never depend on any of this.
+        /// </summary>
+        private static Check CheckHeadsetSdk()
+        {
+            if (!WorldSpaceUiIsInstalled()) return null;
+
+            List<string> sdks = DetectedHeadsetSdks();
+            bool hasPico = sdks.Contains("PICO");
+            bool hasMeta = sdks.Contains("Meta");
+            bool hasOpenXr = sdks.Contains("OpenXR");
+
+            bool metaQr = GroupsWithDefine("META_QR_AVAILABLE").Count > 0;
+            bool picoQr = GroupsWithDefine("PICO_SDK_3_4_OR_NEWER").Count > 0;
+
+            // QR is compiled in, so there is nothing to report.
+            if (picoQr || metaQr) return null;
+
+            if (hasPico || hasMeta || hasOpenXr)
+            {
+                string detected = hasPico ? "PICO" : hasMeta ? "Meta" : "OpenXR";
+                return new Check
+                {
+                    Title = "QR-code sign-in is not enabled for this build target",
+                    Detail = $"{detected} support is in the project, but the define that marks QR support ready is " +
+                             "not set for the active build target. (On PICO it also compiles the scanner in; on " +
+                             "Meta the scanner reaches the SDK by reflection and the define is only the readiness " +
+                             "marker.) It is set automatically once the headset SDK is detected for that target - " +
+                             "switching to Android usually does it. PIN and email sign-in work either way.",
+                    Severity = Severity.Info
+                };
+            }
+
+            return new Check
+            {
+                Title = "QR-code sign-in unavailable - no headset SDK",
+                Detail = "The world-space UI is installed, but QR scanning needs the Meta or PICO SDK (or OpenXR) in " +
+                         "the project. PIN and email sign-in work without it.",
+                Severity = Severity.Info
+            };
+        }
+
+        /// <summary>
+        /// Android player settings a standalone headset build needs. Only reported when Android is the active build
+        /// target, so desktop and WebGL projects are not told to change settings they do not use.
+        /// </summary>
+        private static Check CheckAndroidPlayerSettings()
+        {
+            if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.Android)
+            {
+                return new Check
+                {
+                    Title = "Build target is " + EditorUserBuildSettings.activeBuildTarget,
+                    Detail = $"Switch to Android in File > {BuildWindowName} when you build for a standalone headset " +
+                             "(Quest, PICO). AbxrLib also runs in the Editor and in desktop builds.",
+                    Severity = Severity.Info
+                };
+            }
+
+            bool il2cpp = PlayerSettings.GetScriptingBackend(NamedBuildTarget.Android) == ScriptingImplementation.IL2CPP;
+            bool arm64 = (PlayerSettings.Android.targetArchitectures & AndroidArchitecture.ARM64) != 0;
+            bool minSdk = PlayerSettings.Android.minSdkVersion >= AndroidSdkVersions.AndroidApiLevel29;
+
+            var todo = new List<string>();
+            if (!il2cpp) todo.Add("scripting backend is Mono (headsets need IL2CPP)");
+            if (!arm64) todo.Add("ARM64 is not a target architecture");
+            if (!minSdk) todo.Add($"minimum API level is {(int)PlayerSettings.Android.minSdkVersion} (headsets need 29 or higher)");
+
+            if (todo.Count == 0)
+            {
+                return new Check
+                {
+                    Title = "Android player settings ready",
+                    Detail = "IL2CPP, ARM64, and minimum API level 29 or higher.",
+                    Severity = Severity.Ok
+                };
+            }
+
+            return new Check
+            {
+                Title = "Android player settings need attention",
+                Detail = "Standalone headset builds require IL2CPP, ARM64, and API level 29 or higher. In this " +
+                         "project: " + string.Join("; ", todo) + ".",
+                Severity = Severity.Warning,
+                FixLabel = "Apply recommended settings",
+                Fix = ApplyRecommendedAndroidSettings
+            };
+        }
+
+        /// <summary>
+        /// Applies the Android settings a headset build needs. ARM64 is added to whatever is already selected rather
+        /// than replacing it, so a project that also ships ARMv7 keeps it.
+        /// </summary>
+        private static void ApplyRecommendedAndroidSettings()
+        {
+            PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
+            PlayerSettings.Android.targetArchitectures |= AndroidArchitecture.ARM64;
+            if (PlayerSettings.Android.minSdkVersion < AndroidSdkVersions.AndroidApiLevel29)
+                PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel29;
+
+            Logcat.Info("Applied recommended Android player settings for AbxrLib: IL2CPP, ARM64, minimum API level 29.");
+        }
+    }
+}

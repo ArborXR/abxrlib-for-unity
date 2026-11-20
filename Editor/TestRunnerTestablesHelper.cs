@@ -69,12 +69,17 @@ namespace AbxrLib.Editor
 
             testables.Add(PackageName);
 
+            // Written through a sibling temp file and swapped in: a write that dies partway (disk full, crash)
+            // must never leave a truncated manifest.json - the one file Unity cannot open the project without.
+            string tempPath = manifestPath + ".abxrlib-tmp";
             try
             {
-                File.WriteAllText(manifestPath, root.ToString(Newtonsoft.Json.Formatting.Indented));
+                File.WriteAllText(tempPath, root.ToString(Newtonsoft.Json.Formatting.Indented));
+                File.Replace(tempPath, manifestPath, null);
             }
             catch (Exception ex)
             {
+                try { File.Delete(tempPath); } catch { /* best effort; a leftover temp file is harmless */ }
                 message = $"Could not write manifest: {ex.Message}";
                 return false;
             }

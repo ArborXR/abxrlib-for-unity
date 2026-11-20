@@ -4,16 +4,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using AbxrLib.Runtime.Core;
-using AbxrLib.Runtime.Core.QRScanner;
-using AbxrLib.Runtime.Services.AI;
 using AbxrLib.Runtime.Types;
 using AbxrLib.Runtime.Services.Data;
 using AbxrLib.Runtime.Services.Auth;
+using AbxrLib.Runtime.Services.Pairing;
 using AbxrLib.Runtime.Services.Telemetry;
 using AbxrLib.Runtime.Services.Platform;
 using AbxrLib.Runtime.Services.Transport;
-using AbxrLib.Runtime.UI.ExitPoll;
-using AbxrLib.Runtime.UI.Keyboard;
+using AbxrLib.Runtime.Core.UI;
 using Newtonsoft.Json;
 using UnityEngine;
 
@@ -32,9 +30,37 @@ namespace AbxrLib.Runtime
             _nextRuntimeAuthConfigForTesting = null;
             _simulateQuitInExitAfterAssessmentComplete = false;
             _unitTestSsoSimulationFromConfigAllowed = false;
+            _nextPairingStoreForTesting = null;
+            _nextPairingRedeemClientForTesting = null;
+            _pairingPlatformSupportedForTesting = false;
+            AbxrAuthService.ResetAppliedAuthHandoffForTesting();
             if (Instance != null) Instance._authService.ResetAuthStartedForTesting();
             Abxr.ResetQuitClosingEventDefaultsForTesting();
         }
+
+        /// <summary>For testing only. When set before CreateSubsystem(), the pairing service keeps its pairing here instead of in PlayerPrefs.</summary>
+        internal static IPairingStore NextPairingStoreForTesting
+        {
+            get => _nextPairingStoreForTesting;
+            set => _nextPairingStoreForTesting = value;
+        }
+        private static IPairingStore _nextPairingStoreForTesting;
+
+        /// <summary>For testing only. When set before CreateSubsystem(), the pairing service redeems through this instead of the network.</summary>
+        internal static IPairingRedeemClient NextPairingRedeemClientForTesting
+        {
+            get => _nextPairingRedeemClientForTesting;
+            set => _nextPairingRedeemClientForTesting = value;
+        }
+        private static IPairingRedeemClient _nextPairingRedeemClientForTesting;
+
+        /// <summary>For testing only. Pairing runs only in Android and WebGL players; this lets a PlayMode test pair in the Editor. Read by the subsystem created afterwards.</summary>
+        internal static bool PairingPlatformSupportedForTesting
+        {
+            get => _pairingPlatformSupportedForTesting;
+            set => _pairingPlatformSupportedForTesting = value;
+        }
+        private static bool _pairingPlatformSupportedForTesting;
 
         /// <summary>For testing only. When true, ExitAfterAssessmentComplete() does not call EditorApplication.isPlaying = false / Application.Quit(); it logs and ends the coroutine so PlayMode tests can complete.</summary>
         internal static bool SimulateQuitInExitAfterAssessmentComplete
@@ -63,6 +89,10 @@ namespace AbxrLib.Runtime
         /// <summary>For testing only. Exposes the auth service so tests can simulate auth success.</summary>
         internal AbxrAuthService AuthServiceForTesting => _authService;
 
+        /// <summary>For testing only. The pairing service, for its state and stored pairing.</summary>
+        internal AbxrPairingService PairingServiceForTesting => _pairingService;
+        internal AbxrPairingService Pairing => _pairingService;
+
         /// <summary>For testing only. True when ArborMdmClient is available and connected (e.g. on Android device with MDM). Used to decide expected auth outcome in environment-dependent tests.</summary>
         internal bool IsArborMdmClientAvailableAndConnected => _arborMdmClient != null && _arborMdmClient.IsConnected();
 
@@ -81,6 +111,12 @@ namespace AbxrLib.Runtime
         /// <summary>For testing only. Current transport (REST or ArborInsights). Use to check IsServiceTransport and call GetPending*ForTesting on any transport.</summary>
         internal IAbxrTransport GetTransportForTesting() => _transport;
 
+        /// <summary>For testing only. Replaces the data transport, so a test can see what a flush sends.</summary>
+        internal void SetTransportForTesting(IAbxrTransport transport) => _transport = transport;
+
+        /// <summary>For testing only. True when the exit-or-return flow after an assessment has been started and not stopped.</summary>
+        internal bool IsExitAfterAssessmentScheduledForTesting => _exitAfterAssessmentCoroutine != null;
+
         /// <summary>For testing only. Pending events from current transport; empty list when transport is null or service (device).</summary>
         internal List<EventPayload> GetPendingEventsForTesting() => _transport?.GetPendingEventsForTesting() ?? new List<EventPayload>();
         /// <summary>For testing only. Pending logs from current transport; empty when null or service.</summary>
@@ -90,6 +126,8 @@ namespace AbxrLib.Runtime
 
         // ── Services ─────────────────────────────────────────────────
         private AbxrAuthService _authService;
+        private AbxrPairingService _pairingService;
+        private PairingHost _pairingHost;
         private AbxrDataService _dataService;
         private AbxrTelemetryService _telemetryService;
         private ArborMdmClient _arborMdmClient;
@@ -100,13 +138,17 @@ namespace AbxrLib.Runtime
         private volatile IAbxrTransport _transport;
         private bool _transportSelectionComplete;
         private Coroutine _transportSelectionCoroutine;
-        private AIProxyApi _aiProxyApi;
         private SceneChangeDetector _sceneChangeDetector;
         private HeadsetDetector _headsetDetector;
 
         // ── Module state ─────────────────────────────────────────────
         private int _currentModuleIndex;
         private Action<string, string, string, string> _appOnInputRequested;
+        /// <summary>
+        /// The SDK's UI showed the latest sign-in request. Set when it's dispatched, not read from the handler later: an
+        /// app that assigns OnInputRequested while the SDK's prompt is up leaves the request with that prompt.
+        /// </summary>
+        private bool _signInShownBySdkUi;
 
         // Developer-supplied overrides (bypass ArborMdmClient); null = not set.
         private string _overrideOrgId;
@@ -138,9 +180,15 @@ namespace AbxrLib.Runtime
 
         private static readonly WaitForSecondsRealtime TransportPollWait = new WaitForSecondsRealtime(0.25f);
         private static readonly WaitForSecondsRealtime AuthStartPollWait = new WaitForSecondsRealtime(0.1f);
+        /// <summary>How long identity waits for the ArborXR client after startup: the client's own initialization limit (SDK-60 decision 2).</summary>
+        private const float ArborMdmClientWaitSeconds = 16f;
+        private float _startRealtime;
+        private bool _arborMdmClientInstalled;
 
         private Coroutine _delayedStartCoroutine;
         private Coroutine _exitAfterAssessmentCoroutine;
+        private Coroutine _rateLimitCountdown;
+        private bool _endSessionInProgress;
 
         internal bool HasAuthenticationStarted => _authService.HasAuthenticationStarted;
 
@@ -166,15 +214,19 @@ namespace AbxrLib.Runtime
             }
 
             // Create services
+            _startRealtime = Time.realtimeSinceStartup;
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (Configuration.Instance.enableArborMdmClient)
             {
                 _arborMdmClient = new ArborMdmClient();
-                // Start bind early so it can complete while the scene loads; auth will wait for ready in a coroutine.
+                // Start bind early so it can complete while the scene loads; identity waits for it in a coroutine.
                 _arborMdmClient.Initialize();
+                _arborMdmClientInstalled = ArborMdmClient.IsClientPackageInstalled();
             }
+#pragma warning disable CS0618 // Obsolete, but still honored until 3.1 removes the service path.
             if (Configuration.Instance.enableArborInsightsClient)
                 _arborInsightsClient = new ArborInsightsClient();
+#pragma warning restore CS0618
             if (_arborInsightsClient != null)
                 _arborInsightsClient.Start();
 #endif
@@ -184,16 +236,25 @@ namespace AbxrLib.Runtime
                 _authService.ApplyRuntimeAuthOverridesForTesting(_nextRuntimeAuthConfigForTesting);
                 _nextRuntimeAuthConfigForTesting = null;
             }
+            _pairingHost = new PairingHost(this);
+            _pairingService = new AbxrPairingService(_nextPairingStoreForTesting ?? new PlayerPrefsPairingStore(),
+                _nextPairingRedeemClientForTesting ?? new UnityWebRequestPairingClient(this), _pairingHost);
+            _nextPairingStoreForTesting = null;
+            _nextPairingRedeemClientForTesting = null;
+            _pairingService.OnStateChanged = OnPairingStateChanged;
+            _pairingService.OnInputRequested = OnInputRequestedDispatch;
+            _authService.SetPairedCredential(_pairingService);
             _transport = new AbxrTransportRest(_authService, this);
             _authService.SetTransportGetter(() => _transport);
-            _dataService = new AbxrDataService(this, () => _transport);
+            _dataService = new AbxrDataService(this, () => _transport, () => IsRecording);
             _telemetryService = new AbxrTelemetryService(this);
-            _aiProxyApi = new AIProxyApi(_authService);
             _storageService = new AbxrStorageService(_authService, this, () => _transport);
 
             _transportSelectionComplete = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
+#pragma warning disable CS0618 // Obsolete, but still honored until 3.1 removes the service path.
             if (Configuration.Instance.enableArborInsightsClient && _arborInsightsClient != null)
+#pragma warning restore CS0618
                 _transportSelectionCoroutine = StartCoroutine(WaitForTransportSelectionCoroutine());
             else
 #endif
@@ -203,12 +264,20 @@ namespace AbxrLib.Runtime
             Abxr.OnAuthCompleted += OnAuthCompletedHandler;
 
             // Wire auth callbacks. Auth always invokes our dispatcher; we never call PresentKeyboard when the app has set OnInputRequested.
-            _authService.OnInputRequested = OnInputRequestedDispatch;
+            // Records who showed each sign-in request, so a cleared session closes only the SDK's own prompt.
+            _authService.OnInputRequested = (type, prompt, domain, error) =>
+                _signInShownBySdkUi = DispatchInputRequest(type, prompt, domain, error);
             _authService.OnSucceeded = () => HandleAuthCompleted(true);
             _authService.OnFailed = error =>
             {
                 Logcat.Error($"Authentication failure: {error}");
                 HandleAuthCompleted(false, error);
+            };
+            // No organization identity, or a suspended pairing: states a store install is expected to be in, not faults.
+            _authService.OnFailedQuietly = reason =>
+            {
+                Logcat.Info($"Not authenticating: {reason}. The app runs without sending data.");
+                HandleAuthCompleted(false, reason);
             };
             _authService.OnUserDataSyncCompleted = (success, errorMsg) => Abxr.OnUserDataSyncCompleted?.Invoke(success, errorMsg);
 
@@ -223,11 +292,9 @@ namespace AbxrLib.Runtime
             _headsetDetector = new HeadsetDetector(_authService, this);
             _headsetDetector.Start();
             
-            KeyboardManager.AuthService = _authService;
-            
-#if UNITY_ANDROID && !UNITY_EDITOR
-            QrScannerBase.AuthService = _authService;
-#endif
+            // Publish authentication for the world-space UI to read. The UI is optional, so this is a one-way
+            // hand-off through the registry rather than core assigning fields on UI types.
+            AbxrUi.AuthBridge = _authService;
 
             // Log version/init result first so it always appears before any auth failure from the coroutine.
             var settings = Configuration.Instance;
@@ -237,26 +304,32 @@ namespace AbxrLib.Runtime
                 var reason = Configuration.LastValidationErrorMessage ?? "required configuration missing or invalid";
                 if (reason.StartsWith("Authentication error: ", StringComparison.Ordinal))
                     reason = reason.Substring("Authentication error: ".Length);
-                Logcat.Error($"Version {AbxrLibVersion.Version} Initialization Failed: {reason}");
+                Logcat.Error($"Version {AbxrLibVersion.Version} Initialization Failed: {reason} | {EnvironmentSummary.Describe(settings)}");
             }
             else
-                Logcat.Info($"Version {AbxrLibVersion.Version} Initialized.");
+                Logcat.Info($"Version {AbxrLibVersion.Version} Initialized. {EnvironmentSummary.Describe(settings)}");
 
             // Auto-start auth (gated on transport selection so first auth uses correct backend).
             //
             // Invalid AbxrLib asset (missing/invalid credentials or rest URL): always use this coroutine path — do not
             // call HandleAuthCompleted from Awake. AbxrSubsystem.Awake runs during BeforeSceneLoad, before the scene
-            // exists, so synchronous OnAuthCompleted would run with no subscribers.
+            // exists, so synchronous OnAuthCompleted would run with no subscribers; the coroutine waits a frame first.
             //
-            // When credentials cannot be sent, AbxrAuthService.Authenticate() fails at IsValidToSend() (before
+            // With no org credential from any source and no stored pairing, Authenticate() stops quietly: one Info line
+            // and OnAuthCompleted(false, "No organization identity") through OnFailedQuietly, since a store install is
+            // expected to be in that state (SDK-59 RFC D2). When credentials are present but can't be sent (malformed, a
+            // missing App Token, a production_custom build without its org token), it fails at validation (before
             // AuthenticateCoroutine / device auth / HTTP). That invokes OnFailed → HandleAuthCompleted(false, …) →
-            // Abxr.OnAuthCompleted(false, error). Same pipeline as API/network terminal failure: Authenticated stays false,
+            // Abxr.OnAuthCompleted(false, error). Same pipeline as the API refusing the credentials: Authenticated stays false,
             // no session; apps that continue without analytics should handle success == false (as for any failed auth).
             // This is not success == true (unlike a completed session with authMechanism none from the backend).
+            // Network failures are not terminal: device auth reports the first one as OnAuthCompleted(false, "...; the SDK is
+            // retrying in the background."), keeps retrying, and reports true if a retry succeeds.
             //
-            // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass; the transport may fail
-            // on first request. MDM/query overrides after LoadRuntimeAuthFromConfig may fix credentials; do not gate on
-            // Configuration.LastValidationErrorMessage alone inside Authenticate() (it can be stale after overrides).
+            // Edge case: restUrl invalid but auth fields valid — IsValidToSend() may still pass and the request fails in the
+            // transport (an unreachable host is retried like an offline one). MDM/query overrides after LoadRuntimeAuthFromConfig
+            // may fix credentials; do not gate on Configuration.LastValidationErrorMessage alone inside Authenticate() (it can
+            // be stale after overrides).
             bool enableAutoStart = _authService.GetEnableAutoStartAuthentication();
             if (enableAutoStart)
                 StartCoroutine(AuthStartAfterTransportSelectionCoroutine(settings.authenticationStartDelay));
@@ -310,7 +383,30 @@ namespace AbxrLib.Runtime
         
         private void OnApplicationFocus(bool hasFocus)
         {
-	        if (!hasFocus) SendAll();
+	        if (!hasFocus)
+	        {
+		        SendAll();
+		        return;
+	        }
+	        AdoptAuthHandoffDeliveredWhileRunning();
+        }
+
+        /// <summary>
+        /// A launcher can hand a session to this app while it runs: a new intent, read when focus returns. Before the first
+        /// authentication attempt there is nothing to replace, and that attempt applies it. After it, the handoff is adopted
+        /// whatever became of the session, since nothing else would authenticate again: an app that ended quietly as unpaired,
+        /// failed, or called EndSession starts a session for it. A running one ends the way EndSession does first, so what it
+        /// recorded is sent with its own token.
+        /// </summary>
+        private void AdoptAuthHandoffDeliveredWhileRunning()
+        {
+	        if (_authService == null) return;
+	        bool sessionRunning = _authService.Authenticated || _authService.IsAuthenticationAttemptActive;
+	        if (!sessionRunning && !_authService.HasAttemptedAuthentication) return;
+	        if (!_authService.HasNewAuthHandoff()) return;
+	        Logcat.Info("Received a new auth_handoff while running; starting the session it carries.");
+	        if (_authService.Authenticated) EndSession();
+	        StartNewSession();
         }
         
         private void OnApplicationQuit()
@@ -329,7 +425,7 @@ namespace AbxrLib.Runtime
 	        if (_delayedStartCoroutine != null) { StopCoroutine(_delayedStartCoroutine); _delayedStartCoroutine = null; }
 	        if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 	        CloseRunningEvents();
-	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync).
+	        // Service transport: ForceSend (ForceSendUnsent) before Unbind. REST: no-op here; actual flush is in OnQuit() (sync, except on WebGL, where it sends without waiting).
 	        SendAll();
             _transport?.OnQuit();
 	        _transport?.ClearAllPending();
@@ -338,11 +434,32 @@ namespace AbxrLib.Runtime
 	        PlayerPrefs.Save();
 	        _assessmentStarted = false;
 	        _currentModuleIndex = 0;
-	        AIProxyApi.ClearPastMessages();
-	        _authService.ClearSessionAndPrepareForNew();
+	        // At app quit everything is going away; closing the UI then would only let a poll queued behind it open.
+	        ClearAuthSession(closeSignInUi: _endSessionInProgress);
+        }
+
+        /// <summary>
+        /// Clears the auth session, and closes the SDK's sign-in prompt if it was open for it: waiting for input, or
+        /// showing Processing after a submit. Clearing doesn't hide it, and the World-Space UI prompt outlives scene
+        /// loads, so it would stay on screen. An open pairing prompt stays open.
+        /// </summary>
+        private void ClearAuthSession(bool closeSignInUi = true)
+        {
+            bool signInUiOpen = closeSignInUi
+                && (_authService.IsInputRequestPending || _authService.IsUserAuthSubmitInFlight)
+                // Not when the app's own OnInputRequested handler showed the request.
+                && _signInShownBySdkUi
+                // When pairing waits too, the prompt on screen is pairing's (SubmitInput routes to it), so it stays.
+                && !(_pairingService?.IsInputRequestPending ?? false);
+            _authService.ClearSessionAndPrepareForNew();
+            _signInShownBySdkUi = false;
+            if (!signInUiOpen) return;
+            // A sign-in QR scan, even one still starting the camera, would otherwise submit its result into the next session.
+            var scanner = AbxrUi.QrScanner;
+            if (scanner != null && (scanner.IsScanning || scanner.IsInitializing)) scanner.CancelScan();
+            AbxrUi.AuthUi?.Hide();
         }
         
-        internal void DoAuthenticate() => _authService.Authenticate();
 
         private IEnumerator WaitForTransportSelectionCoroutine()
         {
@@ -379,26 +496,138 @@ namespace AbxrLib.Runtime
 #endif
         }
 
-        private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds)
+        private IEnumerator AuthStartAfterTransportSelectionCoroutine(float delaySeconds, bool clearStateFirst = true)
         {
+            // Never from inside Awake, which runs before the first scene loads: OnAuthCompleted and the pairing Startup
+            // event would fire with no subscribers. One frame in, the scene's objects have run Awake and Start.
+            yield return null;
             while (!_transportSelectionComplete) yield return AuthStartPollWait;
+            // A slow ArborXR client would otherwise look like a headset with no identity, and the app would pair it.
+            while (_pairingService.State == Abxr.PairingState.Resolving && IsWaitingForArborMdmClient())
+                yield return AuthStartPollWait;
             if (delaySeconds > 0) yield return new WaitForSeconds(delaySeconds);
-            DoAuthenticate();
+            _authService.Authenticate(clearStateFirst);
         }
 
-        internal void SubmitInput(string input) => _authService.SubmitInput(input);
+        /// <summary>
+        /// True while the ArborXR client is installed but not connected yet, for up to 16s after startup (SDK-60 decision 2).
+        /// Nothing reports when it connects, so the caller polls.
+        /// </summary>
+        private bool IsWaitingForArborMdmClient()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_arborMdmClient == null || !_arborMdmClientInstalled || _arborMdmClient.IsConnected()) return false;
+            return Time.realtimeSinceStartup - _startRealtime < ArborMdmClientWaitSeconds;
+#else
+            return false;
+#endif
+        }
+
+        private void OnPairingStateChanged(Abxr.PairingState state, Abxr.PairingChangeReason reason)
+        {
+            // A cleared or replaced pairing takes its session with it, including an attempt still retrying: otherwise that
+            // attempt finishes later as the old instance. A revoke needs none of this, since it ends the attempt that
+            // found it, and that attempt still has to report.
+            if (reason == Abxr.PairingChangeReason.Cleared || reason == Abxr.PairingChangeReason.Paired)
+                EndSessionOfPreviousPairing();
+
+            if (state == Abxr.PairingState.Unpaired) StopRecordingWhileUnpaired();
+            if (state == Abxr.PairingState.Paired)
+            {
+                UseRestTransportForPairing();
+                // At startup auth is already bootstrapping as the instance. A new pairing has nothing running yet.
+                if (reason == Abxr.PairingChangeReason.Paired) StartAuthentication();
+            }
+            Abxr.RaisePairingStateChanged(state, reason);
+        }
+
+        private void EndSessionOfPreviousPairing()
+        {
+            if (!_authService.Authenticated && !_authService.IsAuthenticationAttemptActive) return;
+            // A session that signed in ends the way EndSession does, while its token still works: open assessments
+            // close, and what it recorded goes to the org it belongs to instead of being dropped with the queue.
+            // Either way an open sign-in prompt closes (ClearAuthSession).
+            if (_authService.Authenticated) EndSession();
+            else ClearAuthSession();
+        }
+
+        /// <summary>
+        /// False while the app is unpaired and no pairing prompt is open (SDK-60 decision 1): a never-paired install
+        /// would otherwise fill the queues, and a later pairing would send data recorded before anyone opted in.
+        /// Recording resumes when the prompt opens. A session a launcher handed over records too (SDK-80).
+        /// </summary>
+        private bool IsRecording => _endSessionInProgress || _authService.HasAuthHandoff ||
+            !(_pairingService != null && _pairingService.State == Abxr.PairingState.Unpaired && _pairingService.CanPair);
+
+        private void StopRecordingWhileUnpaired()
+        {
+            if (!_pairingService.CanPair || _authService.HasAuthHandoff) return;
+            _transport?.ClearAllPending();
+            Logcat.Info("Not recording: this app isn't paired with an organization. Recording starts when the pairing prompt opens.");
+        }
+
+        /// <summary>Paired mode runs over REST: the ArborInsightsClient bridge has no field for an app instance token.</summary>
+        private void UseRestTransportForPairing()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!(_transport is AbxrTransportArborInsights)) return;
+            _transport = new AbxrTransportRest(_authService, this);
+            Logcat.Info("Paired with an app instance, so the SDK sends over REST instead of the ArborInsightsClient service.");
+#endif
+        }
+
+        /// <summary>What the pairing service reads from the SDK around it.</summary>
+        private sealed class PairingHost : IPairingHost
+        {
+            private readonly AbxrSubsystem _subsystem;
+
+            internal PairingHost(AbxrSubsystem subsystem) => _subsystem = subsystem;
+
+            public bool IsPlatformSupported =>
+#if (UNITY_ANDROID || UNITY_WEBGL) && !UNITY_EDITOR
+                true;
+#else
+                _pairingPlatformSupportedForTesting;
+#endif
+
+            public bool CanPresentPrompt => _subsystem._appOnInputRequested != null || AbxrUi.AuthUi != null;
+            public string AppToken => _subsystem._authService?.AppTokenForPairing ?? "";
+            public string PairingUrl => Configuration.Instance.pairingUrl;
+            public double Now => Time.realtimeSinceStartupAsDouble;
+            public double RequestTimeoutSeconds => Configuration.Instance.requestTimeoutSeconds;
+            public PairingDeviceMetadata DeviceMetadata => PairingDeviceMetadata.Current();
+        }
+
+        /// <summary>
+        /// OnInputSubmitted goes to whichever service asked for input. They can't both be waiting: the pairing prompt
+        /// only opens while Unpaired, and auth asks for input only once identity is settled. Pairing keeps its prompt's
+        /// input while the passcode it sent is redeemed, so "Not now" there cancels instead of reaching auth.
+        /// </summary>
+        internal void SubmitInput(string input)
+        {
+            bool pairingPending = _pairingService != null && _pairingService.IsInputRequestPending;
+            if (pairingPending && _authService.IsInputRequestPending)
+                Logcat.Warning("Both pairing and sign-in are waiting for input. The input went to pairing.");
+
+            bool pairingRedeeming = _pairingService != null && _pairingService.IsPromptRedeemInFlight && !_authService.IsInputRequestPending;
+            if (pairingPending || pairingRedeeming) _pairingService.SubmitInput(input);
+            else _authService.SubmitInput(input);
+        }
+
+        private bool IsAnyInputRequestPending =>
+            (_authService != null && _authService.IsInputRequestPending) || (_pairingService != null && _pairingService.IsInputRequestPending);
 
         internal bool IsQRScanForAuthAvailable()
         {
 	        if (_authService == null || !_authService.IsInputRequestPending) return false;
-	        return QrScannerCoordinator.GetActiveScanner() != null;
+	        return AbxrUi.QrScanner != null;
         }
         
         internal void StartQRScanForAuthInput(Action<string> onResult)
         {
 	        if (onResult == null) return;
 	        
-		    IQrScanner scanner = QrScannerCoordinator.GetActiveScanner();
+		    IAbxrQrScanner scanner = AbxrUi.QrScanner;
 		    if (scanner != null)
 		    {
 		        scanner.SetScanResultCallback(onResult);
@@ -409,19 +638,21 @@ namespace AbxrLib.Runtime
 	        onResult(null);
         }
         
-        internal void CancelQRScanForAuthInput() => QrScannerCoordinator.GetActiveScanner()?.CancelScan();
+        internal void CancelQRScanForAuthInput() => AbxrUi.QrScanner?.CancelScan();
 
-        /// True when the app can choose where to display the QR camera feed (non-Pico).
-        /// When true, use GetQRScanCameraTexture() and assign to your own RawImage. When false (Pico), the platform shows its own scanner UI.
-        internal bool IsQRScanCameraTexturePlaceable() => QrScannerCoordinator.GetActiveScanner() != null;
+        /// True when a QR reader is available on this device, so the app can choose where to display its camera feed:
+        /// use GetQRScanCameraTexture() and assign it to your own RawImage.
+        internal bool IsQRScanCameraTexturePlaceable() => AbxrUi.QrScanner != null;
 
-        internal Texture GetQRScanCameraTexture() => QrScannerCoordinator.GetActiveScanner()?.GetCameraTexture();
+        internal Texture GetQRScanCameraTexture() => AbxrUi.QrScanner?.GetCameraTexture();
 
         private void HandleAuthCompleted(bool success, string errorMessage = null)
         {
 	        // Start default assessment tracking if no assessments are currently running
 	        // This ensures duration tracking starts immediately after authentication
 	        // But delay sending the event to server for 1 minute to allow developers to start their own assessment
+	        // Failures run this too. When 'false' comes before 'true' (a device auth that retried, a wrong PIN), 'true' restarts
+	        // the DEFAULT start, so its duration covers only the time after auth succeeded; only 'true' starts the timer.
 	        // Use lock to prevent race condition with concurrent EventAssessmentStart calls
 	        lock (_assessmentStartTimesLock)
 	        {
@@ -429,6 +660,10 @@ namespace AbxrLib.Runtime
 		        {
 			        // Set start time for duration tracking, but don't send event yet
 			        // The OnAuthCompleted event handler will start the delayed timer
+			        _assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
+		        }
+		        else if (success && !_assessmentStarted && _assessmentStartTimes.Count == 1 && _assessmentStartTimes.ContainsKey("DEFAULT"))
+		        {
 			        _assessmentStartTimes["DEFAULT"] = DateTime.UtcNow;
 		        }
 	        }
@@ -485,7 +720,9 @@ namespace AbxrLib.Runtime
 		/// <summary>Launches another Android app and passes the current auth session via the auth_handoff intent extra.
 		/// The target app must also use AbxrLib; it will adopt the session without re-authenticating.
 		/// Call this in your OnAuthCompleted handler using PackageName from GetAuthResponse().
-		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.</summary>
+		/// When includeReturnToPackage is true, the handoff includes ReturnToPackage (this app's identifier) so the receiving app can return the session when assessment completes.
+		/// Launches the target's launcher activity explicitly. On Android 11 and later that needs the target to be visible to this app
+		/// (a &lt;queries&gt; entry in the manifest); without it the launch falls back to an implicit MAIN intent, which doesn't resolve for a stock Unity app.</summary>
 		internal bool LaunchAppWithAuthHandoff(string packageName, bool includeReturnToPackage = false)
 		{
 			if (string.IsNullOrEmpty(packageName))
@@ -499,6 +736,7 @@ namespace AbxrLib.Runtime
 				return false;
 			}
 #if UNITY_ANDROID && !UNITY_EDITOR
+			bool implicitFallback = false;
 			try
 			{
 				string handoffJson = _authService.GetHandoffJson(includeReturnToPackage);
@@ -509,10 +747,16 @@ namespace AbxrLib.Runtime
 				}
 				using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 				using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
-				using var intent = new AndroidJavaObject("android.content.Intent");
 				using var intentClass = new AndroidJavaClass("android.content.Intent");
-				intent.Call<AndroidJavaObject>("setAction", intentClass.GetStatic<string>("ACTION_MAIN"));
-				intent.Call<AndroidJavaObject>("setPackage", packageName);
+				using var packageManager = activity.Call<AndroidJavaObject>("getPackageManager");
+				// Null when the package isn't installed, has no launcher activity, or (Android 11+) isn't visible to this app.
+				using var launchIntent = packageManager.Call<AndroidJavaObject>("getLaunchIntentForPackage", packageName);
+				implicitFallback = launchIntent == null;
+				// startActivity resolves this implicit intent only if the target's MAIN filter has CATEGORY_DEFAULT,
+				// which a stock Unity launcher activity (MAIN + LAUNCHER) doesn't.
+				using var implicitIntent = implicitFallback ? new AndroidJavaObject("android.content.Intent", intentClass.GetStatic<string>("ACTION_MAIN")) : null;
+				var intent = launchIntent ?? implicitIntent;
+				if (implicitFallback) intent.Call<AndroidJavaObject>("setPackage", packageName);
 				intent.Call<AndroidJavaObject>("putExtra", "auth_handoff", handoffJson);
 				intent.Call<AndroidJavaObject>("addFlags", intentClass.GetStatic<int>("FLAG_ACTIVITY_NEW_TASK"));
 				activity.Call("startActivity", intent);
@@ -521,7 +765,11 @@ namespace AbxrLib.Runtime
 			}
 			catch (Exception ex)
 			{
-				Logcat.Error($"LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}");
+				string hint = !implicitFallback ? "" :
+					$" This app found no launcher activity for '{packageName}'. Check that it is installed and, on Android 11 and later, " +
+					$"that this app's AndroidManifest.xml has a <queries> entry that makes it visible: <package android:name=\"{packageName}\" />, " +
+					"or an <intent> with action android.intent.action.MAIN and category android.intent.category.LAUNCHER.";
+				Logcat.Error($"LaunchAppWithAuthHandoff failed for '{packageName}': {ex.Message}{hint}");
 				return false;
 			}
 #else
@@ -583,8 +831,14 @@ namespace AbxrLib.Runtime
 		/// <summary>Starts authentication. Waits for transport selection to complete first so the first auth uses the correct backend (service if available, else REST).</summary>
 		internal void StartAuthentication() => StartCoroutine(AuthStartAfterTransportSelectionCoroutine(0f));
 
-		/// <summary>True when the SDK is waiting for auth input (OnInputRequested was invoked). Use with device-specific QR availability to show "Scan QR" only when it will be accepted (e.g. Meta: IsAuthInputRequestPending() &amp;&amp; MetaQRCodeReader.Instance.IsQRScanningAvailable()).</summary>
+		/// <summary>True when the SDK is waiting for auth input (OnInputRequested was invoked). To show "Scan QR" only when it will be accepted, use IsQRScanForAuthAvailable(), which also checks for a QR reader on this device.</summary>
 		internal bool IsAuthInputRequestPending() => _authService != null && _authService.IsInputRequestPending;
+
+		/// <summary>
+		/// The last input request that reached neither an app handler nor a UI, kept so a handler assigned
+		/// after the request can still receive it. Cleared whenever a request is actually delivered.
+		/// </summary>
+		private (string type, string prompt, string domain, string error)? _droppedInputRequest;
 
 		/// <summary>
 		/// Get or set the single OnInputRequested handler. When set, auth input requests go to this handler; when null, PresentKeyboard is used.
@@ -593,20 +847,49 @@ namespace AbxrLib.Runtime
 		internal Action<string, string, string, string> OnInputRequested
 		{
 			get => _appOnInputRequested;
-			set => _appOnInputRequested = value;
+			set
+			{
+				_appOnInputRequested = value;
+
+				// Replay a request that previously went nowhere: the backend asked for input before the app
+				// assigned its handler (a login hosted in a later scene, say), and with no UI either, the
+				// request was dropped with a warning - previously ending in a stuck sign-in. Only a
+				// still-pending request replays, and never one a UI presented, so assigning a handler while
+				// the built-in keyboard is up stays a no-op, as it was before the UI became optional.
+				if (value == null || _droppedInputRequest == null) return;
+				if (!IsAnyInputRequestPending) return;
+
+				var request = _droppedInputRequest.Value;
+				_droppedInputRequest = null;
+				value(request.type, request.prompt, request.domain, request.error);
+			}
 		}
 
-		private void OnInputRequestedDispatch(string type, string prompt, string domain, string error)
+		private void OnInputRequestedDispatch(string type, string prompt, string domain, string error) =>
+			DispatchInputRequest(type, prompt, domain, error);
+
+		/// <summary>Sends an input request to the app's handler or the SDK's UI. True when the SDK's UI shows it.</summary>
+		private bool DispatchInputRequest(string type, string prompt, string domain, string error)
 		{
 			if (_appOnInputRequested != null)
+			{
+				_droppedInputRequest = null;
 				_appOnInputRequested(type, prompt, domain, error);
-			else
-				PresentKeyboard(type, prompt, domain, error);
+				return false;
+			}
+			if (PresentKeyboard(type, prompt, domain, error))
+			{
+				_droppedInputRequest = null;
+				return true;
+			}
+			_droppedInputRequest = (type, prompt, domain, error);
+			return false;
 		}
 		
 		/// <summary>
 		/// Starts an entirely fresh session: clears all API tokens, auth state, and pending data; then re-authenticates.
-		/// When using ArborInsightsClient (Android), unbinds and rebinds the service so the connection is fresh.
+		/// When using ArborInsightsClient (Android), unbinds and rebinds a bound service so the connection is fresh. After
+		/// EndSession the service is unbound, and the new attempt binds it and waits for it, for device auth and a handoff alike.
 		/// Equivalent to the user closing the app and starting it again from a session perspective.
 		/// </summary>
 internal void StartNewSession()
@@ -624,7 +907,6 @@ internal void StartNewSession()
 			if (_exitAfterAssessmentCoroutine != null) { StopCoroutine(_exitAfterAssessmentCoroutine); _exitAfterAssessmentCoroutine = null; }
 			_assessmentStarted = false;
 			_currentModuleIndex = 0;
-			AIProxyApi.ClearPastMessages();
 
 #if UNITY_ANDROID && !UNITY_EDITOR
 			// When using ArborInsightsClient, unbind then bind to clear session-related connection state and get a fresh connection.
@@ -634,8 +916,13 @@ internal void StartNewSession()
 				ArborInsightsClient.Bind(null);
 			}
 #endif
-			_authService.ClearSessionAndPrepareForNew();
-			_authService.Authenticate(clearStateFirst: false);
+			ClearAuthSession();
+			// The first attempt of a launch decides identity, so it waits like auto-start does: for the ArborXR client,
+			// and for the first frame. Otherwise a login that calls StartNewSession early settles a managed headset as Unpaired.
+			if (_pairingService.State == Abxr.PairingState.Resolving)
+				StartCoroutine(AuthStartAfterTransportSelectionCoroutine(0f, clearStateFirst: false));
+			else
+				_authService.Authenticate(clearStateFirst: false);
 		}
 
 		/// <summary>
@@ -644,7 +931,11 @@ internal void StartNewSession()
 		/// </summary>
 		internal void EndSession()
 		{
-			OnApplicationQuitHandler();
+			// The app keeps running, so an assessment this auto-closes must not start the exit-or-return flow, which would
+			// launch the return app and quit two seconds later.
+			_endSessionInProgress = true;
+			try { OnApplicationQuitHandler(); }
+			finally { _endSessionInProgress = false; }
 		}
 		
 		internal bool StartModuleAtIndex(int moduleIndex)
@@ -687,10 +978,13 @@ internal void StartNewSession()
             {
                 Logcat.Info($"Module '{modules[_currentModuleIndex - 1].Name}' complete. " +
                              $"Advancing to next module - '{modules[_currentModuleIndex].Name}'");
+                // Runs inside the app's EventAssessmentComplete; what the handler records is the app's own call.
+                using var appCode = AbxrObserver.AppCodeScope();
                 Abxr.OnModuleTarget?.Invoke(modules[_currentModuleIndex].Target);
             }
             else
             {
+                using var appCode = AbxrObserver.AppCodeScope();
                 Abxr.OnAllModulesCompleted?.Invoke();
                 Logcat.Info("All modules complete");
             }
@@ -927,7 +1221,7 @@ internal void StartNewSession()
 			// i.e. no module sequence, or we just completed the last module (same rule as original exit behavior).
 			bool shouldExitOrReturn = _authService.SessionUsedAuthHandoff() && _authService.GetEffectiveEnableReturnTo();
 			bool assessmentFullyComplete = !inModuleSequence || _currentModuleIndex >= (modules?.Count ?? 0);
-			if (shouldExitOrReturn && assessmentFullyComplete)
+			if (shouldExitOrReturn && assessmentFullyComplete && !_endSessionInProgress)
 			{
 				_exitAfterAssessmentCoroutine = StartCoroutine(ExitAfterAssessmentComplete());
 			}
@@ -1090,7 +1384,7 @@ internal void StartNewSession()
 			_authService?.SetRuntimeAuthAuthSecret(authSecret);
 		}
 
-		/// <summary>After <see cref="Configuration.Instance"/>.restUrl changes: sync the device client JNI session when bound. REST transport and LLM proxy read <c>restUrl</c> when building each request.</summary>
+		/// <summary>After <see cref="Configuration.Instance"/>.restUrl changes: sync the device client JNI session when bound. The REST transport reads <c>restUrl</c> when building each request.</summary>
 		internal void NotifyRestUrlChanged()
 		{
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -1168,38 +1462,12 @@ internal void StartNewSession()
 			yield return _storageService.Get(entryName, scope, callback);
 		}
 		
-		internal void StorageSetDefaultEntry(Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
-		{
-			// Check if basic authentication is ready
-			if (!_authService.Authenticated) return;
-			
-			// For user-scoped storage, we need a user to actually be logged in
-			// For device-scoped storage, app-level authentication should be sufficient
-			if (scope == Abxr.StorageScope.User && _authService.ResponseData.UserId == null)
-			{
-				// User-scoped storage requires a user to be logged in, defer this request
-				return;
-			}
-			
+		// The storage service checks authentication and the signed-in user, so it can report the drop to AbxrObserver.
+		internal void StorageSetDefaultEntry(Dictionary<string, string> entry, Abxr.StorageScope scope, Abxr.StoragePolicy policy) =>
 			_storageService.Add("state", entry, scope, policy);
-		}
 		
-		internal void StorageSetEntry(string entryName, Dictionary<string, string> entryData, Abxr.StorageScope scope, Abxr.StoragePolicy policy)
-		{
-			// Check if basic authentication is ready
-			if (!_authService.Authenticated) return;
-			
-			// For user-scoped storage, we need a user to actually be logged in
-			// For device-scoped storage, app-level authentication should be sufficient
-			var authResponse = _authService.ResponseData;
-			if (scope == Abxr.StorageScope.User && (authResponse == null || authResponse.UserId == null))
-			{
-				// User-scoped storage requires a user to be logged in, defer this request
-				return;
-			}
-			
+		internal void StorageSetEntry(string entryName, Dictionary<string, string> entryData, Abxr.StorageScope scope, Abxr.StoragePolicy policy) =>
 			_storageService.Add(entryName, entryData, scope, policy);
-		}
 
 		internal void StorageRemoveDefaultEntry(Abxr.StorageScope scope)
 		{
@@ -1216,17 +1484,7 @@ internal void StartNewSession()
 			StartCoroutine(_storageService.Delete(scope, ""));
 		}
 
-		internal IEnumerator AIProxy(string prompt, string llmProvider, Action<string> callback)
-		{
-			yield return _aiProxyApi.SendPrompt(prompt, llmProvider, null, callback);
-		}
-		
-		internal IEnumerator AIProxy(string prompt, List<string> pastMessages, string llmProvider, Action<string> callback)
-		{
-			yield return _aiProxyApi.SendPrompt(prompt, llmProvider, pastMessages, callback);
-		}
-		
-		internal void PollUser(string prompt, ExitPollHandler.PollType pollType, List<string> responses, Action<string> callback)
+		internal void PollUser(string prompt, PollType pollType, List<string> responses, Action<string> callback)
 		{
 			// Validate prompt
 			if (string.IsNullOrWhiteSpace(prompt))
@@ -1235,7 +1493,7 @@ internal void StartNewSession()
 				return;
 			}
 
-			if (pollType == ExitPollHandler.PollType.MultipleChoice)
+			if (pollType == PollType.MultipleChoice)
 			{
 				if (responses == null)
 				{
@@ -1260,7 +1518,16 @@ internal void StartNewSession()
 				}
 			}
 
-			ExitPollHandler.AddPoll(prompt, pollType, responses, callback);
+			IAbxrPollUi pollUi = AbxrUi.PollUi;
+			if (pollUi == null)
+			{
+				// A valid poll with nowhere to go. Every invalid poll above logs an error, so without this the
+				// one silent case would be the valid call - dropped, with a callback that never fires.
+				AbxrUi.WarnNoPollUi();
+				return;
+			}
+
+			pollUi.AddPoll(prompt, pollType, responses, callback);
 		}
 		
 		/// <summary>
@@ -1307,6 +1574,7 @@ internal void StartNewSession()
 			{
 				string errorMessage = $"Cannot register super metadata with reserved key '{key}'. Reserved keys are: module, moduleName, moduleId, moduleOrder";
 				Logcat.Warning(errorMessage);
+				using var automatic = AbxrObserver.AutomaticScope();
 				Abxr.LogInfo(errorMessage, new Dictionary<string, string> { 
 					{ "attempted_key", key }, 
 					{ "attempted_value", value },
@@ -1468,30 +1736,104 @@ internal void StartNewSession()
 			return result.ToString();
 		}
 
-		private void PresentKeyboard(string type, string prompt, string domain, string error)
+		/// <summary>False when there was no UI to present on, so the dispatcher can keep the request for replay.</summary>
+		private bool PresentKeyboard(string type, string prompt, string domain, string error)
 		{
-			// When showing an error (e.g. invalid PIN), stop the Processing animation so the message is visible.
-			if (!string.IsNullOrEmpty(error)) KeyboardHandler.StopProcessing();
+			// No world-space UI in this project and no app handler either: say so once, actionably, instead of
+			// leaving authentication waiting for input that can never arrive.
+			IAbxrAuthUi authUi = AbxrUi.AuthUi;
+			if (authUi == null)
+			{
+				AbxrUi.WarnNoAuthUi(type);
+				return false;
+			}
+
+			// When showing an error (e.g. invalid PIN), stop the Processing animation so the message is visible. Each
+			// pairing step is a new question even without an error, so the animation stops for those too.
+			bool pairingStep = type is AbxrPairingService.PasscodeInputType or AbxrPairingService.DeviceNameInputType
+				or AbxrPairingService.RequiredDeviceNameInputType or AbxrPairingService.JoinDeviceInputType;
+			if (!string.IsNullOrEmpty(error) || pairingStep) authUi.StopProcessing();
 
 			string displayPrompt = "";
 			if (type is "text" or null or "")
 			{
-				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+				authUi.Show(AuthUiKind.FullKeyboard);
 				displayPrompt = string.IsNullOrEmpty(prompt) ? "Enter Your Login" : $"Enter Your {prompt}";
 			}
 			else if (type == "assessmentPin")
 			{
-				KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+				authUi.Show(AuthUiKind.PinPad);
 				displayPrompt = string.IsNullOrEmpty(prompt) ? "Enter Your 6-digit PIN" : $"Enter Your {prompt} PIN";
 			}
 			else if (type == "email")
 			{
-				KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+				authUi.Show(AuthUiKind.FullKeyboard);
 				displayPrompt = $"Enter your email username\n(<u>username</u>@{domain})";
+			}
+			else if (type == AbxrPairingService.PasscodeInputType)
+			{
+				authUi.Show(AuthUiKind.PairingPasscode);
+				displayPrompt = $"Enter {prompt}";
+			}
+			else if (type == AbxrPairingService.DeviceNameInputType)
+			{
+				authUi.Show(AuthUiKind.PairingDeviceName);
+				displayPrompt = prompt;
+			}
+			else if (type == AbxrPairingService.RequiredDeviceNameInputType)
+			{
+				authUi.Show(AuthUiKind.PairingDeviceNameRequired);
+				displayPrompt = prompt;
+			}
+			else if (type == AbxrPairingService.JoinDeviceInputType)
+			{
+				authUi.Show(AuthUiKind.PairingDeviceJoin);
+				displayPrompt = prompt;
+			}
+
+			StopRateLimitCountdown();
+			Abxr.PairingRedeemResult last = _pairingService?.LastRedeemResult ?? default;
+			if (type == AbxrPairingService.PasscodeInputType && !string.IsNullOrEmpty(error)
+			    && last.Error == Abxr.PairingRedeemError.RateLimited && last.RetryAfterSeconds > 0)
+			{
+				_rateLimitCountdown = StartCoroutine(RateLimitCountdown(authUi, displayPrompt, last.RetryAfterSeconds));
+				return true;
 			}
 
 			if (!string.IsNullOrEmpty(error)) displayPrompt = $"{error}\n{displayPrompt}";
-			KeyboardHandler.SetPrompt(displayPrompt);
+			authUi.SetPrompt(displayPrompt);
+			return true;
+		}
+
+		/// <summary>
+		/// Counts the rate limit's wait down in the prompt, so it doesn't read "51 seconds" until the next attempt. Stops
+		/// when the prompt moves on, and drops the line once the wait is over.
+		/// </summary>
+		private IEnumerator RateLimitCountdown(IAbxrAuthUi authUi, string prompt, int seconds)
+		{
+			float until = Time.realtimeSinceStartup + seconds;
+			while (true)
+			{
+				int left = Mathf.CeilToInt(until - Time.realtimeSinceStartup);
+				if (left <= 0) break;
+				authUi.SetPrompt($"{PairingOutcomes.RateLimited(left).Message}\n{prompt}");
+				// Wakes when the shown number goes stale, not a second after it was drawn.
+				yield return new WaitForSecondsRealtime(until - Time.realtimeSinceStartup - (left - 1));
+				if (_pairingService.State != Abxr.PairingState.Prompting || AbxrUi.AuthUi != authUi)
+				{
+					_rateLimitCountdown = null;
+					yield break;
+				}
+			}
+			authUi.SetPrompt(prompt);
+			_rateLimitCountdown = null;
+		}
+
+		private void StopRateLimitCountdown()
+		{
+			if (_rateLimitCountdown == null) return;
+			StopCoroutine(_rateLimitCountdown);
+			_rateLimitCountdown = null;
 		}
 		
 		/// <summary>
@@ -1545,6 +1887,8 @@ internal void StartNewSession()
         /// </summary>
         private void CloseRunningEvents()
         {
+            // The SDK closes these through the public API; AbxrObserver must report them as its own.
+            using var automatic = AbxrObserver.AutomaticScope();
             // Get references to the static dictionaries using safe public methods
             var runningAssessmentTimes = GetAssessmentStartTimes();
             var runningObjectiveTimes = new Dictionary<string, DateTime>(_objectiveStartTimes);

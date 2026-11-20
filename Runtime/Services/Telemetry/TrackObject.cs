@@ -34,7 +34,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
             _positionData["x"] = transform.position.x.ToString(CultureInfo.InvariantCulture);
             _positionData["y"] = transform.position.y.ToString(CultureInfo.InvariantCulture);
             _positionData["z"] = transform.position.z.ToString(CultureInfo.InvariantCulture);
-            Abxr.Telemetry(gameObject.name + " Position", _positionData);
+            using (AbxrObserver.AutomaticScope()) Abxr.Telemetry(gameObject.name + " Position", _positionData);
         }
     }
 }

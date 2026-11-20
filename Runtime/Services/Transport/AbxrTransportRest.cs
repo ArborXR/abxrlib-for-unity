@@ -37,6 +37,10 @@ namespace AbxrLib.Runtime.Services.Transport
         private float _lastStorageCallTime;
         private Coroutine _tickCoroutine;
         private bool _stopped;
+        /// <summary>Bumped by ClearAllPending, so a send still retrying when its session ends drops its batch instead of carrying it into the next session.</summary>
+        private int _sessionGeneration;
+        /// <summary>The queues that have warned since they last had room.</summary>
+        private readonly HashSet<string> _queuesAtLimit = new HashSet<string>();
 
         public bool IsServiceTransport => false;
 
@@ -64,7 +68,7 @@ namespace AbxrLib.Runtime.Services.Transport
 
         private static readonly JsonSerializerSettings AuthPayloadSerializeSettings = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
 
-        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Action<bool, string, bool> onComplete)
+        public IEnumerator AuthRequestCoroutine(AuthPayload payload, Func<bool> stillCurrent, Action<AuthTransportResult> onComplete)
         {
             string url = RestUri(AuthPath).ToString();
             string json = JsonConvert.SerializeObject(payload, AuthPayloadSerializeSettings);
@@ -77,9 +81,15 @@ namespace AbxrLib.Runtime.Services.Transport
             yield return request.SendWebRequest();
 
             // Always pass response body when present so auth service gets the same error payload as service transport (ExtractAuthErrorMessage, OnFailed message).
-            string response = request.downloadHandler?.text;
-            long responseCode = request.responseCode;
+            var result = ToAuthResult(request.result, request.responseCode, request.downloadHandler?.text);
+            if (!result.Success)
+                Logcat.Warning($"AuthRequest failed: {(string.IsNullOrEmpty(result.Body) ? $"(empty, HTTP {result.StatusCode})" : result.Body)}");
+            onComplete?.Invoke(result);
+        }
 
+        /// <summary>Maps a finished auth request to the result the auth service classifies. Takes the request's parts, not the request, so tests can pin the mapping.</summary>
+        internal static AuthTransportResult ToAuthResult(UnityWebRequest.Result requestResult, long responseCode, string response)
+        {
             // Same success rule as service transport (AuthResponse.IsValidSuccess) so auth service sees consistent behavior.
             bool success = false;
             if (!string.IsNullOrEmpty(response))
@@ -93,13 +103,15 @@ namespace AbxrLib.Runtime.Services.Transport
             }
             // Transport decides: API rejected credentials (do not retry) when HTTP 401 or 403.
             bool isAuthRejectedByApi = !success && (responseCode == 401 || responseCode == 403);
-            // Normalize empty failure body so auth service logs the same message for both transports.
-            string responseBody = response ?? "";
-            if (string.IsNullOrEmpty(responseBody) && !success)
-                responseBody = "No response body.";
-            if (!success)
-                Logcat.Warning($"AuthRequest failed: {responseBody}");
-            onComplete?.Invoke(success, responseBody, isAuthRejectedByApi);
+            bool networkError = requestResult == UnityWebRequest.Result.ConnectionError;
+            return new AuthTransportResult(success, response, isAuthRejectedByApi, responseCode, networkError);
+        }
+
+        /// <summary>REST sends the handed-over token with each request, so there is nothing to set up.</summary>
+        public IEnumerator ApplyAuthHandoffCoroutine(string sessionJson, Func<bool> stillCurrent, Action<bool, string> onComplete)
+        {
+            onComplete?.Invoke(true, null);
+            yield break;
         }
 
         public IEnumerator GetConfigCoroutine(Action<bool, string> onComplete)
@@ -145,43 +157,46 @@ namespace AbxrLib.Runtime.Services.Transport
             }
         }
 
-        public void AddEvent(string name, Dictionary<string, string> meta)
+        public bool AddEvent(string name, Dictionary<string, string> meta, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-            var p = new EventPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
+            var p = new EventPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>(), RecordId = recordId };
             lock (_lock)
             {
-                if (IsQueueAtLimit(_eventPayloads, "Event")) return;
+                if (IsQueueAtLimit(_eventPayloads, "Event")) return false;
                 _eventPayloads.Add(p);
                 if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt) _nextDataSendAt = 0;
             }
+            return true;
         }
 
-        public void AddTelemetry(string name, Dictionary<string, string> meta)
+        public bool AddTelemetry(string name, Dictionary<string, string> meta, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-            var p = new TelemetryPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
+            var p = new TelemetryPayload { timestamp = iso, preciseTimestamp = t, name = name, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>(), RecordId = recordId };
             lock (_lock)
             {
-                if (IsQueueAtLimit(_telemetryPayloads, "Telemetry")) return;
+                if (IsQueueAtLimit(_telemetryPayloads, "Telemetry")) return false;
                 _telemetryPayloads.Add(p);
                 if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt) _nextDataSendAt = 0;
             }
+            return true;
         }
 
-        public void AddLog(string logLevel, string text, Dictionary<string, string> meta)
+        public bool AddLog(string logLevel, string text, Dictionary<string, string> meta, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
-            var p = new LogPayload { timestamp = iso, preciseTimestamp = t, logLevel = logLevel, text = text, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>() };
+            var p = new LogPayload { timestamp = iso, preciseTimestamp = t, logLevel = logLevel, text = text, meta = meta != null ? new Dictionary<string, string>(meta) : new Dictionary<string, string>(), RecordId = recordId };
             lock (_lock)
             {
-                if (IsQueueAtLimit(_logPayloads, "Log")) return;
+                if (IsQueueAtLimit(_logPayloads, "Log")) return false;
                 _logPayloads.Add(p);
                 if (GetTotalDataCount() >= Configuration.Instance.dataEntriesPerSendAttempt) _nextDataSendAt = 0;
             }
+            return true;
         }
 
         public void ForceSend()
@@ -190,7 +205,7 @@ namespace AbxrLib.Runtime.Services.Transport
             _nextStorageSendAt = 0;
         }
 
-        public void StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy)
+        public bool StorageAdd(string name, Dictionary<string, string> entry, global::Abxr.StorageScope scope, global::Abxr.StoragePolicy policy, long recordId = 0)
         {
             long t = Utils.GetUnityTime();
             string iso = DateTimeOffset.FromUnixTimeMilliseconds(t).UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
@@ -200,14 +215,16 @@ namespace AbxrLib.Runtime.Services.Transport
                 keepPolicy = Utils.PascalToCamelCase(policy.ToString()),
                 name = name,
                 data = new List<Dictionary<string, string>> { entry ?? new Dictionary<string, string>() },
-                scope = Utils.PascalToCamelCase(scope.ToString())
+                scope = Utils.PascalToCamelCase(scope.ToString()),
+                RecordId = recordId
             };
             lock (_lock)
             {
-                if (IsQueueAtLimit(_storagePayloads, "Storage")) return;
+                if (IsQueueAtLimit(_storagePayloads, "Storage")) return false;
                 _storagePayloads.Add(p);
                 if (_storagePayloads.Count >= Configuration.Instance.storageEntriesPerSendAttempt) _nextStorageSendAt = 0;
             }
+            return true;
         }
 
         public IEnumerator StorageGetCoroutine(string name, global::Abxr.StorageScope scope, Action<List<Dictionary<string, string>>> onComplete)
@@ -257,11 +274,55 @@ namespace AbxrLib.Runtime.Services.Transport
             onComplete?.Invoke(request.result == UnityWebRequest.Result.Success);
         }
 
-        /// <summary>Flush and release. Sends any pending data and storage synchronously so it reaches the server before the app exits.</summary>
+        /// <summary>Flush and release. Sends any pending data and storage so it reaches the server before the app exits (synchronously, except on WebGL).</summary>
         public void OnQuit()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // WebGL is single-threaded: a UnityWebRequest only completes through browser callbacks on the main thread, so the
+            // sync flush's Thread.Sleep spin never ends and freezes the tab. Send the tail without waiting instead. Leaving it to
+            // ForceSend and the next tick would lose it: the caller clears the queues and auth state as soon as this returns.
+            SendPendingWithoutWaiting();
+#else
             FlushDataSync();
             FlushStorageSync();
+#endif
+        }
+
+        /// <summary>WebGL quit flush (see <see cref="OnQuit"/>). Signs each queued batch with the still-valid session token and lets the browser finish the request. One attempt, no re-queue: a retry or a re-queued batch would go out after this session's auth is cleared.</summary>
+        private void SendPendingWithoutWaiting()
+        {
+            if (!_authService.Authenticated) return;
+            DataPayloadWrapper data = null;
+            StoragePayloadWrapper storage = null;
+            lock (_lock)
+            {
+                if (GetTotalDataCount() > 0)
+                    data = new DataPayloadWrapper { @event = new List<EventPayload>(_eventPayloads), telemetry = new List<TelemetryPayload>(_telemetryPayloads), basicLog = new List<LogPayload>(_logPayloads) };
+                if (_storagePayloads.Count > 0)
+                    storage = new StoragePayloadWrapper { data = new List<StoragePayload>(_storagePayloads) };
+                _eventPayloads.Clear();
+                _telemetryPayloads.Clear();
+                _logPayloads.Clear();
+                _storagePayloads.Clear();
+            }
+            if (data != null) PostWithoutWaiting(DataPath, JsonConvert.SerializeObject(data), "data", RecordIds(data.@event, data.telemetry, data.basicLog));
+            if (storage != null) PostWithoutWaiting(StoragePath, JsonConvert.SerializeObject(storage), "storage", RecordIds(storage: storage.data));
+        }
+
+        private void PostWithoutWaiting(string path, string json, string kind, List<long> recordIds)
+        {
+            var request = new UnityWebRequest(RestUri(path), "POST");
+            Utils.BuildRequest(request, json);
+            _authService.SetAuthHeaders(request, json);
+            request.timeout = Configuration.Instance.requestTimeoutSeconds;
+            request.SendWebRequest().completed += _ =>
+            {
+                bool sent = request.result == UnityWebRequest.Result.Success;
+                if (!sent)
+                    Logcat.Warning($"Quit flush ({kind}) failed ({request.responseCode}): {request.error}");
+                ReportSent(recordIds, sent, request.responseCode, request.error);
+                request.Dispose();
+            };
         }
 
         /// <summary>Synchronously send any queued events/telemetry/logs. Used on quit so data is sent before the process exits (ForceSend only sets flags; the tick may never run again).</summary>
@@ -297,8 +358,10 @@ namespace AbxrLib.Runtime.Services.Transport
                 request.timeout = Configuration.Instance.requestTimeoutSeconds;
                 var op = request.SendWebRequest();
                 while (!op.isDone) { Thread.Sleep(1); }
-                if (request.result != UnityWebRequest.Result.Success)
+                bool sent = request.result == UnityWebRequest.Result.Success;
+                if (!sent)
                     Logcat.Warning($"Sync flush (data) failed ({request.responseCode}): {request.error}");
+                ReportSent(RecordIds(events, telemetries, logs), sent, request.responseCode, request.error);
             }
             finally
             {
@@ -333,8 +396,10 @@ namespace AbxrLib.Runtime.Services.Transport
                 request.timeout = Configuration.Instance.requestTimeoutSeconds;
                 var op = request.SendWebRequest();
                 while (!op.isDone) { Thread.Sleep(1); }
-                if (request.result != UnityWebRequest.Result.Success)
+                bool sent = request.result == UnityWebRequest.Result.Success;
+                if (!sent)
                     Logcat.Warning($"Sync flush (storage) failed ({request.responseCode}): {request.error}");
+                ReportSent(RecordIds(storage: toSend), sent, request.responseCode, request.error);
             }
             finally
             {
@@ -344,13 +409,17 @@ namespace AbxrLib.Runtime.Services.Transport
 
         public void ClearAllPending()
         {
+            List<long> dropped;
             lock (_lock)
             {
+                _sessionGeneration++;
+                dropped = RecordIds(_eventPayloads, _telemetryPayloads, _logPayloads, _storagePayloads);
                 _eventPayloads.Clear();
                 _telemetryPayloads.Clear();
                 _logPayloads.Clear();
                 _storagePayloads.Clear();
             }
+            AbxrObserver.Sent(dropped, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.SessionEnded);
         }
 
         /// <summary>For testing only. Returns a copy of pending event payloads.</summary>
@@ -390,11 +459,69 @@ namespace AbxrLib.Runtime.Services.Transport
             return _eventPayloads.Count + _telemetryPayloads.Count + _logPayloads.Count;
         }
 
-        private static bool IsQueueAtLimit<T>(List<T> queue, string queueType)
+        /// <summary>
+        /// True once the session a batch came from has ended. A retry would sign it with the next session's token, and a
+        /// re-queue would send it with the next session's data, so the batch is dropped.
+        /// </summary>
+        private bool SessionEndedSince(int generation, string kind)
+        {
+            if (generation == _sessionGeneration) return false;
+            Logcat.Debug($"Dropped a {kind} batch from a session that has ended.");
+            return true;
+        }
+
+        /// <summary>
+        /// True when the queue is full, so the entry is dropped. Warns once each time a queue fills, not for every entry it
+        /// drops (SDK-60 decision 1): at about six telemetry entries a second, that was a warning for each one. Call under _lock.
+        /// </summary>
+        private bool IsQueueAtLimit<T>(List<T> queue, string queueType)
         {
             int max = Configuration.Instance.maximumCachedItems;
-            if (max > 0 && queue.Count >= max) { Logcat.Warning($"{queueType} queue limit reached ({max})"); return true; }
-            return false;
+            if (max <= 0 || queue.Count < max)
+            {
+                _queuesAtLimit.Remove(queueType);
+                return false;
+            }
+
+            if (_queuesAtLimit.Add(queueType))
+                Logcat.Warning($"{queueType} queue limit reached ({max}). New entries are dropped until it drains.");
+            return true;
+        }
+
+        /// <summary>
+        /// Puts a failed batch back at the front of its queue in its original order, as far as the queue has room, and adds
+        /// the ids of the entries that didn't fit to dropped. Call under _lock.
+        /// </summary>
+        private void Requeue<T>(List<T> queue, List<T> batch, string queueType, Func<T, long> recordId, List<long> dropped)
+        {
+            // Back to front, so each Insert(0) leaves the batch in the order it was recorded.
+            for (int i = batch.Count - 1; i >= 0; i--)
+            {
+                if (IsQueueAtLimit(queue, queueType)) AbxrObserver.AddId(dropped, recordId(batch[i]));
+                else queue.Insert(0, batch[i]);
+            }
+        }
+
+        /// <summary>The observer ids carried by these payloads, or null when no send handler is attached (no list is built).</summary>
+        private static List<long> RecordIds(List<EventPayload> events = null, List<TelemetryPayload> telemetries = null, List<LogPayload> logs = null, List<StoragePayload> storage = null)
+        {
+            if (!AbxrObserver.HasSendHandler) return null;
+            var ids = new List<long>();
+            if (events != null) foreach (var p in events) AbxrObserver.AddId(ids, p.RecordId);
+            if (telemetries != null) foreach (var p in telemetries) AbxrObserver.AddId(ids, p.RecordId);
+            if (logs != null) foreach (var p in logs) AbxrObserver.AddId(ids, p.RecordId);
+            if (storage != null) foreach (var p in storage) AbxrObserver.AddId(ids, p.RecordId);
+            return ids;
+        }
+
+        private static void ReportSent(List<long> recordIds, bool sent, long responseCode, string error)
+        {
+            AbxrObserver.Sent(recordIds, sent ? AbxrObserver.SendStatus.Sent : AbxrObserver.SendStatus.Failed, (int)responseCode, sent ? null : error);
+        }
+
+        private static void ReportSessionEnded(List<long> recordIds)
+        {
+            AbxrObserver.Sent(recordIds, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.SessionEnded);
         }
 
         private IEnumerator SendData()
@@ -423,13 +550,21 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             string json;
             try { json = JsonConvert.SerializeObject(new DataPayloadWrapper { @event = events, telemetry = telemetries, basicLog = logs }); }
-            catch (Exception ex) { Logcat.Error($"Data serialization failed: {ex.Message}"); yield break; }
+            catch (Exception ex)
+            {
+                Logcat.Error($"Data serialization failed: {ex.Message}");
+                ReportSent(RecordIds(events, telemetries, logs), false, 0, ex.Message);
+                yield break;
+            }
+            int generation = _sessionGeneration;
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
             string lastError = "";
+            long lastStatus = 0;
             while (retryCount <= maxRetries && !success)
             {
+                if (SessionEndedSince(generation, "data")) { ReportSessionEnded(RecordIds(events, telemetries, logs)); yield break; }
                 UnityWebRequest request = null;
                 bool created = false;
                 bool dataRetryWait = false;
@@ -450,22 +585,31 @@ namespace AbxrLib.Runtime.Services.Transport
                 yield return request.SendWebRequest();
                 try
                 {
+                    lastStatus = request.responseCode;
                     if (request.result == UnityWebRequest.Result.Success) { success = true; }
                     else { lastError = request.error; if (IsDataRetryableError(request)) { retryCount++; yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds); continue; } break; }
                 }
                 finally { request?.Dispose(); }
             }
-            if (!success)
+            var recordIds = RecordIds(events, telemetries, logs);
+            if (success)
             {
-                Logcat.Error($"Data POST failed after {retryCount} attempts: {lastError}");
-                _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
-                lock (_lock)
-                {
-                    foreach (var p in events) { if (!IsQueueAtLimit(_eventPayloads, "Event")) _eventPayloads.Insert(0, p); }
-                    foreach (var p in telemetries) { if (!IsQueueAtLimit(_telemetryPayloads, "Telemetry")) _telemetryPayloads.Insert(0, p); }
-                    foreach (var p in logs) { if (!IsQueueAtLimit(_logPayloads, "Log")) _logPayloads.Insert(0, p); }
-                }
+                ReportSent(recordIds, true, lastStatus, null);
+                yield break;
             }
+            if (SessionEndedSince(generation, "data")) { ReportSessionEnded(recordIds); yield break; }
+            Logcat.Error($"Data POST failed after {retryCount} attempts: {lastError}");
+            _nextDataSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
+            var dropped = recordIds != null ? new List<long>() : null;
+            lock (_lock)
+            {
+                Requeue(_eventPayloads, events, "Event", p => p.RecordId, dropped);
+                Requeue(_telemetryPayloads, telemetries, "Telemetry", p => p.RecordId, dropped);
+                Requeue(_logPayloads, logs, "Log", p => p.RecordId, dropped);
+            }
+            // Report only after the requeue: a handler that ends the session must clear this batch, not have it queued after.
+            ReportSent(recordIds, false, lastStatus, lastError);
+            AbxrObserver.Sent(dropped, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.QueueFull);
         }
 
         private static bool IsDataRetryableError(UnityWebRequest request)
@@ -500,13 +644,21 @@ namespace AbxrLib.Runtime.Services.Transport
         {
             string json;
             try { json = JsonConvert.SerializeObject(new StoragePayloadWrapper { data = toSend }); }
-            catch (Exception ex) { Logcat.Error($"Storage serialization failed: {ex.Message}"); yield break; }
+            catch (Exception ex)
+            {
+                Logcat.Error($"Storage serialization failed: {ex.Message}");
+                ReportSent(RecordIds(storage: toSend), false, 0, ex.Message);
+                yield break;
+            }
+            int generation = _sessionGeneration;
             int retryCount = 0;
             int maxRetries = Configuration.Instance.sendRetriesOnFailure;
             bool success = false;
             string lastError = "";
+            long lastStatus = 0;
             while (retryCount <= maxRetries && !success)
             {
+                if (SessionEndedSince(generation, "storage")) { ReportSessionEnded(RecordIds(storage: toSend)); yield break; }
                 UnityWebRequest request = null;
                 bool created = false;
                 bool storageRetryWait = false;
@@ -527,17 +679,26 @@ namespace AbxrLib.Runtime.Services.Transport
                 yield return request.SendWebRequest();
                 try
                 {
+                    lastStatus = request.responseCode;
                     if (request.result == UnityWebRequest.Result.Success) success = true;
                     else { lastError = request.error; if (IsStorageRetryableError(request)) { retryCount++; yield return new WaitForSeconds(Configuration.Instance.sendRetryIntervalSeconds); continue; } break; }
                 }
                 finally { request?.Dispose(); }
             }
-            if (!success)
+            var recordIds = RecordIds(storage: toSend);
+            if (success)
             {
-                Logcat.Error($"Storage POST failed after {retryCount} attempts: {lastError}");
-                _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
-                lock (_lock) { foreach (var p in toSend) { if (!IsQueueAtLimit(_storagePayloads, "Storage")) _storagePayloads.Insert(0, p); } }
+                ReportSent(recordIds, true, lastStatus, null);
+                yield break;
             }
+            if (SessionEndedSince(generation, "storage")) { ReportSessionEnded(recordIds); yield break; }
+            Logcat.Error($"Storage POST failed after {retryCount} attempts: {lastError}");
+            _nextStorageSendAt = Time.time + Configuration.Instance.sendNextBatchWaitSeconds;
+            var dropped = recordIds != null ? new List<long>() : null;
+            lock (_lock) { Requeue(_storagePayloads, toSend, "Storage", p => p.RecordId, dropped); }
+            // After the requeue, as for data.
+            ReportSent(recordIds, false, lastStatus, lastError);
+            AbxrObserver.Sent(dropped, AbxrObserver.SendStatus.Dropped, dropReason: AbxrObserver.DropReason.QueueFull);
         }
 
         private static bool IsStorageRetryableError(UnityWebRequest request)

@@ -1,0 +1,123 @@
+/*
+ * Copyright (c) 2024 ArborXR. All rights reserved.
+ *
+ * How the world-space objects introduce themselves to core.
+ *
+ * Everything core knows about the keyboard, PIN pad, exit poll, and QR scanner arrives through the
+ * registrations below. Core calls the interfaces in Runtime/Core/UI and never names a type in this folder, so
+ * these objects - and TextMeshPro, uGUI, XR Interaction Toolkit, and ZXing with them - can ship separately
+ * from the core package.
+ *
+ * Two phases, because they have different timing requirements:
+ *   SubsystemRegistration - handing over the implementations. No GameObjects, safe this early, and guaranteed
+ *                           by Unity to run before BeforeSceneLoad, so core never looks for a UI that has not
+ *                           registered yet.
+ *   BeforeSceneLoad       - creating the scene objects, driven by Initialize through the registered callback so
+ *                           they appear at exactly the point they did before they became optional.
+ */
+
+using System;
+using System.Collections.Generic;
+using AbxrLib.Runtime.Core;
+using AbxrLib.Runtime.Core.UI;
+using AbxrLib.Runtime.Types;
+using AbxrLib.Runtime.UI.ExitPoll;
+using AbxrLib.Runtime.UI.Keyboard;
+using UnityEngine;
+#if UNITY_ANDROID && !UNITY_EDITOR
+using AbxrLib.Runtime.Core.QRScanner;
+#endif
+
+namespace AbxrLib.Runtime.UI
+{
+    internal static class AbxrWorldSpaceBootstrap
+    {
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void Register()
+        {
+            AbxrUi.RegisterAuthUi(new KeyboardAuthUi());
+            AbxrUi.RegisterPollUi(new ExitPollUi());
+            AbxrUi.RegisterSceneObjectAttacher(AttachSceneObjects);
+            AbxrUi.RegisterSceneChangedHandler(OnSceneChanged);
+        }
+
+        private static void OnSceneChanged()
+        {
+            LaserPointerManager.OnSceneChanged();
+            EventSystemFallback.OnSceneChanged();
+        }
+
+        private static void AttachSceneObjects()
+        {
+            ObjectAttacher.Attach<KeyboardHandler>("KeyboardHandler");
+            ObjectAttacher.Attach<ExitPollHandler>("ExitPollHandler");
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+#if PICO_SDK_3_4_OR_NEWER
+            AbxrUi.RegisterQrScanner(ObjectAttacher.Attach<QRCodeReaderPico>("QRCodeReaderPico"));
+#else
+            AbxrUi.RegisterQrScanner(ObjectAttacher.Attach<QRCodeReaderMeta>("QRCodeReaderMeta"));
+#endif
+#endif
+        }
+    }
+
+    /// <summary>Adapts the shipped keyboard and PIN pad, whose API is static, to the interface core calls.</summary>
+    internal sealed class KeyboardAuthUi : IAbxrAuthUi
+    {
+        public void Show(AuthUiKind kind)
+        {
+            // Pairing moves between the PIN pad and the keyboard, so it shows only the surface its step uses.
+            switch (kind)
+            {
+                case AuthUiKind.PinPad:
+                case AuthUiKind.PairingPasscode:
+                    if (kind == AuthUiKind.PairingPasscode) KeyboardHandler.DestroyKeyboard();
+                    // Create early-returns when an instance already exists, even one the QR scanner hid while
+                    // scanning - ShowPinPad is what re-activates it. Together they cover both halves of the
+                    // interface's contract: create if missing, reveal if hidden.
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+                    KeyboardHandler.SetPairingMode(kind == AuthUiKind.PairingPasscode);
+                    if (kind == AuthUiKind.PairingPasscode) KeyboardHandler.ShowPairingPasscode();
+                    KeyboardHandler.ShowPinPad();
+                    break;
+                case AuthUiKind.PairingDeviceJoin:
+                    KeyboardHandler.DestroyKeyboard();
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.PinPad);
+                    KeyboardHandler.SetPairingMode(true);
+                    if (KeyboardHandler.ShowPairingConfirm())
+                    {
+                        KeyboardHandler.ShowPinPad();
+                        break;
+                    }
+                    // A PIN pad without the confirm panel: type the existing name on the keyboard instead.
+                    KeyboardHandler.DestroyPinPad();
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+                    KeyboardHandler.SetDeviceNameMode(skippable: true, joinByTyping: true);
+                    break;
+                case AuthUiKind.PairingDeviceName:
+                case AuthUiKind.PairingDeviceNameRequired:
+                    KeyboardHandler.DestroyPinPad();
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+                    KeyboardHandler.SetDeviceNameMode(skippable: kind == AuthUiKind.PairingDeviceName);
+                    break;
+                default:
+                    KeyboardHandler.Create(KeyboardHandler.KeyboardType.FullKeyboard);
+                    break;
+            }
+        }
+
+        public void SetPrompt(string prompt) => KeyboardHandler.SetStepPrompt(prompt);
+
+        public void Hide() => KeyboardHandler.Destroy();
+
+        public void StopProcessing() => KeyboardHandler.StopProcessing();
+    }
+
+    /// <summary>Adapts the shipped exit poll to the interface core calls.</summary>
+    internal sealed class ExitPollUi : IAbxrPollUi
+    {
+        public void AddPoll(string prompt, PollType pollType, List<string> responses, Action<string> callback) =>
+            ExitPollHandler.AddPoll(prompt, pollType, responses, callback);
+    }
+}

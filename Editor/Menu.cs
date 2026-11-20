@@ -21,6 +21,31 @@ namespace AbxrLib.Editor
             Application.OpenURL("https://github.com/ArborXR/abxrlib-for-unity?tab=readme-ov-file#table-of-contents");
         }
 
+        private const string IncludeAllConfigMenu = "Analytics for XR/Diagnostics/Include all config values";
+
+        [MenuItem("Analytics for XR/Diagnostics/Copy report", priority = 4)]
+        private static void CopyDiagnostics()
+        {
+            SetupDiagnostics.CopyToClipboard();
+            if (!Application.isBatchMode)
+                EditorUtility.DisplayDialog("AbxrLib",
+                    "Diagnostics copied to the clipboard. Paste them into your support request.\n\n" +
+                    "Tokens and secrets are never included; the report only says whether they are set.", "OK");
+        }
+
+        [MenuItem(IncludeAllConfigMenu, priority = 5)]
+        private static void ToggleIncludeAllConfig() =>
+            SetupDiagnostics.IncludeAllConfig = !SetupDiagnostics.IncludeAllConfig;
+
+        // The validate function is where Unity lets a menu item draw its checkmark. Fully qualified because this
+        // class is also called Menu.
+        [MenuItem(IncludeAllConfigMenu, true)]
+        private static bool ToggleIncludeAllConfigValidate()
+        {
+            UnityEditor.Menu.SetChecked(IncludeAllConfigMenu, SetupDiagnostics.IncludeAllConfig);
+            return true;
+        }
+
         [MenuItem("Analytics for XR/Create Abxr Target", priority = 3)]
         private static void CreateAbxrTarget()
         {

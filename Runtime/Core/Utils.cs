@@ -783,6 +783,27 @@ namespace AbxrLib.Runtime.Core
         }
 
         /// <summary>
+        /// Removes an extra from the current activity's intent, so a later <see cref="GetAndroidIntentParam"/> doesn't
+        /// return it again. Unity replaces that intent with each new one it's launched with (onNewIntent).
+        /// </summary>
+        public static void RemoveAndroidIntentParam(string key)
+        {
+    #if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+                using var activity = unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+                using var intent = activity.Call<AndroidJavaObject>("getIntent");
+                intent.Call("removeExtra", key);
+            }
+            catch (System.Exception ex)
+            {
+                Logcat.Warning($"Failed to remove Android intent parameter '{key}': {ex.Message}");
+            }
+    #endif
+        }
+
+        /// <summary>
         /// Get Android manifest metadata value by key
         /// Reads metadata from AndroidManifest.xml using ApplicationInfo
         /// </summary>
@@ -884,6 +905,27 @@ namespace AbxrLib.Runtime.Core
         }
 
         /// <summary>
+        /// All active loaded objects of type <typeparamref name="T"/>.
+        ///
+        /// Object.FindObjectsOfType is deprecated from Unity 2022.2 in favour of FindObjectsByType, which makes
+        /// sorting optional; FindObjectsByType does not exist before then, so the call is chosen per Editor version
+        /// here rather than at each call site, and consumer projects see no deprecation warnings on either.
+        /// </summary>
+        /// <param name="sorted">
+        /// Leave false when the caller looks at every result, which skips the sort. Pass true when it takes the first
+        /// match and so needs the stable InstanceID ordering the old API always applied.
+        /// </param>
+        internal static T[] FindObjects<T>(bool sorted = false) where T : UnityEngine.Object
+        {
+#if UNITY_2022_2_OR_NEWER
+            return UnityEngine.Object.FindObjectsByType<T>(
+                sorted ? FindObjectsSortMode.InstanceID : FindObjectsSortMode.None);
+#else
+            return UnityEngine.Object.FindObjectsOfType<T>();
+#endif
+        }
+
+        /// <summary>
         /// Finds the best available camera for gaze tracking and telemetry.
         /// Tries Camera.main, then XR HMD camera, then any active enabled camera.
         /// </summary>
@@ -899,7 +941,8 @@ namespace AbxrLib.Runtime.Core
                 var hmd = UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.Head);
                 if (hmd.isValid)
                 {
-                    Camera[] cameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+                    // Sorted: the first acceptable camera wins, so the choice must not vary between runs.
+                    Camera[] cameras = FindObjects<Camera>(sorted: true);
                     foreach (var cam in cameras)
                     {
                         if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)
@@ -909,7 +952,7 @@ namespace AbxrLib.Runtime.Core
             }
             catch (System.Exception) { }
 
-            Camera[] allCameras = UnityEngine.Object.FindObjectsOfType<Camera>();
+            Camera[] allCameras = FindObjects<Camera>(sorted: true);
             foreach (var cam in allCameras)
             {
                 if (cam != null && cam.enabled && cam.gameObject.activeInHierarchy)

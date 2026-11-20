@@ -65,11 +65,8 @@ namespace AbxrLib.Editor
         
         private static void AddDefineForPlatform(string define, BuildTargetGroup target)
         {
-            var defines = PlayerSettings.GetScriptingDefineSymbolsForGroup(target);
-            if (!defines.Contains(define))
+            if (BuildDefines.Add(define, target))
             {
-                PlayerSettings.SetScriptingDefineSymbolsForGroup(target, 
-                    string.IsNullOrEmpty(defines) ? define : defines + ";" + define);
                 Logcat.Debug($"Added {define} to {target} scripting define symbols.");
             }
         }

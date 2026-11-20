@@ -171,7 +171,7 @@ namespace AbxrLib.Runtime.Services.Telemetry
                     ["gaze_direction"] = gazeDirection
                 };
 
-                Abxr.Telemetry($"{targetName} Gaze", telemetryData);
+                using (AbxrObserver.AutomaticScope()) Abxr.Telemetry($"{targetName} Gaze", telemetryData);
             }
         }
     }
