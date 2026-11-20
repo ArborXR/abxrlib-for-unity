@@ -136,7 +136,10 @@ namespace AbxrLib.Runtime.UI.ExitPoll
             DontDestroyOnLoad(_panelInstance); // Outlives a scene load, like the poll.
             // The backdrop has nothing to press, and on a flat screen its raycaster would compete with the poll's for taps.
             foreach (var raycaster in _panelInstance.GetComponentsInChildren<GraphicRaycaster>()) raycaster.enabled = false;
-            _panelInstance.GetComponent<PanelMessage>().Text = _prompt;
+            var message = _panelInstance.GetComponent<PanelMessage>();
+            if (message) message.Text = _prompt;
+            // An older copy of the backdrop, from before PanelMessage. Show the poll without its question rather than none.
+            else Logcat.Error("AbxrDarkPanelWithText has no PanelMessage, so the exit poll shows without its question. Re-import the World-Space UI sample.");
         }
 
         // The poll and its backdrop share a plane, so left to distance the backdrop can draw over the poll: on a flat
