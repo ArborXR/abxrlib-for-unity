@@ -4,6 +4,7 @@
 // with them. Also pins where the poll's backdrop shows the question (SDK-95). The prefabs live in Samples~, which Unity
 // doesn't import, so this reads their YAML.
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -77,8 +78,44 @@ public class ExitPollPrefabTests
             labels.Where(l => l.Owner != "DynamicMessage").Select(l => l.Text), "the header and footer labels changed");
     }
 
+    [Test]
+    public void Backdrop_DynamicMessageFitsAboveThePoll()
+    {
+        // DynamicMessage and BG_Inner are siblings anchored at the canvas centre. The question goes in the inner panel's
+        // top half; every poll is drawn in the bottom half. The old 140x80 box was nearly twice the panel's width.
+        var docs = ReadDocuments(PrefabPath(Backdrop));
+        var (messageCentre, messageSize) = Rect(docs, "DynamicMessage");
+        var (innerCentre, innerSize) = Rect(docs, "BG_Inner");
+
+        Assert.GreaterOrEqual(messageCentre.x - messageSize.x / 2, innerCentre.x - innerSize.x / 2, "DynamicMessage runs past the inner panel's left edge");
+        Assert.LessOrEqual(messageCentre.x + messageSize.x / 2, innerCentre.x + innerSize.x / 2, "DynamicMessage runs past the inner panel's right edge");
+        Assert.LessOrEqual(messageCentre.y + messageSize.y / 2, innerCentre.y + innerSize.y / 2, "DynamicMessage runs past the inner panel's top edge");
+        Assert.GreaterOrEqual(messageCentre.y - messageSize.y / 2, innerCentre.y, "DynamicMessage reaches into the inner panel's bottom half, where the poll is");
+
+        // Auto-sized, so a long question shrinks to fit the box instead of spilling over the poll.
+        var label = docs.Values.Single(d => d.Contains($"guid: {TextMeshProGuid}") && Name(docs[Field(d, "m_GameObject")]) == "DynamicMessage");
+        Assert.AreEqual("1", Field(label, "m_enableAutoSizing"), "DynamicMessage doesn't auto-size its text");
+    }
+
     private static IEnumerable<string> Components(Dictionary<string, string> docs, string gameObject) =>
         Regex.Matches(gameObject, @"component: \{fileID: (-?\d+)\}").Select(m => docs[m.Groups[1].Value]);
+
+    private static (UnityEngine.Vector2 Centre, UnityEngine.Vector2 Size) Rect(Dictionary<string, string> docs, string name)
+    {
+        var gameObject = docs.Values.Single(d => d.StartsWith("--- !u!1 ") && Name(d) == name);
+        var rect = Components(docs, gameObject).Single(c => c.StartsWith("--- !u!224 "));
+        Assert.AreEqual("{x: 0.5, y: 0.5}", Regex.Match(rect, @"^  m_AnchorMin: (.*)$", RegexOptions.Multiline).Groups[1].Value, $"{name} isn't anchored at the centre");
+        Assert.AreEqual("{x: 0.5, y: 0.5}", Regex.Match(rect, @"^  m_AnchorMax: (.*)$", RegexOptions.Multiline).Groups[1].Value, $"{name} isn't anchored at the centre");
+        Assert.AreEqual("{x: 0.5, y: 0.5}", Regex.Match(rect, @"^  m_Pivot: (.*)$", RegexOptions.Multiline).Groups[1].Value, $"{name}'s pivot isn't its centre");
+        return (Vector(rect, "m_AnchoredPosition"), Vector(rect, "m_SizeDelta"));
+    }
+
+    private static UnityEngine.Vector2 Vector(string doc, string field)
+    {
+        var m = Regex.Match(doc, $@"^  {field}: \{{x: (-?[\d.e-]+), y: (-?[\d.e-]+)\}}", RegexOptions.Multiline);
+        Assert.IsTrue(m.Success, $"no {field}");
+        return new UnityEngine.Vector2(float.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), float.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+    }
 
     private static string Name(string doc) => Regex.Match(doc, @"^  m_Name: ?(.*)$", RegexOptions.Multiline).Groups[1].Value.Trim();
 
