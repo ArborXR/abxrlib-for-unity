@@ -851,7 +851,12 @@ namespace AbxrLib.Runtime.Core
             return "";
         }
     
-        public static long GetUnityTime() => (long)(Time.time * 1000f) + AbxrSubsystem.StartTimeMs;
+        /// <summary>
+        /// The time a record is stamped with: the device's UTC clock, in Unix milliseconds.
+        /// Despite the name it is not Unity's game clock (<c>Time.time</c>), which stops while the app is paused
+        /// or <c>Time.timeScale</c> is 0, so records made after a headset slept were stamped in the past (SDK-97).
+        /// </summary>
+        public static long GetUnityTime() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         /// <summary>
         /// Convert raw module dictionaries to typed ModuleData objects.

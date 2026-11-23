@@ -119,6 +119,30 @@ public class EventTrackingTests : AbxrPlayModeTestBase
         Assert.Greater(e.preciseTimestamp, 0L);
     }
 
+    [UnityTest]
+    public IEnumerator Event_TimestampKeepsUpWithRealTime_WhileTimeScaleIsZero()
+    {
+        // SDK-97: the stamp came from the game clock, which stops at timeScale 0 as it does while a headset sleeps.
+        float savedTimeScale = Time.timeScale;
+        Time.timeScale = 0f;
+        try
+        {
+            Abxr.Event("before_wait", null, sendTelemetry: false);
+            yield return new WaitForSecondsRealtime(0.5f);
+            Abxr.Event("after_wait", null, sendTelemetry: false);
+            long now = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            var events = PendingEvents;
+            Assert.AreEqual(2, events.Count);
+            Assert.GreaterOrEqual(events[1].preciseTimestamp - events[0].preciseTimestamp, 450L, "The second event was recorded half a second of real time after the first.");
+            Assert.That(events[1].preciseTimestamp, Is.InRange(now - 250L, now), "The stamp is the device's UTC time when the event was recorded.");
+        }
+        finally
+        {
+            Time.timeScale = savedTimeScale;
+        }
+    }
+
     // ── StartTimedEvent ───────────────────────────────────────────────────
 
     [Test]
