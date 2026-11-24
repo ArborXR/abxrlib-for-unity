@@ -191,9 +191,8 @@ For non-authentication messages (like exit polls, notifications, etc.), you can 
 GameObject panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
 GameObject panelInstance = Instantiate(panelPrefab);
 
-// Set custom message text
-TextMeshProUGUI panelText = panelInstance.GetComponentInChildren<TextMeshProUGUI>();
-panelText.text = "Your custom message here";
+// Set custom message text. The panel has other labels (its "ArborXR" header), so go through PanelMessage.
+panelInstance.GetComponent<PanelMessage>().Text = "Your custom message here";
 ```
 
 This approach allows you to:

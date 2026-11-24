@@ -1,8 +1,10 @@
 // Copyright (c) 2026 ArborXR. All rights reserved.
 // Pins that every button field on the exit poll components is wired in the base prefabs (SDK-76). An empty field
 // throws in Start, which leaves that button and every one after it without a listener, so the poll can't be answered
-// with them. The prefabs live in Samples~, which Unity doesn't import, so this reads their YAML.
+// with them. Also pins where the poll's backdrop shows the question (SDK-95). The prefabs live in Samples~, which Unity
+// doesn't import, so this reads their YAML.
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -13,6 +15,11 @@ public class ExitPollPrefabTests
 {
     // uGUI's Button script GUID in com.unity.ugui.
     private const string ButtonGuid = "4e29b1a8efbd4b44bb3f3716e73f07ff";
+    // TextMeshProUGUI's script GUID in com.unity.ugui.
+    private const string TextMeshProGuid = "f4688fdb7df04437aeb418b961361dc5";
+    // The World-Space UI sample's PanelMessage script GUID.
+    private const string PanelMessageGuid = "8691e019d83b4c8b846016c972ef166d";
+    private const string Backdrop = "AbxrDarkPanelWithText";
 
     private static readonly Regex DocumentHeader = new(@"^--- !u!(\d+) &(-?\d+)( stripped)?", RegexOptions.Multiline);
 
@@ -39,6 +46,83 @@ public class ExitPollPrefabTests
             Assert.That(target, Does.Contain($"guid: {ButtonGuid}"), $"{prefab}: {name} doesn't point at a Button");
         }
     }
+
+    [Test]
+    public void Backdrop_ShowsItsMessageInDynamicMessage()
+    {
+        // ExitPollHandler writes the question through PanelMessage. Looked up with GetComponentInChildren, it went to the
+        // first label in the backdrop, the header's "ArborXR", and DynamicMessage stayed empty.
+        var docs = ReadDocuments(PrefabPath(Backdrop));
+        var root = docs.Values.Single(d => d.StartsWith("--- !u!1 ") && Name(d) == Backdrop);
+        var panelMessage = Components(docs, root).SingleOrDefault(c => c.Contains($"guid: {PanelMessageGuid}"));
+        Assert.IsNotNull(panelMessage, $"{Backdrop}'s root has no PanelMessage");
+
+        string labelId = Field(panelMessage, "label");
+        Assert.AreNotEqual("0", labelId, "PanelMessage's label is empty");
+        Assert.IsTrue(docs.TryGetValue(labelId, out var label), $"PanelMessage's label points at {labelId}, which isn't in the prefab");
+        Assert.That(label, Does.Contain($"guid: {TextMeshProGuid}"), "PanelMessage's label isn't a TextMeshProUGUI");
+        Assert.AreEqual("DynamicMessage", Name(docs[Field(label, "m_GameObject")]), "PanelMessage's label isn't DynamicMessage");
+    }
+
+    [Test]
+    public void Backdrop_KeepsItsBrandLabels()
+    {
+        // Every label but DynamicMessage is part of the backdrop's design and must keep its text.
+        var docs = ReadDocuments(PrefabPath(Backdrop));
+        var labels = docs.Values.Where(d => d.Contains($"guid: {TextMeshProGuid}"))
+            .Select(d => (Owner: Name(docs[Field(d, "m_GameObject")]), Text: Regex.Match(d, @"^  m_text: ?(.*)$", RegexOptions.Multiline).Groups[1].Value.Trim()))
+            .ToList();
+
+        Assert.AreEqual("", labels.Single(l => l.Owner == "DynamicMessage").Text, "DynamicMessage should start empty");
+        CollectionAssert.AreEquivalent(new[] { "ArborXR", "ArborXR", "Powered by" },
+            labels.Where(l => l.Owner != "DynamicMessage").Select(l => l.Text), "the header and footer labels changed");
+    }
+
+    [Test]
+    public void Backdrop_DynamicMessageFitsAboveThePoll()
+    {
+        // DynamicMessage and BG_Inner are siblings anchored at the canvas centre. The question goes in the inner panel's
+        // top half; every poll is drawn in the bottom half. The old 140x80 box was nearly twice the panel's width.
+        var docs = ReadDocuments(PrefabPath(Backdrop));
+        var (messageCentre, messageSize) = Rect(docs, "DynamicMessage");
+        var (innerCentre, innerSize) = Rect(docs, "BG_Inner");
+
+        Assert.GreaterOrEqual(messageCentre.x - messageSize.x / 2, innerCentre.x - innerSize.x / 2, "DynamicMessage runs past the inner panel's left edge");
+        Assert.LessOrEqual(messageCentre.x + messageSize.x / 2, innerCentre.x + innerSize.x / 2, "DynamicMessage runs past the inner panel's right edge");
+        Assert.LessOrEqual(messageCentre.y + messageSize.y / 2, innerCentre.y + innerSize.y / 2, "DynamicMessage runs past the inner panel's top edge");
+        Assert.GreaterOrEqual(messageCentre.y - messageSize.y / 2, innerCentre.y, "DynamicMessage reaches into the inner panel's bottom half, where the poll is");
+
+        // Auto-sized, so a long question shrinks to fit the box instead of spilling over the poll.
+        var label = docs.Values.Single(d => d.Contains($"guid: {TextMeshProGuid}") && Name(docs[Field(d, "m_GameObject")]) == "DynamicMessage");
+        Assert.AreEqual("1", Field(label, "m_enableAutoSizing"), "DynamicMessage doesn't auto-size its text");
+    }
+
+    private static IEnumerable<string> Components(Dictionary<string, string> docs, string gameObject) =>
+        Regex.Matches(gameObject, @"component: \{fileID: (-?\d+)\}").Select(m => docs[m.Groups[1].Value]);
+
+    private static (UnityEngine.Vector2 Centre, UnityEngine.Vector2 Size) Rect(Dictionary<string, string> docs, string name)
+    {
+        var gameObject = docs.Values.Single(d => d.StartsWith("--- !u!1 ") && Name(d) == name);
+        var rect = Components(docs, gameObject).Single(c => c.StartsWith("--- !u!224 "));
+        Assert.AreEqual("{x: 0.5, y: 0.5}", Regex.Match(rect, @"^  m_AnchorMin: (.*)$", RegexOptions.Multiline).Groups[1].Value, $"{name} isn't anchored at the centre");
+        Assert.AreEqual("{x: 0.5, y: 0.5}", Regex.Match(rect, @"^  m_AnchorMax: (.*)$", RegexOptions.Multiline).Groups[1].Value, $"{name} isn't anchored at the centre");
+        Assert.AreEqual("{x: 0.5, y: 0.5}", Regex.Match(rect, @"^  m_Pivot: (.*)$", RegexOptions.Multiline).Groups[1].Value, $"{name}'s pivot isn't its centre");
+        return (Vector(rect, "m_AnchoredPosition"), Vector(rect, "m_SizeDelta"));
+    }
+
+    private static UnityEngine.Vector2 Vector(string doc, string field)
+    {
+        var m = Regex.Match(doc, $@"^  {field}: \{{x: (-?[\d.e-]+), y: (-?[\d.e-]+)\}}", RegexOptions.Multiline);
+        Assert.IsTrue(m.Success, $"no {field}");
+        return new UnityEngine.Vector2(float.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture), float.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture));
+    }
+
+    private static string Name(string doc) => Regex.Match(doc, @"^  m_Name: ?(.*)$", RegexOptions.Multiline).Groups[1].Value.Trim();
+
+    private static string Field(string doc, string field) =>
+        Regex.Match(doc, $@"^  {field}: (?:\{{fileID: (-?\d+)\}}|(.*))$", RegexOptions.Multiline) is var m && m.Groups[1].Success
+            ? m.Groups[1].Value
+            : m.Groups[2].Value.Trim();
 
     private static string PrefabPath(string prefab)
     {

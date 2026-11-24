@@ -70,9 +70,8 @@ Independent panel prefabs are still used for:
 GameObject panelPrefab = Resources.Load<GameObject>("Prefabs/AbxrDarkPanelWithText");
 GameObject panelInstance = Instantiate(panelPrefab);
 
-// Set custom message text
-TextMeshProUGUI panelText = panelInstance.GetComponentInChildren<TextMeshProUGUI>();
-panelText.text = "Your custom message here";
+// Set custom message text. The panel has other labels (its "ArborXR" header), so go through PanelMessage.
+panelInstance.GetComponent<PanelMessage>().Text = "Your custom message here";
 
 // Clean up when done
 Destroy(panelInstance, 5f); // Auto-destroy after 5 seconds
@@ -133,7 +132,7 @@ GameObject panelInstance = Instantiate(panelPrefab);
 
 1. **Choose the right prefab**: Use `AbxrDarkPanelWithText` for simple messages, specialized prefabs for polls
 2. **Manage lifecycle**: Always destroy panel instances when done
-3. **Set text properly**: Use `GetComponentInChildren<TextMeshProUGUI>()` to find and update text
+3. **Set text properly**: Set the message through the panel's `PanelMessage` component. `GetComponentInChildren<TextMeshProUGUI>()` finds the header's "ArborXR" label instead
 4. **Consider positioning**: Independent panels may need manual positioning or FaceCamera components
 
 ### General
@@ -180,8 +179,7 @@ public class MessageDisplayExample : MonoBehaviour
         GameObject panelInstance = Instantiate(panelPrefab);
         
         // Set message text
-        var panelText = panelInstance.GetComponentInChildren<TextMeshProUGUI>();
-        panelText.text = message;
+        panelInstance.GetComponent<PanelMessage>().Text = message;
         
         // Auto-destroy after 3 seconds
         Destroy(panelInstance, 3f);
@@ -223,7 +221,7 @@ public class PollExample : MonoBehaviour
 ### Independent Panel Issues
 
 - **Prefab not found**: Verify the prefab exists in `Resources/Prefabs/`
-- **Text not updating**: Use `GetComponentInChildren<TextMeshProUGUI>()` to find text component
+- **Text not updating, or the header shows your message**: Set it with `GetComponent<PanelMessage>().Text`, not `GetComponentInChildren<TextMeshProUGUI>()`
 - **Memory leaks**: Always destroy panel instances when done
 
 ### General Issues
